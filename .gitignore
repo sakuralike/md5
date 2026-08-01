@@ -1,0 +1,41 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+coverage/
+.pnpm-store/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime data
+*.db
+*.sqlite*
+logs/
+artifacts/

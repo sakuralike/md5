@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import or_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from password_detective.core.config import Settings
+from password_detective.core.errors import AppError
+from password_detective.core.ids import new_id
+from password_detective.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_account_password,
+    hash_refresh_token,
+    needs_password_rehash,
+    verify_account_password,
+)
+from password_detective.core.time import utc_now
+from password_detective.db.audit import write_audit_log
+from password_detective.db.models.user import User, UserStatus
+from password_detective.db.models.user_session import UserSession
+from password_detective.modules.auth.context import ClientContext
+from password_detective.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse
+
+MAX_FAILED_LOGINS = 5
+LOCK_MINUTES = 15
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _issue_token_response(
+    *, settings: Settings, user: User, session: UserSession, refresh_token: str
+) -> TokenResponse:
+    access_token = create_access_token(
+        secret_key=settings.app_secret_key,
+        ttl_minutes=settings.access_token_ttl_minutes,
+        user_id=user.id,
+        role=user.role.value,
+        session_family_id=session.family_id,
+    )
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.access_token_ttl_minutes * 60,
+        user=user,
+    )
+
+
+def register_user(db: Session, payload: RegisterRequest, context: ClientContext) -> User:
+    username = payload.username.strip().lower()
+    email = str(payload.email).strip().lower()
+    existing = db.scalar(select(User.id).where(or_(User.username == username, User.email == email)))
+    if existing:
+        raise AppError("auth.account_conflict", "用户名或邮箱已被使用", status_code=409)
+
+    user = User(
+        username=username,
+        email=email,
+        account_password_hash=hash_account_password(payload.password),
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError("auth.account_conflict", "用户名或邮箱已被使用", status_code=409) from exc
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.register",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+    )
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def login_user(
+    db: Session,
+    settings: Settings,
+    payload: LoginRequest,
+    context: ClientContext,
+) -> TokenResponse:
+    login = payload.login.strip().lower()
+    user = db.scalar(select(User).where(or_(User.username == login, User.email == login)))
+    now = utc_now()
+
+    if user is None:
+        raise AppError("auth.invalid_credentials", "用户名、邮箱或密码不正确", status_code=401)
+    if user.status == UserStatus.DISABLED:
+        raise AppError("auth.account_unavailable", "账号当前不可用", status_code=403)
+    if user.locked_until and _aware(user.locked_until) > now:
+        raise AppError("auth.temporarily_locked", "登录尝试过多，请稍后重试", status_code=423)
+
+    if not verify_account_password(user.account_password_hash, payload.password):
+        user.failed_login_count += 1
+        if user.failed_login_count >= MAX_FAILED_LOGINS:
+            user.locked_until = now + timedelta(minutes=LOCK_MINUTES)
+            user.status = UserStatus.LOCKED
+        write_audit_log(
+            db,
+            actor_id=user.id,
+            action="auth.login",
+            target_type="user",
+            target_id=user.id,
+            result="failure",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={"reason": "invalid_credentials"},
+        )
+        db.commit()
+        raise AppError("auth.invalid_credentials", "用户名、邮箱或密码不正确", status_code=401)
+
+    if user.status == UserStatus.LOCKED:
+        user.status = UserStatus.ACTIVE
+    user.failed_login_count = 0
+    user.locked_until = None
+    if needs_password_rehash(user.account_password_hash):
+        user.account_password_hash = hash_account_password(payload.password)
+
+    refresh_token = create_refresh_token()
+    session = UserSession(
+        user_id=user.id,
+        family_id=new_id(),
+        refresh_token_hash=hash_refresh_token(refresh_token),
+        expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
+        user_agent=context.user_agent,
+        ip_prefix=context.ip_prefix,
+    )
+    db.add(session)
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.login",
+        target_type="session",
+        target_id=session.family_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+    )
+    db.commit()
+    db.refresh(user)
+    db.refresh(session)
+    return _issue_token_response(
+        settings=settings, user=user, session=session, refresh_token=refresh_token
+    )
+
+
+def rotate_refresh_token(
+    db: Session,
+    settings: Settings,
+    refresh_token: str,
+    context: ClientContext,
+) -> TokenResponse:
+    token_hash = hash_refresh_token(refresh_token)
+    session = db.scalar(select(UserSession).where(UserSession.refresh_token_hash == token_hash))
+    if session is None:
+        raise AppError("auth.invalid_refresh_token", "刷新令牌无效", status_code=401)
+
+    now = utc_now()
+    if session.revoked_at is not None:
+        db.execute(
+            update(UserSession)
+            .where(UserSession.family_id == session.family_id, UserSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="refresh_token_reuse")
+        )
+        write_audit_log(
+            db,
+            actor_id=session.user_id,
+            action="auth.refresh_reuse_detected",
+            target_type="session",
+            target_id=session.family_id,
+            result="blocked",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+        )
+        db.commit()
+        raise AppError(
+            "auth.refresh_token_reused",
+            "检测到刷新令牌重复使用，相关会话已撤销",
+            status_code=401,
+        )
+
+    if _aware(session.expires_at) <= now:
+        session.revoked_at = now
+        session.revoked_reason = "expired"
+        db.commit()
+        raise AppError("auth.refresh_token_expired", "刷新令牌已过期", status_code=401)
+
+    user = db.get(User, session.user_id)
+    if user is None or user.status != UserStatus.ACTIVE:
+        raise AppError("auth.account_unavailable", "账号当前不可用", status_code=403)
+
+    session.revoked_at = now
+    session.revoked_reason = "rotated"
+    session.last_used_at = now
+    new_token = create_refresh_token()
+    next_session = UserSession(
+        user_id=user.id,
+        family_id=session.family_id,
+        refresh_token_hash=hash_refresh_token(new_token),
+        rotated_from_id=session.id,
+        expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
+        user_agent=context.user_agent or session.user_agent,
+        ip_prefix=context.ip_prefix or session.ip_prefix,
+    )
+    db.add(next_session)
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.refresh",
+        target_type="session",
+        target_id=session.family_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+    )
+    db.commit()
+    db.refresh(next_session)
+    return _issue_token_response(
+        settings=settings, user=user, session=next_session, refresh_token=new_token
+    )
+
+
+def revoke_session_family(
+    db: Session,
+    *,
+    user_id: str,
+    family_id: str,
+    reason: str,
+    context: ClientContext,
+) -> None:
+    now = utc_now()
+    result = db.execute(
+        update(UserSession)
+        .where(
+            UserSession.user_id == user_id,
+            UserSession.family_id == family_id,
+            UserSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now, revoked_reason=reason)
+    )
+    if not result.rowcount:
+        raise AppError("auth.session_not_found", "会话不存在或已撤销", status_code=404)
+    write_audit_log(
+        db,
+        actor_id=user_id,
+        action="auth.session_revoke",
+        target_type="session",
+        target_id=family_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"reason": reason},
+    )
+    db.commit()
+
+
+def revoke_all_sessions(db: Session, *, user_id: str, context: ClientContext) -> int:
+    now = utc_now()
+    result = db.execute(
+        update(UserSession)
+        .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+        .values(revoked_at=now, revoked_reason="logout_all")
+    )
+    write_audit_log(
+        db,
+        actor_id=user_id,
+        action="auth.logout_all",
+        target_type="user",
+        target_id=user_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"revoked_rows": result.rowcount or 0},
+    )
+    db.commit()
+    return result.rowcount or 0

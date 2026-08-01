@@ -1,0 +1,12 @@
+{
+  "name": "password-detective",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @password-detective/web dev",
+    "dev:admin": "pnpm --filter @password-detective/admin dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}

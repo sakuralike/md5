@@ -1,0 +1,90 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: password_detective
+      MYSQL_USER: password_detective
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password_detective_local}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_change_me}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports: ["3306:3306"]
+    volumes: ["mysql-data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_local_change_me}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      APP_ENV: integration
+      APP_DEBUG: "false"
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?请在 .env 中设置 APP_SECRET_KEY}
+      DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174
+      AUTO_CREATE_TABLES: "false"
+    command: ["sh", "-c", "alembic upgrade head && uvicorn password_detective.main:app --host 0.0.0.0 --port 8000"]
+    ports: ["8000:8000"]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      APP_ENV: integration
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?请在 .env 中设置 APP_SECRET_KEY}
+      DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
+      REDIS_URL: redis://redis:6379/0
+      AUTO_CREATE_TABLES: "false"
+    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        TARGET_FILTER: "@password-detective/web"
+        TARGET_DIR: "apps/web"
+    ports: ["5173:80"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  admin:
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        TARGET_FILTER: "@password-detective/admin"
+        TARGET_DIR: "apps/admin"
+    ports: ["5174:80"]
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  mysql-data:
+  redis-data:
