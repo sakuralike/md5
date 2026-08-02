@@ -70,7 +70,7 @@ Copy-Item .env.example .env
 
 执行前先确认 `docker version` 同时显示 Client 和 Server；仅安装 Docker CLI 而 Docker Desktop/WSL 2 引擎未就绪时不能通过该门禁。
 
-脚本会删除本项目 Compose 卷、重新构建并等待服务就绪，然后用合成账号完成注册和登录，并检查 Web/Admin HTTP 响应。默认结束后清理环境；调试时可使用 `-KeepEnvironment`。此脚本会清除当前 Compose 项目的数据库和 Redis 数据，不应用于含有需要保留数据的环境。
+脚本会删除本项目 Compose 卷、重新构建并等待服务就绪，然后用合成账号完成注册和登录，并检查 Web/Admin HTTP 响应。若项目路径包含中文等非 ASCII 字符，脚本会自动分配临时 ASCII 盘符以兼容 Docker BuildKit，并在结束时释放。默认结束后清理环境；调试时可使用 `-KeepEnvironment`。此脚本会清除当前 Compose 项目的数据库和 Redis 数据，不应用于含有需要保留数据的环境。
 
 ## 安全要求
 
