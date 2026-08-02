@@ -46,6 +46,8 @@ services:
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       CORS_ORIGINS: http://localhost:5173,http://localhost:5174
       AUTO_CREATE_TABLES: "false"
+      DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
+    volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
     command: ["sh", "-c", "alembic upgrade head && uvicorn password_detective.main:app --host 0.0.0.0 --port 8000"]
     ports: ["8000:8000"]
     depends_on:
@@ -103,3 +105,4 @@ services:
 volumes:
   mysql-data:
   redis-data:
+  desktop-update-data:

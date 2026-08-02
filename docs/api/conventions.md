@@ -52,6 +52,52 @@
 
 候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `verification-v1` 聚合：两个独立成功且失败权重低于阈值时自动验证，三个独立失败或失败权重达到阈值时自动隔离；所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
 
+## 桌面安装、挑战与签名回执
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `POST` | `/desktop/installations` | 必需 | 注册 P-256 SPKI DER 公钥；安装 ID 不得跨账号或替换公钥；支持幂等重注册 |
+| `GET` | `/desktop/installations` | 必需 | 仅返回当前账号的安装状态、公钥指纹、版本和回执计数 |
+| `POST` | `/desktop/installations/{installation_id}/revoke` | 必需 | 撤销后不得创建挑战或提交回执 |
+| `POST` | `/desktop/challenges` | 必需 | 绑定账号、安装、候选、档案指纹和客户端版本；随机 nonce 仅保存 SHA-256 摘要并在 300 秒后过期 |
+| `POST` | `/desktop/receipts` | 必需 | 校验一次性挑战、ECDSA P-256/SHA-256 DER 签名、时间窗口、最低版本、字段绑定和防重放 |
+
+回执规范载荷版本为 `desktop-receipt-v1`。客户端按固定顺序生成 UTF-8 `key=value` 行，时间统一为毫秒精度 UTC `Z`，末尾保留换行。签名覆盖挑战 ID/nonce、安装与账号、候选、档案指纹、候选密码 SHA-256 摘要、验证结果、压缩格式、客户端版本和验证时间。服务端只持久化候选摘要的 HMAC，不保存客户端提交的原始无盐摘要。
+
+桌面端是不可信证据来源：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。有效回执仍进入 `verification-v1` 证据聚合，并接受账号、安装和 IP 关联去重/降权。档案文件名、目录列表、文件内容和候选密码不得上传。
+
+最低版本拒绝使用 `426 desktop.client_version_unsupported`，并在 `details` 中返回可供客户端展示的版本信息：
+
+```json
+{
+  "code": "desktop.client_version_unsupported",
+  "message": "客户端版本过低，最低要求为 0.2.0",
+  "details": {
+    "minimum_client_version": "0.2.0",
+    "current_client_version": "0.1.0"
+  },
+  "request_id": "req_synthetic_desktop_upgrade"
+}
+```
+
+`desktop.installation_revoked`、`desktop.installation_account_mismatch`、`desktop.installation_key_mismatch` 或 `desktop.installation_not_found` 表示本地身份不能继续使用，客户端可引导生成新的随机安装 ID/密钥并重新注册。`desktop.client_version_unsupported` 和 `desktop.installation_limit_reached` 不得通过重新生成身份绕过。
+
+## 桌面更新发布与下载
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/desktop/updates/check?current_version=...&channel=stable&platform=windows&architecture=x64` | 匿名 | 仅选择相同目标的最高 `published` 版本；返回最低版本、强制升级、发布说明、SHA-256、大小、签名状态和后端下载地址 |
+| `GET` | `/desktop/updates/{release_id}/download` | 匿名 | 仅下载 `published` 且存储完整性仍匹配的制品；响应含不可变缓存、ETag、`Digest` 和 `nosniff` |
+| `POST` | `/admin/desktop-releases` | 管理员 + MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256 和代码签名元数据 |
+| `GET` | `/admin/desktop-releases` | 管理员 + MFA | 列出发布生命周期、上传状态和下载计数 |
+| `PUT` | `/admin/desktop-releases/{release_id}/artifact` | 管理员 + MFA | 请求体为安装包原始字节流；按声明大小和 SHA-256 流式校验，通过后原子替换 |
+| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + MFA | 重新核验存储制品；生产环境只允许发布记录标记为 `verified` 且包含签名者与证书指纹 |
+| `POST` | `/admin/desktop-releases/{release_id}/withdraw` | 管理员 + MFA | 将版本标记为 `withdrawn`，检查与下载入口立即停止提供该制品 |
+
+发布生命周期固定为 `draft → published → withdrawn`。同一通道、平台、架构和版本只能存在一条记录；已发布记录不可覆盖制品，修复必须使用新版本。`stable` 与 `beta` 通道严格隔离，当前桌面 UI 默认只查询 `stable/windows/x64|arm64`。
+
+服务端的 `code_signature_status=verified` 是受 MFA 保护的发布流程证明，不等价于客户端对 Authenticode 的本地密码学验证。首版桌面端只自动检查，不静默下载、不自动执行；用户点击后由系统浏览器打开同一后端返回的 HTTP(S) 下载入口，生产必须使用 HTTPS，并在安装前核验操作系统展示的签名者。
+
 ## 成功响应
 
 资源接口直接返回资源；响应头包含 `X-Request-ID`。列表使用：

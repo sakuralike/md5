@@ -20,6 +20,20 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: password_detective
+          MYSQL_USER: password_detective
+          MYSQL_PASSWORD: synthetic_mysql_ci
+          MYSQL_ROOT_PASSWORD: synthetic_root_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -psynthetic_root_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
     defaults:
       run:
         working-directory: apps/api
@@ -38,6 +52,15 @@ jobs:
           APP_ENV: test
           APP_SECRET_KEY: synthetic-ci-secret-key-for-validation
           DATABASE_URL: sqlite:///./ci-migration.db
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+      - name: Verify MySQL migration round trip
+        env:
+          APP_ENV: test
+          APP_SECRET_KEY: synthetic-ci-secret-key-for-mysql-validation
+          DATABASE_URL: mysql+pymysql://password_detective:synthetic_mysql_ci@127.0.0.1:3306/password_detective
         run: |
           alembic upgrade head
           alembic downgrade base
@@ -65,6 +88,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "10.0.x" }
       - run: dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
+      - run: dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
 
   container-images:
     runs-on: ubuntu-latest

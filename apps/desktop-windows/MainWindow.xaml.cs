@@ -6,9 +6,24 @@ namespace PasswordDetective.Desktop;
 
 public partial class MainWindow : Window
 {
+    private readonly MainWindowViewModel _viewModel;
+
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel(new FileFingerprintService());
+        _viewModel = new MainWindowViewModel(
+            new FileFingerprintService(),
+            new ArchiveVerificationService(),
+            new InstallationIdentityService(),
+            new DesktopApiClient(),
+            new ProtectedSessionStore(),
+            new ExternalUriLauncher());
+        DataContext = _viewModel;
     }
+
+    private void CandidatePasswordBox_OnPasswordChanged(object sender, RoutedEventArgs eventArgs) =>
+        _viewModel.SetCandidatePassword(CandidatePasswordBox.Password);
+
+    private void LoginPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs eventArgs) =>
+        _viewModel.SetLoginPassword(LoginPasswordBox.Password);
 }

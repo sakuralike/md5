@@ -15,7 +15,9 @@
 | SEARCH-01～06 | `modules/archives` | `apps/api/tests/test_m2_archive_core.py`：完整指纹精确匹配、匿名/登录可见性、仅 verified 揭示、每日配额和审计 | M2 首版完成；已验证种子浏览器 E2E 与规模压测待实施 |
 | SUB-01～06 | `modules/archives`、`modules/verification`、`core/candidate_secrets` | `apps/api/tests/test_m2_archive_core.py`、`apps/api/tests/test_m2_verification.py`、`apps/api/tests/test_security.py`：授权声明、持久化幂等、重复合并、密文与 HMAC、待结算及首次 verified 结算 | M2 核心完成；文件名元数据细化和更复杂风控留后续 |
 | VERIFY-01～07 | `modules/verification` | `apps/api/tests/test_m2_verification.py`：单账号唯一有效反馈、不可变历史、关联键去重、双成功验证、三失败隔离、verified 降级、状态事件、规则版本和积分幂等 | M2 Web 反馈与自动状态基础完成；M3 桌面签名回执、防重放，M4 关联账号/短时异常/人工审核待实现 |
-| 管理端需求 | `modules/admin` | `apps/api/tests/test_auth.py`、`apps/api/tests/test_m1_security_gates.py`：RBAC、普通用户拒绝、TOTP/MFA | M1 入口完成，M4 业务功能待实现 |
+| DESK-01～08 | `apps/desktop-windows`、`modules/desktop_verification` | `apps/desktop-windows.tests/DesktopSecurityTests.cs`、`apps/desktop-windows.tests/ArchiveVerificationMatrixTests.cs`、`apps/api/tests/test_m3_desktop_verification.py`：DPAPI 身份持久化/重建、ECDSA DER 签名、规范载荷、加密 ZIP/7z 正确与错误密码、损坏/不支持格式、受控内容读取、资源限制、取消、路径穿越、最低版本详情、签名篡改、过期/重放、账号切换、撤销、时钟偏差和双独立回执 | M3 自动化核心与恢复 UX 完成；8 GiB 物理样本和 Windows 10/11 实机 E2E 待外部验收 |
+| DESK-09～13 | `modules/desktop_updates`、`apps/admin`、`apps/desktop-windows` | `apps/api/tests/test_m3_desktop_updates.py`、`apps/admin/src/services/desktopReleases.test.ts`、`apps/desktop-windows.tests/DesktopUpdateClientTests.cs`：版本/目标选择、声明大小与摘要、原始制品上传、发布/撤回、生产签名元数据门禁、管理端元数据规范化与上传恢复、匿名检查、下载完整性、客户端查询参数和清单解析 | M3 后端发布通道、管理端发布闭环与显式升级入口完成；正式 Authenticode 流水线、分批发布和静默安装留后续 |
+| 管理端需求 | `modules/admin`、`modules/desktop_updates`、`apps/admin` | `apps/api/tests/test_auth.py`、`apps/api/tests/test_m1_security_gates.py`、`apps/admin/src/services/desktopReleases.test.ts`：RBAC、普通用户拒绝、TOTP/MFA、发布元数据与原始制品上传 | M1 安全入口与 M3 桌面发布工作台完成，M4 审核/处置业务待实现 |
 | 前端认证传输 | Web/Admin API Client | `apps/web/src/services/api.test.ts`、`apps/admin/src/services/api.test.ts` | M1 基础完成 |
 | 敏感数据日志保护 | `core/logging` | `apps/api/tests/test_security.py`：嵌套字典/列表敏感字段递归脱敏 | M2 首版完成 |
 

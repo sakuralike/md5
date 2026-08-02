@@ -193,3 +193,128 @@ export interface MyFeedbackHistoryResponse {
   page_size: number;
   total: number;
 }
+
+export type DesktopInstallationStatus = "active" | "revoked";
+export type DesktopKeyAlgorithm = "ecdsa-p256-sha256";
+export type DesktopArchiveFormat = "zip" | "7z";
+
+export interface DesktopInstallationRegistrationRequest {
+  installation_id: string;
+  public_key: string;
+  key_algorithm: DesktopKeyAlgorithm;
+  client_version: string;
+}
+
+export interface DesktopInstallation {
+  installation_id: string;
+  status: DesktopInstallationStatus;
+  key_algorithm: DesktopKeyAlgorithm;
+  public_key_fingerprint: string;
+  client_version: string;
+  receipt_count: number;
+  created_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+}
+
+export interface DesktopInstallationListResponse {
+  items: DesktopInstallation[];
+}
+
+export interface DesktopChallengeRequest {
+  installation_id: string;
+  candidate_id: string;
+  fingerprint_algorithm: FingerprintAlgorithm;
+  fingerprint_digest: string;
+  client_version: string;
+}
+
+export interface DesktopChallengeResponse {
+  challenge_id: string;
+  challenge_nonce: string;
+  installation_id: string;
+  account_id: string;
+  candidate_id: string;
+  fingerprint_algorithm: FingerprintAlgorithm;
+  fingerprint_digest: string;
+  client_version: string;
+  canonical_payload_version: "desktop-receipt-v1";
+  expires_at: string;
+}
+
+export interface DesktopReceiptRequest {
+  challenge_id: string;
+  challenge_nonce: string;
+  installation_id: string;
+  account_id: string;
+  candidate_id: string;
+  fingerprint_algorithm: FingerprintAlgorithm;
+  fingerprint_digest: string;
+  candidate_digest: string;
+  outcome: FeedbackOutcome;
+  archive_format: DesktopArchiveFormat;
+  client_version: string;
+  verified_at: string;
+  signature: string;
+}
+
+export interface DesktopReceiptResponse {
+  receipt_id: string;
+  evidence_event_id: string | null;
+  candidate_id: string;
+  outcome: FeedbackOutcome;
+  candidate_status: CandidateStatus;
+  snapshot: VerificationSnapshot;
+  accepted_at: string;
+}
+
+export type DesktopReleaseChannel = "stable" | "beta";
+export type DesktopArchitecture = "x64" | "arm64";
+export type DesktopReleaseStatus = "draft" | "published" | "withdrawn";
+export type DesktopCodeSignatureStatus = "unsigned" | "test_signed" | "verified";
+
+export interface DesktopReleaseCreateRequest {
+  channel: DesktopReleaseChannel;
+  platform: "windows";
+  architecture: DesktopArchitecture;
+  version: string;
+  minimum_supported_version: string;
+  mandatory: boolean;
+  release_notes: string;
+  artifact_filename: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+  content_type: string;
+  code_signature_status: DesktopCodeSignatureStatus;
+  signer_subject: string | null;
+  signer_thumbprint: string | null;
+}
+
+export interface DesktopRelease {
+  id: string;
+  channel: DesktopReleaseChannel;
+  platform: string;
+  architecture: DesktopArchitecture;
+  version: string;
+  minimum_supported_version: string;
+  status: DesktopReleaseStatus;
+  mandatory: boolean;
+  release_notes: string;
+  artifact_filename: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+  content_type: string;
+  artifact_uploaded: boolean;
+  code_signature_status: DesktopCodeSignatureStatus;
+  signer_subject: string | null;
+  signer_thumbprint: string | null;
+  download_count: number;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  withdrawn_at: string | null;
+}
+
+export interface DesktopReleaseListResponse {
+  items: DesktopRelease[];
+}
