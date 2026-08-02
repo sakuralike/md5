@@ -29,7 +29,7 @@
 | Vue 用户端与管理端 | 完成 M1 范围 | HttpOnly 刷新 Cookie、管理端 TOTP 入口、可构建可测试 |
 | WPF 桌面端骨架 | 完成 M1 范围 | 本地 SHA-256/MD5 PoC 可构建 |
 | Docker Compose | 配置和验收脚本完成 | Docker 已安装，但 WSL 2/引擎未就绪，空环境实测待执行 |
-| 托管 CI 与分支保护 | 配置完成、待外部验收 | Git 远端 `origin` 已配置；GitHub CLI 尚未登录，托管 CI 与分支保护未实测 |
+| 托管 CI 与分支保护 | 配置完成、待外部验收 | Git 远端与开发分支推送完成；GitHub CLI 尚未登录，托管 CI、PR 与分支保护未实测 |
 
 ### M1 尚未关闭的外部门禁
 
