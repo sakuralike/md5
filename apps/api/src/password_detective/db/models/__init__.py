@@ -26,6 +26,12 @@ from password_detective.db.models.password_candidate import CandidateStatus, Pas
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
+from password_detective.db.models.trust_case import (
+    TrustCase,
+    TrustCaseEvent,
+    TrustCaseKind,
+    TrustCaseStatus,
+)
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.db.models.verification import (
@@ -64,6 +70,10 @@ __all__ = [
     "Submission",
     "SubmissionSource",
     "SystemSetting",
+    "TrustCase",
+    "TrustCaseEvent",
+    "TrustCaseKind",
+    "TrustCaseStatus",
     "User",
     "UserRole",
     "UserSession",
