@@ -41,7 +41,7 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, length=32), default=UserRole.USER, index=True
     )
-    reputation_score: Mapped[int] = mapped_column(Integer, default=0)
+    reputation_score: Mapped[int] = mapped_column(Integer, default=50)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     totp_pending_secret_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
