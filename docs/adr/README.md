@@ -13,5 +13,6 @@
 | [ADR-0009](./0009-backend-managed-desktop-update-channel.md) | 后端托管桌面更新通道与显式下载入口 | 已接受 |
 | [ADR-0010](./0010-unified-trust-case-workflow.md) | 统一举报与申诉信任案件工作流 | 已接受 |
 | [ADR-0011](./0011-points-projection-and-reputation-events.md) | 积分投影与不可变信誉事件 | 已接受 |
+| [ADR-0012](./0012-reward-compensation-reconciliation.md) | 奖励补偿与状态驱动校正 | 已接受 |
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。

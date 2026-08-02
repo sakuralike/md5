@@ -5,12 +5,14 @@ from collections.abc import Sequence
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.archive import Archive
 from password_detective.db.models.archive_fingerprint import ArchiveFingerprint
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
+from password_detective.db.models.reward_adjustment_event import RewardAdjustmentEvent
 from password_detective.db.models.submission import Submission
 from password_detective.db.models.verification import (
     CandidateFeedback,
@@ -30,9 +32,22 @@ from password_detective.modules.moderation.schemas import (
     EvidenceSnapshotResponse,
     FingerprintSummary,
     ManualTransitionReason,
+    RewardAdjustmentEventResponse,
+    RewardAdjustmentSummaryResponse,
     StateEventResponse,
 )
-from password_detective.modules.verification.service import ACTIVE_RULE, candidate_evidence_totals
+from password_detective.modules.reputation.adjustments import (
+    REWARD_COMPENSATION_RULE_VERSION,
+    RewardAdjustmentSummary,
+    list_candidate_reward_adjustments,
+    reconcile_candidate_rewards,
+)
+from password_detective.modules.verification.service import (
+    ACTIVE_RULE,
+    candidate_evidence_totals,
+    has_ever_been_verified,
+    settle_first_verification_rewards,
+)
 
 MODERATION_RULE_VERSION = "moderation-v1"
 
@@ -165,12 +180,17 @@ def get_candidate_detail(db: Session, candidate_id: str) -> CandidateModerationD
             for event in evidence_events
         ],
         state_events=[_state_event(event) for event in state_events],
+        reward_adjustments=[
+            _reward_adjustment(event)
+            for event in list_candidate_reward_adjustments(db, candidate.id)
+        ],
     )
 
 
 def transition_candidate(
     db: Session,
     *,
+    settings: Settings,
     candidate_id: str,
     payload: CandidateTransitionRequest,
     principal: Principal,
@@ -200,6 +220,10 @@ def transition_candidate(
         )
 
     totals = candidate_evidence_totals(db, candidate.id)
+    first_verification = (
+        payload.target_status == CandidateStatus.VERIFIED
+        and not has_ever_been_verified(db, candidate.id)
+    )
     event = RecordStateEvent(
         candidate_id=candidate.id,
         previous_status=previous_status,
@@ -222,6 +246,15 @@ def transition_candidate(
         candidate.last_verified_at = utc_now()
     db.add(event)
     db.flush()
+    if first_verification:
+        settle_first_verification_rewards(db, settings, candidate.id)
+        db.flush()
+    adjustment = reconcile_candidate_rewards(
+        db,
+        candidate_id=candidate.id,
+        state_event_id=event.id,
+        target_status=payload.target_status,
+    )
     write_audit_log(
         db,
         actor_id=principal.user.id,
@@ -236,6 +269,15 @@ def transition_candidate(
             "current_status": payload.target_status.value,
             "reason_code": payload.reason_code.value,
             "state_event_id": event.id,
+            "reward_adjustment": {
+                "direction": adjustment.direction.value if adjustment.direction else None,
+                "affected_users": adjustment.affected_users,
+                "points_entries": adjustment.points_entries,
+                "reputation_events": adjustment.reputation_events,
+                "points_amount": adjustment.points_amount,
+                "reputation_amount": adjustment.reputation_amount,
+                "rule_version": REWARD_COMPENSATION_RULE_VERSION,
+            },
         },
     )
     db.commit()
@@ -246,6 +288,7 @@ def transition_candidate(
         state_event_id=event.id,
         reason_code=payload.reason_code,
         request_id=context.request_id,
+        reward_adjustment=_reward_adjustment_summary(adjustment),
     )
 
 
@@ -315,5 +358,37 @@ def _state_event(event: RecordStateEvent) -> StateEventResponse:
         independent_failure_count=event.independent_failure_count,
         success_weight=round(event.success_weight, 3),
         failure_weight=round(event.failure_weight, 3),
+        created_at=event.created_at,
+    )
+
+
+def _reward_adjustment_summary(
+    summary: RewardAdjustmentSummary,
+) -> RewardAdjustmentSummaryResponse:
+    return RewardAdjustmentSummaryResponse(
+        rule_version=REWARD_COMPENSATION_RULE_VERSION,
+        direction=summary.direction,
+        affected_users=summary.affected_users,
+        points_entries=summary.points_entries,
+        reputation_events=summary.reputation_events,
+        points_amount=summary.points_amount,
+        reputation_amount=summary.reputation_amount,
+    )
+
+
+def _reward_adjustment(
+    event: RewardAdjustmentEvent,
+) -> RewardAdjustmentEventResponse:
+    return RewardAdjustmentEventResponse(
+        id=event.id,
+        state_event_id=event.state_event_id,
+        user_id=event.user_id,
+        reward_kind=event.reward_kind,
+        source_reference_id=event.source_reference_id,
+        direction=event.direction,
+        points_amount=event.points_amount,
+        reputation_amount=event.reputation_amount,
+        reason_code=event.reason_code,
+        rule_version=event.rule_version,
         created_at=event.created_at,
     )
