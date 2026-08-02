@@ -5,6 +5,7 @@ import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
+import TrustCasesPage from "../pages/TrustCasesPage.vue";
 
 const STORAGE_KEY = "password_detective_admin_session_v2";
 
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
+    { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
   ],
 });

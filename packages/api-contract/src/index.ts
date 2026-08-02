@@ -405,3 +405,95 @@ export interface CandidateTransitionResponse {
   reason_code: ManualTransitionReason;
   request_id: string | null;
 }
+
+export type ReportReason =
+  | "report.invalid_candidate"
+  | "report.policy_violation"
+  | "report.misleading_metadata"
+  | "report.other";
+export type AppealReason =
+  | "appeal.decision_incorrect"
+  | "appeal.new_evidence"
+  | "appeal.context_missing"
+  | "appeal.other";
+
+export interface ReportCreateRequest {
+  candidate_id: string;
+  reason_code: ReportReason;
+  description?: string | null;
+}
+
+export interface AppealCreateRequest {
+  candidate_id: string;
+  related_case_id?: string | null;
+  reason_code: AppealReason;
+  description: string;
+}
+
+export type TrustCaseKind = "report" | "appeal";
+export type TrustCaseStatus = "open" | "in_review" | "resolved" | "dismissed";
+export type TrustCaseResolutionCode =
+  | "admin.review_started"
+  | "admin.action_taken"
+  | "admin.no_violation"
+  | "admin.insufficient_evidence"
+  | "admin.appeal_upheld"
+  | "admin.appeal_denied"
+  | "admin.reopened";
+
+export interface TrustCaseSummary {
+  id: string;
+  kind: TrustCaseKind;
+  status: TrustCaseStatus;
+  reporter_id: string;
+  reporter_username: string;
+  candidate_id: string;
+  related_case_id: string | null;
+  reason_code: string;
+  description: string | null;
+  assigned_to_id: string | null;
+  resolved_by_id: string | null;
+  resolution_code: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrustCaseEvent {
+  id: string;
+  actor_id: string | null;
+  previous_status: TrustCaseStatus | null;
+  next_status: TrustCaseStatus;
+  action: string;
+  reason_code: string;
+  note: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
+export interface TrustCaseDetail extends TrustCaseSummary {
+  events: TrustCaseEvent[];
+}
+
+export interface TrustCaseListResponse {
+  items: TrustCaseSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface TrustCaseTransitionRequest {
+  target_status: TrustCaseStatus;
+  resolution_code: TrustCaseResolutionCode;
+  resolution_note?: string | null;
+}
+
+export interface TrustCaseTransitionResponse {
+  case_id: string;
+  previous_status: TrustCaseStatus;
+  current_status: TrustCaseStatus;
+  event_id: string;
+  resolution_code: TrustCaseResolutionCode;
+  request_id: string | null;
+}

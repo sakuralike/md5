@@ -4,6 +4,7 @@ import LoginPage from "../pages/LoginPage.vue";
 import RegisterPage from "../pages/RegisterPage.vue";
 import SecurityPage from "../pages/SecurityPage.vue";
 import SubmissionsPage from "../pages/SubmissionsPage.vue";
+import TrustCasesPage from "../pages/TrustCasesPage.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: "/register", component: RegisterPage, meta: { guestOnly: true } },
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
     { path: "/submissions", component: SubmissionsPage, meta: { requiresAuth: true } },
+    { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAuth: true } },
   ],
 });
 

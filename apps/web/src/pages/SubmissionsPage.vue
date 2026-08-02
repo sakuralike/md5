@@ -60,7 +60,15 @@ function statusLabel(status: string): string {
           <code v-for="fingerprint in item.fingerprints" :key="fingerprint.algorithm">
             {{ fingerprint.algorithm.toUpperCase() }} · {{ shortDigest(fingerprint.digest) }}
           </code>
+          <small>候选 ID {{ item.candidate_id }}</small>
           <small>授权声明版本 {{ item.authorization_version }} · 来源 {{ item.source }}</small>
+          <RouterLink
+            v-if="item.candidate_status === 'rejected' || item.candidate_status === 'quarantined'"
+            class="button secondary"
+            :to="{ path: '/trust-cases', query: { kind: 'appeal', candidate_id: item.candidate_id } }"
+          >
+            对此审核结果发起申诉
+          </RouterLink>
         </div>
       </article>
     </div>

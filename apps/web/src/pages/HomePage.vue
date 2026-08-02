@@ -385,6 +385,12 @@ function statusLabel(status: CandidateStatus): string {
                   >
                     {{ candidate.my_feedback === "failure" ? "已反馈失败" : "本地验证失败" }}
                   </button>
+                  <RouterLink
+                    class="button secondary"
+                    :to="{ path: '/trust-cases', query: { kind: 'report', candidate_id: candidate.id } }"
+                  >
+                    举报候选
+                  </RouterLink>
                 </div>
                 <small class="muted">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
               </div>

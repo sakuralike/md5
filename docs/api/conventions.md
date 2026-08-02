@@ -94,6 +94,21 @@
 
 状态事件保存可选的 500 字符审核说明，但审计详情只保存原因码、前后状态和事件 ID。调用方不得在审核说明中放入密码、令牌、密钥或个人信息；API 响应、日志和审计均不得复制候选密码明文、密文、nonce、密钥版本或去重标签。
 
+## 举报与申诉案件
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `POST` | `/trust/reports` | 登录 | 举报存在的候选；每小时限流；要求 16～128 字符 `Idempotency-Key`；说明最多 1000 字符 |
+| `POST` | `/trust/appeals` | 登录 | 仅候选贡献者可对 `rejected/quarantined` 候选申诉；说明必填；每日限流；要求 `Idempotency-Key` |
+| `GET` | `/trust/cases?kind=...&page=1&page_size=20` | 登录 | 只返回当前用户提交的案件，不接受任意 reporter 参数 |
+| `GET` | `/admin/trust-cases?kind=...&status=...&query=...` | 审核员/管理员 + MFA | 按类型、状态、案件/候选 ID 或举报人用户名筛选统一队列 |
+| `GET` | `/admin/trust-cases/{case_id}` | 审核员/管理员 + MFA | 返回案件详情和不可变事件时间线 |
+| `POST` | `/admin/trust-cases/{case_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；状态和结果码必须匹配；写入不可变事件与脱敏审计 |
+
+案件状态为 `open/in_review/resolved/dismissed`。允许 `open → in_review/resolved/dismissed`、`in_review → open/resolved/dismissed`、`resolved/dismissed → open`；关闭案件重新打开必须使用 `admin.reopened`。举报解决码为采取行动或无违规，申诉解决码为申诉成立或驳回；案件结论不会自动改写候选状态，后续候选处置必须走独立的 `moderation-v1` 接口。
+
+自由文本只用于案件详情和事件时间线，不复制到审计详情。调用方不得提交密码、令牌、密钥或个人信息；用户接口必须保持对象级私有，管理接口必须保持 MFA 门禁。
+
 ## 桌面更新发布与下载
 
 | 方法 | 路径 | 认证 | 关键约束 |
