@@ -31,6 +31,7 @@ from password_detective.modules.desktop_verification.router import router as des
 from password_detective.modules.health.router import router as health_router
 from password_detective.modules.moderation.router import router as moderation_router
 from password_detective.modules.reputation.router import router as reputation_router
+from password_detective.modules.risk_alerts.router import router as risk_alerts_router
 from password_detective.modules.trust_cases.router import (
     admin_router as trust_cases_admin_router,
 )
@@ -108,6 +109,7 @@ def create_app(
     app.include_router(archives_router, prefix="/api/v1")
     app.include_router(verification_router, prefix="/api/v1")
     app.include_router(reputation_router, prefix="/api/v1")
+    app.include_router(risk_alerts_router, prefix="/api/v1")
     app.include_router(desktop_router, prefix="/api/v1")
     app.include_router(desktop_updates_router, prefix="/api/v1")
     app.include_router(desktop_updates_admin_router, prefix="/api/v1")
