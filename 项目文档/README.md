@@ -17,6 +17,7 @@
 - [当前阶段状态](../docs/development/phase-status.md)
 - [模块地图](../docs/development/module-map.md)
 - [M0/M1 第 1 次开发迭代](../docs/development/2026-08-01-m0-m1-iteration-1.md)
+- [M4 第 3 次开发迭代：积分与信誉中心](../docs/development/2026-08-02-m4-iteration-3.md)
 - [M4 第 2 次开发迭代：举报与申诉案件闭环](../docs/development/2026-08-02-m4-iteration-2.md)
 - [M4 第 1 次开发迭代：候选人工审核闭环](../docs/development/2026-08-02-m4-iteration-1.md)
 - [架构决策记录](../docs/adr/README.md)

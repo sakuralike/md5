@@ -150,3 +150,11 @@
 ```
 
 错误信息不得用于枚举账号，不得回显密码、令牌、密钥、Cookie、TOTP 秘钥或内部堆栈。限流返回 `429 rate_limit.exceeded` 和重试秒数；Redis 保护后端不可用时返回 `503 rate_limit.backend_unavailable`。
+
+## 本人积分与信誉
+
+- `GET /api/v1/me/trust-profile`：返回本人信誉分、积分状态汇总、贡献和有效反馈统计。
+- `GET /api/v1/me/points`：分页返回本人积分流水。
+- `GET /api/v1/me/reputation`：分页返回本人不可变信誉事件。
+- 三个端点均从认证主体确定用户，不接受目标用户 ID；积分状态为 `pending/posted/reversed`。
+- 信誉事件使用 `reputation-v1`、受控原因码和引用唯一约束，分值范围为 0～100。

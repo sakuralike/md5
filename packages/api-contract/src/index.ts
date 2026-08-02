@@ -194,6 +194,70 @@ export interface MyFeedbackHistoryResponse {
   total: number;
 }
 
+export type PointsLedgerStatus = "pending" | "posted" | "reversed";
+
+export interface PointsSummary {
+  available: number;
+  pending: number;
+  reversed: number;
+}
+
+export interface FeedbackSummary {
+  effective_success: number;
+  effective_failure: number;
+  history_events: number;
+}
+
+export interface ContributionSummary {
+  total: number;
+  verified: number;
+}
+
+export interface TrustProfileResponse {
+  reputation_score: number;
+  reputation_min: number;
+  reputation_max: number;
+  points: PointsSummary;
+  feedback: FeedbackSummary;
+  contributions: ContributionSummary;
+}
+
+export interface PointsLedgerItem {
+  id: string;
+  amount: number;
+  event_type: string;
+  reference_id: string;
+  status: PointsLedgerStatus;
+  created_at: string;
+  settled_at: string | null;
+}
+
+export interface PointsLedgerResponse {
+  items: PointsLedgerItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface ReputationEventItem {
+  id: string;
+  amount: number;
+  event_type: string;
+  reference_id: string;
+  reason_code: string;
+  rule_version: string;
+  previous_score: number;
+  next_score: number;
+  created_at: string;
+}
+
+export interface ReputationEventsResponse {
+  items: ReputationEventItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 export type DesktopInstallationStatus = "active" | "revoked";
 export type DesktopKeyAlgorithm = "ecdsa-p256-sha256";
 export type DesktopArchiveFormat = "zip" | "7z";

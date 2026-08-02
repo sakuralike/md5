@@ -24,6 +24,7 @@ from password_detective.db.models.desktop_verification import (
 from password_detective.db.models.idempotency_record import IdempotencyRecord, IdempotencyStatus
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
+from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.trust_case import (
@@ -66,6 +67,7 @@ __all__ = [
     "PointsLedger",
     "PointsLedgerStatus",
     "RecordStateEvent",
+    "ReputationEvent",
     "StateTransitionSource",
     "Submission",
     "SubmissionSource",

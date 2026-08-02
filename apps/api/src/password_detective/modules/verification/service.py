@@ -24,6 +24,11 @@ from password_detective.db.models.verification import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.reputation.service import (
+    CONTRIBUTION_VERIFIED_REPUTATION,
+    VERIFICATION_ACCEPTED_REPUTATION,
+    apply_reputation_event,
+)
 from password_detective.modules.verification.schemas import (
     FeedbackRequest,
     FeedbackResponse,
@@ -409,8 +414,17 @@ def _settle_first_verification_points(
         )
         ledger.settled_at = now
 
-    if settings.verification_reward_points <= 0:
-        return
+    if submissions:
+        first_submission = submissions[0]
+        apply_reputation_event(
+            db,
+            user_id=first_submission.user_id,
+            amount=CONTRIBUTION_VERIFIED_REPUTATION,
+            event_type="contribution.verified",
+            reference_id=first_submission.id,
+            reason_code="reputation.valid_contribution",
+        )
+
     successful_feedbacks = list(
         db.scalars(
             select(CandidateFeedback).where(
@@ -420,24 +434,33 @@ def _settle_first_verification_points(
         )
     )
     for feedback in successful_feedbacks:
-        existing = db.scalar(
-            select(PointsLedger.id).where(
-                PointsLedger.user_id == feedback.user_id,
-                PointsLedger.event_type == "verification.accepted",
-                PointsLedger.reference_id == feedback.id,
-            )
-        )
-        if existing is None:
-            db.add(
-                PointsLedger(
-                    user_id=feedback.user_id,
-                    amount=settings.verification_reward_points,
-                    event_type="verification.accepted",
-                    reference_id=feedback.id,
-                    status=PointsLedgerStatus.POSTED,
-                    settled_at=now,
+        if settings.verification_reward_points > 0:
+            existing = db.scalar(
+                select(PointsLedger.id).where(
+                    PointsLedger.user_id == feedback.user_id,
+                    PointsLedger.event_type == "verification.accepted",
+                    PointsLedger.reference_id == feedback.id,
                 )
             )
+            if existing is None:
+                db.add(
+                    PointsLedger(
+                        user_id=feedback.user_id,
+                        amount=settings.verification_reward_points,
+                        event_type="verification.accepted",
+                        reference_id=feedback.id,
+                        status=PointsLedgerStatus.POSTED,
+                        settled_at=now,
+                    )
+                )
+        apply_reputation_event(
+            db,
+            user_id=feedback.user_id,
+            amount=VERIFICATION_ACCEPTED_REPUTATION,
+            event_type="verification.accepted",
+            reference_id=feedback.id,
+            reason_code="reputation.valid_verification",
+        )
 
 
 def list_my_feedback_history(

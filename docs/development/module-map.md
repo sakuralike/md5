@@ -14,17 +14,18 @@
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定与 MFA 访问门禁 | 举报、配置、危险操作二次确认和审计查询 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态时间线、`moderation-v1` 人工状态转换、持久化幂等和审计 | 候选合并/删除、案件联动、并发冲突强化与批量处置资源限制 |
 | Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人案件列表、MFA 统一队列/详情、受控状态矩阵、不可变事件、限流、幂等和审计脱敏 | 结果通知、SLA、候选处置编排、账号申诉和自动分派 |
+| Reputation | `apps/api/src/password_detective/modules/reputation/` | 本人积分投影、贡献/反馈统计、积分流水、不可变信誉事件、0～100 分投影和 `reputation-v1` 幂等奖励 | 撤销补偿、信誉扣减、管理员用户处置和动态风险权重 |
 | Health | `apps/api/src/password_detective/modules/health/` | 存活、数据库和限流后端就绪检查 | Worker/密钥管理与更细粒度依赖状态 |
 | Desktop Verification | `apps/api/src/password_detective/modules/desktop_verification/` | 安装公钥注册/撤销、一次性挑战、版本/时钟/绑定校验、ECDSA 回执验签、防重放与证据接入 | M4 风险评分细化、关联账号分析和人工处置 |
 | Desktop Updates | `apps/api/src/password_detective/modules/desktop_updates/` | 稳定/测试通道发布清单、MFA 管理发布、流式制品完整性校验、发布/撤回、匿名版本检查和受控下载 | 对象存储/CDN、正式签名流水线、分批发布与回滚编排 |
-| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置、档案、指纹、候选、贡献、积分、反馈、证据历史、自动/人工状态事件、信任案件/案件事件、安装实例、挑战、桌面回执和桌面发布模型 | 信誉事件、案件 SLA 与通知投递状态 |
+| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置、档案、指纹、候选、贡献、积分、信誉事件、反馈、证据历史、自动/人工状态事件、信任案件/案件事件、安装实例、挑战、桌面回执和桌面发布模型 | 案件 SLA、通知投递状态和补偿关联字段 |
 | Worker | `apps/api/src/password_detective/worker.py` | Celery 应用和探活任务 | 邮件投递、幂等记录清理、验证批处理和报表 |
 
 ## 客户端模块
 
 | 模块 | 路径 | 当前职责 | 下一步 |
 |---|---|---|---|
-| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈、个人贡献、举报/申诉创建和本人案件列表 | Web Worker 隔离、反馈历史、积分/信誉、案件结果通知、超大文件性能与浏览器 E2E |
+| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈、个人贡献、举报/申诉，以及积分/信誉/反馈历史中心 | Web Worker 隔离、案件结果通知、超大文件性能与浏览器 E2E |
 | 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、候选审核队列/详情/人工处置、举报/申诉队列/详情/状态时间线、桌面发布草稿/上传重试/发布/撤回工作台 | 用户处置、审计查询、案件与候选状态编排、SLA 和风险指标工作台 |
 | Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执、稳定通道自动检查与显式浏览器下载入口 | Windows 10/11 实机 E2E、物理超大样本、静默安装与正式发布签名 |
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
