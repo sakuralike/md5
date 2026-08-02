@@ -14,5 +14,6 @@
 | [ADR-0010](./0010-unified-trust-case-workflow.md) | 统一举报与申诉信任案件工作流 | 已接受 |
 | [ADR-0011](./0011-points-projection-and-reputation-events.md) | 积分投影与不可变信誉事件 | 已接受 |
 | [ADR-0012](./0012-reward-compensation-reconciliation.md) | 奖励补偿与状态驱动校正 | 已接受 |
+| [ADR-0013](./0013-failure-surge-risk-alerts.md) | 短时间窗失败激增风险告警与隐私边界 | 已接受 |
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。

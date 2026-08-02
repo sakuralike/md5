@@ -589,3 +589,72 @@ export interface TrustCaseTransitionResponse {
   resolution_code: TrustCaseResolutionCode;
   request_id: string | null;
 }
+
+
+export type RiskAlertKind = "failure_surge";
+export type RiskAlertSeverity = "high";
+export type RiskAlertStatus = "open" | "acknowledged" | "resolved";
+export type RiskAlertResolutionCode =
+  | "admin.investigation_started"
+  | "admin.mitigated"
+  | "admin.false_positive"
+  | "admin.reopened";
+
+export interface RiskAlertSummary {
+  id: string;
+  candidate_id: string;
+  trigger_evidence_id: string;
+  kind: RiskAlertKind;
+  severity: RiskAlertSeverity;
+  status: RiskAlertStatus;
+  rule_version: string;
+  window_started_at: string;
+  window_ended_at: string;
+  independent_failure_count: number;
+  failure_weight: number;
+  assigned_to_id: string | null;
+  resolved_by_id: string | null;
+  resolution_code: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskAlertEvent {
+  id: string;
+  actor_id: string | null;
+  previous_status: RiskAlertStatus | null;
+  next_status: RiskAlertStatus;
+  action: string;
+  reason_code: string;
+  note: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
+export interface RiskAlertDetail extends RiskAlertSummary {
+  events: RiskAlertEvent[];
+}
+
+export interface RiskAlertListResponse {
+  items: RiskAlertSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RiskAlertTransitionRequest {
+  target_status: RiskAlertStatus;
+  resolution_code: RiskAlertResolutionCode;
+  resolution_note?: string | null;
+}
+
+export interface RiskAlertTransitionResponse {
+  alert_id: string;
+  previous_status: RiskAlertStatus;
+  current_status: RiskAlertStatus;
+  event_id: string;
+  resolution_code: RiskAlertResolutionCode;
+  request_id: string | null;
+}

@@ -10,10 +10,11 @@
 | Core | `apps/api/src/password_detective/core/` | 配置、令牌、Argon2id、错误、request_id、Redis 限流、数据库幂等、通知边界、浏览器 Cookie、TOTP 秘钥加密、候选秘密保险库、递归日志脱敏 | 生产 KMS 适配器、密钥轮换、指标与清理任务 |
 | Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务、可选身份解析 | M2 个人资料扩展与风险策略 |
 | Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数和个人贡献列表 | 高风险揭示二次验证、规模查询优化 |
-| Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v1` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算和自动奖励校正 | M4 关联账号、短时异常和失败激增告警 |
+| Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v1` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | M4 关联账号图谱与动态反馈降权 |
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定与 MFA 访问门禁 | 举报、配置、危险操作二次确认和审计查询 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
 | Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人案件列表、MFA 统一队列/详情、受控状态矩阵、不可变事件、限流、幂等和审计脱敏 | 结果通知、SLA、候选处置编排、账号申诉和自动分派 |
+| Risk Alerts | `apps/api/src/password_detective/modules/risk_alerts/` | `risk-alert-v1` 15 分钟失败激增检测、聚合告警投影、不可变事件、MFA 队列/详情和幂等处置 | 关联账号图谱、通知、SLA、批量操作与动态规则配置 |
 | Reputation | `apps/api/src/password_detective/modules/reputation/` | 本人积分投影、贡献/反馈统计、积分流水、不可变信誉事件、0～100 分投影、`reputation-v1` 幂等奖励和 `reward-compensation-v1` 撤销/恢复校正 | 管理员用户处置、危险操作再次确认和动态风险权重 |
 | Health | `apps/api/src/password_detective/modules/health/` | 存活、数据库和限流后端就绪检查 | Worker/密钥管理与更细粒度依赖状态 |
 | Desktop Verification | `apps/api/src/password_detective/modules/desktop_verification/` | 安装公钥注册/撤销、一次性挑战、版本/时钟/绑定校验、ECDSA 回执验签、防重放与证据接入 | M4 风险评分细化、关联账号分析和人工处置 |

@@ -237,6 +237,13 @@ def apply_candidate_evidence(
         totals=totals,
         trigger_evidence=evidence_event,
     )
+    from password_detective.modules.risk_alerts.detection import detect_failure_surge
+
+    detect_failure_surge(
+        db,
+        candidate_id=candidate.id,
+        trigger_evidence=evidence_event,
+    )
     return EvidenceMutation(
         feedback=feedback,
         evidence_event=evidence_event,

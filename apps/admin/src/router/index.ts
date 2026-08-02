@@ -4,6 +4,7 @@ import CandidateModerationPage from "../pages/CandidateModerationPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
+import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
 
@@ -18,6 +19,7 @@ const router = createRouter({
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
+    { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
   ],
 });

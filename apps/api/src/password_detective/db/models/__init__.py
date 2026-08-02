@@ -30,6 +30,13 @@ from password_detective.db.models.reward_adjustment_event import (
     RewardAdjustmentEvent,
     RewardKind,
 )
+from password_detective.db.models.risk_alert import (
+    RiskAlert,
+    RiskAlertEvent,
+    RiskAlertKind,
+    RiskAlertSeverity,
+    RiskAlertStatus,
+)
 from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.trust_case import (
@@ -72,6 +79,11 @@ __all__ = [
     "PointsLedger",
     "PointsLedgerStatus",
     "RecordStateEvent",
+    "RiskAlert",
+    "RiskAlertEvent",
+    "RiskAlertKind",
+    "RiskAlertSeverity",
+    "RiskAlertStatus",
     "ReputationEvent",
     "RewardAdjustmentDirection",
     "RewardAdjustmentEvent",
