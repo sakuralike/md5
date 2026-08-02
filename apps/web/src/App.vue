@@ -13,6 +13,7 @@ const auth = useAuthStore();
       </RouterLink>
       <nav class="nav" aria-label="主导航">
         <RouterLink to="/">首页</RouterLink>
+        <RouterLink v-if="auth.isAuthenticated" to="/submissions">我的贡献</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/security">账号安全</RouterLink>
         <RouterLink v-if="!auth.isAuthenticated" to="/login">登录</RouterLink>
         <RouterLink v-if="!auth.isAuthenticated" to="/register">注册</RouterLink>

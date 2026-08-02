@@ -7,28 +7,31 @@
 
 | 模块 | 路径 | 当前职责 | 下一步 |
 |---|---|---|---|
-| Core | `apps/api/src/password_detective/core/` | 配置、令牌、Argon2id、错误、request_id、Redis 限流、数据库幂等、通知边界、浏览器 Cookie、TOTP 秘钥加密 | 候选秘密加密适配器、指标与清理任务 |
-| Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务 | M2 个人资料扩展与风险策略 |
+| Core | `apps/api/src/password_detective/core/` | 配置、令牌、Argon2id、错误、request_id、Redis 限流、数据库幂等、通知边界、浏览器 Cookie、TOTP 秘钥加密、候选秘密保险库、递归日志脱敏 | 生产 KMS 适配器、密钥轮换、指标与清理任务 |
+| Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务、可选身份解析 | M2 个人资料扩展与风险策略 |
+| Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数和个人贡献列表 | 高风险揭示二次验证、规模查询优化 |
+| Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v1` 聚合、自动状态事件、首次验证积分结算和个人反馈历史 | M3 签名桌面回执；M4 关联账号、短时异常和人工审核 |
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定与 MFA 访问门禁 | M4 候选审核、举报、配置和审计查询 |
 | Health | `apps/api/src/password_detective/modules/health/` | 存活、数据库和限流后端就绪检查 | Worker/密钥管理与更细粒度依赖状态 |
-| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置模型 | M2 档案/指纹/候选/贡献模型 |
-| Worker | `apps/api/src/password_detective/worker.py` | Celery 应用和探活任务 | 邮件投递、幂等记录清理、批量任务和报表 |
+| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置、档案、指纹、候选、贡献、积分、反馈、证据历史和状态事件模型 | 安装实例、挑战、桌面回执、举报与信誉事件 |
+| Worker | `apps/api/src/password_detective/worker.py` | Celery 应用和探活任务 | 邮件投递、幂等记录清理、验证批处理和报表 |
 
 ## 客户端模块
 
 | 模块 | 路径 | 当前职责 | 下一步 |
 |---|---|---|---|
-| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、会话安全页、M1 首页 | M2 浏览器分块哈希、查询、贡献、揭示 |
+| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈和个人贡献 | Web Worker 隔离、反馈历史页、超大文件性能与浏览器 E2E |
 | 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、导航骨架 | M4 审核与审计工作台 |
 | Windows 桌面端 | `apps/desktop-windows/` | 文件选择、异步 SHA-256/MD5、进度和取消 | M3 ZIP/7z 解压测试、安装密钥、挑战签名 |
-| Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌和基础样式 | 可访问组件与状态组件 |
-| API Contract | `packages/api-contract/` | 共享认证、浏览器会话、用户/会话、标准错误和角色类型 | 从 OpenAPI 自动生成并做契约差异检查 |
+| Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
+| API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
 
 ## 模块边界规则
 
-1. API 模块不直接导入其他模块的内部仓储；跨模块操作通过公开服务函数或应用编排层完成。
+1. API 模块不直接导入其他模块的内部仓储；跨模块操作通过公开服务函数或应用编排层完成。Archives 查询只调用 Verification 的公开证据汇总函数。
 2. 业务状态改变必须写入领域事件或审计，不在路由中散落状态规则。
-3. 候选密码明文只允许在 M2 秘密服务的最小路径出现，不进入日志、异常或前端缓存。
+3. 候选密码明文只允许在 M2 秘密服务的最小路径出现，不进入日志、异常或前端持久缓存。
 4. Web/Admin 只通过 API 契约访问后端；长期刷新令牌仅存在于 HttpOnly Cookie，桌面端使用独立 JSON 令牌流程。
 5. Windows 客户端是不可信证据来源，签名回执仍需服务端挑战、防重放和风险规则。
 6. 生产与集成环境的限流状态必须由 Redis 共享；关键写操作的幂等结果必须持久化到数据库。
+7. 候选秘密加密与去重使用不同用途密钥；生产环境不得直接使用应用主密钥代替 KMS 管理的数据密钥。

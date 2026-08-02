@@ -26,6 +26,19 @@ $env:REDIS_URL = "redis://localhost:6379/0"
 
 账号验证和密码重置默认使用内存通知网关。容器环境使用不输出邮箱和令牌的日志占位网关；接入正式邮件提供商前，不应将其视为真实投递。
 
+M2 候选秘密和揭示策略可通过以下变量配置：
+
+```powershell
+$env:CANDIDATE_SECRET_KEY_VERSION = "v1"
+$env:DAILY_REVEAL_QUOTA = "5"
+$env:SUBMISSION_PENDING_POINTS = "1"
+$env:VERIFICATION_REWARD_POINTS = "1"
+```
+
+验证状态规则当前固定为 `verification-v1`；规则版本会写入反馈历史和状态事件。修改阈值时必须发布新规则版本并补充迁移/回放测试，不能直接改写历史证据。
+
+本地/测试适配器使用 `APP_SECRET_KEY` 按用途派生候选加密密钥和 HMAC 去重密钥，仅用于开发闭环。生产部署必须接入独立 KMS/密钥管理适配器，并完成密钥版本轮换演练。
+
 ## Web 与 Admin
 
 ```powershell
@@ -34,7 +47,7 @@ pnpm dev:web
 pnpm dev:admin
 ```
 
-默认地址分别为 `http://localhost:5173` 和 `http://localhost:5174`。两者使用独立 HttpOnly 刷新 Cookie；如果更换端口或域名，必须同步更新 `CORS_ORIGINS`。生产环境必须设置 `BROWSER_COOKIE_SECURE=true` 并使用 HTTPS。
+默认地址分别为 `http://localhost:5173` 和 `http://localhost:5174`。Web 本地指纹计算建议上限由 `VITE_MAX_ARCHIVE_SIZE_BYTES` 控制，默认 20 GiB；仍采用分块读取，不一次性载入内存。两者使用独立 HttpOnly 刷新 Cookie；如果更换端口或域名，必须同步更新 `CORS_ORIGINS`。生产环境必须设置 `BROWSER_COOKIE_SECURE=true` 并使用 HTTPS。
 
 ## 统一检查
 
@@ -58,7 +71,9 @@ Copy-Item .env.example .env
 ./scripts/smoke-compose.ps1
 ```
 
-脚本会删除本项目 Compose 卷、重新构建并等待服务就绪，然后用合成账号完成注册和登录，并检查 Web/Admin HTTP 响应。默认结束后清理环境；调试时可使用 `-KeepEnvironment`。此脚本会清除当前 Compose 项目的数据库和 Redis 数据，不应用于含有需要保留数据的环境。
+执行前先确认 `docker version` 同时显示 Client 和 Server；仅安装 Docker CLI 而 Docker Desktop/WSL 2 引擎未就绪时不能通过该门禁。
+
+脚本会删除本项目 Compose 卷、重新构建并等待服务就绪，然后用合成账号完成注册和登录，并检查 Web/Admin HTTP 响应。若项目路径包含中文等非 ASCII 字符，脚本会自动分配临时 ASCII 盘符以兼容 Docker BuildKit，并在结束时释放。默认结束后清理环境；调试时可使用 `-KeepEnvironment`。此脚本会清除当前 Compose 项目的数据库和 Redis 数据，不应用于含有需要保留数据的环境。
 
 ## 安全要求
 
@@ -67,3 +82,4 @@ Copy-Item .env.example .env
 3. 不在日志中记录请求体、密码、Authorization、Cookie、TOTP 秘钥或一次性令牌。
 4. 本地 SQLite 不复制到集成或生产环境。
 5. 不用内存限流器替代集成/生产 Redis 验收。
+6. 候选秘密不得进入浏览器持久存储、日志、审计详情或异常文本；揭示响应不得被缓存。

@@ -19,8 +19,10 @@ from password_detective.core.rate_limit import InMemoryRateLimiter, RedisRateLim
 from password_detective.core.request_context import RequestContextMiddleware
 from password_detective.db.database import Database
 from password_detective.modules.admin.router import router as admin_router
+from password_detective.modules.archives.router import router as archives_router
 from password_detective.modules.auth.router import router as auth_router
 from password_detective.modules.health.router import router as health_router
+from password_detective.modules.verification.router import router as verification_router
 
 
 def create_app(
@@ -60,7 +62,7 @@ def create_app(
     docs_url = "/docs" if resolved_settings.app_env in {"local", "test", "integration"} else None
     app = FastAPI(
         title=resolved_settings.app_name,
-        version="0.2.0",
+        version="0.3.0",
         debug=resolved_settings.app_debug,
         docs_url=docs_url,
         redoc_url=None,
@@ -87,6 +89,8 @@ def create_app(
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(admin_router, prefix="/api/v1")
+    app.include_router(archives_router, prefix="/api/v1")
+    app.include_router(verification_router, prefix="/api/v1")
     return app
 
 

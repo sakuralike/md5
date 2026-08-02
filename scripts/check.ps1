@@ -5,7 +5,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Api = Join-Path $Root "apps/api"
 $Python = Join-Path $Api ".venv/Scripts/python.exe"
 $Pnpm = (Get-Command pnpm -ErrorAction SilentlyContinue)?.Source
-$MigrationDatabase = Join-Path $Api ".local/m1-migration-check.db"
+$MigrationDatabase = Join-Path $Api ".local/migration-check.db"
 
 function Invoke-Checked {
     param(
@@ -41,7 +41,7 @@ try {
         }
         $env:APP_ENV = "test"
         $env:APP_SECRET_KEY = "synthetic-local-migration-secret"
-        $env:DATABASE_URL = "sqlite:///./.local/m1-migration-check.db"
+        $env:DATABASE_URL = "sqlite:///./.local/migration-check.db"
         Invoke-Checked $Python -m alembic upgrade head
         Invoke-Checked $Python -m alembic downgrade base
         Invoke-Checked $Python -m alembic upgrade head

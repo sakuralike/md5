@@ -34,7 +34,29 @@ def get_current_principal(
 ) -> Principal:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AppError("auth.authentication_required", "需要登录", status_code=401)
-    claims = decode_access_token(credentials.credentials, settings.app_secret_key)
+    return _resolve_principal(request, credentials.credentials, db, settings)
+
+
+def get_optional_principal(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Principal | None:
+    if credentials is None:
+        return None
+    if credentials.scheme.lower() != "bearer":
+        raise AppError("auth.authentication_required", "需要登录", status_code=401)
+    return _resolve_principal(request, credentials.credentials, db, settings)
+
+
+def _resolve_principal(
+    request: Request,
+    access_token: str,
+    db: Session,
+    settings: Settings,
+) -> Principal:
+    claims = decode_access_token(access_token, settings.app_secret_key)
     user = db.get(User, claims.user_id)
     if user is None or user.status != UserStatus.ACTIVE:
         raise AppError("auth.account_unavailable", "账号当前不可用", status_code=403)
