@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     desktop_receipt_clock_skew_seconds: int = Field(default=300, ge=30, le=900)
     desktop_min_client_version: str = Field(default="0.1.0", min_length=5, max_length=32)
     desktop_max_installations_per_user: int = Field(default=10, ge=1, le=100)
+    desktop_update_storage_path: str = ".local/desktop-updates"
+    desktop_update_max_artifact_bytes: int = Field(
+        default=536_870_912, ge=1_048_576, le=2_147_483_648
+    )
+    desktop_update_download_cache_seconds: int = Field(
+        default=86_400, ge=60, le=31_536_000
+    )
     database_url: str = "sqlite:///./.local/password-detective.db"
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
@@ -65,6 +72,7 @@ class Settings(BaseSettings):
             raw_path = self.database_url.removeprefix("sqlite:///")
             if raw_path != ":memory:":
                 Path(raw_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.desktop_update_storage_path).mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

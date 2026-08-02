@@ -14,7 +14,7 @@
 ./scripts/dev-api.ps1
 ```
 
-默认开发数据库为 `apps/api/.local/password-detective.db`，默认限流后端为内存。该组合只用于本机单进程开发；集成和生产环境必须使用 MySQL 与 Redis。
+默认开发数据库为 `apps/api/.local/password-detective.db`，桌面升级制品目录为仓库根目录 `.local/desktop-updates`，默认限流后端为内存。该组合只用于本机单进程开发；集成和生产环境必须使用 MySQL、Redis 与持久化制品存储。
 
 若要本地连接 Redis：
 
@@ -68,6 +68,61 @@ python -m venv ./.local/desktop-fixtures-venv
 
 样本说明和固定合成密码见 [`apps/desktop-windows.tests/Fixtures/README.md`](../../apps/desktop-windows.tests/Fixtures/README.md)。服务端返回安装撤销、绑定冲突或密钥不一致时，客户端会启用新身份生成/重新注册操作；最低版本拒绝只显示升级提示，不应通过更换身份绕过。
 
+桌面端启动后会匿名请求 `stable/windows` 更新清单，并按当前进程架构选择 `x64` 或 `arm64`。发现更新时只展示发布信息和“打开升级下载”按钮；按钮通过系统浏览器访问后端下载入口，不静默下载或执行安装包。
+
+### 本地发布合成升级制品
+
+以下变量控制制品目录、大小上限和下载缓存：
+
+```powershell
+$env:DESKTOP_UPDATE_STORAGE_PATH = ".local/desktop-updates"
+$env:DESKTOP_UPDATE_MAX_ARTIFACT_BYTES = "536870912"
+$env:DESKTOP_UPDATE_DOWNLOAD_CACHE_SECONDS = "86400"
+```
+
+管理员访问令牌必须来自已完成 TOTP 验证的会话。示例令牌与制品均为本地合成值，不要把真实令牌写入脚本或文档：
+
+```powershell
+$artifact = Join-Path $PWD ".local/synthetic-update.msix"
+[IO.File]::WriteAllBytes($artifact, [Text.Encoding]::UTF8.GetBytes("synthetic desktop artifact"))
+$sha256 = (Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+$headers = @{ Authorization = "Bearer $env:SYNTHETIC_ADMIN_MFA_TOKEN" }
+
+$release = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/admin/desktop-releases" `
+  -Headers $headers `
+  -ContentType "application/json" `
+  -Body (@{
+    channel = "stable"
+    platform = "windows"
+    architecture = "x64"
+    version = "1.0.1"
+    minimum_supported_version = "1.0.0"
+    mandatory = $false
+    release_notes = "合成发布说明"
+    artifact_filename = "synthetic-update.msix"
+    artifact_sha256 = $sha256
+    artifact_size_bytes = (Get-Item $artifact).Length
+    content_type = "application/octet-stream"
+    code_signature_status = "test_signed"
+  } | ConvertTo-Json)
+
+Invoke-RestMethod `
+  -Method Put `
+  -Uri "http://127.0.0.1:8000/api/v1/admin/desktop-releases/$($release.id)/artifact" `
+  -Headers $headers `
+  -ContentType "application/octet-stream" `
+  -InFile $artifact
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/admin/desktop-releases/$($release.id)/publish" `
+  -Headers $headers
+```
+
+开发环境允许发布 `unsigned`/`test_signed` 制品；`APP_ENV=production` 时只有发布记录标记为 `verified` 且包含签名者与证书指纹才能发布。该门禁是发布流程声明，不替代 Authenticode 实际验证；生产流水线仍必须独立核验签名。
+
 ## 统一检查
 
 ```powershell
@@ -102,3 +157,4 @@ Copy-Item .env.example .env
 4. 本地 SQLite 不复制到集成或生产环境。
 5. 不用内存限流器替代集成/生产 Redis 验收。
 6. 候选秘密不得进入浏览器持久存储、日志、审计详情或异常文本；揭示响应不得被缓存。
+7. 桌面制品目录和安装包不得提交 Git；生产下载必须使用 HTTPS，且只有发布流水线可以把签名状态标记为 `verified`。

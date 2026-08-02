@@ -10,5 +10,6 @@
 | [ADR-0006](./0006-distributed-request-protection.md) | 分布式限流与持久化幂等 | 已接受 |
 | [ADR-0007](./0007-browser-session-boundary.md) | 浏览器会话与桌面令牌边界 | 已接受 |
 | [ADR-0008](./0008-verification-evidence-state-and-points.md) | 验证证据、状态事件与积分结算边界 | 已接受 |
+| [ADR-0009](./0009-backend-managed-desktop-update-channel.md) | 后端托管桌面更新通道与显式下载入口 | 已接受 |
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。

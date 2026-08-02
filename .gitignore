@@ -37,6 +37,7 @@ obj/
 Thumbs.db
 
 # Runtime data
+.local/
 *.db
 *.sqlite*
 logs/

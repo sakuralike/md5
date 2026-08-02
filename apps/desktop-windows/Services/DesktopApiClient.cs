@@ -23,6 +23,26 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         _ownsClient = httpClient is null;
     }
 
+    public Task<DesktopUpdateCheckResponse> CheckForUpdateAsync(
+        string serverBaseUrl,
+        string currentVersion,
+        string channel,
+        string platform,
+        string architecture,
+        CancellationToken cancellationToken = default)
+    {
+        var query = string.Join(
+            "&",
+            $"current_version={Uri.EscapeDataString(currentVersion)}",
+            $"channel={Uri.EscapeDataString(channel)}",
+            $"platform={Uri.EscapeDataString(platform)}",
+            $"architecture={Uri.EscapeDataString(architecture)}");
+        return GetAsync<DesktopUpdateCheckResponse>(
+            serverBaseUrl,
+            $"desktop/updates/check?{query}",
+            cancellationToken);
+    }
+
     public Task<TokenResponse> LoginAsync(
         string serverBaseUrl,
         LoginRequest request,
@@ -81,6 +101,18 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             accessToken,
             cancellationToken);
 
+    private async Task<TResponse> GetAsync<TResponse>(
+        string serverBaseUrl,
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            BuildUri(serverBaseUrl, relativePath));
+        request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
+        return await SendAsync<TResponse>(request, cancellationToken);
+    }
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string serverBaseUrl,
         string relativePath,
@@ -100,6 +132,13 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         }
         request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
 
+        return await SendAsync<TResponse>(request, cancellationToken);
+    }
+
+    private async Task<TResponse> SendAsync<TResponse>(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

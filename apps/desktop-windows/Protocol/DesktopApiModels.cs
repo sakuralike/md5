@@ -16,6 +16,26 @@ public sealed record TokenResponse(
 
 public sealed record RefreshRequest(string RefreshToken);
 
+public sealed record DesktopUpdateCheckResponse(
+    bool UpdateAvailable,
+    bool Mandatory,
+    string CurrentVersion,
+    string? LatestVersion,
+    string? MinimumSupportedVersion,
+    string Channel,
+    string Platform,
+    string Architecture,
+    string? ReleaseId,
+    string ReleaseNotes,
+    DateTimeOffset? PublishedAt,
+    string? DownloadUrl,
+    string? ArtifactFilename,
+    string? ArtifactSha256,
+    long? ArtifactSizeBytes,
+    string? CodeSignatureStatus,
+    string? SignerSubject,
+    string? SignerThumbprint);
+
 public sealed record InstallationRegistrationRequest(
     Guid InstallationId,
     string PublicKey,

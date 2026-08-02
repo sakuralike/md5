@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32;
@@ -19,6 +20,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IInstallationIdentityService _identityService;
     private readonly IDesktopApiClient _apiClient;
     private readonly IProtectedSessionStore _sessionStore;
+    private readonly IExternalUriLauncher _externalUriLauncher;
     private CancellationTokenSource? _cancellation;
     private DesktopSession? _session;
     private InstallationIdentity? _identity;
@@ -36,6 +38,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isBusy;
     private bool _canRegenerateInstallation;
     private string _upgradeNotice = string.Empty;
+    private string _updateStatus = "正在检查稳定通道更新…";
+    private string? _updateDownloadUrl;
     private FileFingerprintResult? _result;
     private ArchiveVerificationResult? _verificationResult;
 
@@ -44,13 +48,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IArchiveVerificationService archiveVerificationService,
         IInstallationIdentityService identityService,
         IDesktopApiClient apiClient,
-        IProtectedSessionStore sessionStore)
+        IProtectedSessionStore sessionStore,
+        IExternalUriLauncher externalUriLauncher)
     {
         _fingerprintService = fingerprintService;
         _archiveVerificationService = archiveVerificationService;
         _identityService = identityService;
         _apiClient = apiClient;
         _sessionStore = sessionStore;
+        _externalUriLauncher = externalUriLauncher;
         SelectFileCommand = new RelayCommand(SelectFile, () => !IsBusy);
         CalculateCommand = new AsyncRelayCommand(CalculateAsync, CanUseFile);
         VerifyCommand = new AsyncRelayCommand(VerifyAsync, CanVerify);
@@ -61,6 +67,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             () => !IsBusy && CanRegenerateInstallation);
         LogoutCommand = new RelayCommand(Logout, () => !IsBusy && _session is not null);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
+        CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, CanCheckForUpdates);
+        OpenUpdateDownloadCommand = new RelayCommand(OpenUpdateDownload, CanOpenUpdateDownload);
         _ = InitializeAsync();
     }
 
@@ -78,6 +86,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool IsBusy { get => _isBusy; private set { SetField(ref _isBusy, value); NotifyCommands(); } }
     public bool CanRegenerateInstallation { get => _canRegenerateInstallation; private set { SetField(ref _canRegenerateInstallation, value); NotifyCommands(); } }
     public string UpgradeNotice { get => _upgradeNotice; private set => SetField(ref _upgradeNotice, value); }
+    public string UpdateStatus { get => _updateStatus; private set => SetField(ref _updateStatus, value); }
+    public bool HasUpdate => _updateDownloadUrl is not null;
 
     public RelayCommand SelectFileCommand { get; }
     public AsyncRelayCommand CalculateCommand { get; }
@@ -87,6 +97,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public AsyncRelayCommand RegenerateInstallationCommand { get; }
     public RelayCommand LogoutCommand { get; }
     public RelayCommand CancelCommand { get; }
+    public AsyncRelayCommand CheckForUpdatesCommand { get; }
+    public RelayCommand OpenUpdateDownloadCommand { get; }
 
     public void SetCandidatePassword(string password) { _candidatePassword = password; NotifyCommands(); }
     public void SetLoginPassword(string password) { _loginPassword = password; NotifyCommands(); }
@@ -119,9 +131,105 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         finally
         {
+            try
+            {
+                await CheckForUpdatesCoreAsync(CancellationToken.None);
+            }
+            catch
+            {
+                UpdateStatus = "暂时无法连接后端更新通道，可稍后手动重试。";
+            }
             NotifyCommands();
         }
     }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        BeginOperation("正在检查桌面端稳定通道更新…");
+        try
+        {
+            await CheckForUpdatesCoreAsync(_cancellation!.Token);
+            Status = UpdateStatus;
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "检查更新已取消。";
+        }
+        catch (DesktopApiException exception)
+        {
+            Status = $"检查更新失败：{exception.Message}";
+            UpdateStatus = "后端更新通道暂不可用。";
+        }
+        catch (Exception)
+        {
+            Status = "检查更新失败，请确认服务地址与网络连接。";
+            UpdateStatus = "后端更新通道暂不可用。";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task CheckForUpdatesCoreAsync(CancellationToken cancellationToken)
+    {
+        _updateDownloadUrl = null;
+        OnPropertyChanged(nameof(HasUpdate));
+        NotifyCommands();
+        var architecture = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+            ? "arm64"
+            : "x64";
+        var update = await _apiClient.CheckForUpdateAsync(
+            ServerBaseUrl,
+            ClientVersion,
+            "stable",
+            "windows",
+            architecture,
+            cancellationToken);
+        if (!update.UpdateAvailable)
+        {
+            UpdateStatus = $"当前版本 {ClientVersion} 已是稳定通道最新版本。";
+        }
+        else
+        {
+            if (!Uri.TryCreate(update.DownloadUrl, UriKind.Absolute, out var downloadUri)
+                || downloadUri.Scheme is not ("http" or "https"))
+            {
+                throw new InvalidOperationException("后端返回了无效的 HTTP(S) 升级地址。");
+            }
+            _updateDownloadUrl = downloadUri.AbsoluteUri;
+            var requirement = update.Mandatory ? "必须升级" : "可升级";
+            var signature = update.CodeSignatureStatus == "verified"
+                ? "发布记录标记签名已验证"
+                : "请在下载后核验安装包签名";
+            UpdateStatus =
+                $"发现 {update.LatestVersion}（{requirement}，{signature}）。{update.ReleaseNotes}";
+        }
+        OnPropertyChanged(nameof(HasUpdate));
+        NotifyCommands();
+    }
+
+    private void OpenUpdateDownload()
+    {
+        if (_updateDownloadUrl is null
+            || !Uri.TryCreate(_updateDownloadUrl, UriKind.Absolute, out var uri))
+        {
+            Status = "升级下载地址无效，请重新检查更新。";
+            return;
+        }
+        try
+        {
+            _externalUriLauncher.Open(uri);
+            Status = "已在系统浏览器中打开后端升级下载入口；安装前请核验签名。";
+        }
+        catch (Exception)
+        {
+            Status = "无法打开系统浏览器，请重新检查更新或联系管理员。";
+        }
+    }
+
+    private bool CanCheckForUpdates() => !IsBusy && !string.IsNullOrWhiteSpace(ServerBaseUrl);
+    private bool CanOpenUpdateDownload() => !IsBusy && _updateDownloadUrl is not null;
 
     private async Task LoginAsync()
     {
@@ -390,7 +498,32 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void BeginOperation(string status) { IsBusy = true; Progress = 0; Status = status; _cancellation = new CancellationTokenSource(); }
     private void EndOperation() { _cancellation?.Dispose(); _cancellation = null; IsBusy = false; }
     private void Cancel() => _cancellation?.Cancel();
-    private void NotifyCommands() { SelectFileCommand.NotifyCanExecuteChanged(); CalculateCommand.NotifyCanExecuteChanged(); VerifyCommand.NotifyCanExecuteChanged(); LoginCommand.NotifyCanExecuteChanged(); SubmitReceiptCommand.NotifyCanExecuteChanged(); RegenerateInstallationCommand.NotifyCanExecuteChanged(); LogoutCommand.NotifyCanExecuteChanged(); CancelCommand.NotifyCanExecuteChanged(); }
-    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null) { if (EqualityComparer<T>.Default.Equals(field, value)) return false; field = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); return true; }
+    private void NotifyCommands()
+    {
+        SelectFileCommand.NotifyCanExecuteChanged();
+        CalculateCommand.NotifyCanExecuteChanged();
+        VerifyCommand.NotifyCanExecuteChanged();
+        LoginCommand.NotifyCanExecuteChanged();
+        SubmitReceiptCommand.NotifyCanExecuteChanged();
+        RegenerateInstallationCommand.NotifyCanExecuteChanged();
+        LogoutCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+        CheckForUpdatesCommand.NotifyCanExecuteChanged();
+        OpenUpdateDownloadCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnPropertyChanged(string propertyName) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private bool SetField<T>(
+        ref T field,
+        T value,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        OnPropertyChanged(propertyName!);
+        return true;
+    }
     public event PropertyChangedEventHandler? PropertyChanged;
 }

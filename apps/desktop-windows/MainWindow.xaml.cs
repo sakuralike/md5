@@ -16,7 +16,8 @@ public partial class MainWindow : Window
             new ArchiveVerificationService(),
             new InstallationIdentityService(),
             new DesktopApiClient(),
-            new ProtectedSessionStore());
+            new ProtectedSessionStore(),
+            new ExternalUriLauncher());
         DataContext = _viewModel;
     }
 

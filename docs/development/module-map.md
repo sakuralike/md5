@@ -14,7 +14,8 @@
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定与 MFA 访问门禁 | M4 候选审核、举报、配置和审计查询 |
 | Health | `apps/api/src/password_detective/modules/health/` | 存活、数据库和限流后端就绪检查 | Worker/密钥管理与更细粒度依赖状态 |
 | Desktop Verification | `apps/api/src/password_detective/modules/desktop_verification/` | 安装公钥注册/撤销、一次性挑战、版本/时钟/绑定校验、ECDSA 回执验签、防重放与证据接入 | M4 风险评分细化、关联账号分析和人工处置 |
-| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置、档案、指纹、候选、贡献、积分、反馈、证据历史、状态事件、安装实例、挑战和桌面回执模型 | 举报与信誉事件 |
+| Desktop Updates | `apps/api/src/password_detective/modules/desktop_updates/` | 稳定/测试通道发布清单、MFA 管理发布、流式制品完整性校验、发布/撤回、匿名版本检查和受控下载 | 对象存储/CDN、正式签名流水线、分批发布与回滚编排 |
+| Database | `apps/api/src/password_detective/db/` | 用户、会话、账号动作令牌、幂等、审计、设置、档案、指纹、候选、贡献、积分、反馈、证据历史、状态事件、安装实例、挑战、桌面回执和桌面发布模型 | 举报与信誉事件 |
 | Worker | `apps/api/src/password_detective/worker.py` | Celery 应用和探活任务 | 邮件投递、幂等记录清理、验证批处理和报表 |
 
 ## 客户端模块
@@ -23,7 +24,7 @@
 |---|---|---|---|
 | 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈和个人贡献 | Web Worker 隔离、反馈历史页、超大文件性能与浏览器 E2E |
 | 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、导航骨架 | M4 审核与审计工作台 |
-| Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执 | Windows 10/11 实机 E2E、物理超大样本、自动更新与发布签名 |
+| Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执、稳定通道自动检查与显式浏览器下载入口 | Windows 10/11 实机 E2E、物理超大样本、静默安装与正式发布签名 |
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
 | API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、桌面安装/挑战/回执和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
 
@@ -36,3 +37,4 @@
 5. Windows 客户端是不可信证据来源，签名回执仍需服务端挑战、防重放和风险规则。
 6. 生产与集成环境的限流状态必须由 Redis 共享；关键写操作的幂等结果必须持久化到数据库。
 7. 候选秘密加密与去重使用不同用途密钥；生产环境不得直接使用应用主密钥代替 KMS 管理的数据密钥。
+8. 桌面升级制品必须经过“声明摘要/大小 → 流式上传校验 → 发布前重校验”的链路；匿名客户端只能访问已发布制品，且更新提示不得自动执行下载内容。

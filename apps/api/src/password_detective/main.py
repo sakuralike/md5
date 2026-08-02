@@ -21,6 +21,12 @@ from password_detective.db.database import Database
 from password_detective.modules.admin.router import router as admin_router
 from password_detective.modules.archives.router import router as archives_router
 from password_detective.modules.auth.router import router as auth_router
+from password_detective.modules.desktop_updates.router import (
+    admin_router as desktop_updates_admin_router,
+)
+from password_detective.modules.desktop_updates.router import (
+    public_router as desktop_updates_router,
+)
 from password_detective.modules.desktop_verification.router import router as desktop_router
 from password_detective.modules.health.router import router as health_router
 from password_detective.modules.verification.router import router as verification_router
@@ -93,6 +99,8 @@ def create_app(
     app.include_router(archives_router, prefix="/api/v1")
     app.include_router(verification_router, prefix="/api/v1")
     app.include_router(desktop_router, prefix="/api/v1")
+    app.include_router(desktop_updates_router, prefix="/api/v1")
+    app.include_router(desktop_updates_admin_router, prefix="/api/v1")
     return app
 
 

@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：M2 第 1 次核心查询与贡献迭代完成；M1 代码门禁已完成，但 Docker 空环境、真实 Redis CI 和托管分支保护仍待外部环境验收。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：M3 第 3 次迭代正在完成后端桌面更新通道、发布清单和显式升级下载入口；桌面验证与身份恢复闭环已完成自动化核心。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -70,6 +70,8 @@ docker compose up --build
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
+- [M3 第 3 次迭代记录](./docs/development/2026-08-02-m3-iteration-3.md)
+- [M3 第 2 次迭代记录](./docs/development/2026-08-02-m3-iteration-2.md)
 - [M2 第 1 次迭代记录](./docs/development/2026-08-02-m2-iteration-1.md)
 - [M1 第 2 次迭代记录](./docs/development/2026-08-02-m1-iteration-2.md)
 - [主分支保护验收](./docs/development/branch-protection.md)

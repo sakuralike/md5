@@ -27,6 +27,7 @@ def client(tmp_path, notifications: MemoryNotificationGateway) -> Iterator[TestC
         rate_limit_backend="redis",
         rate_limit_namespace=f"test:{tmp_path.name}",
         notification_backend="memory",
+        desktop_update_storage_path=str(tmp_path / "desktop-updates"),
         auto_create_tables=True,
         cors_origins="http://testserver",
     )

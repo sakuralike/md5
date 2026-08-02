@@ -82,6 +82,22 @@
 
 `desktop.installation_revoked`、`desktop.installation_account_mismatch`、`desktop.installation_key_mismatch` 或 `desktop.installation_not_found` 表示本地身份不能继续使用，客户端可引导生成新的随机安装 ID/密钥并重新注册。`desktop.client_version_unsupported` 和 `desktop.installation_limit_reached` 不得通过重新生成身份绕过。
 
+## 桌面更新发布与下载
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/desktop/updates/check?current_version=...&channel=stable&platform=windows&architecture=x64` | 匿名 | 仅选择相同目标的最高 `published` 版本；返回最低版本、强制升级、发布说明、SHA-256、大小、签名状态和后端下载地址 |
+| `GET` | `/desktop/updates/{release_id}/download` | 匿名 | 仅下载 `published` 且存储完整性仍匹配的制品；响应含不可变缓存、ETag、`Digest` 和 `nosniff` |
+| `POST` | `/admin/desktop-releases` | 管理员 + MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256 和代码签名元数据 |
+| `GET` | `/admin/desktop-releases` | 管理员 + MFA | 列出发布生命周期、上传状态和下载计数 |
+| `PUT` | `/admin/desktop-releases/{release_id}/artifact` | 管理员 + MFA | 请求体为安装包原始字节流；按声明大小和 SHA-256 流式校验，通过后原子替换 |
+| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + MFA | 重新核验存储制品；生产环境只允许发布记录标记为 `verified` 且包含签名者与证书指纹 |
+| `POST` | `/admin/desktop-releases/{release_id}/withdraw` | 管理员 + MFA | 将版本标记为 `withdrawn`，检查与下载入口立即停止提供该制品 |
+
+发布生命周期固定为 `draft → published → withdrawn`。同一通道、平台、架构和版本只能存在一条记录；已发布记录不可覆盖制品，修复必须使用新版本。`stable` 与 `beta` 通道严格隔离，当前桌面 UI 默认只查询 `stable/windows/x64|arm64`。
+
+服务端的 `code_signature_status=verified` 是受 MFA 保护的发布流程证明，不等价于客户端对 Authenticode 的本地密码学验证。首版桌面端只自动检查，不静默下载、不自动执行；用户点击后由系统浏览器打开同一后端返回的 HTTP(S) 下载入口，生产必须使用 HTTPS，并在安装前核验操作系统展示的签名者。
+
 ## 成功响应
 
 资源接口直接返回资源；响应头包含 `X-Request-ID`。列表使用：

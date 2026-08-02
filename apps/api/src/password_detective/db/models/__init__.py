@@ -8,6 +8,13 @@ from password_detective.db.models.archive_fingerprint import (
     FingerprintAlgorithm,
 )
 from password_detective.db.models.audit_log import AuditLog
+from password_detective.db.models.desktop_update import (
+    CodeSignatureStatus,
+    DesktopArchitecture,
+    DesktopRelease,
+    DesktopReleaseChannel,
+    DesktopReleaseStatus,
+)
 from password_detective.db.models.desktop_verification import (
     ClientInstallation,
     InstallationStatus,
@@ -38,7 +45,12 @@ __all__ = [
     "CandidateFeedback",
     "CandidateStatus",
     "ClientInstallation",
+    "CodeSignatureStatus",
     "FeedbackOutcome",
+    "DesktopArchitecture",
+    "DesktopRelease",
+    "DesktopReleaseChannel",
+    "DesktopReleaseStatus",
     "FingerprintAlgorithm",
     "IdempotencyRecord",
     "IdempotencyStatus",
