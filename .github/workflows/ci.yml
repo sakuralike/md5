@@ -73,14 +73,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/api.Dockerfile
           push: false
           tags: password-detective-api:ci
       - name: Build Web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/frontend.Dockerfile
@@ -90,7 +90,7 @@ jobs:
             TARGET_FILTER=@password-detective/web
             TARGET_DIR=apps/web
       - name: Build Admin image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/frontend.Dockerfile
