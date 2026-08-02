@@ -39,6 +39,17 @@
 - 相同操作仍在处理时返回 `409 request.idempotency_in_progress`。
 - 默认记录保留 24 小时；原始键和敏感请求体不入库。
 
+## 档案查询与贡献接口
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/archives/search?fingerprint=...` | 可选 | 只接受完整 MD5/SHA-1/SHA-256/SHA-512 十六进制指纹；匿名仅返回匹配和状态元数据，登录用户可见遮挡候选 |
+| `POST` | `/archives/submissions` | 必需 | 必须声明有权提交、提供 `Idempotency-Key`；重复候选合并提交证据，不重复保存秘密 |
+| `POST` | `/archives/{archive_id}/reveal` | 必需 | 仅揭示 `verified` 候选；执行每日配额；响应使用 `Cache-Control: no-store` |
+| `GET` | `/me/submissions` | 必需 | 返回当前用户贡献及 pending/后续状态，不返回候选密码明文或密文 |
+
+候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
+
 ## 成功响应
 
 资源接口直接返回资源；响应头包含 `X-Request-ID`。列表使用：

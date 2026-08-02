@@ -60,3 +60,84 @@ export class ApiError extends Error {
 export function isPrivilegedRole(role: UserRole): boolean {
   return role === "moderator" || role === "admin";
 }
+
+export type FingerprintAlgorithm = "md5" | "sha1" | "sha256" | "sha512";
+export type CandidateStatus = "pending" | "verified" | "rejected" | "quarantined";
+
+export interface ArchiveFingerprint {
+  algorithm: FingerprintAlgorithm;
+  digest: string;
+}
+
+export interface CandidateSummary {
+  id: string;
+  status: CandidateStatus;
+  confidence_score: number;
+  masked_secret: string;
+  submission_count: number;
+  last_verified_at: string | null;
+}
+
+export interface ArchiveSearchResult {
+  id: string;
+  optional_size: number | null;
+  optional_format: string | null;
+  fingerprints: ArchiveFingerprint[];
+  candidate_count: number;
+  status_counts: Record<string, number>;
+  candidates: CandidateSummary[];
+}
+
+export interface ArchiveSearchResponse {
+  matched: boolean;
+  query: ArchiveFingerprint;
+  authenticated: boolean;
+  archive: ArchiveSearchResult | null;
+}
+
+export interface ArchiveSubmissionRequest {
+  fingerprints: ArchiveFingerprint[];
+  password: string;
+  authorization_confirmed: boolean;
+  authorization_version: string;
+  optional_size?: number;
+  optional_format?: string;
+}
+
+export interface ArchiveSubmissionResponse {
+  submission_id: string;
+  archive_id: string;
+  candidate_id: string;
+  candidate_status: CandidateStatus;
+  archive_created: boolean;
+  candidate_created: boolean;
+  evidence_merged: boolean;
+  pending_points: number;
+  created_at: string;
+}
+
+export interface ArchiveRevealResponse {
+  archive_id: string;
+  candidate_id: string;
+  password: string;
+  candidate_status: CandidateStatus;
+  remaining_daily_quota: number;
+}
+
+export interface MySubmission {
+  id: string;
+  archive_id: string;
+  candidate_id: string;
+  candidate_status: CandidateStatus;
+  fingerprints: ArchiveFingerprint[];
+  source: string;
+  authorization_version: string;
+  created_at: string;
+}
+
+export interface MySubmissionsResponse {
+  items: MySubmission[];
+  page: number;
+  page_size: number;
+  total: number;
+}

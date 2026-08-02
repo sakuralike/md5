@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = Field(default=15, ge=5, le=60)
     refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
     account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
+    candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)
+    daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
+    submission_pending_points: int = Field(default=1, ge=0, le=1000)
     database_url: str = "sqlite:///./.local/password-detective.db"
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
