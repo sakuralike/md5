@@ -87,12 +87,12 @@
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
 | `GET` | `/admin/candidates?status=...&query=...&page=1&page_size=20` | 审核员/管理员 + MFA | 可按状态、候选/存档 ID 或指纹摘要筛选；只返回指纹、状态、计数和时间，不返回任何候选秘密字段 |
-| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、不可变证据修订和自动/人工状态时间线；不返回 IP、安装关联键或候选秘密 |
-| `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；写入人工状态事件与审计 |
+| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、不可变证据修订、自动/人工状态时间线和奖励校正时间线；不返回 IP、安装关联键或候选秘密 |
+| `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；同事务写入人工状态事件、必要的首次验证奖励与奖励校正，并返回实际校正汇总 |
 
 人工原因码按目标状态约束：`manual.evidence_conflict`/`manual.security_hold` 仅用于隔离，`manual.invalid_candidate`/`manual.policy_violation` 仅用于拒绝，`manual.review_reopened` 仅用于重新进入待验证，`manual.verified_by_review` 仅用于人工通过，`manual.quarantine_cleared` 用于解除隔离后进入待验证或已验证。
 
-状态事件保存可选的 500 字符审核说明，但审计详情只保存原因码、前后状态和事件 ID。调用方不得在审核说明中放入密码、令牌、密钥或个人信息；API 响应、日志和审计均不得复制候选密码明文、密文、nonce、密钥版本或去重标签。
+状态事件保存可选的 500 字符审核说明，但审计详情只保存原因码、前后状态、事件 ID 和奖励校正聚合值。`reward-compensation-v1` 按状态事件追加积分/信誉校正，不改写原始奖励；详情中的校正时间线仅展示受控字段。调用方不得在审核说明中放入密码、令牌、密钥或个人信息；API 响应、日志和审计均不得复制候选密码明文、密文、nonce、密钥版本或去重标签。
 
 ## 举报与申诉案件
 
@@ -158,3 +158,4 @@
 - `GET /api/v1/me/reputation`：分页返回本人不可变信誉事件。
 - 三个端点均从认证主体确定用户，不接受目标用户 ID；积分状态为 `pending/posted/reversed`。
 - 信誉事件使用 `reputation-v1`、受控原因码和引用唯一约束，分值范围为 0～100。
+- 候选奖励失效或恢复时追加 `reward.contribution.invalidate`、`reward.verification.invalidate`、`reward.contribution.restore`、`reward.verification.restore` 事件；原始奖励不被删除或修改，信誉流水记录边界裁剪后的实际变化量。
