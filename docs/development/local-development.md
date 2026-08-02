@@ -80,7 +80,20 @@ $env:DESKTOP_UPDATE_MAX_ARTIFACT_BYTES = "536870912"
 $env:DESKTOP_UPDATE_DOWNLOAD_CACHE_SECONDS = "86400"
 ```
 
-管理员访问令牌必须来自已完成 TOTP 验证的会话。示例令牌与制品均为本地合成值，不要把真实令牌写入脚本或文档：
+优先使用管理端的“桌面发布”页面完成本地操作：
+
+```powershell
+pnpm dev:admin
+```
+
+1. 使用已启用 TOTP 的合成管理员账号登录 `http://127.0.0.1:5174`。
+2. 从受控构建输出选择 `.msix`、`.msixbundle` 或 `.exe`，并使用 `Get-FileHash -Algorithm SHA256` 获取摘要。
+3. 创建草稿并上传；网络中断时可在“草稿制品重试”区域重新选择同名、同大小文件。
+4. 复核通道、架构、版本、最低版本、摘要和签名记录后显式发布；需要停止分发时执行撤回。
+
+管理端浏览器只做输入格式、文件名和大小的前置校验，不会宣称已经完成 Authenticode 验签。制品摘要由后端在上传、发布和下载前重新校验。
+
+也可以直接调用 API。管理员访问令牌必须来自已完成 TOTP 验证的会话。示例令牌与制品均为本地合成值，不要把真实令牌写入脚本或文档：
 
 ```powershell
 $artifact = Join-Path $PWD ".local/synthetic-update.msix"

@@ -267,3 +267,54 @@ export interface DesktopReceiptResponse {
   snapshot: VerificationSnapshot;
   accepted_at: string;
 }
+
+export type DesktopReleaseChannel = "stable" | "beta";
+export type DesktopArchitecture = "x64" | "arm64";
+export type DesktopReleaseStatus = "draft" | "published" | "withdrawn";
+export type DesktopCodeSignatureStatus = "unsigned" | "test_signed" | "verified";
+
+export interface DesktopReleaseCreateRequest {
+  channel: DesktopReleaseChannel;
+  platform: "windows";
+  architecture: DesktopArchitecture;
+  version: string;
+  minimum_supported_version: string;
+  mandatory: boolean;
+  release_notes: string;
+  artifact_filename: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+  content_type: string;
+  code_signature_status: DesktopCodeSignatureStatus;
+  signer_subject: string | null;
+  signer_thumbprint: string | null;
+}
+
+export interface DesktopRelease {
+  id: string;
+  channel: DesktopReleaseChannel;
+  platform: string;
+  architecture: DesktopArchitecture;
+  version: string;
+  minimum_supported_version: string;
+  status: DesktopReleaseStatus;
+  mandatory: boolean;
+  release_notes: string;
+  artifact_filename: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+  content_type: string;
+  artifact_uploaded: boolean;
+  code_signature_status: DesktopCodeSignatureStatus;
+  signer_subject: string | null;
+  signer_thumbprint: string | null;
+  download_count: number;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  withdrawn_at: string | null;
+}
+
+export interface DesktopReleaseListResponse {
+  items: DesktopRelease[];
+}

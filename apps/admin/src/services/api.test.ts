@@ -24,6 +24,39 @@ describe("admin apiRequest", () => {
     expect(headers.get("X-Request-ID")).toBe("admin_synthetic-request-id");
   });
 
+  it("sets JSON content type only for string request bodies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await apiRequest("/desktop-releases", {
+      method: "POST",
+      body: JSON.stringify({ version: "1.2.3" }),
+    });
+    await apiRequest("/desktop-releases/synthetic/artifact", {
+      method: "PUT",
+      body: new Blob(["synthetic artifact"]),
+    });
+
+    const jsonHeaders = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Headers;
+    const binaryHeaders = (fetchMock.mock.calls[1]?.[1] as RequestInit).headers as Headers;
+    expect(jsonHeaders.get("Content-Type")).toBe("application/json");
+    expect(binaryHeaders.get("Content-Type")).toBeNull();
+  });
+
   it("throws the standardized API error", async () => {
     vi.stubGlobal(
       "fetch",
