@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
     submission_pending_points: int = Field(default=1, ge=0, le=1000)
     verification_reward_points: int = Field(default=1, ge=0, le=1000)
+    desktop_challenge_ttl_seconds: int = Field(default=300, ge=60, le=900)
+    desktop_receipt_clock_skew_seconds: int = Field(default=300, ge=30, le=900)
+    desktop_min_client_version: str = Field(default="0.1.0", min_length=5, max_length=32)
+    desktop_max_installations_per_user: int = Field(default=10, ge=1, le=100)
     database_url: str = "sqlite:///./.local/password-detective.db"
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"

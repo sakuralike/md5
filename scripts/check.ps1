@@ -63,6 +63,7 @@ try {
     Invoke-Checked $Pnpm test
     Invoke-Checked $Pnpm build
     Invoke-Checked dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
+    Invoke-Checked dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
 } finally {
     Pop-Location
 }

@@ -49,6 +49,15 @@ pnpm dev:admin
 
 默认地址分别为 `http://localhost:5173` 和 `http://localhost:5174`。Web 本地指纹计算建议上限由 `VITE_MAX_ARCHIVE_SIZE_BYTES` 控制，默认 20 GiB；仍采用分块读取，不一次性载入内存。两者使用独立 HttpOnly 刷新 Cookie；如果更换端口或域名，必须同步更新 `CORS_ORIGINS`。生产环境必须设置 `BROWSER_COOKIE_SECURE=true` 并使用 HTTPS。
 
+## Windows Desktop
+
+```powershell
+dotnet run --project ./apps/desktop-windows/PasswordDetective.Desktop.csproj
+dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj -c Release
+```
+
+默认 API 地址为 `http://localhost:8000/api/v1/`。安装身份保存于当前用户 `%LocalAppData%/PasswordDetective/installation-identity.json`，其中私钥由 DPAPI 保护；桌面访问/刷新令牌保存在同目录的 DPAPI 密文文件中。候选密码、压缩包内容和目录不会写入这些文件。
+
 ## 统一检查
 
 ```powershell
@@ -61,7 +70,7 @@ pnpm dev:admin
 ./scripts/check.ps1 -SkipInstall
 ```
 
-脚本执行 Ruff、pytest 覆盖率、Alembic 往返、TypeScript、Vitest、生产构建和 WPF Release 构建。
+脚本执行 Ruff、pytest 覆盖率、Alembic 往返、TypeScript、Vitest、生产构建、WPF Release 构建和桌面安全测试。
 
 ## Docker 空环境门禁
 

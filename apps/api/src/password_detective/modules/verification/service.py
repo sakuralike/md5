@@ -125,6 +125,119 @@ def candidate_evidence_totals(db: Session, candidate_id: str) -> EvidenceTotals:
     return summarize_feedbacks(feedbacks)
 
 
+@dataclass(frozen=True)
+class EvidenceMutation:
+    feedback: CandidateFeedback
+    evidence_event: VerificationEvidenceEvent | None
+    totals: EvidenceTotals
+    created: bool
+    changed: bool
+
+
+def apply_candidate_evidence(
+    db: Session,
+    settings: Settings,
+    *,
+    candidate: PasswordCandidate,
+    outcome: FeedbackOutcome,
+    source: VerificationSource,
+    principal: Principal,
+    context: ClientContext,
+    installation_id_hash: str | None = None,
+) -> EvidenceMutation:
+    """Upsert one account's current evidence and append history for material changes."""
+
+    if candidate.status == CandidateStatus.REJECTED:
+        raise AppError(
+            "verification.rejected_candidate_locked",
+            "已拒绝候选不接受普通用户反馈",
+            status_code=409,
+        )
+    feedback = db.scalar(
+        select(CandidateFeedback).where(
+            CandidateFeedback.candidate_id == candidate.id,
+            CandidateFeedback.user_id == principal.user.id,
+        )
+    )
+    created = feedback is None
+    desktop_upgrade = (
+        feedback is not None
+        and source == VerificationSource.DESKTOP_RECEIPT
+        and (
+            feedback.source != VerificationSource.DESKTOP_RECEIPT
+            or feedback.installation_id_hash != installation_id_hash
+        )
+    )
+    changed = created or feedback.outcome != outcome or desktop_upgrade
+
+    if feedback is None:
+        feedback = CandidateFeedback(
+            candidate_id=candidate.id,
+            user_id=principal.user.id,
+            outcome=outcome,
+            source=source,
+            weight=feedback_weight(principal.user.role),
+            rule_version=ACTIVE_RULE.version,
+            installation_id_hash=installation_id_hash,
+            ip_prefix=context.ip_prefix,
+            revision=1,
+        )
+        db.add(feedback)
+        db.flush()
+        previous_outcome = None
+    elif changed:
+        previous_outcome = feedback.outcome
+        feedback.outcome = outcome
+        feedback.source = source
+        feedback.weight = feedback_weight(principal.user.role)
+        feedback.rule_version = ACTIVE_RULE.version
+        feedback.installation_id_hash = installation_id_hash
+        feedback.ip_prefix = context.ip_prefix
+        feedback.revision += 1
+        feedback.updated_at = utc_now()
+        db.flush()
+    else:
+        totals = candidate_evidence_totals(db, candidate.id)
+        return EvidenceMutation(
+            feedback=feedback,
+            evidence_event=None,
+            totals=totals,
+            created=False,
+            changed=False,
+        )
+
+    evidence_event = VerificationEvidenceEvent(
+        feedback_id=feedback.id,
+        candidate_id=candidate.id,
+        user_id=principal.user.id,
+        previous_outcome=previous_outcome,
+        outcome=feedback.outcome,
+        source=feedback.source,
+        weight=feedback.weight,
+        rule_version=feedback.rule_version,
+        installation_id_hash=feedback.installation_id_hash,
+        ip_prefix=feedback.ip_prefix,
+        revision=feedback.revision,
+    )
+    db.add(evidence_event)
+    db.flush()
+    totals = candidate_evidence_totals(db, candidate.id)
+    _apply_automatic_transition(
+        db,
+        settings,
+        candidate=candidate,
+        totals=totals,
+        trigger_evidence=evidence_event,
+    )
+    return EvidenceMutation(
+        feedback=feedback,
+        evidence_event=evidence_event,
+        totals=totals,
+        created=created,
+        changed=True,
+    )
+
+
 def record_feedback(
     db: Session,
     settings: Settings,
@@ -141,124 +254,56 @@ def record_feedback(
     )
     if candidate is None:
         raise AppError("verification.candidate_not_found", "未找到候选记录", status_code=404)
-    if candidate.status == CandidateStatus.REJECTED:
-        raise AppError(
-            "verification.rejected_candidate_locked",
-            "已拒绝候选不接受普通用户反馈",
-            status_code=409,
-        )
 
-    feedback = db.scalar(
-        select(CandidateFeedback).where(
-            CandidateFeedback.candidate_id == candidate_id,
-            CandidateFeedback.user_id == principal.user.id,
-        )
-    )
-    created = feedback is None
-    changed = created or feedback.outcome != payload.outcome
-    evidence_event: VerificationEvidenceEvent | None = None
-
-    if feedback is None:
-        feedback = CandidateFeedback(
-            candidate_id=candidate_id,
-            user_id=principal.user.id,
-            outcome=payload.outcome,
-            source=VerificationSource.WEB_FEEDBACK,
-            weight=feedback_weight(principal.user.role),
-            rule_version=ACTIVE_RULE.version,
-            ip_prefix=context.ip_prefix,
-            revision=1,
-        )
-        db.add(feedback)
-        db.flush()
-        previous_outcome = None
-    elif changed:
-        previous_outcome = feedback.outcome
-        feedback.outcome = payload.outcome
-        feedback.source = VerificationSource.WEB_FEEDBACK
-        feedback.weight = feedback_weight(principal.user.role)
-        feedback.rule_version = ACTIVE_RULE.version
-        feedback.ip_prefix = context.ip_prefix
-        feedback.revision += 1
-        feedback.updated_at = utc_now()
-        db.flush()
-    else:
-        totals = candidate_evidence_totals(db, candidate_id)
-        return FeedbackResponse(
-            feedback_id=feedback.id,
-            evidence_event_id=None,
-            candidate_id=candidate.id,
-            outcome=feedback.outcome,
-            source=feedback.source,
-            revision=feedback.revision,
-            created=False,
-            changed=False,
-            candidate_status=candidate.status,
-            snapshot=totals.to_snapshot(),
-            updated_at=feedback.updated_at,
-        )
-
-    evidence_event = VerificationEvidenceEvent(
-        feedback_id=feedback.id,
-        candidate_id=candidate_id,
-        user_id=principal.user.id,
-        previous_outcome=previous_outcome,
-        outcome=feedback.outcome,
-        source=feedback.source,
-        weight=feedback.weight,
-        rule_version=feedback.rule_version,
-        installation_id_hash=feedback.installation_id_hash,
-        ip_prefix=feedback.ip_prefix,
-        revision=feedback.revision,
-    )
-    db.add(evidence_event)
-    db.flush()
-
-    totals = candidate_evidence_totals(db, candidate_id)
-    _apply_automatic_transition(
+    mutation = apply_candidate_evidence(
         db,
         settings,
         candidate=candidate,
-        totals=totals,
-        trigger_evidence=evidence_event,
+        outcome=payload.outcome,
+        source=VerificationSource.WEB_FEEDBACK,
+        principal=principal,
+        context=context,
     )
-    write_audit_log(
-        db,
-        actor_id=principal.user.id,
-        action="candidate.feedback_recorded",
-        target_type="password_candidate",
-        target_id=candidate.id,
-        result="success",
-        ip_prefix=context.ip_prefix,
-        request_id=context.request_id,
-        details={
-            "outcome": feedback.outcome.value,
-            "revision": feedback.revision,
-            "rule_version": ACTIVE_RULE.version,
-            "candidate_status": candidate.status.value,
-        },
-    )
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise AppError(
-            "verification.concurrent_feedback_conflict",
-            "反馈正在被并发更新，请重试原请求",
-            status_code=409,
-        ) from exc
-    db.refresh(feedback)
+    feedback = mutation.feedback
+    evidence_event = mutation.evidence_event
+    if mutation.changed:
+        write_audit_log(
+            db,
+            actor_id=principal.user.id,
+            action="candidate.feedback_recorded",
+            target_type="password_candidate",
+            target_id=candidate.id,
+            result="success",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={
+                "outcome": feedback.outcome.value,
+                "revision": feedback.revision,
+                "rule_version": ACTIVE_RULE.version,
+                "candidate_status": candidate.status.value,
+            },
+        )
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise AppError(
+                "verification.concurrent_feedback_conflict",
+                "反馈正在被并发更新，请重试原请求",
+                status_code=409,
+            ) from exc
+        db.refresh(feedback)
     return FeedbackResponse(
         feedback_id=feedback.id,
-        evidence_event_id=evidence_event.id,
+        evidence_event_id=evidence_event.id if evidence_event else None,
         candidate_id=candidate.id,
         outcome=feedback.outcome,
         source=feedback.source,
         revision=feedback.revision,
-        created=created,
-        changed=changed,
+        created=mutation.created,
+        changed=mutation.changed,
         candidate_status=candidate.status,
-        snapshot=totals.to_snapshot(),
+        snapshot=mutation.totals.to_snapshot(),
         updated_at=feedback.updated_at,
     )
 

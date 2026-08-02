@@ -8,6 +8,12 @@ from password_detective.db.models.archive_fingerprint import (
     FingerprintAlgorithm,
 )
 from password_detective.db.models.audit_log import AuditLog
+from password_detective.db.models.desktop_verification import (
+    ClientInstallation,
+    InstallationStatus,
+    VerificationChallenge,
+    VerificationReceipt,
+)
 from password_detective.db.models.idempotency_record import IdempotencyRecord, IdempotencyStatus
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
@@ -31,10 +37,12 @@ __all__ = [
     "AuditLog",
     "CandidateFeedback",
     "CandidateStatus",
+    "ClientInstallation",
     "FeedbackOutcome",
     "FingerprintAlgorithm",
     "IdempotencyRecord",
     "IdempotencyStatus",
+    "InstallationStatus",
     "PasswordCandidate",
     "PointsLedger",
     "PointsLedgerStatus",
@@ -46,6 +54,8 @@ __all__ = [
     "UserRole",
     "UserSession",
     "UserStatus",
+    "VerificationChallenge",
     "VerificationEvidenceEvent",
+    "VerificationReceipt",
     "VerificationSource",
 ]
