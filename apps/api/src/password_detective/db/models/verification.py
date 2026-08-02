@@ -22,6 +22,11 @@ class VerificationSource(StrEnum):
     DESKTOP_RECEIPT = "desktop_receipt"
 
 
+class StateTransitionSource(StrEnum):
+    AUTOMATIC = "automatic"
+    MANUAL = "manual"
+
+
 class CandidateFeedback(Base):
     """Current effective feedback; immutable revisions live in VerificationEvidenceEvent."""
 
@@ -95,7 +100,7 @@ class VerificationEvidenceEvent(Base):
 
 
 class RecordStateEvent(Base):
-    """Append-only record of automatic candidate state transitions."""
+    """Append-only record of automatic and moderator candidate state transitions."""
 
     __tablename__ = "record_state_events"
 
@@ -110,7 +115,17 @@ class RecordStateEvent(Base):
         Enum(CandidateStatus, native_enum=False, length=16), index=True
     )
     reason_code: Mapped[str] = mapped_column(String(64), index=True)
+    reason_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     rule_version: Mapped[str] = mapped_column(String(32), index=True)
+    transition_source: Mapped[StateTransitionSource] = mapped_column(
+        Enum(StateTransitionSource, native_enum=False, length=16),
+        default=StateTransitionSource.AUTOMATIC,
+        index=True,
+    )
+    actor_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    request_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     trigger_evidence_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("verification_evidence_events.id", ondelete="SET NULL"),

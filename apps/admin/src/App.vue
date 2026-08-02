@@ -13,6 +13,7 @@ const auth = useAdminAuthStore();
       </RouterLink>
       <nav v-if="auth.isAuthenticated" class="nav" aria-label="管理导航">
         <RouterLink to="/">仪表盘</RouterLink>
+        <RouterLink to="/candidates">候选审核</RouterLink>
         <RouterLink to="/desktop-releases">桌面发布</RouterLink>
         <RouterLink to="/audit">审计日志</RouterLink>
         <button class="button secondary" @click="auth.logout()">退出</button>
