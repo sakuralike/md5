@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace PasswordDetective.Desktop.Protocol;
 
 public sealed record LoginRequest(string Login, string Password, string? TotpCode);
@@ -69,4 +71,7 @@ public sealed record ReceiptResponse(
     string CandidateStatus,
     DateTimeOffset AcceptedAt);
 
-public sealed record ApiErrorBody(string Code, string Message);
+public sealed record ApiErrorBody(
+    string Code,
+    string Message,
+    Dictionary<string, JsonElement>? Details);

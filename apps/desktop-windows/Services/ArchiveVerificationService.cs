@@ -8,13 +8,13 @@ namespace PasswordDetective.Desktop.Services;
 
 public sealed class ArchiveVerificationService : IArchiveVerificationService
 {
-    private const long MaxArchiveBytes = 8L * 1024 * 1024 * 1024;
-    private const int MaxEntries = 10_000;
-    private const long MaxExpandedBytes = 32L * 1024 * 1024 * 1024;
-    private const double MaxCompressionRatio = 1_000;
-    private const long RatioCheckMinimumBytes = 1024 * 1024;
-    private const long MaxSampleBytes = 1024 * 1024;
-    private static readonly TimeSpan VerificationTimeout = TimeSpan.FromSeconds(30);
+    private readonly ArchiveVerificationLimits _limits;
+
+    public ArchiveVerificationService(ArchiveVerificationLimits? limits = null)
+    {
+        _limits = limits ?? new ArchiveVerificationLimits();
+        _limits.Validate();
+    }
 
     public async Task<ArchiveVerificationResult> VerifyAsync(
         string filePath,
@@ -30,7 +30,7 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
 
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
-        linkedCancellation.CancelAfter(VerificationTimeout);
+        linkedCancellation.CancelAfter(_limits.VerificationTimeout);
 
         try
         {
@@ -58,7 +58,7 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         }
     }
 
-    private static ArchiveVerificationResult VerifyCore(
+    private ArchiveVerificationResult VerifyCore(
         string filePath,
         string candidatePassword,
         CancellationToken cancellationToken)
@@ -68,9 +68,10 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         {
             throw new FileNotFoundException("未找到所选文件。", filePath);
         }
-        if (file.Length > MaxArchiveBytes)
+        if (file.Length > _limits.MaxArchiveBytes)
         {
-            throw new ArchiveSafetyException("压缩包超过 8 GiB 本地验证上限。");
+            throw new ArchiveSafetyException(
+                $"压缩包超过 {FormatByteLimit(_limits.MaxArchiveBytes)} 本地验证上限。");
         }
 
         var archiveFormat = GetArchiveFormat(filePath);
@@ -104,9 +105,10 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         {
             cancellationToken.ThrowIfCancellationRequested();
             entryCount++;
-            if (entryCount > MaxEntries)
+            if (entryCount > _limits.MaxEntries)
             {
-                throw new ArchiveSafetyException("压缩包条目数超过 10,000 个本地验证上限。");
+                throw new ArchiveSafetyException(
+                    $"压缩包条目数超过 {_limits.MaxEntries:N0} 个本地验证上限。");
             }
 
             ValidateEntryPath(entry.Key);
@@ -116,21 +118,22 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
             }
 
             totalExpandedBytes = checked(totalExpandedBytes + entry.Size);
-            if (totalExpandedBytes > MaxExpandedBytes)
+            if (totalExpandedBytes > _limits.MaxExpandedBytes)
             {
-                throw new ArchiveSafetyException("压缩包声明的展开大小超过 32 GiB 安全上限。");
+                throw new ArchiveSafetyException(
+                    $"压缩包声明的展开大小超过 {FormatByteLimit(_limits.MaxExpandedBytes)} 安全上限。");
             }
 
             var compressedSize = Math.Max(1, entry.CompressedSize);
-            if (entry.Size >= RatioCheckMinimumBytes
-                && (double)entry.Size / compressedSize > MaxCompressionRatio)
+            if (entry.Size >= _limits.RatioCheckMinimumBytes
+                && (double)entry.Size / compressedSize > _limits.MaxCompressionRatio)
             {
                 throw new ArchiveSafetyException("压缩包的声明压缩比超过安全上限。");
             }
 
             using var entryStream = entry.OpenEntryStream();
-            var perEntryTarget = sampledBytes < MaxSampleBytes
-                ? Math.Min(64 * 1024, MaxSampleBytes - sampledBytes)
+            var perEntryTarget = sampledBytes < _limits.MaxSampleBytes
+                ? Math.Min(64 * 1024, _limits.MaxSampleBytes - sampledBytes)
                 : 1;
             long entrySampled = 0;
             while (entrySampled < perEntryTarget)
@@ -185,6 +188,18 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         {
             throw new ArchiveSafetyException("压缩包包含不安全的绝对路径或路径穿越条目。");
         }
+    }
+
+    private static string FormatByteLimit(long bytes)
+    {
+        const long gibibyte = 1024L * 1024 * 1024;
+        const long mebibyte = 1024L * 1024;
+        return bytes switch
+        {
+            >= gibibyte when bytes % gibibyte == 0 => $"{bytes / gibibyte} GiB",
+            >= mebibyte when bytes % mebibyte == 0 => $"{bytes / mebibyte} MiB",
+            _ => $"{bytes:N0} 字节",
+        };
     }
 
     private static string GetArchiveFormat(string filePath) =>

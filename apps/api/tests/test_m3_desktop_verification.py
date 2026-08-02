@@ -79,6 +79,8 @@ def _register_installation(
     headers: dict[str, str],
     installation_id: str,
     public_key: str,
+    *,
+    client_version: str = CLIENT_VERSION,
 ):
     return client.post(
         "/api/v1/desktop/installations",
@@ -87,7 +89,7 @@ def _register_installation(
             "installation_id": installation_id,
             "public_key": public_key,
             "key_algorithm": "ecdsa-p256-sha256",
-            "client_version": CLIENT_VERSION,
+            "client_version": client_version,
         },
     )
 
@@ -141,6 +143,26 @@ def _receipt_payload(
     )
     payload["signature"] = base64.b64encode(signature).decode()
     return payload
+
+
+def test_unsupported_client_version_returns_machine_readable_upgrade_details(client):
+    verifier, _ = _register_and_login(client, "upgrade_verifier")
+    installation_id, _, public_key = _new_identity()
+
+    response = _register_installation(
+        client,
+        verifier,
+        installation_id,
+        public_key,
+        client_version="0.0.1",
+    )
+
+    assert response.status_code == 426
+    assert response.json()["code"] == "desktop.client_version_unsupported"
+    assert response.json()["details"] == {
+        "minimum_client_version": CLIENT_VERSION,
+        "current_client_version": "0.0.1",
+    }
 
 
 def test_signed_receipt_is_accepted_once_and_becomes_desktop_evidence(client):

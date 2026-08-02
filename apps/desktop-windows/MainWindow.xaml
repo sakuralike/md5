@@ -44,6 +44,12 @@
                         <TextBlock Text="本机安装身份" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding InstallationStatus}" Foreground="#45657A"
                                    Margin="0,5,0,0" TextWrapping="Wrap" FontFamily="Consolas"/>
+                        <Button Content="生成新的安装身份并重新注册"
+                                Command="{Binding RegenerateInstallationCommand}"
+                                HorizontalAlignment="Left" Margin="0,12,0,0"
+                                ToolTip="仅在当前安装身份被撤销、绑定冲突或密钥不一致时启用"/>
+                        <TextBlock Text="{Binding UpgradeNotice}" Foreground="#B54708"
+                                   Margin="0,10,0,0" TextWrapping="Wrap" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Border>
 

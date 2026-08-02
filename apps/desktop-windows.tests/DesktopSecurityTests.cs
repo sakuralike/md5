@@ -2,6 +2,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using PasswordDetective.Desktop.Protocol;
 using PasswordDetective.Desktop.Services;
 
@@ -72,6 +73,62 @@ public sealed class DesktopSecurityTests : IDisposable
             HashAlgorithmName.SHA256,
             DSASignatureFormat.Rfc3279DerSequence));
         Assert.DoesNotContain("PRIVATE KEY", await File.ReadAllTextAsync(path));
+    }
+
+    [Fact]
+    public async Task InstallationIdentityCanBeRegeneratedAndOldSignatureStopsMatching()
+    {
+        var path = Path.Combine(_temporaryDirectory, "identity-regenerated.json");
+        var service = new InstallationIdentityService(path);
+        var payload = Encoding.UTF8.GetBytes("synthetic-regeneration-payload");
+        var first = await service.GetOrCreateAsync();
+        var firstSignature = Convert.FromBase64String(await service.SignAsync(payload));
+
+        var replacement = await service.RegenerateAsync();
+        var replacementSignature = Convert.FromBase64String(await service.SignAsync(payload));
+        var persisted = await new InstallationIdentityService(path).GetOrCreateAsync();
+
+        Assert.NotEqual(first.InstallationId, replacement.InstallationId);
+        Assert.NotEqual(first.PublicKey, replacement.PublicKey);
+        Assert.Equal(replacement, persisted);
+        using var replacementPublicKey = ECDsa.Create();
+        replacementPublicKey.ImportSubjectPublicKeyInfo(
+            Convert.FromBase64String(replacement.PublicKey),
+            out _);
+        Assert.False(replacementPublicKey.VerifyData(
+            payload,
+            firstSignature,
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence));
+        Assert.True(replacementPublicKey.VerifyData(
+            payload,
+            replacementSignature,
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence));
+    }
+
+    [Fact]
+    public void DesktopRecoveryAdvisorExplainsIdentityAndUpgradeRecovery()
+    {
+        var revoked = DesktopRecoveryAdvisor.From(new DesktopApiException(
+            409,
+            "desktop.installation_revoked",
+            "synthetic revoked response"));
+        var upgrade = DesktopRecoveryAdvisor.From(new DesktopApiException(
+            426,
+            "desktop.client_version_unsupported",
+            "synthetic version response",
+            new Dictionary<string, JsonElement>
+            {
+                ["minimum_client_version"] = JsonSerializer.SerializeToElement("0.2.0"),
+            }));
+
+        Assert.True(revoked.CanRegenerateInstallation);
+        Assert.False(revoked.UpgradeRequired);
+        Assert.Contains("新的安装身份", revoked.Message);
+        Assert.False(upgrade.CanRegenerateInstallation);
+        Assert.True(upgrade.UpgradeRequired);
+        Assert.Contains("0.2.0", upgrade.Message);
     }
 
     [Fact]

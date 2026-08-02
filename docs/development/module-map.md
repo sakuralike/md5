@@ -23,7 +23,7 @@
 |---|---|---|---|
 | 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈和个人贡献 | Web Worker 隔离、反馈历史页、超大文件性能与浏览器 E2E |
 | 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、导航骨架 | M4 审核与审计工作台 |
-| Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、资源限制、SHA-256/MD5、DPAPI 安装密钥与令牌、登录、公钥注册、挑战和 ECDSA 签名回执 | 代表性加密 7z 样本矩阵、安装撤销后的重新注册 UX、自动更新与发布签名 |
+| Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执 | Windows 10/11 实机 E2E、物理超大样本、自动更新与发布签名 |
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
 | API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、桌面安装/挑战/回执和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
 

@@ -34,6 +34,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _accountStatus = "未登录";
     private double _progress;
     private bool _isBusy;
+    private bool _canRegenerateInstallation;
+    private string _upgradeNotice = string.Empty;
     private FileFingerprintResult? _result;
     private ArchiveVerificationResult? _verificationResult;
 
@@ -54,6 +56,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         VerifyCommand = new AsyncRelayCommand(VerifyAsync, CanVerify);
         LoginCommand = new AsyncRelayCommand(LoginAsync, CanLogin);
         SubmitReceiptCommand = new AsyncRelayCommand(VerifyAndSubmitAsync, CanSubmit);
+        RegenerateInstallationCommand = new AsyncRelayCommand(
+            RegenerateInstallationAsync,
+            () => !IsBusy && CanRegenerateInstallation);
         LogoutCommand = new RelayCommand(Logout, () => !IsBusy && _session is not null);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
         _ = InitializeAsync();
@@ -71,12 +76,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public FileFingerprintResult? Result { get => _result; private set => SetField(ref _result, value); }
     public ArchiveVerificationResult? VerificationResult { get => _verificationResult; private set => SetField(ref _verificationResult, value); }
     public bool IsBusy { get => _isBusy; private set { SetField(ref _isBusy, value); NotifyCommands(); } }
+    public bool CanRegenerateInstallation { get => _canRegenerateInstallation; private set { SetField(ref _canRegenerateInstallation, value); NotifyCommands(); } }
+    public string UpgradeNotice { get => _upgradeNotice; private set => SetField(ref _upgradeNotice, value); }
 
     public RelayCommand SelectFileCommand { get; }
     public AsyncRelayCommand CalculateCommand { get; }
     public AsyncRelayCommand VerifyCommand { get; }
     public AsyncRelayCommand LoginCommand { get; }
     public AsyncRelayCommand SubmitReceiptCommand { get; }
+    public AsyncRelayCommand RegenerateInstallationCommand { get; }
     public RelayCommand LogoutCommand { get; }
     public RelayCommand CancelCommand { get; }
 
@@ -88,12 +96,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             _identity = await _identityService.GetOrCreateAsync();
-            InstallationStatus = $"安装实例 {_identity.InstallationId:D} · 公钥指纹 {_identity.PublicKeyFingerprint[..16]}…";
+            UpdateInstallationStatus(_identity);
             _session = await _sessionStore.LoadAsync();
             if (_session is not null)
             {
                 ServerBaseUrl = _session.ServerBaseUrl;
-                await EnsureSessionAndRegistrationAsync(CancellationToken.None);
+                try
+                {
+                    await EnsureSessionAndRegistrationAsync(CancellationToken.None);
+                }
+                catch (DesktopApiException exception)
+                {
+                    AccountStatus = $"已加载 {_session.Username} 的本地会话，但安装注册需要处理";
+                    ApplyApiError("恢复登录状态失败", exception);
+                }
             }
         }
         catch (Exception)
@@ -118,13 +134,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _cancellation!.Token);
             _session = ToSession(ServerBaseUrl, tokens);
             await _sessionStore.SaveAsync(_session, _cancellation.Token);
+            AccountStatus = $"已登录：{_session.Username} · 正在注册安装身份";
             await RegisterInstallationAsync(_session, _cancellation.Token);
             AccountStatus = $"已登录：{_session.Username} · 令牌由 Windows DPAPI 保护";
             Status = "登录成功，本机安装公钥已注册。";
         }
         catch (DesktopApiException exception)
         {
-            Status = $"登录或安装注册失败（{exception.Code}）：{exception.Message}";
+            ApplyApiError("登录或安装注册失败", exception);
         }
         catch (Exception)
         {
@@ -210,7 +227,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (DesktopApiException exception)
         {
-            Status = $"服务端拒绝回执（{exception.Code}）：{exception.Message}";
+            ApplyApiError("服务端拒绝回执", exception);
         }
         catch (Exception)
         {
@@ -245,7 +262,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task RegisterInstallationAsync(DesktopSession session, CancellationToken cancellationToken)
     {
         _identity ??= await _identityService.GetOrCreateAsync(cancellationToken);
-        await _apiClient.RegisterInstallationAsync(
+        var registration = await _apiClient.RegisterInstallationAsync(
             session.ServerBaseUrl,
             session.AccessToken,
             new InstallationRegistrationRequest(
@@ -254,6 +271,64 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _identity.KeyAlgorithm,
                 ClientVersion),
             cancellationToken);
+        ClearRecoveryState();
+        InstallationStatus =
+            $"安装实例 {_identity.InstallationId:D} · 服务端状态 {registration.Status} · 已接收回执 {registration.ReceiptCount}";
+    }
+
+    private async Task RegenerateInstallationAsync()
+    {
+        BeginOperation("正在生成新的本机安装身份…");
+        try
+        {
+            _identity = await _identityService.RegenerateAsync(_cancellation!.Token);
+            ClearRecoveryState();
+            UpdateInstallationStatus(_identity);
+            if (_session is null)
+            {
+                Status = "新的安装身份已生成。登录后将自动向服务端注册。";
+                return;
+            }
+
+            await EnsureSessionAndRegistrationAsync(_cancellation.Token);
+            Status = "新的安装身份已生成并完成服务端注册。";
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "重新生成安装身份已取消。";
+        }
+        catch (DesktopApiException exception)
+        {
+            ApplyApiError("重新注册安装身份失败", exception);
+        }
+        catch (Exception)
+        {
+            Status = "重新生成安装身份失败，请检查当前 Windows 用户的数据保护状态后重试。";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void ApplyApiError(string context, DesktopApiException exception)
+    {
+        var advice = DesktopRecoveryAdvisor.From(exception);
+        CanRegenerateInstallation = advice.CanRegenerateInstallation;
+        UpgradeNotice = advice.UpgradeRequired ? advice.Message : string.Empty;
+        Status = $"{context}：{advice.Message}";
+    }
+
+    private void ClearRecoveryState()
+    {
+        CanRegenerateInstallation = false;
+        UpgradeNotice = string.Empty;
+    }
+
+    private void UpdateInstallationStatus(InstallationIdentity identity)
+    {
+        InstallationStatus =
+            $"安装实例 {identity.InstallationId:D} · 公钥指纹 {identity.PublicKeyFingerprint[..16]}…";
     }
 
     private void Logout()
@@ -315,7 +390,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void BeginOperation(string status) { IsBusy = true; Progress = 0; Status = status; _cancellation = new CancellationTokenSource(); }
     private void EndOperation() { _cancellation?.Dispose(); _cancellation = null; IsBusy = false; }
     private void Cancel() => _cancellation?.Cancel();
-    private void NotifyCommands() { SelectFileCommand.NotifyCanExecuteChanged(); CalculateCommand.NotifyCanExecuteChanged(); VerifyCommand.NotifyCanExecuteChanged(); LoginCommand.NotifyCanExecuteChanged(); SubmitReceiptCommand.NotifyCanExecuteChanged(); LogoutCommand.NotifyCanExecuteChanged(); CancelCommand.NotifyCanExecuteChanged(); }
+    private void NotifyCommands() { SelectFileCommand.NotifyCanExecuteChanged(); CalculateCommand.NotifyCanExecuteChanged(); VerifyCommand.NotifyCanExecuteChanged(); LoginCommand.NotifyCanExecuteChanged(); SubmitReceiptCommand.NotifyCanExecuteChanged(); RegenerateInstallationCommand.NotifyCanExecuteChanged(); LogoutCommand.NotifyCanExecuteChanged(); CancelCommand.NotifyCanExecuteChanged(); }
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null) { if (EqualityComparer<T>.Default.Equals(field, value)) return false; field = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); return true; }
     public event PropertyChangedEventHandler? PropertyChanged;
 }

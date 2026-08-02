@@ -49,6 +49,23 @@ public sealed class InstallationIdentityService : IInstallationIdentityService
         }
     }
 
+    public async Task<InstallationIdentity> RegenerateAsync(
+        CancellationToken cancellationToken = default)
+    {
+        EnsureWindows();
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            File.Delete(_identityPath + ".tmp");
+            var stored = await CreateAndStoreAsync(cancellationToken);
+            return ToPublicIdentity(stored);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<string> SignAsync(
         ReadOnlyMemory<byte> canonicalPayload,
         CancellationToken cancellationToken = default)

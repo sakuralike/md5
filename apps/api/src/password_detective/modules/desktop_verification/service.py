@@ -508,6 +508,10 @@ def _require_supported_client_version(version: str, settings: Settings) -> None:
             "desktop.client_version_unsupported",
             f"客户端版本过低，最低要求为 {settings.desktop_min_client_version}",
             status_code=426,
+            details={
+                "minimum_client_version": settings.desktop_min_client_version,
+                "current_client_version": version,
+            },
         )
 
 

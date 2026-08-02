@@ -66,6 +66,22 @@
 
 桌面端是不可信证据来源：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。有效回执仍进入 `verification-v1` 证据聚合，并接受账号、安装和 IP 关联去重/降权。档案文件名、目录列表、文件内容和候选密码不得上传。
 
+最低版本拒绝使用 `426 desktop.client_version_unsupported`，并在 `details` 中返回可供客户端展示的版本信息：
+
+```json
+{
+  "code": "desktop.client_version_unsupported",
+  "message": "客户端版本过低，最低要求为 0.2.0",
+  "details": {
+    "minimum_client_version": "0.2.0",
+    "current_client_version": "0.1.0"
+  },
+  "request_id": "req_synthetic_desktop_upgrade"
+}
+```
+
+`desktop.installation_revoked`、`desktop.installation_account_mismatch`、`desktop.installation_key_mismatch` 或 `desktop.installation_not_found` 表示本地身份不能继续使用，客户端可引导生成新的随机安装 ID/密钥并重新注册。`desktop.client_version_unsupported` 和 `desktop.installation_limit_reached` 不得通过重新生成身份绕过。
+
 ## 成功响应
 
 资源接口直接返回资源；响应头包含 `X-Request-ID`。列表使用：

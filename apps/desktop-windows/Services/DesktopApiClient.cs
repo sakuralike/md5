@@ -117,7 +117,8 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             throw new DesktopApiException(
                 (int)response.StatusCode,
                 error?.Code ?? "desktop.remote_error",
-                error?.Message ?? "服务端请求失败。");
+                error?.Message ?? "服务端请求失败。",
+                error?.Details);
         }
 
         return await response.Content.ReadFromJsonAsync<TResponse>(JsonOptions, cancellationToken)
@@ -152,8 +153,16 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
 public sealed class DesktopApiException(
     int statusCode,
     string code,
-    string message) : Exception(message)
+    string message,
+    IReadOnlyDictionary<string, JsonElement>? details = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
     public string Code { get; } = code;
+    public IReadOnlyDictionary<string, JsonElement> Details { get; } =
+        details ?? new Dictionary<string, JsonElement>();
+
+    public string? GetStringDetail(string key) =>
+        Details.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 }

@@ -58,6 +58,16 @@ dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj 
 
 默认 API 地址为 `http://localhost:8000/api/v1/`。安装身份保存于当前用户 `%LocalAppData%/PasswordDetective/installation-identity.json`，其中私钥由 DPAPI 保护；桌面访问/刷新令牌保存在同目录的 DPAPI 密文文件中。候选密码、压缩包内容和目录不会写入这些文件。
 
+加密压缩包测试样本必须由项目脚本使用合成数据生成，不手工提交来源不明的压缩包：
+
+```powershell
+python -m venv ./.local/desktop-fixtures-venv
+& ./.local/desktop-fixtures-venv/Scripts/python.exe -m pip install -r ./scripts/desktop-fixtures-requirements.txt
+& ./.local/desktop-fixtures-venv/Scripts/python.exe ./scripts/generate-desktop-archive-fixtures.py
+```
+
+样本说明和固定合成密码见 [`apps/desktop-windows.tests/Fixtures/README.md`](../../apps/desktop-windows.tests/Fixtures/README.md)。服务端返回安装撤销、绑定冲突或密钥不一致时，客户端会启用新身份生成/重新注册操作；最低版本拒绝只显示升级提示，不应通过更换身份绕过。
+
 ## 统一检查
 
 ```powershell
