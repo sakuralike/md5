@@ -60,11 +60,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_desktop_releases_published_at", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_created_by", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_status", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_version", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_architecture", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_platform", table_name="desktop_releases")
-    op.drop_index("ix_desktop_releases_channel", table_name="desktop_releases")
+    # Dropping the table removes its indexes and foreign key together. MySQL rejects
+    # dropping the created_by index first because InnoDB requires it for the FK.
     op.drop_table("desktop_releases")

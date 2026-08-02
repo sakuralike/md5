@@ -71,6 +71,7 @@
 1. 移除该 `TEXT` 列的服务端默认值，由应用层继续提供合成发布说明或空字符串。
 2. 在 Docker MySQL 8.4 空环境重新执行全量迁移、服务健康检查、合成注册/登录和 Web/Admin 响应检查，约 0.9 分钟通过。
 3. 在 GitHub Actions API 作业增加 MySQL 8.4 服务和 Alembic `upgrade → downgrade base → upgrade` 门禁，与本地 SQLite 门禁并行保留。
+4. 首轮托管 MySQL 往返进一步发现降级时先删除外键依赖索引会被 InnoDB 拒绝；调整为直接删除整表，使索引与外键按数据库支持的顺序一起移除。修复后已在本地 MySQL 8.4 完成全量 `upgrade → downgrade base → upgrade`。
 
 该问题属于“目标数据库运行时兼容性”缺陷；在 PR 尚未合入、迁移尚未进入正式环境时直接修正迁移是可接受的。若迁移已经发布到共享或生产环境，则必须新增纠正迁移而不能改写历史迁移。
 
