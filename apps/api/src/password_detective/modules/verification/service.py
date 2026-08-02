@@ -24,6 +24,9 @@ from password_detective.db.models.verification import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.reputation.adjustments import (
+    reconcile_candidate_rewards,
+)
 from password_detective.modules.reputation.service import (
     CONTRIBUTION_VERIFIED_REPUTATION,
     VERIFICATION_ACCEPTED_REPUTATION,
@@ -363,25 +366,32 @@ def _apply_automatic_transition(
     if next_status == CandidateStatus.VERIFIED:
         candidate.last_verified_at = utc_now()
 
-    db.add(
-        RecordStateEvent(
-            candidate_id=candidate.id,
-            previous_status=previous_status,
-            next_status=next_status,
-            reason_code=reason_code or "automatic.rule_evaluation",
-            rule_version=rule.version,
-            trigger_evidence_id=trigger_evidence.id,
-            independent_success_count=totals.independent_success_count,
-            independent_failure_count=totals.independent_failure_count,
-            success_weight=totals.success_weight,
-            failure_weight=totals.failure_weight,
-        )
+    state_event = RecordStateEvent(
+        candidate_id=candidate.id,
+        previous_status=previous_status,
+        next_status=next_status,
+        reason_code=reason_code or "automatic.rule_evaluation",
+        rule_version=rule.version,
+        trigger_evidence_id=trigger_evidence.id,
+        independent_success_count=totals.independent_success_count,
+        independent_failure_count=totals.independent_failure_count,
+        success_weight=totals.success_weight,
+        failure_weight=totals.failure_weight,
     )
+    db.add(state_event)
+    db.flush()
     if first_verification:
-        _settle_first_verification_points(db, settings, candidate.id)
+        settle_first_verification_rewards(db, settings, candidate.id)
+        db.flush()
+    reconcile_candidate_rewards(
+        db,
+        candidate_id=candidate.id,
+        state_event_id=state_event.id,
+        target_status=next_status,
+    )
 
 
-def _settle_first_verification_points(
+def settle_first_verification_rewards(
     db: Session,
     settings: Settings,
     candidate_id: str,

@@ -6,6 +6,10 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.password_candidate import CandidateStatus
+from password_detective.db.models.reward_adjustment_event import (
+    RewardAdjustmentDirection,
+    RewardKind,
+)
 from password_detective.db.models.verification import (
     FeedbackOutcome,
     StateTransitionSource,
@@ -98,10 +102,35 @@ class StateEventResponse(BaseModel):
     created_at: datetime
 
 
+class RewardAdjustmentSummaryResponse(BaseModel):
+    rule_version: str
+    direction: RewardAdjustmentDirection | None
+    affected_users: int
+    points_entries: int
+    reputation_events: int
+    points_amount: int
+    reputation_amount: int
+
+
+class RewardAdjustmentEventResponse(BaseModel):
+    id: str
+    state_event_id: str
+    user_id: str
+    reward_kind: RewardKind
+    source_reference_id: str
+    direction: RewardAdjustmentDirection
+    points_amount: int
+    reputation_amount: int
+    reason_code: str
+    rule_version: str
+    created_at: datetime
+
+
 class CandidateModerationDetail(CandidateModerationSummary):
     evidence_snapshot: EvidenceSnapshotResponse
     evidence_events: list[EvidenceEventResponse]
     state_events: list[StateEventResponse]
+    reward_adjustments: list[RewardAdjustmentEventResponse]
 
 
 class CandidateTransitionResponse(BaseModel):
@@ -111,3 +140,4 @@ class CandidateTransitionResponse(BaseModel):
     state_event_id: str
     reason_code: ManualTransitionReason
     request_id: str | None
+    reward_adjustment: RewardAdjustmentSummaryResponse

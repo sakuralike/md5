@@ -384,6 +384,8 @@ export interface DesktopReleaseListResponse {
 }
 
 export type StateTransitionSource = "automatic" | "manual";
+export type RewardAdjustmentDirection = "invalidate" | "restore";
+export type RewardKind = "contribution" | "verification";
 export type ManualTransitionReason =
   | "manual.evidence_conflict"
   | "manual.security_hold"
@@ -449,10 +451,35 @@ export interface CandidateStateEvent {
   created_at: string;
 }
 
+export interface RewardAdjustmentSummary {
+  rule_version: string;
+  direction: RewardAdjustmentDirection | null;
+  affected_users: number;
+  points_entries: number;
+  reputation_events: number;
+  points_amount: number;
+  reputation_amount: number;
+}
+
+export interface RewardAdjustmentEvent {
+  id: string;
+  state_event_id: string;
+  user_id: string;
+  reward_kind: RewardKind;
+  source_reference_id: string;
+  direction: RewardAdjustmentDirection;
+  points_amount: number;
+  reputation_amount: number;
+  reason_code: string;
+  rule_version: string;
+  created_at: string;
+}
+
 export interface CandidateModerationDetail extends CandidateModerationSummary {
   evidence_snapshot: ModerationEvidenceSnapshot;
   evidence_events: ModerationEvidenceEvent[];
   state_events: CandidateStateEvent[];
+  reward_adjustments: RewardAdjustmentEvent[];
 }
 
 export interface CandidateTransitionRequest {
@@ -468,6 +495,7 @@ export interface CandidateTransitionResponse {
   state_event_id: string;
   reason_code: ManualTransitionReason;
   request_id: string | null;
+  reward_adjustment: RewardAdjustmentSummary;
 }
 
 export type ReportReason =

@@ -40,6 +40,16 @@ const sourceLabels = {
   manual: "人工处置",
 };
 
+const adjustmentDirectionLabels = {
+  invalidate: "扣回奖励",
+  restore: "恢复奖励",
+};
+
+const rewardKindLabels = {
+  contribution: "贡献奖励",
+  verification: "验证奖励",
+};
+
 const availableActions = computed(() => {
   if (!selected.value) return [];
   const actions: Array<{ target: CandidateStatus; reason: ManualTransitionReason; label: string; danger?: boolean }> = [];
@@ -85,6 +95,10 @@ function shortId(value: string): string {
   return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
 }
 
+function signedAmount(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
 function describeError(value: unknown): string {
   return value instanceof ApiError ? `${value.body.message}（${value.body.code}）` : value instanceof Error ? value.message : "操作失败";
 }
@@ -128,15 +142,19 @@ async function applyTransition(action: { target: CandidateStatus; reason: Manual
   message.value = "";
   const candidateId = selected.value.id;
   try {
-    await transitionModerationCandidate(
+    const response = await transitionModerationCandidate(
       candidateId,
       { target_status: action.target, reason_code: action.reason, reason_note: reasonNote.value.trim() || null },
       requireToken(),
       createTransitionKey(),
     );
     reasonNote.value = "";
-    message.value = `已完成“${action.label}”，不可变状态时间线和审计日志已写入。`;
     await Promise.all([loadCandidates(), openCandidate(candidateId)]);
+    const adjustment = response.reward_adjustment;
+    const adjustmentText = adjustment.direction
+      ? `奖励调整：积分 ${signedAmount(adjustment.points_amount)}，信誉 ${signedAmount(adjustment.reputation_amount)}，影响 ${adjustment.affected_users} 个账号。`
+      : "本次状态变更无需奖励调整。";
+    message.value = `已完成“${action.label}”，不可变状态时间线和审计日志已写入。${adjustmentText}`;
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -210,6 +228,18 @@ onMounted(() => loadCandidates(true));
                 <div class="timeline-title"><strong>{{ statusLabels[event.previous_status] }} → {{ statusLabels[event.next_status] }}</strong><span class="badge">{{ sourceLabels[event.transition_source] }}</span></div>
                 <p>{{ event.reason_code }}<span v-if="event.reason_note"> · {{ event.reason_note }}</span></p>
                 <small>{{ formatTime(event.created_at) }} · 规则 {{ event.rule_version }}<span v-if="event.actor_id"> · 操作人 {{ shortId(event.actor_id) }}</span></small>
+              </li>
+            </ol>
+          </section>
+
+          <section class="panel stack">
+            <div class="section-title"><h2>积分 / 信誉调整</h2><span class="muted">{{ selected.reward_adjustments.length }} 条</span></div>
+            <div v-if="selected.reward_adjustments.length === 0" class="empty-state">尚无奖励扣回或恢复事件。</div>
+            <ol v-else class="timeline reward-timeline">
+              <li v-for="event in selected.reward_adjustments" :key="event.id">
+                <div class="timeline-title"><strong>{{ adjustmentDirectionLabels[event.direction] }} · {{ rewardKindLabels[event.reward_kind] }}</strong><span class="badge">{{ shortId(event.user_id) }}</span></div>
+                <p>积分 {{ signedAmount(event.points_amount) }} · 信誉 {{ signedAmount(event.reputation_amount) }}</p>
+                <small>{{ formatTime(event.created_at) }} · {{ event.rule_version }} · 状态事件 {{ shortId(event.state_event_id) }}</small>
               </li>
             </ol>
           </section>

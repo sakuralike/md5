@@ -46,6 +46,15 @@ describe("candidate moderation administration", () => {
       state_event_id: "event_synthetic",
       reason_code: "manual.evidence_conflict",
       request_id: "request_synthetic",
+      reward_adjustment: {
+        rule_version: "reward-compensation-v1",
+        direction: "invalidate",
+        affected_users: 2,
+        points_entries: 2,
+        reputation_events: 2,
+        points_amount: -2,
+        reputation_amount: -5,
+      },
     };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal("fetch", fetchMock);

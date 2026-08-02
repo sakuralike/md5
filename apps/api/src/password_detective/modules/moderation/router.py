@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
+from password_detective.core.config import Settings, get_settings
 from password_detective.core.idempotency import (
     abandon_idempotency,
     acquire_idempotency,
@@ -65,6 +66,7 @@ def candidate_transition(
     payload: CandidateTransitionRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
     principal: Annotated[Principal, Depends(require_admin_mfa)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> CandidateTransitionResponse:
@@ -81,6 +83,7 @@ def candidate_transition(
     try:
         response = transition_candidate(
             db,
+            settings=settings,
             candidate_id=candidate_id,
             payload=payload,
             principal=principal,

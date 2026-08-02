@@ -51,6 +51,10 @@ function eventLabel(eventType: string): string {
     "submission.pending": "候选贡献",
     "verification.accepted": "有效验证",
     "contribution.verified": "有效贡献",
+    "reward.contribution.invalidate": "贡献奖励扣回",
+    "reward.verification.invalidate": "验证奖励扣回",
+    "reward.contribution.restore": "贡献奖励恢复",
+    "reward.verification.restore": "验证奖励恢复",
   }[eventType] ?? eventType;
 }
 
