@@ -1,14 +1,13 @@
-import type { Session, TokenResponse, User } from "@password-detective/api-contract";
+import type { BrowserTokenResponse, Session, User } from "@password-detective/api-contract";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiRequest } from "../services/api";
 
-const STORAGE_KEY = "password_detective_session_v1";
+const STORAGE_KEY = "password_detective_session_v2";
 
 interface StoredSession {
   accessToken: string;
-  refreshToken: string;
   user: User;
 }
 
@@ -26,7 +25,6 @@ function readStoredSession(): StoredSession | null {
 export const useAuthStore = defineStore("auth", () => {
   const restored = readStoredSession();
   const accessToken = ref(restored?.accessToken ?? "");
-  const refreshToken = ref(restored?.refreshToken ?? "");
   const user = ref<User | null>(restored?.user ?? null);
   const busy = ref(false);
   const error = ref("");
@@ -34,15 +32,13 @@ export const useAuthStore = defineStore("auth", () => {
 
   const isAuthenticated = computed(() => Boolean(accessToken.value && user.value));
 
-  function persist(tokens: TokenResponse): void {
+  function persist(tokens: BrowserTokenResponse): void {
     accessToken.value = tokens.access_token;
-    refreshToken.value = tokens.refresh_token;
     user.value = tokens.user;
     sessionStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
         user: tokens.user,
       } satisfies StoredSession),
     );
@@ -50,7 +46,6 @@ export const useAuthStore = defineStore("auth", () => {
 
   function clear(): void {
     accessToken.value = "";
-    refreshToken.value = "";
     user.value = null;
     sessionStorage.removeItem(STORAGE_KEY);
   }
@@ -59,7 +54,7 @@ export const useAuthStore = defineStore("auth", () => {
     busy.value = true;
     error.value = "";
     try {
-      const tokens = await apiRequest<TokenResponse>("/auth/login", {
+      const tokens = await apiRequest<BrowserTokenResponse>("/web/auth/login", {
         method: "POST",
         body: JSON.stringify({ login: loginName, password }),
       });
@@ -91,11 +86,9 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function refresh(): Promise<boolean> {
-    if (!refreshToken.value) return false;
     try {
-      const tokens = await apiRequest<TokenResponse>("/auth/refresh", {
+      const tokens = await apiRequest<BrowserTokenResponse>("/web/auth/refresh", {
         method: "POST",
-        body: JSON.stringify({ refresh_token: refreshToken.value }),
       });
       persist(tokens);
       return true;
@@ -106,12 +99,14 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function logout(): Promise<void> {
-    if (accessToken.value) {
-      try {
-        await apiRequest("/auth/logout", { method: "POST" }, accessToken.value);
-      } catch {
-        // 本地仍必须清理失效令牌。
-      }
+    try {
+      await apiRequest(
+        "/web/auth/logout",
+        { method: "POST" },
+        accessToken.value || undefined,
+      );
+    } catch {
+      // 即使访问令牌过期，也要优先清理本地状态；服务端会依据 HttpOnly Cookie 撤销会话。
     }
     clear();
     await router.push("/login");

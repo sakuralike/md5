@@ -2,20 +2,35 @@ import { createRouter, createWebHistory } from "vue-router";
 import AuditPage from "../pages/AuditPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
+import TotpSetupPage from "../pages/TotpSetupPage.vue";
+
+const STORAGE_KEY = "password_detective_admin_session_v2";
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", component: LoginPage },
+    { path: "/totp-setup", component: TotpSetupPage, meta: { requiresEnrollment: true } },
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
   ],
 });
 
-router.beforeEach((to) => {
-  if (to.meta.requiresAdmin && !sessionStorage.getItem("password_detective_admin_session_v1")) {
-    return "/login";
+function readSession(): { enrollmentOnly?: boolean } | null {
+  const raw = sessionStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { enrollmentOnly?: boolean };
+  } catch {
+    sessionStorage.removeItem(STORAGE_KEY);
+    return null;
   }
+}
+
+router.beforeEach((to) => {
+  const session = readSession();
+  if (to.meta.requiresEnrollment && (!session || !session.enrollmentOnly)) return "/login";
+  if (to.meta.requiresAdmin && (!session || session.enrollmentOnly)) return "/login";
   return true;
 });
 

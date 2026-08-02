@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
 from password_detective.core.ids import new_id
+from password_detective.core.notifications import NotificationGateway
 from password_detective.core.security import (
     create_access_token,
     create_refresh_token,
@@ -19,10 +20,13 @@ from password_detective.core.security import (
 )
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
+from password_detective.db.models.account_action_token import AccountTokenKind
 from password_detective.db.models.user import User, UserStatus
 from password_detective.db.models.user_session import UserSession
+from password_detective.modules.auth.account_tokens import issue_account_token
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse
+from password_detective.modules.auth.totp import verify_user_totp
 
 MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
@@ -35,22 +39,31 @@ def _aware(value: datetime) -> datetime:
 def _issue_token_response(
     *, settings: Settings, user: User, session: UserSession, refresh_token: str
 ) -> TokenResponse:
+    mfa_verified = session.mfa_verified_at is not None
     access_token = create_access_token(
         secret_key=settings.app_secret_key,
         ttl_minutes=settings.access_token_ttl_minutes,
         user_id=user.id,
         role=user.role.value,
         session_family_id=session.family_id,
+        mfa_verified=mfa_verified,
     )
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.access_token_ttl_minutes * 60,
+        mfa_verified=mfa_verified,
         user=user,
     )
 
 
-def register_user(db: Session, payload: RegisterRequest, context: ClientContext) -> User:
+def register_user(
+    db: Session,
+    settings: Settings,
+    notifications: NotificationGateway,
+    payload: RegisterRequest,
+    context: ClientContext,
+) -> User:
     username = payload.username.strip().lower()
     email = str(payload.email).strip().lower()
     existing = db.scalar(select(User.id).where(or_(User.username == username, User.email == email)))
@@ -79,6 +92,15 @@ def register_user(db: Session, payload: RegisterRequest, context: ClientContext)
         request_id=context.request_id,
     )
     db.commit()
+    db.refresh(user)
+    issue_account_token(
+        db,
+        settings,
+        notifications,
+        user=user,
+        kind=AccountTokenKind.EMAIL_VERIFICATION,
+        context=context,
+    )
     db.refresh(user)
     return user
 
@@ -119,6 +141,10 @@ def login_user(
         db.commit()
         raise AppError("auth.invalid_credentials", "用户名、邮箱或密码不正确", status_code=401)
 
+    mfa_verified = False
+    if user.totp_enabled_at is not None:
+        mfa_verified = verify_user_totp(user, settings, payload.totp_code)
+
     if user.status == UserStatus.LOCKED:
         user.status = UserStatus.ACTIVE
     user.failed_login_count = 0
@@ -134,6 +160,7 @@ def login_user(
         expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
         user_agent=context.user_agent,
         ip_prefix=context.ip_prefix,
+        mfa_verified_at=now if mfa_verified else None,
     )
     db.add(session)
     write_audit_log(
@@ -145,6 +172,7 @@ def login_user(
         result="success",
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
+        details={"mfa_verified": mfa_verified},
     )
     db.commit()
     db.refresh(user)
@@ -211,6 +239,7 @@ def rotate_refresh_token(
         expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
         user_agent=context.user_agent or session.user_agent,
         ip_prefix=context.ip_prefix or session.ip_prefix,
+        mfa_verified_at=session.mfa_verified_at,
     )
     db.add(next_session)
     write_audit_log(
@@ -284,3 +313,40 @@ def revoke_all_sessions(db: Session, *, user_id: str, context: ClientContext) ->
     )
     db.commit()
     return result.rowcount or 0
+
+
+def revoke_by_refresh_token(
+    db: Session,
+    *,
+    refresh_token: str,
+    reason: str,
+    context: ClientContext,
+) -> None:
+    session = db.scalar(
+        select(UserSession).where(
+            UserSession.refresh_token_hash == hash_refresh_token(refresh_token)
+        )
+    )
+    if session is None:
+        return
+    now = utc_now()
+    db.execute(
+        update(UserSession)
+        .where(
+            UserSession.family_id == session.family_id,
+            UserSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now, revoked_reason=reason)
+    )
+    write_audit_log(
+        db,
+        actor_id=session.user_id,
+        action="auth.browser_logout",
+        target_type="session",
+        target_id=session.family_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"reason": reason},
+    )
+    db.commit()

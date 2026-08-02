@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：M0 基线完成，M1 工程基础与认证开发中。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：M0 基线完成；M1 代码门禁完成，等待 Docker 空环境、真实 Redis CI 和托管分支保护验收。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -54,6 +54,9 @@ dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj
 Copy-Item .env.example .env
 # 修改 APP_SECRET_KEY 后再启动
 docker compose up --build
+
+# 或执行会清理本项目 Compose 数据的空环境门禁
+./scripts/smoke-compose.ps1
 ```
 
 ## 质量检查
@@ -67,5 +70,7 @@ docker compose up --build
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
+- [M1 第 2 次迭代记录](./docs/development/2026-08-02-m1-iteration-2.md)
+- [主分支保护验收](./docs/development/branch-protection.md)
 - [架构决策](./docs/adr/README.md)
 - [初始威胁模型](./docs/threat-model/initial-threat-model.md)

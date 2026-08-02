@@ -28,6 +28,7 @@ class UserSession(Base):
     )
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ip_prefix: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)

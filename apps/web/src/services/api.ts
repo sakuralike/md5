@@ -13,7 +13,7 @@ export async function apiRequest<T>(
   if (options.body) headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
+  const response = await fetch(`${baseUrl}${path}`, { credentials: "include", ...options, headers });
   if (!response.ok) {
     const fallback: ApiErrorBody = {
       code: "network.unexpected_response",

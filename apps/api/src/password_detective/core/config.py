@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,8 +22,13 @@ class Settings(BaseSettings):
     app_secret_key: str = "local-development-secret-key-change-me"
     access_token_ttl_minutes: int = Field(default=15, ge=5, le=60)
     refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
+    account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
     database_url: str = "sqlite:///./.local/password-detective.db"
     redis_url: str = "redis://localhost:6379/0"
+    rate_limit_backend: Literal["memory", "redis"] = "memory"
+    rate_limit_namespace: str = "password-detective"
+    notification_backend: Literal["memory", "log"] = "memory"
+    browser_cookie_secure: bool = False
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     auto_create_tables: bool = True
     log_level: str = "INFO"
@@ -33,6 +39,13 @@ class Settings(BaseSettings):
         env = info.data.get("app_env", "local")
         if env not in {"local", "test"} and len(value) < 32:
             raise ValueError("非本地环境的 APP_SECRET_KEY 至少需要 32 个字符")
+        return value
+
+    @field_validator("browser_cookie_secure")
+    @classmethod
+    def validate_browser_cookie(cls, value: bool, info) -> bool:  # noqa: ANN001
+        if info.data.get("app_env") == "production" and not value:
+            raise ValueError("生产环境必须启用安全 Cookie")
         return value
 
     @property

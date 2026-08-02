@@ -8,7 +8,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, tok
   headers.set("X-Request-ID", `admin_${crypto.randomUUID()}`);
   if (options.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
+  const response = await fetch(`${baseUrl}${path}`, { credentials: "include", ...options, headers });
   if (!response.ok) {
     let body: ApiErrorBody = {
       code: "network.unexpected_response",

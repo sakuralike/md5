@@ -23,6 +23,7 @@ _bearer = HTTPBearer(auto_error=False)
 class Principal:
     user: User
     session_family_id: str
+    mfa_verified: bool
 
 
 def get_current_principal(
@@ -49,7 +50,11 @@ def get_current_principal(
     if active_session is None:
         raise AppError("auth.session_revoked", "登录会话已失效", status_code=401)
     request.state.user_id = user.id
-    return Principal(user=user, session_family_id=claims.session_family_id)
+    return Principal(
+        user=user,
+        session_family_id=claims.session_family_id,
+        mfa_verified=claims.mfa_verified,
+    )
 
 
 def require_roles(*roles: UserRole):
@@ -61,3 +66,16 @@ def require_roles(*roles: UserRole):
         return principal
 
     return dependency
+
+
+def require_admin_mfa(
+    principal: Annotated[
+        Principal,
+        Depends(require_roles(UserRole.MODERATOR, UserRole.ADMIN)),
+    ],
+) -> Principal:
+    if not principal.user.totp_enabled:
+        raise AppError("auth.totp_setup_required", "管理员必须先启用 TOTP", status_code=403)
+    if not principal.mfa_verified:
+        raise AppError("auth.totp_required", "该管理操作需要 TOTP 验证", status_code=403)
+    return principal

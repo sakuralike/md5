@@ -4,9 +4,22 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     defaults:
       run:
         working-directory: apps/api
@@ -17,7 +30,18 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check src tests
       - run: python -m pytest --cov=password_detective --cov-fail-under=80
-      - run: APP_ENV=test APP_SECRET_KEY=synthetic-ci-secret-key-for-validation DATABASE_URL=sqlite:///./ci.db alembic upgrade head
+        env:
+          RUN_REDIS_INTEGRATION: "1"
+          REDIS_URL: redis://localhost:6379/15
+      - name: Verify migration round trip
+        env:
+          APP_ENV: test
+          APP_SECRET_KEY: synthetic-ci-secret-key-for-validation
+          DATABASE_URL: sqlite:///./ci-migration.db
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
 
   frontend:
     runs-on: ubuntu-latest
@@ -41,3 +65,37 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "10.0.x" }
       - run: dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
+
+  container-images:
+    runs-on: ubuntu-latest
+    needs: [api, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          push: false
+          tags: password-detective-api:ci
+      - name: Build Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/frontend.Dockerfile
+          push: false
+          tags: password-detective-web:ci
+          build-args: |
+            TARGET_FILTER=@password-detective/web
+            TARGET_DIR=apps/web
+      - name: Build Admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/frontend.Dockerfile
+          push: false
+          tags: password-detective-admin:ci
+          build-args: |
+            TARGET_FILTER=@password-detective/admin
+            TARGET_DIR=apps/admin

@@ -15,7 +15,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  const authenticated = Boolean(sessionStorage.getItem("password_detective_session_v1"));
+  const authenticated = Boolean(sessionStorage.getItem("password_detective_session_v2"));
   if (to.meta.requiresAuth && !authenticated) return "/login";
   if (to.meta.guestOnly && authenticated) return "/";
   return true;

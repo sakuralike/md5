@@ -31,3 +31,7 @@ def get_client_context(request: Request) -> ClientContext:
         ip_prefix=_mask_ip(request.client.host if request.client else None),
         user_agent=user_agent[:255] if user_agent else None,
     )
+
+
+def get_notification_gateway(request: Request):  # noqa: ANN201
+    return request.app.state.notification_gateway

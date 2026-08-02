@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,9 +18,11 @@ def live() -> dict[str, str]:
 
 
 @router.get("/ready")
-def ready(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
+def ready(request: Request, db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
     try:
         db.execute(text("SELECT 1"))
     except Exception as exc:
         raise AppError("health.database_unavailable", "数据库尚未就绪", status_code=503) from exc
-    return {"status": "ready", "database": "ok"}
+    if not request.app.state.rate_limiter.ping():
+        raise AppError("health.redis_unavailable", "Redis 尚未就绪", status_code=503)
+    return {"status": "ready", "database": "ok", "rate_limit": "ok"}

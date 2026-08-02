@@ -7,5 +7,7 @@
 | [ADR-0003](./0003-token-and-session-strategy.md) | 短期访问令牌与刷新令牌轮换 | 已接受 |
 | [ADR-0004](./0004-desktop-verification-trust-boundary.md) | 桌面验证回执信任边界 | 已接受 |
 | [ADR-0005](./0005-initial-archive-formats.md) | 首版压缩格式范围 | 临时接受，待产品确认 |
+| [ADR-0006](./0006-distributed-request-protection.md) | 分布式限流与持久化幂等 | 已接受 |
+| [ADR-0007](./0007-browser-session-boundary.md) | 浏览器会话与桌面令牌边界 | 已接受 |
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。
