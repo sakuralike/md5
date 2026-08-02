@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column("minimum_supported_version", sa.String(32), nullable=False),
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("mandatory", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("release_notes", sa.Text(), nullable=False, server_default=""),
+        sa.Column("release_notes", sa.Text(), nullable=False),
         sa.Column("artifact_filename", sa.String(255), nullable=False),
         sa.Column("artifact_storage_key", sa.String(128), nullable=True, unique=True),
         sa.Column("artifact_sha256", sa.String(64), nullable=False),

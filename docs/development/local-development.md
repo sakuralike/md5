@@ -148,7 +148,7 @@ Invoke-RestMethod `
 ./scripts/check.ps1 -SkipInstall
 ```
 
-脚本执行 Ruff、pytest 覆盖率、Alembic 往返、TypeScript、Vitest、生产构建、WPF Release 构建和桌面安全测试。
+脚本执行 Ruff、pytest 覆盖率、SQLite Alembic 往返、TypeScript、Vitest、生产构建、WPF Release 构建和桌面安全测试。托管 CI 还会启动 MySQL 8.4，执行一次完整的 Alembic `upgrade → downgrade base → upgrade` 往返，避免 SQLite 无法暴露的数据库方言兼容问题。
 
 ## Docker 空环境门禁
 
