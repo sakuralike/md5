@@ -29,15 +29,16 @@
 | Vue 用户端与管理端 | 完成 M1 范围 | HttpOnly 刷新 Cookie、管理端 TOTP 入口、可构建可测试 |
 | WPF 桌面端骨架 | 完成 M1 范围 | 本地 SHA-256/MD5 PoC 可构建 |
 | Docker Compose | 本地门禁完成 | Docker Desktop WSL 2 引擎已恢复；含 M2 最新迁移的空环境构建、健康检查、合成账号注册和 Web/Admin 响应再次通过 |
-| 托管 CI 与分支保护 | CLI 已登录、待外部验收 | Git 远端与开发分支推送完成；GitHub CLI 已登录，托管 CI、PR 与分支保护仍需本轮提交后实测 |
+| 托管 CI 与分支保护 | PR/CI 完成，保护受套餐限制 | PR #14 已创建且 pull_request CI 的 API、Frontend、Desktop、Container Images 全部通过；私有仓库主分支保护被当前 GitHub 套餐拒绝启用 |
 
 ### M1 尚未关闭的外部门禁
 
 - [x] 在真实 Redis 环境执行分布式集成测试。
 - [x] Docker 从空环境启动，并在 30 分钟内完成注册/登录。
-- [ ] 托管仓库主分支 CI 实际通过并配置分支保护。
+- [x] 开发分支 PR 的托管 CI 实际通过。
+- [ ] 配置主分支保护；当前私有仓库套餐返回 403，需升级 GitHub 套餐或将仓库调整为支持该功能的可见性。
 
-M1 代码门禁和本地 Docker/Redis 门禁已完成；M2 在独立开发分支继续推进，发布仍受托管 CI 与主分支保护外部门禁约束。
+M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；M2 在独立开发分支继续推进，发布仍受私有仓库主分支保护套餐限制约束。
 
 ## M2：核心 Web 查询与贡献
 
