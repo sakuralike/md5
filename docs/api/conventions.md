@@ -6,7 +6,7 @@
 - JSON 字段：`snake_case`
 - 时间：ISO 8601 UTC
 - 请求追踪：客户端可传 `X-Request-ID`，服务端始终回传。
-- 创建贡献、回执和状态操作必须使用 `Idempotency-Key`。
+- 创建贡献、反馈、回执和状态操作必须使用 `Idempotency-Key`。
 
 ## 客户端认证边界
 
@@ -47,8 +47,10 @@
 | `POST` | `/archives/submissions` | 必需 | 必须声明有权提交、提供 `Idempotency-Key`；重复候选合并提交证据，不重复保存秘密 |
 | `POST` | `/archives/{archive_id}/reveal` | 必需 | 仅揭示 `verified` 候选；执行每日配额；响应使用 `Cache-Control: no-store` |
 | `GET` | `/me/submissions` | 必需 | 返回当前用户贡献及 pending/后续状态，不返回候选密码明文或密文 |
+| `POST` | `/candidates/{candidate_id}/feedback` | 必需 | `success/failure`；同一账号仅一个当前有效反馈；修改追加历史；必须提供 `Idempotency-Key` |
+| `GET` | `/me/feedback` | 必需 | 分页返回当前用户反馈修订历史、规则版本和候选当前状态 |
 
-候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
+候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `verification-v1` 聚合：两个独立成功且失败权重低于阈值时自动验证，三个独立失败或失败权重达到阈值时自动隔离；所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
 
 ## 成功响应
 

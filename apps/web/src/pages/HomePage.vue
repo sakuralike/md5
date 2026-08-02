@@ -5,7 +5,9 @@ import type {
   ArchiveSearchResponse,
   ArchiveSubmissionRequest,
   ArchiveSubmissionResponse,
+  CandidateFeedbackResponse,
   CandidateStatus,
+  FeedbackOutcome,
 } from "@password-detective/api-contract";
 import { computed, ref } from "vue";
 import { apiRequest } from "../services/api";
@@ -33,6 +35,7 @@ const calculating = ref(false);
 const searching = ref(false);
 const submitting = ref(false);
 const revealing = ref(false);
+const feedbackCandidateId = ref("");
 const error = ref("");
 const notice = ref("");
 const searchResult = ref<ArchiveSearchResponse | null>(null);
@@ -166,6 +169,30 @@ async function submitContribution(): Promise<void> {
     error.value = caught instanceof Error ? caught.message : "贡献提交失败";
   } finally {
     submitting.value = false;
+  }
+}
+
+async function submitFeedback(candidateId: string, outcome: FeedbackOutcome): Promise<void> {
+  feedbackCandidateId.value = candidateId;
+  resetMessages();
+  try {
+    const result = await apiRequest<CandidateFeedbackResponse>(
+      `/candidates/${encodeURIComponent(candidateId)}/feedback`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": `web-feedback-${crypto.randomUUID()}` },
+        body: JSON.stringify({ outcome }),
+      },
+      auth.accessToken,
+    );
+    await search();
+    notice.value = result.changed
+      ? `反馈已记录（规则 ${result.snapshot.rule_version}），候选状态：${statusLabel(result.candidate_status)}。`
+      : "该反馈与当前有效反馈一致，未重复写入证据历史。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "反馈提交失败";
+  } finally {
+    feedbackCandidateId.value = "";
   }
 }
 
@@ -328,7 +355,38 @@ function statusLabel(status: CandidateStatus): string {
                   <strong>{{ candidate.masked_secret }}</strong>
                   <span class="status-text">{{ statusLabel(candidate.status) }}</span>
                 </div>
-                <small>贡献证据 {{ candidate.submission_count }} 条</small>
+                <small>
+                  贡献 {{ candidate.submission_count }} 条 · 独立成功
+                  {{ candidate.success_evidence_count }} 条 · 独立失败
+                  {{ candidate.failure_evidence_count }} 条
+                </small>
+                <div class="actions">
+                  <button
+                    class="button secondary"
+                    type="button"
+                    :disabled="Boolean(feedbackCandidateId)"
+                    :aria-pressed="candidate.my_feedback === 'success'"
+                    @click="submitFeedback(candidate.id, 'success')"
+                  >
+                    {{
+                      feedbackCandidateId === candidate.id
+                        ? "记录中…"
+                        : candidate.my_feedback === "success"
+                          ? "已反馈成功"
+                          : "本地验证成功"
+                    }}
+                  </button>
+                  <button
+                    class="button secondary"
+                    type="button"
+                    :disabled="Boolean(feedbackCandidateId)"
+                    :aria-pressed="candidate.my_feedback === 'failure'"
+                    @click="submitFeedback(candidate.id, 'failure')"
+                  >
+                    {{ candidate.my_feedback === "failure" ? "已反馈失败" : "本地验证失败" }}
+                  </button>
+                </div>
+                <small class="muted">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
               </div>
               <button
                 v-if="hasVerifiedCandidate"

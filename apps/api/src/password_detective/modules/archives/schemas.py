@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from password_detective.db.models.archive_fingerprint import FingerprintAlgorithm
 from password_detective.db.models.password_candidate import CandidateStatus
+from password_detective.db.models.verification import FeedbackOutcome
 
 
 class FingerprintInput(BaseModel):
@@ -49,6 +50,9 @@ class CandidateSummary(BaseModel):
     confidence_score: float
     masked_secret: str = "••••••••"
     submission_count: int
+    success_evidence_count: int = 0
+    failure_evidence_count: int = 0
+    my_feedback: FeedbackOutcome | None = None
     last_verified_at: datetime | None
 
 

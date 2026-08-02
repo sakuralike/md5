@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from password_detective.core.candidate_secrets import CandidateSecretVault
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
+from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.archive import Archive
 from password_detective.db.models.archive_fingerprint import (
@@ -36,6 +37,10 @@ from password_detective.modules.archives.schemas import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.verification.service import (
+    has_ever_been_verified,
+    summarize_feedbacks,
+)
 
 _HEX_PATTERN = re.compile(r"^[0-9a-f]+$")
 _LENGTH_TO_ALGORITHM = {
@@ -104,6 +109,27 @@ def normalize_fingerprints(items: list[FingerprintInput]) -> list[NormalizedFing
     return normalized
 
 
+def _candidate_summary(candidate: PasswordCandidate, principal: Principal) -> CandidateSummary:
+    totals = summarize_feedbacks(list(candidate.feedbacks))
+    return CandidateSummary(
+        id=candidate.id,
+        status=candidate.status,
+        confidence_score=candidate.confidence_score,
+        submission_count=len(candidate.submissions),
+        success_evidence_count=totals.independent_success_count,
+        failure_evidence_count=totals.independent_failure_count,
+        my_feedback=next(
+            (
+                feedback.outcome
+                for feedback in candidate.feedbacks
+                if feedback.user_id == principal.user.id
+            ),
+            None,
+        ),
+        last_verified_at=candidate.last_verified_at,
+    )
+
+
 def search_archive(
     db: Session,
     *,
@@ -133,6 +159,7 @@ def search_archive(
         .options(
             selectinload(Archive.fingerprints),
             selectinload(Archive.candidates).selectinload(PasswordCandidate.submissions),
+            selectinload(Archive.candidates).selectinload(PasswordCandidate.feedbacks),
         )
     )
     if archive is None:
@@ -158,13 +185,7 @@ def search_archive(
     counts = Counter(candidate.status.value for candidate in visible)
     candidates = (
         [
-            CandidateSummary(
-                id=candidate.id,
-                status=candidate.status,
-                confidence_score=candidate.confidence_score,
-                submission_count=len(candidate.submissions),
-                last_verified_at=candidate.last_verified_at,
-            )
+            _candidate_summary(candidate, principal)
             for candidate in visible
         ]
         if principal is not None
@@ -283,16 +304,25 @@ def create_submission(
     db.add(submission)
     db.flush()
 
+    pending_points = settings.submission_pending_points
     if settings.submission_pending_points:
+        already_verified = has_ever_been_verified(db, candidate.id)
         db.add(
             PointsLedger(
                 user_id=principal.user.id,
                 amount=settings.submission_pending_points,
                 event_type="submission.pending",
                 reference_id=submission.id,
-                status=PointsLedgerStatus.PENDING,
+                status=(
+                    PointsLedgerStatus.REVERSED
+                    if already_verified
+                    else PointsLedgerStatus.PENDING
+                ),
+                settled_at=utc_now() if already_verified else None,
             )
         )
+        if already_verified:
+            pending_points = 0
     write_audit_log(
         db,
         actor_id=principal.user.id,
@@ -328,7 +358,7 @@ def create_submission(
         archive_created=archive_created,
         candidate_created=candidate_created,
         evidence_merged=not candidate_created,
-        pending_points=settings.submission_pending_points,
+        pending_points=pending_points,
         created_at=submission.created_at,
     )
 

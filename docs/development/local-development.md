@@ -32,7 +32,10 @@ M2 候选秘密和揭示策略可通过以下变量配置：
 $env:CANDIDATE_SECRET_KEY_VERSION = "v1"
 $env:DAILY_REVEAL_QUOTA = "5"
 $env:SUBMISSION_PENDING_POINTS = "1"
+$env:VERIFICATION_REWARD_POINTS = "1"
 ```
+
+验证状态规则当前固定为 `verification-v1`；规则版本会写入反馈历史和状态事件。修改阈值时必须发布新规则版本并补充迁移/回放测试，不能直接改写历史证据。
 
 本地/测试适配器使用 `APP_SECRET_KEY` 按用途派生候选加密密钥和 HMAC 去重密钥，仅用于开发闭环。生产部署必须接入独立 KMS/密钥管理适配器，并完成密钥版本轮换演练。
 

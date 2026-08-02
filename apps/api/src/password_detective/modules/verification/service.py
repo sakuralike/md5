@@ -1,0 +1,449 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+
+from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from password_detective.core.config import Settings
+from password_detective.core.errors import AppError
+from password_detective.core.time import utc_now
+from password_detective.db.audit import write_audit_log
+from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
+from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
+from password_detective.db.models.submission import Submission
+from password_detective.db.models.user import UserRole
+from password_detective.db.models.verification import (
+    CandidateFeedback,
+    FeedbackOutcome,
+    RecordStateEvent,
+    VerificationEvidenceEvent,
+    VerificationSource,
+)
+from password_detective.modules.auth.context import ClientContext
+from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.verification.schemas import (
+    FeedbackRequest,
+    FeedbackResponse,
+    MyFeedbackHistoryItem,
+    MyFeedbackHistoryResponse,
+    VerificationSnapshot,
+)
+
+
+@dataclass(frozen=True)
+class VerificationRule:
+    version: str
+    independent_success_required: int
+    maximum_failure_weight_for_verification: float
+    independent_failure_quarantine: int
+    failure_weight_quarantine: float
+
+
+ACTIVE_RULE = VerificationRule(
+    version="verification-v1",
+    independent_success_required=2,
+    maximum_failure_weight_for_verification=2.0,
+    independent_failure_quarantine=3,
+    failure_weight_quarantine=3.0,
+)
+
+
+@dataclass(frozen=True)
+class EvidenceTotals:
+    independent_success_count: int
+    independent_failure_count: int
+    success_weight: float
+    failure_weight: float
+
+    def to_snapshot(self, rule: VerificationRule = ACTIVE_RULE) -> VerificationSnapshot:
+        return VerificationSnapshot(
+            rule_version=rule.version,
+            independent_success_count=self.independent_success_count,
+            independent_failure_count=self.independent_failure_count,
+            success_weight=round(self.success_weight, 3),
+            failure_weight=round(self.failure_weight, 3),
+            needs_more_independent_success=max(
+                rule.independent_success_required - self.independent_success_count,
+                0,
+            ),
+        )
+
+
+def feedback_weight(role: UserRole) -> float:
+    if role in {UserRole.MODERATOR, UserRole.ADMIN}:
+        return 1.5
+    if role == UserRole.TRUSTED_CONTRIBUTOR:
+        return 1.25
+    return 1.0
+
+
+def summarize_feedbacks(feedbacks: list[CandidateFeedback]) -> EvidenceTotals:
+    """Deduplicate correlated evidence by installation, then IP subnet, then account."""
+
+    grouped: dict[FeedbackOutcome, dict[str, list[float]]] = {
+        FeedbackOutcome.SUCCESS: defaultdict(list),
+        FeedbackOutcome.FAILURE: defaultdict(list),
+    }
+    for feedback in feedbacks:
+        correlation_key = (
+            f"installation:{feedback.installation_id_hash}"
+            if feedback.installation_id_hash
+            else f"ip:{feedback.ip_prefix}"
+            if feedback.ip_prefix
+            else f"user:{feedback.user_id}"
+        )
+        grouped[feedback.outcome][correlation_key].append(feedback.weight)
+
+    success_groups = grouped[FeedbackOutcome.SUCCESS]
+    failure_groups = grouped[FeedbackOutcome.FAILURE]
+    return EvidenceTotals(
+        independent_success_count=len(success_groups),
+        independent_failure_count=len(failure_groups),
+        success_weight=sum(max(weights) for weights in success_groups.values()),
+        failure_weight=sum(max(weights) for weights in failure_groups.values()),
+    )
+
+
+def has_ever_been_verified(db: Session, candidate_id: str) -> bool:
+    return bool(
+        db.scalar(
+            select(RecordStateEvent.id).where(
+                RecordStateEvent.candidate_id == candidate_id,
+                RecordStateEvent.next_status == CandidateStatus.VERIFIED,
+            )
+        )
+    )
+
+
+def candidate_evidence_totals(db: Session, candidate_id: str) -> EvidenceTotals:
+    feedbacks = list(
+        db.scalars(select(CandidateFeedback).where(CandidateFeedback.candidate_id == candidate_id))
+    )
+    return summarize_feedbacks(feedbacks)
+
+
+def record_feedback(
+    db: Session,
+    settings: Settings,
+    *,
+    candidate_id: str,
+    payload: FeedbackRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> FeedbackResponse:
+    candidate = db.scalar(
+        select(PasswordCandidate)
+        .where(PasswordCandidate.id == candidate_id)
+        .with_for_update()
+    )
+    if candidate is None:
+        raise AppError("verification.candidate_not_found", "未找到候选记录", status_code=404)
+    if candidate.status == CandidateStatus.REJECTED:
+        raise AppError(
+            "verification.rejected_candidate_locked",
+            "已拒绝候选不接受普通用户反馈",
+            status_code=409,
+        )
+
+    feedback = db.scalar(
+        select(CandidateFeedback).where(
+            CandidateFeedback.candidate_id == candidate_id,
+            CandidateFeedback.user_id == principal.user.id,
+        )
+    )
+    created = feedback is None
+    changed = created or feedback.outcome != payload.outcome
+    evidence_event: VerificationEvidenceEvent | None = None
+
+    if feedback is None:
+        feedback = CandidateFeedback(
+            candidate_id=candidate_id,
+            user_id=principal.user.id,
+            outcome=payload.outcome,
+            source=VerificationSource.WEB_FEEDBACK,
+            weight=feedback_weight(principal.user.role),
+            rule_version=ACTIVE_RULE.version,
+            ip_prefix=context.ip_prefix,
+            revision=1,
+        )
+        db.add(feedback)
+        db.flush()
+        previous_outcome = None
+    elif changed:
+        previous_outcome = feedback.outcome
+        feedback.outcome = payload.outcome
+        feedback.source = VerificationSource.WEB_FEEDBACK
+        feedback.weight = feedback_weight(principal.user.role)
+        feedback.rule_version = ACTIVE_RULE.version
+        feedback.ip_prefix = context.ip_prefix
+        feedback.revision += 1
+        feedback.updated_at = utc_now()
+        db.flush()
+    else:
+        totals = candidate_evidence_totals(db, candidate_id)
+        return FeedbackResponse(
+            feedback_id=feedback.id,
+            evidence_event_id=None,
+            candidate_id=candidate.id,
+            outcome=feedback.outcome,
+            source=feedback.source,
+            revision=feedback.revision,
+            created=False,
+            changed=False,
+            candidate_status=candidate.status,
+            snapshot=totals.to_snapshot(),
+            updated_at=feedback.updated_at,
+        )
+
+    evidence_event = VerificationEvidenceEvent(
+        feedback_id=feedback.id,
+        candidate_id=candidate_id,
+        user_id=principal.user.id,
+        previous_outcome=previous_outcome,
+        outcome=feedback.outcome,
+        source=feedback.source,
+        weight=feedback.weight,
+        rule_version=feedback.rule_version,
+        installation_id_hash=feedback.installation_id_hash,
+        ip_prefix=feedback.ip_prefix,
+        revision=feedback.revision,
+    )
+    db.add(evidence_event)
+    db.flush()
+
+    totals = candidate_evidence_totals(db, candidate_id)
+    _apply_automatic_transition(
+        db,
+        settings,
+        candidate=candidate,
+        totals=totals,
+        trigger_evidence=evidence_event,
+    )
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="candidate.feedback_recorded",
+        target_type="password_candidate",
+        target_id=candidate.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "outcome": feedback.outcome.value,
+            "revision": feedback.revision,
+            "rule_version": ACTIVE_RULE.version,
+            "candidate_status": candidate.status.value,
+        },
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            "verification.concurrent_feedback_conflict",
+            "反馈正在被并发更新，请重试原请求",
+            status_code=409,
+        ) from exc
+    db.refresh(feedback)
+    return FeedbackResponse(
+        feedback_id=feedback.id,
+        evidence_event_id=evidence_event.id,
+        candidate_id=candidate.id,
+        outcome=feedback.outcome,
+        source=feedback.source,
+        revision=feedback.revision,
+        created=created,
+        changed=changed,
+        candidate_status=candidate.status,
+        snapshot=totals.to_snapshot(),
+        updated_at=feedback.updated_at,
+    )
+
+
+def _apply_automatic_transition(
+    db: Session,
+    settings: Settings,
+    *,
+    candidate: PasswordCandidate,
+    totals: EvidenceTotals,
+    trigger_evidence: VerificationEvidenceEvent,
+) -> None:
+    rule = ACTIVE_RULE
+    should_quarantine = (
+        totals.independent_failure_count >= rule.independent_failure_quarantine
+        or totals.failure_weight >= rule.failure_weight_quarantine
+    )
+    should_verify = (
+        totals.independent_success_count >= rule.independent_success_required
+        and totals.failure_weight < rule.maximum_failure_weight_for_verification
+    )
+
+    next_status = candidate.status
+    reason_code: str | None = None
+    if should_quarantine and candidate.status in {
+        CandidateStatus.PENDING,
+        CandidateStatus.VERIFIED,
+    }:
+        next_status = CandidateStatus.QUARANTINED
+        reason_code = "automatic.failure_threshold_reached"
+    elif should_verify and candidate.status in {
+        CandidateStatus.PENDING,
+        CandidateStatus.QUARANTINED,
+    }:
+        next_status = CandidateStatus.VERIFIED
+        reason_code = "automatic.success_threshold_reached"
+
+    confidence = (totals.success_weight - totals.failure_weight) / max(
+        float(rule.independent_success_required),
+        1.0,
+    )
+    candidate.confidence_score = max(0.0, min(1.0, confidence))
+    if next_status == candidate.status:
+        return
+
+    previous_status = candidate.status
+    first_verification = (
+        next_status == CandidateStatus.VERIFIED
+        and not has_ever_been_verified(db, candidate.id)
+    )
+    candidate.status = next_status
+    if next_status == CandidateStatus.VERIFIED:
+        candidate.last_verified_at = utc_now()
+
+    db.add(
+        RecordStateEvent(
+            candidate_id=candidate.id,
+            previous_status=previous_status,
+            next_status=next_status,
+            reason_code=reason_code or "automatic.rule_evaluation",
+            rule_version=rule.version,
+            trigger_evidence_id=trigger_evidence.id,
+            independent_success_count=totals.independent_success_count,
+            independent_failure_count=totals.independent_failure_count,
+            success_weight=totals.success_weight,
+            failure_weight=totals.failure_weight,
+        )
+    )
+    if first_verification:
+        _settle_first_verification_points(db, settings, candidate.id)
+
+
+def _settle_first_verification_points(
+    db: Session,
+    settings: Settings,
+    candidate_id: str,
+) -> None:
+    submissions = list(
+        db.scalars(
+            select(Submission)
+            .where(Submission.candidate_id == candidate_id)
+            .order_by(Submission.created_at, Submission.id)
+        )
+    )
+    first_submission_id = submissions[0].id if submissions else None
+    pending_ledgers = list(
+        db.scalars(
+            select(PointsLedger)
+            .join(Submission, Submission.id == PointsLedger.reference_id)
+            .where(
+                Submission.candidate_id == candidate_id,
+                PointsLedger.event_type == "submission.pending",
+                PointsLedger.status == PointsLedgerStatus.PENDING,
+            )
+        )
+    )
+    now = utc_now()
+    for ledger in pending_ledgers:
+        ledger.status = (
+            PointsLedgerStatus.POSTED
+            if ledger.reference_id == first_submission_id
+            else PointsLedgerStatus.REVERSED
+        )
+        ledger.settled_at = now
+
+    if settings.verification_reward_points <= 0:
+        return
+    successful_feedbacks = list(
+        db.scalars(
+            select(CandidateFeedback).where(
+                CandidateFeedback.candidate_id == candidate_id,
+                CandidateFeedback.outcome == FeedbackOutcome.SUCCESS,
+            )
+        )
+    )
+    for feedback in successful_feedbacks:
+        existing = db.scalar(
+            select(PointsLedger.id).where(
+                PointsLedger.user_id == feedback.user_id,
+                PointsLedger.event_type == "verification.accepted",
+                PointsLedger.reference_id == feedback.id,
+            )
+        )
+        if existing is None:
+            db.add(
+                PointsLedger(
+                    user_id=feedback.user_id,
+                    amount=settings.verification_reward_points,
+                    event_type="verification.accepted",
+                    reference_id=feedback.id,
+                    status=PointsLedgerStatus.POSTED,
+                    settled_at=now,
+                )
+            )
+
+
+def list_my_feedback_history(
+    db: Session,
+    *,
+    principal: Principal,
+    page: int,
+    page_size: int,
+) -> MyFeedbackHistoryResponse:
+    total = db.scalar(
+        select(func.count(VerificationEvidenceEvent.id)).where(
+            VerificationEvidenceEvent.user_id == principal.user.id
+        )
+    ) or 0
+    events = list(
+        db.scalars(
+            select(VerificationEvidenceEvent)
+            .where(VerificationEvidenceEvent.user_id == principal.user.id)
+            .order_by(
+                desc(VerificationEvidenceEvent.created_at),
+                desc(VerificationEvidenceEvent.id),
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
+    statuses = {
+        candidate_id: status
+        for candidate_id, status in db.execute(
+            select(PasswordCandidate.id, PasswordCandidate.status).where(
+                PasswordCandidate.id.in_({item.candidate_id for item in events})
+            )
+        )
+    }
+    return MyFeedbackHistoryResponse(
+        items=[
+            MyFeedbackHistoryItem(
+                evidence_event_id=item.id,
+                feedback_id=item.feedback_id,
+                candidate_id=item.candidate_id,
+                previous_outcome=item.previous_outcome,
+                outcome=item.outcome,
+                source=item.source,
+                revision=item.revision,
+                rule_version=item.rule_version,
+                candidate_status=statuses[item.candidate_id],
+                created_at=item.created_at,
+            )
+            for item in events
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )

@@ -15,6 +15,13 @@ from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
+from password_detective.db.models.verification import (
+    CandidateFeedback,
+    FeedbackOutcome,
+    RecordStateEvent,
+    VerificationEvidenceEvent,
+    VerificationSource,
+)
 
 __all__ = [
     "AccountActionToken",
@@ -22,13 +29,16 @@ __all__ = [
     "Archive",
     "ArchiveFingerprint",
     "AuditLog",
+    "CandidateFeedback",
     "CandidateStatus",
+    "FeedbackOutcome",
     "FingerprintAlgorithm",
     "IdempotencyRecord",
     "IdempotencyStatus",
     "PasswordCandidate",
     "PointsLedger",
     "PointsLedgerStatus",
+    "RecordStateEvent",
     "Submission",
     "SubmissionSource",
     "SystemSetting",
@@ -36,4 +46,6 @@ __all__ = [
     "UserRole",
     "UserSession",
     "UserStatus",
+    "VerificationEvidenceEvent",
+    "VerificationSource",
 ]

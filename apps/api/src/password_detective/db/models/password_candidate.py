@@ -52,3 +52,9 @@ class PasswordCandidate(Base):
     submissions = relationship(
         "Submission", back_populates="candidate", cascade="all, delete-orphan"
     )
+    feedbacks = relationship(
+        "CandidateFeedback", back_populates="candidate", cascade="all, delete-orphan"
+    )
+    state_events = relationship(
+        "RecordStateEvent", back_populates="candidate", cascade="all, delete-orphan"
+    )
