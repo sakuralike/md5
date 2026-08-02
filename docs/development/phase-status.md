@@ -95,5 +95,5 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；M2 在�
 - [x] 管理端具备 MFA 发布列表、草稿创建、制品上传/重试、显式发布和撤回闭环，并在客户端侧校验版本、摘要、签名字段、文件名和大小。
 - [x] 本轮更新通道与管理端发布工作台代码的统一门禁、前端生产构建及 Alembic 全量升降级往返通过。
 - [ ] 本轮 Docker 空环境门禁通过；Dockerfile/Compose 静态检查已通过，但 2026-08-02 的本地重建多次受外部 PyPI/npm 索引超时阻塞。
-- [x] PR #15 本轮 GitHub CI 运行 `30737711202` 的 API、Frontend、Desktop 和 Container Images 全部通过。
+- [x] PR #15 本轮 GitHub CI 运行 `30740786796` 的 API、Frontend、Desktop 和 Container Images 全部通过。
 - [ ] 在 Windows 10/11 实机执行桌面 E2E。
