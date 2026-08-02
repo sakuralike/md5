@@ -318,3 +318,90 @@ export interface DesktopRelease {
 export interface DesktopReleaseListResponse {
   items: DesktopRelease[];
 }
+
+export type StateTransitionSource = "automatic" | "manual";
+export type ManualTransitionReason =
+  | "manual.evidence_conflict"
+  | "manual.security_hold"
+  | "manual.invalid_candidate"
+  | "manual.policy_violation"
+  | "manual.review_reopened"
+  | "manual.verified_by_review"
+  | "manual.quarantine_cleared";
+
+export interface CandidateModerationSummary {
+  id: string;
+  archive_id: string;
+  status: CandidateStatus;
+  confidence_score: number;
+  fingerprints: ArchiveFingerprint[];
+  submission_count: number;
+  feedback_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CandidateModerationListResponse {
+  items: CandidateModerationSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface ModerationEvidenceSnapshot {
+  rule_version: string;
+  independent_success_count: number;
+  independent_failure_count: number;
+  success_weight: number;
+  failure_weight: number;
+}
+
+export interface ModerationEvidenceEvent {
+  id: string;
+  user_id: string;
+  previous_outcome: FeedbackOutcome | null;
+  outcome: FeedbackOutcome;
+  source: VerificationSource;
+  weight: number;
+  rule_version: string;
+  revision: number;
+  created_at: string;
+}
+
+export interface CandidateStateEvent {
+  id: string;
+  previous_status: CandidateStatus;
+  next_status: CandidateStatus;
+  reason_code: string;
+  reason_note: string | null;
+  rule_version: string;
+  transition_source: StateTransitionSource;
+  actor_id: string | null;
+  request_id: string | null;
+  independent_success_count: number;
+  independent_failure_count: number;
+  success_weight: number;
+  failure_weight: number;
+  created_at: string;
+}
+
+export interface CandidateModerationDetail extends CandidateModerationSummary {
+  evidence_snapshot: ModerationEvidenceSnapshot;
+  evidence_events: ModerationEvidenceEvent[];
+  state_events: CandidateStateEvent[];
+}
+
+export interface CandidateTransitionRequest {
+  target_status: CandidateStatus;
+  reason_code: ManualTransitionReason;
+  reason_note?: string | null;
+}
+
+export interface CandidateTransitionResponse {
+  candidate_id: string;
+  previous_status: CandidateStatus;
+  current_status: CandidateStatus;
+  state_event_id: string;
+  reason_code: ManualTransitionReason;
+  request_id: string | null;
+}

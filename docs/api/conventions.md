@@ -82,6 +82,18 @@
 
 `desktop.installation_revoked`、`desktop.installation_account_mismatch`、`desktop.installation_key_mismatch` 或 `desktop.installation_not_found` 表示本地身份不能继续使用，客户端可引导生成新的随机安装 ID/密钥并重新注册。`desktop.client_version_unsupported` 和 `desktop.installation_limit_reached` 不得通过重新生成身份绕过。
 
+## 管理端候选审核与人工处置
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/admin/candidates?status=...&query=...&page=1&page_size=20` | 审核员/管理员 + MFA | 可按状态、候选/存档 ID 或指纹摘要筛选；只返回指纹、状态、计数和时间，不返回任何候选秘密字段 |
+| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、不可变证据修订和自动/人工状态时间线；不返回 IP、安装关联键或候选秘密 |
+| `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；写入人工状态事件与审计 |
+
+人工原因码按目标状态约束：`manual.evidence_conflict`/`manual.security_hold` 仅用于隔离，`manual.invalid_candidate`/`manual.policy_violation` 仅用于拒绝，`manual.review_reopened` 仅用于重新进入待验证，`manual.verified_by_review` 仅用于人工通过，`manual.quarantine_cleared` 用于解除隔离后进入待验证或已验证。
+
+状态事件保存可选的 500 字符审核说明，但审计详情只保存原因码、前后状态和事件 ID。调用方不得在审核说明中放入密码、令牌、密钥或个人信息；API 响应、日志和审计均不得复制候选密码明文、密文、nonce、密钥版本或去重标签。
+
 ## 桌面更新发布与下载
 
 | 方法 | 路径 | 认证 | 关键约束 |

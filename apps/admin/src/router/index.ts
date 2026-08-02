@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AuditPage from "../pages/AuditPage.vue";
+import CandidateModerationPage from "../pages/CandidateModerationPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
@@ -14,6 +15,7 @@ const router = createRouter({
     { path: "/totp-setup", component: TotpSetupPage, meta: { requiresEnrollment: true } },
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
+    { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
   ],
 });

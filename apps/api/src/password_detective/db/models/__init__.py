@@ -32,6 +32,7 @@ from password_detective.db.models.verification import (
     CandidateFeedback,
     FeedbackOutcome,
     RecordStateEvent,
+    StateTransitionSource,
     VerificationEvidenceEvent,
     VerificationSource,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "PointsLedger",
     "PointsLedgerStatus",
     "RecordStateEvent",
+    "StateTransitionSource",
     "Submission",
     "SubmissionSource",
     "SystemSetting",
