@@ -1,8 +1,19 @@
-import type { BrowserTokenResponse, Session, User } from "@password-detective/api-contract";
+import type {
+  BrowserTokenResponse,
+  MessageResponse,
+  PasswordChangeRequest,
+  ProfileUpdateRequest,
+  Session,
+  TotpCodeRequest,
+  TotpSetupResponse,
+  User,
+} from "@password-detective/api-contract";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import * as accountApi from "../services/account";
 import { apiRequest } from "../services/api";
+import { loginBrowser, resendEmailVerification } from "../services/auth";
 
 const STORAGE_KEY = "password_detective_session_v2";
 
@@ -44,20 +55,37 @@ export const useAuthStore = defineStore("auth", () => {
     );
   }
 
+  function persistUser(nextUser: User): void {
+    user.value = nextUser;
+    const current = readStoredSession();
+    if (current) {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ accessToken: current.accessToken, user: nextUser } satisfies StoredSession),
+      );
+    }
+  }
+
   function clear(): void {
     accessToken.value = "";
     user.value = null;
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
-  async function login(loginName: string, password: string): Promise<void> {
+  async function login(
+    loginName: string,
+    password: string,
+    totpCode?: string,
+  ): Promise<void> {
     busy.value = true;
     error.value = "";
     try {
-      const tokens = await apiRequest<BrowserTokenResponse>("/web/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ login: loginName, password }),
-      });
+      const payload = {
+        login: loginName,
+        password,
+        ...(totpCode ? { totp_code: totpCode } : {}),
+      };
+      const tokens = await loginBrowser(payload);
       persist(tokens);
       await router.push("/");
     } catch (caught) {
@@ -112,12 +140,48 @@ export const useAuthStore = defineStore("auth", () => {
     await router.push("/login");
   }
 
+  async function loadProfile(): Promise<User> {
+    const profile = await accountApi.loadProfile(accessToken.value);
+    persistUser(profile);
+    return profile;
+  }
+
+  async function updateProfile(payload: ProfileUpdateRequest): Promise<User> {
+    const profile = await accountApi.updateProfile(accessToken.value, payload);
+    persistUser(profile);
+    return profile;
+  }
+
+  async function changePassword(payload: PasswordChangeRequest): Promise<MessageResponse> {
+    return accountApi.changePassword(accessToken.value, payload);
+  }
+
+  async function resendVerificationEmail(): Promise<MessageResponse> {
+    return resendEmailVerification(accessToken.value);
+  }
+
+  async function beginTotpSetup(): Promise<TotpSetupResponse> {
+    return accountApi.beginTotpSetup(accessToken.value);
+  }
+
+  async function confirmTotp(payload: TotpCodeRequest): Promise<MessageResponse> {
+    const result = await accountApi.confirmTotp(accessToken.value, payload);
+    await refresh();
+    return result;
+  }
+
+  async function disableTotp(payload: TotpCodeRequest): Promise<MessageResponse> {
+    const result = await accountApi.disableTotp(accessToken.value, payload);
+    await refresh();
+    return result;
+  }
+
   async function listSessions(): Promise<Session[]> {
-    return apiRequest<Session[]>("/me/security/sessions", {}, accessToken.value);
+    return accountApi.listSessions(accessToken.value);
   }
 
   async function revokeSession(id: string): Promise<void> {
-    await apiRequest(`/me/security/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }, accessToken.value);
+    await accountApi.revokeSession(accessToken.value, id);
     if ((await listSessions()).every((session) => !session.current)) clear();
   }
 
@@ -131,6 +195,13 @@ export const useAuthStore = defineStore("auth", () => {
     register,
     refresh,
     logout,
+    loadProfile,
+    updateProfile,
+    changePassword,
+    resendVerificationEmail,
+    beginTotpSetup,
+    confirmTotp,
+    disableTotp,
     listSessions,
     revokeSession,
   };

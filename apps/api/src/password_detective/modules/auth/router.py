@@ -39,21 +39,32 @@ from password_detective.modules.auth.schemas import (
     EmailTokenRequest,
     LoginRequest,
     MessageResponse,
+    PasswordChangeRequest,
     PasswordForgotRequest,
     PasswordResetRequest,
+    ProfileUpdateRequest,
     RefreshRequest,
     RegisterRequest,
     SessionResponse,
     TokenResponse,
+    TotpCodeRequest,
+    TotpSetupResponse,
     UserResponse,
 )
 from password_detective.modules.auth.service import (
+    change_password,
     login_user,
     register_user,
     revoke_all_sessions,
     revoke_by_refresh_token,
     revoke_session_family,
     rotate_refresh_token,
+    update_profile,
+)
+from password_detective.modules.auth.totp import (
+    begin_totp_setup,
+    confirm_totp_setup,
+    disable_totp,
 )
 
 router = APIRouter(tags=["认证与账号"])
@@ -293,6 +304,201 @@ def profile(
     principal: Annotated[Principal, Depends(get_current_principal)],
 ) -> UserResponse:
     return principal.user
+
+
+@router.patch(
+    "/me/profile",
+    response_model=UserResponse,
+    dependencies=[Depends(rate_limit("me.profile.update", limit=20, window_seconds=3600))],
+)
+def update_my_profile(
+    payload: ProfileUpdateRequest,
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="me.profile.update",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest(payload.model_dump(mode="json")),
+    )
+    if lease.cached_response is not None:
+        return UserResponse.model_validate(lease.cached_response)
+    try:
+        user = update_profile(
+            db,
+            user=principal.user,
+            payload=payload,
+            context=get_client_context(request),
+        )
+        response = UserResponse.model_validate(user)
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.post(
+    "/me/security/password/change",
+    response_model=MessageResponse,
+    dependencies=[Depends(rate_limit("me.password.change", limit=10, window_seconds=3600))],
+)
+def change_my_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> MessageResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="me.password.change",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest(payload.model_dump(mode="json")),
+    )
+    if lease.cached_response is not None:
+        return MessageResponse.model_validate(lease.cached_response)
+    response = MessageResponse(message="密码已修改，其他登录会话已撤销")
+    try:
+        change_password(
+            db,
+            settings,
+            user=principal.user,
+            session_family_id=principal.session_family_id,
+            payload=payload,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.post(
+    "/me/security/totp/setup",
+    response_model=TotpSetupResponse,
+    dependencies=[Depends(rate_limit("me.totp.setup", limit=5, window_seconds=3600))],
+)
+def setup_my_totp(
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> TotpSetupResponse:
+    return begin_totp_setup(
+        db,
+        settings,
+        user=principal.user,
+        context=get_client_context(request),
+    )
+
+
+@router.post(
+    "/me/security/totp/confirm",
+    response_model=MessageResponse,
+    dependencies=[Depends(rate_limit("me.totp.confirm", limit=10, window_seconds=3600))],
+)
+def confirm_my_totp(
+    payload: TotpCodeRequest,
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> MessageResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="me.totp.confirm",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest(payload.model_dump(mode="json")),
+    )
+    if lease.cached_response is not None:
+        return MessageResponse.model_validate(lease.cached_response)
+    response = MessageResponse(message="TOTP 已启用")
+    try:
+        confirm_totp_setup(
+            db,
+            settings,
+            user=principal.user,
+            session_family_id=principal.session_family_id,
+            code=payload.code,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.delete(
+    "/me/security/totp",
+    response_model=MessageResponse,
+    dependencies=[Depends(rate_limit("me.totp.disable", limit=10, window_seconds=3600))],
+)
+def disable_my_totp(
+    payload: TotpCodeRequest,
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> MessageResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="me.totp.disable",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest(payload.model_dump(mode="json")),
+    )
+    if lease.cached_response is not None:
+        return MessageResponse.model_validate(lease.cached_response)
+    response = MessageResponse(message="TOTP 已停用")
+    try:
+        disable_totp(
+            db,
+            settings,
+            user=principal.user,
+            code=payload.code,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
 
 
 @router.get("/me/security/sessions", response_model=list[SessionResponse])

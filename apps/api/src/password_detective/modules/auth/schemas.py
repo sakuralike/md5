@@ -8,6 +8,13 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 _USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 
 
+def _validate_username(value: str) -> str:
+    value = value.strip()
+    if not _USERNAME_PATTERN.fullmatch(value):
+        raise ValueError("用户名只能包含字母、数字和下划线")
+    return value
+
+
 def _validate_password(value: str) -> str:
     if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
         raise ValueError("密码至少包含一个字母和一个数字")
@@ -22,12 +29,34 @@ class RegisterRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def validate_username(cls, value: str) -> str:
-        value = value.strip()
-        if not _USERNAME_PATTERN.fullmatch(value):
-            raise ValueError("用户名只能包含字母、数字和下划线")
-        return value
+        return _validate_username(value)
 
     @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password(value)
+
+
+class ProfileUpdateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        return _validate_username(value)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+    totp_code: str | None = Field(
+        default=None,
+        min_length=6,
+        max_length=8,
+        pattern=r"^[0-9]+$",
+    )
+
+    @field_validator("new_password")
     @classmethod
     def validate_password(cls, value: str) -> str:
         return _validate_password(value)

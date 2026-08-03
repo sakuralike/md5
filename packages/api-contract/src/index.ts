@@ -41,6 +41,126 @@ export interface Session {
   mfa_verified: boolean;
 }
 
+export interface ProfileUpdateRequest {
+  username: string;
+}
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+  totp_code?: string | null;
+}
+
+export interface TotpCodeRequest {
+  code: string;
+}
+
+export interface TotpSetupResponse {
+  secret: string;
+  provisioning_uri: string;
+  message: string;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
+export interface BrowserLoginRequest {
+  login: string;
+  password: string;
+  totp_code?: string;
+}
+
+export interface EmailTokenRequest {
+  token: string;
+}
+
+export interface PasswordForgotRequest {
+  email: string;
+}
+
+export interface PasswordResetRequest {
+  token: string;
+  new_password: string;
+}
+
+export type AuthorizationSource = "web" | "desktop" | "api";
+export type PrivacyExportStatus =
+  | "pending"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "expired"
+  | "downloaded";
+export type PrivacyDeletionStatus = "pending" | "cancelled" | "processing" | "completed";
+
+export interface RevealHistoryItem {
+  audit_id: string;
+  archive_id: string | null;
+  fingerprint_summary: string[];
+  result: string;
+  revealed_at: string;
+}
+
+export interface RevealHistoryResponse {
+  items: RevealHistoryItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface AuthorizationDeclarationCreateRequest {
+  purpose: string;
+  source: AuthorizationSource;
+  accepted: true;
+}
+
+export interface AuthorizationDeclaration {
+  id: string;
+  declaration_version: string;
+  purpose: string;
+  source: AuthorizationSource;
+  confirmed_at: string;
+  withdrawn_at: string | null;
+  active: boolean;
+}
+
+export interface AuthorizationDeclarationListResponse {
+  items: AuthorizationDeclaration[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface PrivacyExport {
+  id: string;
+  status: PrivacyExportStatus;
+  requested_at: string;
+  completed_at: string | null;
+  expires_at: string | null;
+  downloaded_at: string | null;
+  download_available: boolean;
+  download_token: string | null;
+  artifact_sha256: string | null;
+  failure_code: string | null;
+}
+
+export interface PrivacyDeletionCreateRequest {
+  current_password: string;
+  totp_code?: string | null;
+}
+
+export interface PrivacyDeletionRequest {
+  id: string;
+  status: PrivacyDeletionStatus;
+  requested_at: string;
+  cancel_before: string;
+  cancelled_at: string | null;
+  processing_started_at: string | null;
+  completed_at: string | null;
+  can_cancel: boolean;
+}
+
 export interface ApiErrorBody {
   code: string;
   message: string;

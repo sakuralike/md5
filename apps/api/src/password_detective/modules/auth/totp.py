@@ -22,6 +22,8 @@ def begin_totp_setup(
     user: User,
     context: ClientContext,
 ) -> TotpSetupResponse:
+    if user.totp_secret_ciphertext:
+        raise AppError("auth.totp_already_enabled", "TOTP 已启用", status_code=409)
     secret = pyotp.random_base32()
     user.totp_pending_secret_ciphertext = encrypt_secret(secret, settings.app_secret_key)
     write_audit_log(
@@ -96,6 +98,11 @@ def disable_totp(
     user.totp_secret_ciphertext = None
     user.totp_pending_secret_ciphertext = None
     user.totp_enabled_at = None
+    db.execute(
+        update(UserSession)
+        .where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
+        .values(mfa_verified_at=None)
+    )
     write_audit_log(
         db,
         actor_id=user.id,

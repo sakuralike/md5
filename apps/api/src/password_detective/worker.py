@@ -5,6 +5,10 @@ from celery import Celery
 from password_detective.core.config import get_settings
 from password_detective.core.notifications import build_notification_gateway
 from password_detective.db.database import Database
+from password_detective.modules.account_privacy.service import (
+    build_privacy_export,
+    process_due_deletion_requests,
+)
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
     queue_due_sla_notifications,
@@ -33,6 +37,10 @@ celery_app.conf.update(
             "task": "risk_alerts.dispatch_notifications",
             "schedule": 15.0,
         },
+        "process-account-deletion-requests": {
+            "task": "privacy.process_deletions",
+            "schedule": 300.0,
+        },
     },
 )
 
@@ -60,5 +68,25 @@ def dispatch_risk_alert_notifications() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return dispatch_pending_notifications(db, gateway)
+    finally:
+        database.dispose()
+
+@celery_app.task(name="privacy.build_export")
+def build_account_privacy_export(export_id: str) -> dict[str, str]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            build_privacy_export(db, settings, export_id)
+            return {"export_id": export_id, "status": "processed"}
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="privacy.process_deletions")
+def process_account_deletions() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return {"processed": process_due_deletion_requests(db)}
     finally:
         database.dispose()

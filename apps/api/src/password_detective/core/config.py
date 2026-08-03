@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
     candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)
     daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
+    authorization_declaration_version: str = Field(
+        default="authorization-v1", min_length=1, max_length=32
+    )
+    privacy_export_ttl_minutes: int = Field(default=15, ge=5, le=1440)
+    privacy_deletion_grace_hours: int = Field(default=168, ge=1, le=720)
+    privacy_job_backend: Literal["inline", "celery"] = "inline"
     submission_pending_points: int = Field(default=1, ge=0, le=1000)
     verification_reward_points: int = Field(default=1, ge=0, le=1000)
     desktop_challenge_ttl_seconds: int = Field(default=300, ge=60, le=900)

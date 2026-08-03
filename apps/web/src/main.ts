@@ -1,6 +1,7 @@
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import "@password-detective/web-ui/styles.css";
+import "./index.css";
 import App from "./App.vue";
 import router from "./router";
 

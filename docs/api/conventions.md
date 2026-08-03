@@ -24,11 +24,18 @@
 - `POST /auth/email/resend`
 - `POST /auth/password/forgot`
 - `POST /auth/password/reset`
+- `PATCH /me/profile`
+- `POST /me/security/password/change`
+- `POST /me/security/totp/setup`
+- `POST /me/security/totp/confirm`
+- `DELETE /me/security/totp`
 - `POST /admin/totp/setup`
 - `POST /admin/totp/confirm`
 - `POST /admin/totp/disable`
 
-密码重置请求无论邮箱是否存在都返回相同消息，防止账号枚举。
+密码重置请求无论邮箱是否存在都返回相同消息，防止账号枚举。本人资料修改当前只开放用户名；邮箱变更必须使用后续独立验证流程。修改密码要求当前密码作为近期再认证，启用 TOTP 的账号还需动态验证码；成功后保留当前会话并撤销其他会话族。用户 TOTP 生成接口返回敏感密钥，因此只做限流，不将响应写入幂等缓存；确认和停用操作要求 `Idempotency-Key`。
+
+Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。邮件链接中的一次性凭证由页面读入内存后立即从地址栏移除，只通过 JSON 请求体提交；不得写入浏览器持久化存储、遥测或日志。浏览器登录支持可选 `totp_code`，已启用 TOTP 时由服务端强制校验。
 
 ## 幂等约定
 
@@ -51,6 +58,22 @@
 | `GET` | `/me/feedback` | 必需 | 分页返回当前用户反馈修订历史、规则版本和候选当前状态 |
 
 候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `correlation-v1` 先构建候选内关联组，再由 `verification-v2` 聚合：共享安装标识哈希或 IP 网段的传递关联反馈，在成功/失败两个结果维度内分别最多保留组内最高单条权重；两个独立成功且有效失败权重低于阈值时自动验证，三个独立失败或有效失败权重达到阈值时自动隔离。每次材料变化追加 `evidence_correlation_assessments` 聚合快照，所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
+
+## 账号活动与隐私接口
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/me/reveals` | 必需 | 仅返回本人揭示的审计引用、时间、结果和掩码指纹摘要；不返回历史明文密码 |
+| `GET` | `/me/authorization-declarations` | 必需 | 仅返回本人声明；记录当前版本、用途、来源、确认/撤回状态 |
+| `POST` | `/me/authorization-declarations` | 必需 | `accepted=true`，由服务端注入当前声明版本；必须使用幂等键、限流和审计 |
+| `POST` | `/me/privacy/exports` | 必需 | 返回 `202`；重复活动申请复用活动请求；本地可内联处理，部署环境可投递 Celery |
+| `GET` | `/me/privacy/exports/{export_id}` | 必需 | 强制所有权校验；准备完成后返回短时下载凭证；过期时清理导出制品 |
+| `POST` | `/me/privacy/exports/{export_id}/download` | 必需 | 提交短时凭证；一次性消费；响应不缓存；导出不含密码、候选秘密或 TOTP 密钥 |
+| `POST` | `/me/privacy/deletion-requests` | 必需 | 必须重新验证当前密码；启用 TOTP 时还需动态码；进入可撤销宽限期 |
+| `GET` | `/me/privacy/deletion-requests/current` | 必需 | 仅返回本人最近一次删除申请及状态 |
+| `POST` | `/me/privacy/deletion-requests/{request_id}/cancel` | 必需 | 仅 `pending` 且未超过 `cancel_before` 时允许撤销；必须幂等和审计 |
+
+导出状态为 `pending/processing/ready/failed/expired/downloaded`，删除状态为 `pending/cancelled/processing/completed`。Celery 任务会在宽限期结束后停用并去标识化账号，保留法定审计记录，清除授权声明、导出制品、账号动作令牌和会话中的可识别信息。
 
 ## 桌面安装、挑战与签名回执
 

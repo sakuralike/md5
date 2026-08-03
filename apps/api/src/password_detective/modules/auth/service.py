@@ -25,7 +25,13 @@ from password_detective.db.models.user import User, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.auth.account_tokens import issue_account_token
 from password_detective.modules.auth.context import ClientContext
-from password_detective.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse
+from password_detective.modules.auth.schemas import (
+    LoginRequest,
+    PasswordChangeRequest,
+    ProfileUpdateRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 from password_detective.modules.auth.totp import verify_user_totp
 
 MAX_FAILED_LOGINS = 5
@@ -257,6 +263,86 @@ def rotate_refresh_token(
     return _issue_token_response(
         settings=settings, user=user, session=next_session, refresh_token=new_token
     )
+
+
+def update_profile(
+    db: Session,
+    *,
+    user: User,
+    payload: ProfileUpdateRequest,
+    context: ClientContext,
+) -> User:
+    username = payload.username.strip().lower()
+    if username == user.username:
+        return user
+
+    existing = db.scalar(select(User.id).where(User.username == username, User.id != user.id))
+    if existing:
+        raise AppError("auth.username_conflict", "用户名已被使用", status_code=409)
+
+    user.username = username
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError("auth.username_conflict", "用户名已被使用", status_code=409) from exc
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.profile.updated",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"fields": ["username"]},
+    )
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def change_password(
+    db: Session,
+    settings: Settings,
+    *,
+    user: User,
+    session_family_id: str,
+    payload: PasswordChangeRequest,
+    context: ClientContext,
+) -> int:
+    if not verify_account_password(user.account_password_hash, payload.current_password):
+        raise AppError("auth.invalid_current_password", "当前密码不正确", status_code=400)
+    if verify_account_password(user.account_password_hash, payload.new_password):
+        raise AppError("auth.password_unchanged", "新密码不能与当前密码相同", status_code=400)
+    if user.totp_secret_ciphertext:
+        verify_user_totp(user, settings, payload.totp_code)
+
+    user.account_password_hash = hash_account_password(payload.new_password)
+    now = utc_now()
+    result = db.execute(
+        update(UserSession)
+        .where(
+            UserSession.user_id == user.id,
+            UserSession.family_id != session_family_id,
+            UserSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now, revoked_reason="password_changed")
+    )
+    revoked_rows = result.rowcount or 0
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.password.changed",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"revoked_other_sessions": revoked_rows},
+    )
+    db.commit()
+    return revoked_rows
 
 
 def revoke_session_family(

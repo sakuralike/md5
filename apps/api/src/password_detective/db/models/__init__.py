@@ -8,6 +8,10 @@ from password_detective.db.models.archive_fingerprint import (
     FingerprintAlgorithm,
 )
 from password_detective.db.models.audit_log import AuditLog
+from password_detective.db.models.authorization_declaration import (
+    AuthorizationDeclaration,
+    AuthorizationSource,
+)
 from password_detective.db.models.desktop_update import (
     CodeSignatureStatus,
     DesktopArchitecture,
@@ -25,6 +29,12 @@ from password_detective.db.models.evidence_correlation import EvidenceCorrelatio
 from password_detective.db.models.idempotency_record import IdempotencyRecord, IdempotencyStatus
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
+from password_detective.db.models.privacy_request import (
+    PrivacyDeletionRequest,
+    PrivacyDeletionStatus,
+    PrivacyExport,
+    PrivacyExportStatus,
+)
 from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.reward_adjustment_event import (
     RewardAdjustmentDirection,
@@ -65,6 +75,8 @@ __all__ = [
     "AccountTokenKind",
     "Archive",
     "ArchiveFingerprint",
+    "AuthorizationDeclaration",
+    "AuthorizationSource",
     "AuditLog",
     "CandidateFeedback",
     "CandidateStatus",
@@ -83,6 +95,10 @@ __all__ = [
     "PasswordCandidate",
     "PointsLedger",
     "PointsLedgerStatus",
+    "PrivacyDeletionRequest",
+    "PrivacyDeletionStatus",
+    "PrivacyExport",
+    "PrivacyExportStatus",
     "RecordStateEvent",
     "RiskAlert",
     "RiskAlertEvent",

@@ -17,6 +17,7 @@ from password_detective.core.notifications import (
 from password_detective.core.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from password_detective.core.request_context import RequestContextMiddleware
 from password_detective.db.database import Database
+from password_detective.modules.account_privacy.router import router as account_privacy_router
 from password_detective.modules.admin.router import router as admin_router
 from password_detective.modules.archives.router import router as archives_router
 from password_detective.modules.auth.router import router as auth_router
@@ -97,6 +98,7 @@ def create_app(
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(account_privacy_router, prefix="/api/v1")
     app.include_router(admin_router, prefix="/api/v1")
     app.include_router(moderation_router, prefix="/api/v1")
     app.include_router(trust_cases_router, prefix="/api/v1")
