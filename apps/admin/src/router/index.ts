@@ -7,6 +7,7 @@ import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
+import UserGovernancePage from "../pages/UserGovernancePage.vue";
 
 const STORAGE_KEY = "password_detective_admin_session_v2";
 
@@ -17,6 +18,7 @@ const router = createRouter({
     { path: "/totp-setup", component: TotpSetupPage, meta: { requiresEnrollment: true } },
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
+    { path: "/users", component: UserGovernancePage, meta: { requiresAdmin: true } },
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },

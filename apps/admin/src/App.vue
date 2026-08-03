@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from "@/components/ui/button";
 import { useAdminAuthStore } from "./stores/auth";
 
 const auth = useAdminAuthStore();
@@ -18,7 +19,8 @@ const auth = useAdminAuthStore();
         <RouterLink to="/risk-alerts">风险告警</RouterLink>
         <RouterLink to="/desktop-releases">桌面发布</RouterLink>
         <RouterLink to="/audit">审计日志</RouterLink>
-        <button class="button secondary" @click="auth.logout()">退出</button>
+        <RouterLink to="/users">用户治理</RouterLink>
+        <Button variant="outline" size="sm" @click="auth.logout()">退出</Button>
       </nav>
     </header>
     <main class="main"><RouterView /></main>

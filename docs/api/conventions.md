@@ -191,6 +191,31 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 - 治理队列汇总待审核候选、处理中举报/申诉、未关闭风险告警、待处理隐私导出和账号删除申请。
 - 接口只返回聚合计数，不返回指纹、候选密码、邮箱、IP、安装标识或用户自由文本。
 
+## 管理端审计中心
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/admin/audit-logs` | 审核员/管理员 + MFA | 分页 1～100 条；支持动作、结果、目标类型、操作者、请求号、时间范围和综合搜索 |
+| `GET` | `/admin/audit-logs/{audit_id}` | 审核员/管理员 + MFA | 返回操作者用户名/角色和服务端再次脱敏的详情，不返回邮箱或秘密材料 |
+| `GET` | `/admin/audit-logs/export` | 审核员/管理员 + MFA | 当前筛选同步 CSV；单次最多 5000 条、每分钟最多 10 次，并写入 `admin.audit.export` |
+
+- `created_from` 不得晚于 `created_to`；非法范围返回 `422 admin.audit.invalid_time_range`。
+- 综合搜索只覆盖审计 ID、动作、目标类型、目标 ID、请求号和操作者用户名；通配符按普通字符转义。
+- `details` 在输出前按键名递归脱敏，限制 4 层深度、每个对象 64 项、数组 20 项和字符串 256 字符；密码、令牌、Cookie、邮箱、Webhook、载荷和摘要等键值统一替换为 `[redacted]`。
+- CSV 使用 UTF-8 BOM，危险公式前缀 `= + - @` 自动增加单引号；响应暴露 `Content-Disposition` 和 `X-Exported-Rows`。
+- 列表和详情读取不写新的审计事件，避免查询审计产生递归记录；导出本身必须审计。超过导出上限返回 `422 admin.audit_export_too_large`。
+
+## 管理端用户治理总览
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/admin/users?status=...&role=...&query=...&page=1&page_size=20` | **管理员 + MFA** | 仅 `admin` 角色可访问；按账号状态、角色、用户 ID/用户名/邮箱筛选；列表只返回脱敏邮箱和会话/MFA摘要 |
+| `GET` | `/admin/users/{user_id}` | **管理员 + MFA** | 返回账号治理统计、积分余额、声望事件、提交/案件和隐私队列计数；不存在返回 `404 admin.user_not_found` |
+
+- 用户治理读取接口不返回完整邮箱、密码、TOTP 密钥、刷新令牌、IP 或秘密材料；邮箱查询只用于服务端筛选，响应使用首字符掩码。
+- 列表按注册时间和用户 ID 倒序分页；活跃会话定义为未撤销且未过期，会话总数与最近活跃时间只用于治理摘要。
+- 本切片仅提供只读总览，不提供封禁、解封或角色变更；这些危险写操作必须先实现管理员近期再认证、原因码、幂等和不可变审计。
+
 ## 成功响应
 
 资源接口直接返回资源；响应头包含 `X-Request-ID`。列表使用：
@@ -225,3 +250,15 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 - 三个端点均从认证主体确定用户，不接受目标用户 ID；积分状态为 `pending/posted/reversed`。
 - 信誉事件使用 `reputation-v1`、受控原因码和引用唯一约束，分值范围为 0～100。
 - 候选奖励失效或恢复时追加 `reward.contribution.invalidate`、`reward.verification.invalidate`、`reward.contribution.restore`、`reward.verification.restore` 事件；原始奖励不被删除或修改，信誉流水记录边界裁剪后的实际变化量。
+
+## 管理端用户治理危险操作
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `POST` | `/admin/auth/reauthenticate` | 仅管理员 + MFA | 当前密码与 TOTP；签发短时、一次性、当前会话族绑定的 `admin_user_governance` 凭据；响应 `no-store` |
+| `PATCH` | `/admin/users/{user_id}/status` | 仅管理员 + MFA | 仅 `active/disabled`；要求一次性再认证、结构化原因、`expected_status` 和 `Idempotency-Key`；停用自动撤销活跃会话 |
+| `POST` | `/admin/users/{user_id}/sessions/revoke` | 仅管理员 + MFA | 要求一次性再认证、结构化原因、`expected_active_session_count` 和 `Idempotency-Key` |
+
+管理员治理凭据不得由公开用户再认证接口签发。对象级规则禁止管理员处置自身、其他管理员和服务账号；状态或会话计数冲突返回 `409` 且不消费凭据。成功响应可由幂等记录重放，但同一再认证令牌用于新的幂等请求必须返回 `401`。审计详情不得包含当前密码、TOTP、再认证令牌、完整邮箱、完整 IP 或自由文本。
+
+角色变更与批量处置尚未开放，后续必须先冻结权限层级、双人复核和资源上限。

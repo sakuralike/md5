@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -95,7 +96,11 @@ class TotpDisableRequest(BaseModel):
 
 
 class ReauthenticationRequest(BaseModel):
-    purpose: ReauthenticationPurpose
+    purpose: Literal[
+        ReauthenticationPurpose.PASSWORD_CHANGE,
+        ReauthenticationPurpose.TOTP_DISABLE,
+        ReauthenticationPurpose.ACCOUNT_DELETION,
+    ]
     current_password: str = Field(min_length=1, max_length=128)
     totp_code: str | None = Field(
         default=None, min_length=6, max_length=8, pattern=r"^[0-9]+$"

@@ -960,3 +960,101 @@ export interface AdminDashboardSummary {
   audited_error_rate: number;
   queue_backlog: AdminQueueBacklog;
 }
+
+export type AuditDetailValue =
+  | string
+  | number
+  | boolean
+  | null
+  | AuditDetailValue[]
+  | { [key: string]: AuditDetailValue };
+
+export interface AdminAuditLogEntry {
+  id: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  actor_role: UserRole | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  result: string;
+  ip_prefix: string | null;
+  request_id: string | null;
+  details: Record<string, AuditDetailValue>;
+  created_at: string;
+}
+
+export interface AdminAuditLogListResponse {
+  items: AdminAuditLogEntry[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+
+export interface AdminUserListItem {
+  id: string;
+  username: string;
+  masked_email: string;
+  email_verified: boolean;
+  status: UserStatus;
+  role: UserRole;
+  reputation_score: number;
+  totp_enabled: boolean;
+  active_session_count: number;
+  last_active_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface AdminUserDetail extends AdminUserListItem {
+  total_session_count: number;
+  submission_count: number;
+  trust_case_count: number;
+  points_balance: number;
+  reputation_event_count: number;
+  pending_privacy_export_count: number;
+  pending_deletion_request_count: number;
+}
+
+export type AdminUserStatusReasonCode =
+  | "security_risk"
+  | "abuse_confirmed"
+  | "policy_violation"
+  | "appeal_approved"
+  | "manual_review";
+
+export type AdminSessionRevocationReasonCode =
+  | "security_risk"
+  | "user_request"
+  | "incident_response"
+  | "manual_review";
+
+export interface AdminReauthenticationResponse {
+  reauth_token: string;
+  purpose: "admin_user_governance";
+  expires_at: string;
+}
+
+export interface AdminUserStatusChangeResponse {
+  user_id: string;
+  previous_status: UserStatus;
+  current_status: UserStatus;
+  revoked_session_count: number;
+  audit_id: string;
+  request_id: string | null;
+}
+
+export interface AdminUserSessionRevocationResponse {
+  user_id: string;
+  revoked_session_count: number;
+  audit_id: string;
+  request_id: string | null;
+}
