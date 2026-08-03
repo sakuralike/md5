@@ -11,6 +11,7 @@ from password_detective.db.models.risk_alert import (
     RiskAlert,
     RiskAlertEvent,
     RiskAlertKind,
+    RiskAlertNotificationKind,
     RiskAlertSeverity,
     RiskAlertStatus,
 )
@@ -18,6 +19,10 @@ from password_detective.db.models.verification import (
     CandidateFeedback,
     FeedbackOutcome,
     VerificationEvidenceEvent,
+)
+from password_detective.modules.risk_alerts.notifications import (
+    ACTIVE_RISK_ALERT_SLA_RULE,
+    queue_risk_alert_notifications,
 )
 from password_detective.modules.verification.service import summarize_feedbacks
 
@@ -81,26 +86,36 @@ def detect_failure_surge(
         severity=RiskAlertSeverity.HIGH,
         status=RiskAlertStatus.OPEN,
         rule_version=rule.version,
+        sla_rule_version=ACTIVE_RISK_ALERT_SLA_RULE.version,
         window_started_at=min(observed_times) if observed_times else cutoff,
         window_ended_at=now,
+        acknowledge_due_at=now + timedelta(minutes=ACTIVE_RISK_ALERT_SLA_RULE.acknowledge_minutes),
+        resolve_due_at=now + timedelta(minutes=ACTIVE_RISK_ALERT_SLA_RULE.resolve_minutes),
         independent_failure_count=totals.independent_failure_count,
         failure_weight=round(totals.failure_weight, 3),
     )
     db.add(alert)
     db.flush()
-    db.add(
-        RiskAlertEvent(
-            alert_id=alert.id,
-            actor_id=None,
-            previous_status=None,
-            next_status=RiskAlertStatus.OPEN,
-            action="risk_alert.detected",
-            reason_code="detection.failure_surge",
-            note=None,
-            request_id=None,
-        )
+    event = RiskAlertEvent(
+        alert_id=alert.id,
+        actor_id=None,
+        previous_status=None,
+        next_status=RiskAlertStatus.OPEN,
+        previous_assignee_id=None,
+        next_assignee_id=None,
+        action="risk_alert.detected",
+        reason_code="detection.failure_surge",
+        note=None,
+        request_id=None,
     )
+    db.add(event)
     db.flush()
+    queue_risk_alert_notifications(
+        db,
+        alert=alert,
+        event=event,
+        kind=RiskAlertNotificationKind.DETECTED,
+    )
     return alert
 
 

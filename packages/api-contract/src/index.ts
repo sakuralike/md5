@@ -631,6 +631,20 @@ export interface TrustCaseTransitionResponse {
 export type RiskAlertKind = "failure_surge";
 export type RiskAlertSeverity = "high";
 export type RiskAlertStatus = "open" | "acknowledged" | "resolved";
+export type RiskAlertSlaState =
+  | "within_sla"
+  | "acknowledgement_overdue"
+  | "resolution_overdue"
+  | "met"
+  | "breached";
+export type RiskAlertNotificationKind =
+  | "detected"
+  | "assigned"
+  | "acknowledgement_overdue"
+  | "resolution_overdue"
+  | "resolved"
+  | "reopened";
+export type RiskAlertNotificationStatus = "pending" | "sent" | "failed";
 export type RiskAlertResolutionCode =
   | "admin.investigation_started"
   | "admin.mitigated"
@@ -645,11 +659,17 @@ export interface RiskAlertSummary {
   severity: RiskAlertSeverity;
   status: RiskAlertStatus;
   rule_version: string;
+  sla_rule_version: string;
+  sla_state: RiskAlertSlaState;
   window_started_at: string;
   window_ended_at: string;
+  acknowledge_due_at: string;
+  resolve_due_at: string;
+  acknowledged_at: string | null;
   independent_failure_count: number;
   failure_weight: number;
   assigned_to_id: string | null;
+  assigned_to_username: string | null;
   resolved_by_id: string | null;
   resolution_code: string | null;
   resolution_note: string | null;
@@ -663,6 +683,8 @@ export interface RiskAlertEvent {
   actor_id: string | null;
   previous_status: RiskAlertStatus | null;
   next_status: RiskAlertStatus;
+  previous_assignee_id: string | null;
+  next_assignee_id: string | null;
   action: string;
   reason_code: string;
   note: string | null;
@@ -670,8 +692,22 @@ export interface RiskAlertEvent {
   created_at: string;
 }
 
+export interface RiskAlertNotification {
+  id: string;
+  recipient_user_id: string;
+  recipient_username: string;
+  kind: RiskAlertNotificationKind;
+  status: RiskAlertNotificationStatus;
+  attempts: number;
+  available_at: string;
+  sent_at: string | null;
+  last_error_code: string | null;
+  created_at: string;
+}
+
 export interface RiskAlertDetail extends RiskAlertSummary {
   events: RiskAlertEvent[];
+  notifications: RiskAlertNotification[];
 }
 
 export interface RiskAlertListResponse {
@@ -693,5 +729,24 @@ export interface RiskAlertTransitionResponse {
   current_status: RiskAlertStatus;
   event_id: string;
   resolution_code: RiskAlertResolutionCode;
+  request_id: string | null;
+}
+
+export interface RiskAlertOperator {
+  id: string;
+  username: string;
+  role: UserRole;
+}
+
+export interface RiskAlertAssignmentRequest {
+  assignee_id: string;
+  assignment_note?: string | null;
+}
+
+export interface RiskAlertAssignmentResponse {
+  alert_id: string;
+  previous_assignee_id: string | null;
+  current_assignee_id: string;
+  event_id: string;
   request_id: string | null;
 }
