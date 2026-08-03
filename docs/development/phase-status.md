@@ -197,7 +197,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 - SMTP 接受后返回本地 RFC Message-ID，风险告警复用现有提供商/回执、三次失败终态、指标和幂等重放链路；Message-ID 不解释为最终送达。
 - `.env.example`、API/Worker Compose、本地开发指南、规格、计划、模块地图、追踪矩阵和 README 已同步更新，示例只包含合成占位符。
 - 统一本地门禁通过：SMTP/Webhook 专项测试 7 项，API 默认环境 67 项通过/1 项真实 Redis 条件测试跳过、覆盖率 91%，真实 Redis 分布式限流测试 1 项通过；共享契约 2 项、Web 10 项、Admin 20 项、Desktop 11 项通过。
-- Ruff、前端类型检查/生产构建、桌面 Release 构建、SQLite/MySQL 8.4 全量迁移往返、`docker compose config` 和 Docker Compose 空环境冒烟通过；最终复验合成注册/登录耗时约 7.7 分钟，资源已清理。远端 CI 结果将在推送并创建 PR 后补充。
+- Ruff、前端类型检查/生产构建、桌面 Release 构建、SQLite/MySQL 8.4 全量迁移往返、`docker compose config` 和 Docker Compose 空环境冒烟通过；最终复验合成注册/登录耗时约 7.7 分钟，资源已清理。创建堆叠 PR #24；GitHub Actions push 运行 `30786947956` 与 pull_request 运行 `30786976922` 的 API、Frontend、Desktop 和 Container Images 作业全部通过。
 
 ### 后续范围
 
