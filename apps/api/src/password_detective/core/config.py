@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from email.utils import parseaddr
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,10 +43,18 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     rate_limit_namespace: str = "password-detective"
-    notification_backend: Literal["memory", "log", "webhook"] = "memory"
+    notification_backend: Literal["memory", "log", "webhook", "smtp"] = "memory"
     notification_webhook_url: str = ""
     notification_webhook_secret: str = ""
     notification_webhook_timeout_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
+    notification_smtp_host: str = ""
+    notification_smtp_port: int = Field(default=587, ge=1, le=65535)
+    notification_smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    notification_smtp_username: str = ""
+    notification_smtp_password: SecretStr = SecretStr("")
+    notification_smtp_sender_email: str = ""
+    notification_smtp_sender_name: str = Field(default="密码侦探社", max_length=128)
+    notification_smtp_timeout_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
     browser_cookie_secure: bool = False
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     auto_create_tables: bool = True
@@ -67,13 +76,40 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def validate_notification_webhook(self) -> Settings:
-        if self.notification_backend != "webhook":
-            return self
-        if not self.notification_webhook_url.startswith("https://"):
-            raise ValueError("Webhook 通知后端必须配置 HTTPS URL")
-        if len(self.notification_webhook_secret) < 32:
-            raise ValueError("Webhook 通知签名密钥至少需要 32 个字符")
+    def validate_notification_backend(self) -> Settings:
+        if self.notification_backend == "webhook":
+            if not self.notification_webhook_url.startswith("https://"):
+                raise ValueError("Webhook 通知后端必须配置 HTTPS URL")
+            if len(self.notification_webhook_secret) < 32:
+                raise ValueError("Webhook 通知签名密钥至少需要 32 个字符")
+        elif self.notification_backend == "smtp":
+            if not self.notification_smtp_host.strip() or any(
+                char in self.notification_smtp_host for char in "\r\n"
+            ):
+                raise ValueError("SMTP 通知后端必须配置服务器地址")
+            sender = self.notification_smtp_sender_email.strip()
+            display_name, parsed_sender = parseaddr(sender)
+            if (
+                not sender
+                or display_name
+                or parsed_sender != sender
+                or "@" not in sender
+                or any(char in sender for char in "\r\n")
+            ):
+                raise ValueError("SMTP 通知后端必须配置有效的发件邮箱")
+            if not self.notification_smtp_sender_name.strip() or any(
+                char in self.notification_smtp_sender_name for char in "\r\n"
+            ):
+                raise ValueError("SMTP 发件人名称不能为空或包含换行符")
+            password = self.notification_smtp_password.get_secret_value()
+            has_username = bool(self.notification_smtp_username.strip())
+            has_password = bool(password)
+            if has_username != has_password:
+                raise ValueError("SMTP 用户名和密码必须同时配置")
+            if self.app_env not in {"local", "test"} and not has_username:
+                raise ValueError("非本地环境的 SMTP 通知后端必须配置认证凭据")
+            if self.app_env not in {"local", "test"} and self.notification_smtp_security == "none":
+                raise ValueError("非本地环境的 SMTP 通知后端必须启用 STARTTLS 或 SSL")
         return self
 
     @property

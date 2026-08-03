@@ -4,9 +4,14 @@ import hashlib
 import hmac
 import json
 import logging
+import smtplib
+import ssl
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol
+from email.message import EmailMessage
+from email.utils import format_datetime, formataddr, make_msgid
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.request import Request, urlopen
 
 if TYPE_CHECKING:
@@ -210,6 +215,164 @@ class WebhookNotificationGateway:
             return response.headers.get("X-Provider-Message-Id")
 
 
+class SMTPNotificationGateway:
+    """SMTP adapter using plain-text messages and transport encryption when configured."""
+
+    provider_name = "smtp"
+
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        security: Literal["starttls", "ssl", "none"],
+        username: str,
+        password: str,
+        sender_email: str,
+        sender_name: str,
+        timeout_seconds: float = 10.0,
+        smtp_factory: Any | None = None,
+        ssl_context_factory: Any = ssl.create_default_context,
+    ) -> None:
+        self._host = host
+        self._port = port
+        self._security = security
+        self._username = username
+        self._password = password
+        self._sender_email = sender_email
+        self._sender_name = sender_name
+        self._timeout_seconds = timeout_seconds
+        self._smtp_factory = smtp_factory
+        self._ssl_context_factory = ssl_context_factory
+
+    def send_account_token(self, *, kind: str, recipient: str, token: str) -> str | None:
+        subject, content = _account_token_email(kind=kind, token=token)
+        message = self._build_message(
+            recipient=recipient,
+            subject=subject,
+            content=content,
+            notification_type="account_token",
+            message_key=kind,
+        )
+        return self._send_message(message=message, recipient=recipient)
+
+    def send_risk_alert(
+        self,
+        *,
+        delivery_id: str,
+        kind: str,
+        recipient: str,
+        alert_id: str,
+        severity: str,
+        due_at: datetime | None,
+    ) -> str | None:
+        due_at_text = _isoformat_utc(due_at) or "未设置"
+        message = self._build_message(
+            recipient=recipient,
+            subject=f"[密码侦探社] {severity.upper()} 风险告警",
+            content=(
+                "检测到需要管理员处理的风险告警。\n\n"
+                f"告警编号：{alert_id}\n"
+                f"通知类型：{kind}\n"
+                f"严重级别：{severity}\n"
+                f"处理时限：{due_at_text}\n\n"
+                "请登录管理端核查并处置。为保护敏感信息，邮件不包含候选密码、"
+                "证据原文或用户凭据。"
+            ),
+            notification_type="risk_alert",
+            message_key=delivery_id,
+            extra_headers={"X-Password-Detective-Delivery-ID": delivery_id},
+        )
+        return self._send_message(message=message, recipient=recipient)
+
+    def _build_message(
+        self,
+        *,
+        recipient: str,
+        subject: str,
+        content: str,
+        notification_type: str,
+        message_key: str,
+        extra_headers: dict[str, str] | None = None,
+    ) -> EmailMessage:
+        sender_domain = self._sender_email.rsplit("@", maxsplit=1)[-1]
+        message = EmailMessage()
+        message["From"] = formataddr((self._sender_name, self._sender_email))
+        message["To"] = recipient
+        message["Subject"] = subject
+        message["Date"] = format_datetime(datetime.now(UTC))
+        message["Message-ID"] = make_msgid(idstring=message_key, domain=sender_domain)
+        message["X-Password-Detective-Notification-Type"] = notification_type
+        for name, value in (extra_headers or {}).items():
+            message[name] = value
+        message.set_content(content, charset="utf-8")
+        return message
+
+    def _send_message(self, *, message: EmailMessage, recipient: str) -> str:
+        client = self._open_client()
+        try:
+            if self._username:
+                client.login(self._username, self._password)
+            refused = client.send_message(
+                message,
+                from_addr=self._sender_email,
+                to_addrs=[recipient],
+            )
+            if refused:
+                raise RuntimeError("notification_smtp_recipient_rejected")
+        finally:
+            _close_smtp_client(client)
+        return str(message["Message-ID"])
+
+    def _open_client(self) -> Any:
+        if self._security == "ssl":
+            factory = self._smtp_factory or smtplib.SMTP_SSL
+            return factory(
+                self._host,
+                self._port,
+                timeout=self._timeout_seconds,
+                context=self._ssl_context_factory(),
+            )
+
+        factory = self._smtp_factory or smtplib.SMTP
+        client = factory(self._host, self._port, timeout=self._timeout_seconds)
+        if self._security != "starttls":
+            return client
+        try:
+            client.ehlo()
+            client.starttls(context=self._ssl_context_factory())
+            client.ehlo()
+        except Exception:
+            _close_smtp_client(client)
+            raise
+        return client
+
+
+def _close_smtp_client(client: Any) -> None:
+    try:
+        client.quit()
+    except Exception:
+        with suppress(Exception):
+            client.close()
+
+
+def _account_token_email(*, kind: str, token: str) -> tuple[str, str]:
+    if kind == "email_verification":
+        purpose = "验证邮箱"
+        subject = "[密码侦探社] 验证邮箱"
+    elif kind == "password_reset":
+        purpose = "重置账户密码"
+        subject = "[密码侦探社] 重置账户密码"
+    else:
+        purpose = "完成账户操作"
+        subject = "[密码侦探社] 账户安全通知"
+    content = (
+        f"请使用以下一次性令牌{purpose}：\n\n{token}\n\n"
+        "令牌具有有效期且只能使用一次。若非本人操作，请忽略此邮件，不要将令牌转发给他人。"
+    )
+    return subject, content
+
+
 def _isoformat_utc(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -222,8 +385,19 @@ def build_notification_gateway(settings: Settings) -> NotificationGateway:
         return MemoryNotificationGateway()
     if settings.notification_backend == "log":
         return LoggingNotificationGateway()
-    return WebhookNotificationGateway(
-        url=settings.notification_webhook_url,
-        secret=settings.notification_webhook_secret,
-        timeout_seconds=settings.notification_webhook_timeout_seconds,
+    if settings.notification_backend == "webhook":
+        return WebhookNotificationGateway(
+            url=settings.notification_webhook_url,
+            secret=settings.notification_webhook_secret,
+            timeout_seconds=settings.notification_webhook_timeout_seconds,
+        )
+    return SMTPNotificationGateway(
+        host=settings.notification_smtp_host,
+        port=settings.notification_smtp_port,
+        security=settings.notification_smtp_security,
+        username=settings.notification_smtp_username,
+        password=settings.notification_smtp_password.get_secret_value(),
+        sender_email=settings.notification_smtp_sender_email,
+        sender_name=settings.notification_smtp_sender_name,
+        timeout_seconds=settings.notification_smtp_timeout_seconds,
     )
