@@ -50,6 +50,11 @@ const rewardKindLabels = {
   verification: "验证奖励",
 };
 
+const correlationSignalLabels = {
+  installation: "共享安装实例",
+  ip_prefix: "共享 IP 网段",
+};
+
 const availableActions = computed(() => {
   if (!selected.value) return [];
   const actions: Array<{ target: CandidateStatus; reason: ManualTransitionReason; label: string; danger?: boolean }> = [];
@@ -97,6 +102,10 @@ function shortId(value: string): string {
 
 function signedAmount(value: number): string {
   return value > 0 ? `+${value}` : String(value);
+}
+
+function weightReduction(raw: number, effective: number): string {
+  return Math.max(raw - effective, 0).toFixed(3);
 }
 
 function describeError(value: unknown): string {
@@ -214,6 +223,38 @@ onMounted(() => loadCandidates(true));
             <div class="fingerprints"><strong>存档指纹</strong><code v-for="fingerprint in selected.fingerprints" :key="`${fingerprint.algorithm}:${fingerprint.digest}`">{{ fingerprint.algorithm }}:{{ fingerprint.digest }}</code></div>
           </section>
 
+          <section class="panel stack correlation-panel">
+            <div class="section-title">
+              <div><div class="eyebrow">{{ selected.correlation_snapshot.rule_version }}</div><h2>关联证据与动态降权</h2></div>
+              <span class="badge" :class="{ warning: selected.correlation_snapshot.correlated_group_count > 0 }">{{ selected.correlation_snapshot.correlated_group_count }} 个关联组</span>
+            </div>
+            <p class="muted">关联键只在后端内存中参与计算；此处仅展示账号、证据 ID 和关联类型，不返回 IP 网段或安装标识哈希。</p>
+            <dl class="detail-grid correlation-metrics">
+              <div><dt>反馈 / 独立组</dt><dd>{{ selected.correlation_snapshot.feedback_count }} / {{ selected.correlation_snapshot.independent_group_count }}</dd></div>
+              <div><dt>被降权反馈</dt><dd>{{ selected.correlation_snapshot.downweighted_feedback_count }}</dd></div>
+              <div><dt>成功权重</dt><dd>{{ selected.correlation_snapshot.raw_success_weight }} → {{ selected.correlation_snapshot.effective_success_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_success_weight, selected.correlation_snapshot.effective_success_weight) }}）</dd></div>
+              <div><dt>失败权重</dt><dd>{{ selected.correlation_snapshot.raw_failure_weight }} → {{ selected.correlation_snapshot.effective_failure_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_failure_weight, selected.correlation_snapshot.effective_failure_weight) }}）</dd></div>
+            </dl>
+            <div v-if="selected.correlation_snapshot.correlated_group_count === 0" class="empty-state">当前未发现共享安装实例或 IP 网段形成的关联反馈组。</div>
+            <ol v-else class="correlation-groups">
+              <li v-for="group in selected.correlation_groups.filter((item) => item.member_count > 1)" :key="group.group_id">
+                <div class="timeline-title"><strong>{{ group.group_id }} · {{ group.member_count }} 个账号</strong><span class="badge warning">{{ group.shared_signals.map((signal) => correlationSignalLabels[signal]).join(" + ") }}</span></div>
+                <p>成功 {{ group.success_count }} 条，权重 {{ group.raw_success_weight }} → {{ group.effective_success_weight }}；失败 {{ group.failure_count }} 条，权重 {{ group.raw_failure_weight }} → {{ group.effective_failure_weight }}</p>
+                <small>账号：{{ group.user_ids.map(shortId).join("、") }} · 证据：{{ group.feedback_ids.map(shortId).join("、") }}</small>
+              </li>
+            </ol>
+            <details v-if="selected.correlation_assessments.length > 0">
+              <summary>查看不可变评估历史（{{ selected.correlation_assessments.length }} 条）</summary>
+              <ol class="timeline compact-timeline">
+                <li v-for="assessment in selected.correlation_assessments.slice(0, 20)" :key="assessment.id">
+                  <strong>{{ assessment.correlated_group_count }} 个关联组 · {{ assessment.downweighted_feedback_count }} 条降权</strong>
+                  <p>成功 {{ assessment.raw_success_weight }} → {{ assessment.effective_success_weight }}；失败 {{ assessment.raw_failure_weight }} → {{ assessment.effective_failure_weight }}</p>
+                  <small>{{ formatTime(assessment.created_at) }} · 触发证据 {{ shortId(assessment.trigger_evidence_id) }}</small>
+                </li>
+              </ol>
+            </details>
+          </section>
+
           <section class="panel stack">
             <div><div class="eyebrow">受控处置</div><h2>状态操作</h2></div>
             <label class="field"><span>审核说明（进入状态时间线，不写入审计详情）</span><textarea v-model="reasonNote" rows="3" maxlength="500" placeholder="使用合成、非敏感说明；禁止粘贴密码、令牌或个人信息。"></textarea></label>
@@ -281,6 +322,15 @@ onMounted(() => loadCandidates(true));
 .timeline li { padding: 14px 0 14px 18px; border-left: 3px solid #bfdbfe; }
 .timeline p { margin: 7px 0; overflow-wrap: anywhere; }
 .timeline small { color: var(--muted); }
+.correlation-panel { border-color: #fed7aa; background: linear-gradient(180deg, #fff 0%, #fffaf3 100%); }
+.correlation-metrics dd { font-variant-numeric: tabular-nums; }
+.correlation-groups { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.correlation-groups li { padding: 14px; border: 1px solid #fed7aa; border-radius: 12px; background: #fff; }
+.correlation-groups p { margin: 8px 0; }
+.correlation-groups small { color: var(--muted); overflow-wrap: anywhere; }
+.badge.warning { color: #9a3412; background: #ffedd5; }
+details summary { cursor: pointer; color: #9a3412; font-weight: 700; }
+.compact-timeline { margin-top: 14px; }
 .field textarea, .field select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: white; font: inherit; }
 .empty-state { padding: 28px; text-align: center; color: var(--muted); }
 @media (max-width: 960px) { .moderation-heading, .moderation-layout { grid-template-columns: 1fr; } .candidate-list-panel { position: static; max-height: none; } }

@@ -422,6 +422,40 @@ export interface ModerationEvidenceSnapshot {
   failure_weight: number;
 }
 
+export interface CorrelationSnapshot {
+  rule_version: string;
+  feedback_count: number;
+  independent_group_count: number;
+  correlated_group_count: number;
+  downweighted_feedback_count: number;
+  raw_success_weight: number;
+  effective_success_weight: number;
+  raw_failure_weight: number;
+  effective_failure_weight: number;
+}
+
+export type CorrelationSignal = "installation" | "ip_prefix";
+
+export interface CorrelationGroup {
+  group_id: string;
+  feedback_ids: string[];
+  user_ids: string[];
+  shared_signals: CorrelationSignal[];
+  member_count: number;
+  success_count: number;
+  failure_count: number;
+  raw_success_weight: number;
+  effective_success_weight: number;
+  raw_failure_weight: number;
+  effective_failure_weight: number;
+}
+
+export interface CorrelationAssessment extends CorrelationSnapshot {
+  id: string;
+  trigger_evidence_id: string;
+  created_at: string;
+}
+
 export interface ModerationEvidenceEvent {
   id: string;
   user_id: string;
@@ -477,6 +511,9 @@ export interface RewardAdjustmentEvent {
 
 export interface CandidateModerationDetail extends CandidateModerationSummary {
   evidence_snapshot: ModerationEvidenceSnapshot;
+  correlation_snapshot: CorrelationSnapshot;
+  correlation_groups: CorrelationGroup[];
+  correlation_assessments: CorrelationAssessment[];
   evidence_events: ModerationEvidenceEvent[];
   state_events: CandidateStateEvent[];
   reward_adjustments: RewardAdjustmentEvent[];

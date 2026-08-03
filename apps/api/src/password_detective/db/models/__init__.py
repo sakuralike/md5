@@ -21,6 +21,7 @@ from password_detective.db.models.desktop_verification import (
     VerificationChallenge,
     VerificationReceipt,
 )
+from password_detective.db.models.evidence_correlation import EvidenceCorrelationAssessment
 from password_detective.db.models.idempotency_record import IdempotencyRecord, IdempotencyStatus
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
@@ -71,6 +72,7 @@ __all__ = [
     "DesktopRelease",
     "DesktopReleaseChannel",
     "DesktopReleaseStatus",
+    "EvidenceCorrelationAssessment",
     "FingerprintAlgorithm",
     "IdempotencyRecord",
     "IdempotencyStatus",

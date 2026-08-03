@@ -50,7 +50,7 @@
 | `POST` | `/candidates/{candidate_id}/feedback` | 必需 | `success/failure`；同一账号仅一个当前有效反馈；修改追加历史；必须提供 `Idempotency-Key` |
 | `GET` | `/me/feedback` | 必需 | 分页返回当前用户反馈修订历史、规则版本和候选当前状态 |
 
-候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `verification-v1` 聚合：两个独立成功且失败权重低于阈值时自动验证，三个独立失败或失败权重达到阈值时自动隔离；所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
+候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `correlation-v1` 先构建候选内关联组，再由 `verification-v2` 聚合：共享安装标识哈希或 IP 网段的传递关联反馈，在成功/失败两个结果维度内分别最多保留组内最高单条权重；两个独立成功且有效失败权重低于阈值时自动验证，三个独立失败或有效失败权重达到阈值时自动隔离。每次材料变化追加 `evidence_correlation_assessments` 聚合快照，所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
 
 ## 桌面安装、挑战与签名回执
 
@@ -64,7 +64,7 @@
 
 回执规范载荷版本为 `desktop-receipt-v1`。客户端按固定顺序生成 UTF-8 `key=value` 行，时间统一为毫秒精度 UTC `Z`，末尾保留换行。签名覆盖挑战 ID/nonce、安装与账号、候选、档案指纹、候选密码 SHA-256 摘要、验证结果、压缩格式、客户端版本和验证时间。服务端只持久化候选摘要的 HMAC，不保存客户端提交的原始无盐摘要。
 
-桌面端是不可信证据来源：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。有效回执仍进入 `verification-v1` 证据聚合，并接受账号、安装和 IP 关联去重/降权。档案文件名、目录列表、文件内容和候选密码不得上传。
+桌面端是不可信证据来源：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。有效回执仍进入 `verification-v2` 证据聚合，并接受候选内账号、安装和 IP 关联传递分组与动态限权；该分析不扩展为跨候选身份图谱。档案文件名、目录列表、文件内容和候选密码不得上传。
 
 最低版本拒绝使用 `426 desktop.client_version_unsupported`，并在 `details` 中返回可供客户端展示的版本信息：
 
@@ -87,7 +87,7 @@
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
 | `GET` | `/admin/candidates?status=...&query=...&page=1&page_size=20` | 审核员/管理员 + MFA | 可按状态、候选/存档 ID 或指纹摘要筛选；只返回指纹、状态、计数和时间，不返回任何候选秘密字段 |
-| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、不可变证据修订、自动/人工状态时间线和奖励校正时间线；不返回 IP、安装关联键或候选秘密 |
+| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、关联组与动态限权摘要、不可变证据修订、自动/人工状态时间线和奖励校正时间线；仅展示账号/反馈标识与信号类型，不返回 IP、安装哈希、关联键或候选秘密 |
 | `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；同事务写入人工状态事件、必要的首次验证奖励与奖励校正，并返回实际校正汇总 |
 
 人工原因码按目标状态约束：`manual.evidence_conflict`/`manual.security_hold` 仅用于隔离，`manual.invalid_candidate`/`manual.policy_violation` 仅用于拒绝，`manual.review_reopened` 仅用于重新进入待验证，`manual.verified_by_review` 仅用于人工通过，`manual.quarantine_cleared` 用于解除隔离后进入待验证或已验证。

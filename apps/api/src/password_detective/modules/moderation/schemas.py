@@ -54,6 +54,38 @@ class EvidenceSnapshotResponse(BaseModel):
     failure_weight: float
 
 
+class CorrelationSnapshotResponse(BaseModel):
+    rule_version: str
+    feedback_count: int
+    independent_group_count: int
+    correlated_group_count: int
+    downweighted_feedback_count: int
+    raw_success_weight: float
+    effective_success_weight: float
+    raw_failure_weight: float
+    effective_failure_weight: float
+
+
+class CorrelationGroupResponse(BaseModel):
+    group_id: str
+    feedback_ids: list[str]
+    user_ids: list[str]
+    shared_signals: list[str]
+    member_count: int
+    success_count: int
+    failure_count: int
+    raw_success_weight: float
+    effective_success_weight: float
+    raw_failure_weight: float
+    effective_failure_weight: float
+
+
+class CorrelationAssessmentResponse(CorrelationSnapshotResponse):
+    id: str
+    trigger_evidence_id: str
+    created_at: datetime
+
+
 class CandidateModerationSummary(BaseModel):
     id: str
     archive_id: str
@@ -128,6 +160,9 @@ class RewardAdjustmentEventResponse(BaseModel):
 
 class CandidateModerationDetail(CandidateModerationSummary):
     evidence_snapshot: EvidenceSnapshotResponse
+    correlation_snapshot: CorrelationSnapshotResponse
+    correlation_groups: list[CorrelationGroupResponse]
+    correlation_assessments: list[CorrelationAssessmentResponse]
     evidence_events: list[EvidenceEventResponse]
     state_events: list[StateEventResponse]
     reward_adjustments: list[RewardAdjustmentEventResponse]
