@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：M4 第 8 次迭代已完成签名 HTTPS Webhook、提供商回执、通知投递指标、失败队列和幂等重放工作台；`risk-alert-sla-v1`、MFA 值班指派、事务通知 Outbox、候选关联降权、人工审核、举报/申诉、积分/信誉、奖励补偿及 M3 桌面发布闭环保持完成。当前工程估算为：功能代码约 92%、MVP 验收约 80%、生产上线准备度约 50%；该估算不替代真实提供商和目标环境验收。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：M4 第 9 次迭代已完成提供商无关的 SMTP 邮件投递、STARTTLS/SSL 生产门禁、纯文本账户/风险模板和 Message-ID 回执；签名 Webhook、投递指标、失败重放、`risk-alert-sla-v1`、MFA 值班指派、事务通知 Outbox、候选关联降权及 M3 桌面发布闭环保持完成。当前工程估算为：功能代码约 93%、MVP 验收约 81%、生产上线准备度约 53%；该估算不替代真实 SMTP 服务商、发件域名和目标环境验收。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -71,6 +71,7 @@ docker compose up --build
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
 - [项目整体完成度审计](./docs/development/2026-08-02-completion-audit.md)
+- [M4 第 9 次迭代记录](./docs/development/2026-08-03-m4-iteration-9.md)
 - [M4 第 8 次迭代记录](./docs/development/2026-08-03-m4-iteration-8.md)
 - [M4 第 7 次迭代记录](./docs/development/2026-08-03-m4-iteration-7.md)
 - [M4 第 6 次迭代记录](./docs/development/2026-08-03-m4-iteration-6.md)

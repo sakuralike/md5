@@ -36,6 +36,23 @@ $env:NOTIFICATION_WEBHOOK_TIMEOUT_SECONDS = "10"
 
 Webhook 仅允许 HTTPS，并使用 `notification-webhook-v1` 规范 JSON、UTC 时间戳和 HMAC-SHA256 签名。示例地址和密钥均为合成占位符；不得把真实令牌或密钥写入项目文档、提交或日志。真实 staging/production 端点、凭据轮换、网络白名单和数据处理协议仍需单独验收。
 
+需要通过标准 SMTP 发送账户令牌和风险告警邮件时：
+
+```powershell
+$env:NOTIFICATION_BACKEND = "smtp"
+$env:NOTIFICATION_SMTP_HOST = "smtp.synthetic.example.com"
+$env:NOTIFICATION_SMTP_PORT = "587"
+$env:NOTIFICATION_SMTP_SECURITY = "starttls"
+$env:NOTIFICATION_SMTP_USERNAME = "synthetic-user"
+$env:NOTIFICATION_SMTP_PASSWORD = "replace-with-provider-app-password"
+$env:NOTIFICATION_SMTP_SENDER_EMAIL = "no-reply@synthetic.example.com"
+$env:NOTIFICATION_SMTP_SENDER_NAME = "密码侦探社"
+$env:NOTIFICATION_SMTP_TIMEOUT_SECONDS = "10"
+./scripts/dev-api.ps1
+```
+
+`starttls` 是默认生产模式，`ssl` 用于隐式 TLS，`none` 仅允许本地和测试环境。非本地环境必须同时配置用户名、密码和加密模式。SMTP 密码不得写入仓库；生产环境应从秘密管理系统注入。SMTP 接受后保存的 Message-ID 不是最终送达证明，发件域名、SPF、DKIM、DMARC、配额和退信链路仍需在选定服务商环境验收。
+
 M2 候选秘密和揭示策略可通过以下变量配置：
 
 ```powershell
