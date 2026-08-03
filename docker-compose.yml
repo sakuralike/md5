@@ -75,7 +75,7 @@ services:
       DAILY_REVEAL_QUOTA: ${DAILY_REVEAL_QUOTA:-5}
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       AUTO_CREATE_TABLES: "false"
-    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO"]
+    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--beat", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
 

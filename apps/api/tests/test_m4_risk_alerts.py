@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pyotp
 from sqlalchemy import func, select
 
+from password_detective.core.notifications import MemoryNotificationGateway
+from password_detective.core.time import utc_now
 from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
-from password_detective.db.models.risk_alert import RiskAlert, RiskAlertEvent, RiskAlertStatus
+from password_detective.db.models.risk_alert import (
+    RiskAlert,
+    RiskAlertEvent,
+    RiskAlertNotification,
+    RiskAlertNotificationKind,
+    RiskAlertNotificationStatus,
+    RiskAlertStatus,
+)
 from password_detective.db.models.user import User, UserRole
+from password_detective.modules.risk_alerts.notifications import (
+    dispatch_pending_notifications,
+    queue_due_sla_notifications,
+)
 
 
 def _register_and_login(client, suffix: str) -> tuple[dict[str, str], dict[str, str]]:
@@ -90,10 +105,7 @@ def _feedback(
 
 def _trigger_failure_surge(client, suffix: str) -> tuple[str, list[dict[str, str]]]:
     _, owner = _register_and_login(client, f"{suffix}_owner")
-    voters = [
-        _register_and_login(client, f"{suffix}_failure_{index}")[1]
-        for index in range(1, 4)
-    ]
+    voters = [_register_and_login(client, f"{suffix}_failure_{index}")[1] for index in range(1, 4)]
     candidate_id = _create_candidate(client, owner, suffix)
     for index, voter in enumerate(voters, start=1):
         response = _feedback(client, voter, candidate_id, f"{suffix}-{index}")
@@ -245,3 +257,194 @@ def test_admin_can_acknowledge_resolve_and_replay_transition_idempotently(client
         assert alerts[0].status == RiskAlertStatus.RESOLVED
         assert alerts[1].status == RiskAlertStatus.OPEN
         assert db.scalar(select(func.count(RiskAlertEvent.id))) == 4
+
+
+def test_alert_sla_assignment_and_notification_outbox_close_the_operator_loop(
+    client, notifications: MemoryNotificationGateway
+):
+    admin_headers = _admin_headers(client, "sla_admin")
+    candidate_id, voters = _trigger_failure_surge(client, "sla")
+
+    operators = client.get("/api/v1/admin/risk-alerts/operators", headers=admin_headers)
+    assert operators.status_code == 200
+    assert len(operators.json()) == 1
+    operator = operators.json()[0]
+
+    queue = client.get(
+        "/api/v1/admin/risk-alerts",
+        headers=admin_headers,
+        params={"query": candidate_id},
+    )
+    assert queue.status_code == 200
+    summary = queue.json()["items"][0]
+    alert_id = summary["id"]
+    assert summary["sla_rule_version"] == "risk-alert-sla-v1"
+    assert summary["sla_state"] == "within_sla"
+    assert summary["assigned_to_id"] is None
+
+    ordinary_registration = _register_and_login(client, "sla_ordinary")[0]
+    with client.app.state.database.session_factory() as db:
+        ordinary = db.scalar(select(User).where(User.username == ordinary_registration["username"]))
+        assert ordinary is not None
+        ordinary_id = ordinary.id
+    invalid = client.post(
+        f"/api/v1/admin/risk-alerts/{alert_id}/assign",
+        headers={**admin_headers, "Idempotency-Key": "risk-invalid-assignee"},
+        json={"assignee_id": ordinary_id},
+    )
+    assert invalid.status_code == 422
+
+    assignment_headers = {**admin_headers, "Idempotency-Key": "risk-valid-assignee"}
+    assignment = client.post(
+        f"/api/v1/admin/risk-alerts/{alert_id}/assign",
+        headers=assignment_headers,
+        json={"assignee_id": operator["id"], "assignment_note": "合成值班指派"},
+    )
+    assert assignment.status_code == 200
+    assert assignment.json()["current_assignee_id"] == operator["id"]
+    replay = client.post(
+        f"/api/v1/admin/risk-alerts/{alert_id}/assign",
+        headers=assignment_headers,
+        json={"assignee_id": operator["id"], "assignment_note": "合成值班指派"},
+    )
+    assert replay.status_code == 200
+    assert replay.json() == assignment.json()
+
+    assigned_queue = client.get(
+        "/api/v1/admin/risk-alerts",
+        headers=admin_headers,
+        params={"assigned_to_id": operator["id"]},
+    )
+    assert assigned_queue.status_code == 200
+    assert assigned_queue.json()["total"] == 1
+
+    with client.app.state.database.session_factory() as db:
+        alert = db.get(RiskAlert, alert_id)
+        assert alert is not None
+        assert alert.assigned_to_id == operator["id"]
+        kinds = list(
+            db.scalars(
+                select(RiskAlertNotification.kind)
+                .where(RiskAlertNotification.alert_id == alert_id)
+                .order_by(RiskAlertNotification.created_at)
+            )
+        )
+        assert kinds == [
+            RiskAlertNotificationKind.DETECTED,
+            RiskAlertNotificationKind.ASSIGNED,
+        ]
+        result = dispatch_pending_notifications(
+            db,
+            notifications,
+            now=utc_now() + timedelta(seconds=1),
+        )
+        assert result == {"selected": 2, "sent": 2, "failed": 0}
+
+    assert [message.kind for message in notifications.risk_alert_messages] == [
+        "detected",
+        "assigned",
+    ]
+    assert all(
+        message.recipient.endswith("@synthetic.example.com")
+        for message in notifications.risk_alert_messages
+    )
+    assert all(message.alert_id == alert_id for message in notifications.risk_alert_messages)
+    assert all(message.severity == "high" for message in notifications.risk_alert_messages)
+
+    detail = client.get(f"/api/v1/admin/risk-alerts/{alert_id}", headers=admin_headers)
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["assigned_to_username"] == operator["username"]
+    assert [event["action"] for event in body["events"]] == [
+        "risk_alert.detected",
+        "risk_alert.assigned",
+    ]
+    assert all(item["status"] == "sent" for item in body["notifications"])
+    assert all("recipient_email" not in item for item in body["notifications"])
+    assert all("ip_prefix" not in item for item in body["notifications"])
+    assert voters
+
+
+def test_alert_sla_overdue_notifications_are_deduplicated_and_queryable(client):
+    admin_headers = _admin_headers(client, "overdue_admin")
+    candidate_id, _ = _trigger_failure_surge(client, "overdue")
+    operator = client.get("/api/v1/admin/risk-alerts/operators", headers=admin_headers).json()[0]
+    summary = client.get(
+        "/api/v1/admin/risk-alerts",
+        headers=admin_headers,
+        params={"query": candidate_id},
+    ).json()["items"][0]
+    alert_id = summary["id"]
+    assert (
+        client.post(
+            f"/api/v1/admin/risk-alerts/{alert_id}/assign",
+            headers={**admin_headers, "Idempotency-Key": "risk-overdue-assign"},
+            json={"assignee_id": operator["id"]},
+        ).status_code
+        == 200
+    )
+
+    observed_at = utc_now()
+    with client.app.state.database.session_factory() as db:
+        alert = db.get(RiskAlert, alert_id)
+        assert alert is not None
+        alert.acknowledge_due_at = observed_at - timedelta(minutes=1)
+        db.commit()
+        assert queue_due_sla_notifications(db, now=observed_at) == 1
+        assert queue_due_sla_notifications(db, now=observed_at) == 0
+
+    overdue_queue = client.get(
+        "/api/v1/admin/risk-alerts",
+        headers=admin_headers,
+        params={"overdue": True, "query": candidate_id},
+    )
+    assert overdue_queue.status_code == 200
+    assert overdue_queue.json()["total"] == 1
+    assert overdue_queue.json()["items"][0]["sla_state"] == "acknowledgement_overdue"
+
+    acknowledged = client.post(
+        f"/api/v1/admin/risk-alerts/{alert_id}/transition",
+        headers={**admin_headers, "Idempotency-Key": "risk-overdue-ack"},
+        json={
+            "target_status": "acknowledged",
+            "resolution_code": "admin.investigation_started",
+        },
+    )
+    assert acknowledged.status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        alert = db.get(RiskAlert, alert_id)
+        assert alert is not None
+        alert.resolve_due_at = observed_at - timedelta(minutes=1)
+        db.commit()
+        assert queue_due_sla_notifications(db, now=observed_at) == 1
+        assert queue_due_sla_notifications(db, now=observed_at) == 0
+        overdue_kinds = list(
+            db.scalars(
+                select(RiskAlertNotification.kind).where(
+                    RiskAlertNotification.alert_id == alert_id,
+                    RiskAlertNotification.kind.in_(
+                        [
+                            RiskAlertNotificationKind.ACKNOWLEDGEMENT_OVERDUE,
+                            RiskAlertNotificationKind.RESOLUTION_OVERDUE,
+                        ]
+                    ),
+                )
+            )
+        )
+        assert set(overdue_kinds) == {
+            RiskAlertNotificationKind.ACKNOWLEDGEMENT_OVERDUE,
+            RiskAlertNotificationKind.RESOLUTION_OVERDUE,
+        }
+        assert (
+            db.scalar(
+                select(func.count(RiskAlertNotification.id)).where(
+                    RiskAlertNotification.status == RiskAlertNotificationStatus.PENDING
+                )
+            )
+            == 4
+        )
+
+    detail = client.get(f"/api/v1/admin/risk-alerts/{alert_id}", headers=admin_headers)
+    assert detail.status_code == 200
+    assert detail.json()["sla_state"] == "resolution_overdue"

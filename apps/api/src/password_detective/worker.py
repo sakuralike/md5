@@ -3,6 +3,15 @@ from __future__ import annotations
 from celery import Celery
 
 from password_detective.core.config import get_settings
+from password_detective.core.notifications import (
+    LoggingNotificationGateway,
+    MemoryNotificationGateway,
+)
+from password_detective.db.database import Database
+from password_detective.modules.risk_alerts.notifications import (
+    dispatch_pending_notifications,
+    queue_due_sla_notifications,
+)
 
 settings = get_settings()
 celery_app = Celery(
@@ -18,9 +27,45 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "queue-risk-alert-sla-notifications": {
+            "task": "risk_alerts.queue_sla_notifications",
+            "schedule": 60.0,
+        },
+        "dispatch-risk-alert-notifications": {
+            "task": "risk_alerts.dispatch_notifications",
+            "schedule": 15.0,
+        },
+    },
 )
 
 
 @celery_app.task(name="system.ping")
 def ping() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@celery_app.task(name="risk_alerts.queue_sla_notifications")
+def queue_risk_alert_sla_notifications() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            queued = queue_due_sla_notifications(db)
+            return {"queued": queued}
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="risk_alerts.dispatch_notifications")
+def dispatch_risk_alert_notifications() -> dict[str, int]:
+    database = Database(settings)
+    gateway = (
+        MemoryNotificationGateway()
+        if settings.notification_backend == "memory"
+        else LoggingNotificationGateway()
+    )
+    try:
+        with database.session_factory() as db:
+            return dispatch_pending_notifications(db, gateway)
+    finally:
+        database.dispose()

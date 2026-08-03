@@ -113,11 +113,15 @@
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/risk-alerts?kind=...&severity=...&status=...&query=...` | 审核员/管理员 + MFA | 按告警类型、严重度、状态、告警 ID 或候选 ID 查询；仅返回聚合证据 |
-| `GET` | `/admin/risk-alerts/{alert_id}` | 审核员/管理员 + MFA | 返回告警投影和不可变检测/处置时间线，不返回 IP、安装标识或相关性键 |
-| `POST` | `/admin/risk-alerts/{alert_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；目标状态与结果码强匹配，写入不可变事件与最小披露审计 |
+| `GET` | `/admin/risk-alerts?kind=...&severity=...&status=...&assigned_to_id=...&overdue=true&query=...` | 审核员/管理员 + MFA | 按告警类型、严重度、状态、负责人、实时 SLA 超时和告警/候选 ID 查询；仅返回聚合证据 |
+| `GET` | `/admin/risk-alerts/operators` | 审核员/管理员 + MFA | 仅返回状态正常、角色为 moderator/admin 且启用 TOTP 的可指派人员 |
+| `GET` | `/admin/risk-alerts/{alert_id}` | 审核员/管理员 + MFA | 返回告警投影、SLA、负责人、不可变时间线和通知投递状态，不返回邮箱、IP、安装标识或关联键 |
+| `POST` | `/admin/risk-alerts/{alert_id}/assign` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；只允许指派给可用 MFA 操作者，写入负责人变化事件、通知 Outbox 和最小披露审计 |
+| `POST` | `/admin/risk-alerts/{alert_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；目标状态与结果码强匹配，写入不可变事件、通知 Outbox 与最小披露审计 |
 
-`risk-alert-v1` 在 15 分钟内观察到至少 3 个独立当前失败组且失败权重不低于 3.0 时创建 `failure_surge/high` 告警。同一候选、类型和规则版本只保留一个活跃告警；处置状态为 `open/acknowledged/resolved`，已解决告警可受控重开。首版不自动封禁账号或扣减信誉。
+`risk-alert-v1` 在 15 分钟内观察到至少 3 个独立当前失败组且失败权重不低于 3.0 时创建 `failure_surge/high` 告警。同一候选、类型和规则版本只保留一个活跃告警；处置状态为 `open/acknowledged/resolved`，已解决告警可受控重开。`risk-alert-sla-v1` 固定 15 分钟首次响应和 240 分钟解决目标；告警保存规则版本和绝对截止时间，Worker 扫描响应/解决超时并通过事务 Outbox 有限重试投递。首版不自动封禁账号或扣减信誉。
+
+Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/resolved/reopened`，状态为 `pending/sent/failed`。通知记录不复制接收地址；投递时从用户记录读取地址，载荷只包含投递 ID、类型、告警 ID、严重级别和适用截止时间。
 
 ## 桌面更新发布与下载
 

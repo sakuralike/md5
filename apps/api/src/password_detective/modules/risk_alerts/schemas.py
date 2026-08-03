@@ -7,9 +7,12 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from password_detective.db.models.risk_alert import (
     RiskAlertKind,
+    RiskAlertNotificationKind,
+    RiskAlertNotificationStatus,
     RiskAlertSeverity,
     RiskAlertStatus,
 )
+from password_detective.db.models.user import UserRole
 
 
 class RiskAlertResolutionCode(StrEnum):
@@ -17,6 +20,14 @@ class RiskAlertResolutionCode(StrEnum):
     MITIGATED = "admin.mitigated"
     FALSE_POSITIVE = "admin.false_positive"
     REOPENED = "admin.reopened"
+
+
+class RiskAlertSlaState(StrEnum):
+    WITHIN_SLA = "within_sla"
+    ACKNOWLEDGEMENT_OVERDUE = "acknowledgement_overdue"
+    RESOLUTION_OVERDUE = "resolution_overdue"
+    MET = "met"
+    BREACHED = "breached"
 
 
 class RiskAlertTransitionRequest(BaseModel):
@@ -36,9 +47,7 @@ class RiskAlertTransitionRequest(BaseModel):
     def validate_code_for_status(self) -> RiskAlertTransitionRequest:
         allowed = {
             RiskAlertStatus.OPEN: {RiskAlertResolutionCode.REOPENED},
-            RiskAlertStatus.ACKNOWLEDGED: {
-                RiskAlertResolutionCode.INVESTIGATION_STARTED
-            },
+            RiskAlertStatus.ACKNOWLEDGED: {RiskAlertResolutionCode.INVESTIGATION_STARTED},
             RiskAlertStatus.RESOLVED: {
                 RiskAlertResolutionCode.MITIGATED,
                 RiskAlertResolutionCode.FALSE_POSITIVE,
@@ -49,6 +58,25 @@ class RiskAlertTransitionRequest(BaseModel):
         return self
 
 
+class RiskAlertAssignmentRequest(BaseModel):
+    assignee_id: str = Field(min_length=1, max_length=36)
+    assignment_note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("assignment_note")
+    @classmethod
+    def normalize_assignment_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class RiskAlertOperator(BaseModel):
+    id: str
+    username: str
+    role: UserRole
+
+
 class RiskAlertSummary(BaseModel):
     id: str
     candidate_id: str
@@ -57,11 +85,17 @@ class RiskAlertSummary(BaseModel):
     severity: RiskAlertSeverity
     status: RiskAlertStatus
     rule_version: str
+    sla_rule_version: str
+    sla_state: RiskAlertSlaState
     window_started_at: datetime
     window_ended_at: datetime
+    acknowledge_due_at: datetime
+    resolve_due_at: datetime
+    acknowledged_at: datetime | None
     independent_failure_count: int
     failure_weight: float
     assigned_to_id: str | None
+    assigned_to_username: str | None
     resolved_by_id: str | None
     resolution_code: str | None
     resolution_note: str | None
@@ -75,6 +109,8 @@ class RiskAlertEventResponse(BaseModel):
     actor_id: str | None
     previous_status: RiskAlertStatus | None
     next_status: RiskAlertStatus
+    previous_assignee_id: str | None
+    next_assignee_id: str | None
     action: str
     reason_code: str
     note: str | None
@@ -82,8 +118,22 @@ class RiskAlertEventResponse(BaseModel):
     created_at: datetime
 
 
+class RiskAlertNotificationResponse(BaseModel):
+    id: str
+    recipient_user_id: str
+    recipient_username: str
+    kind: RiskAlertNotificationKind
+    status: RiskAlertNotificationStatus
+    attempts: int
+    available_at: datetime
+    sent_at: datetime | None
+    last_error_code: str | None
+    created_at: datetime
+
+
 class RiskAlertDetail(RiskAlertSummary):
     events: list[RiskAlertEventResponse]
+    notifications: list[RiskAlertNotificationResponse]
 
 
 class RiskAlertListResponse(BaseModel):
@@ -99,4 +149,12 @@ class RiskAlertTransitionResponse(BaseModel):
     current_status: RiskAlertStatus
     event_id: str
     resolution_code: RiskAlertResolutionCode
+    request_id: str | None
+
+
+class RiskAlertAssignmentResponse(BaseModel):
+    alert_id: str
+    previous_assignee_id: str | None
+    current_assignee_id: str
+    event_id: str
     request_id: str | None

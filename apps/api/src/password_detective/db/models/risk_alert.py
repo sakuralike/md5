@@ -25,6 +25,21 @@ class RiskAlertStatus(StrEnum):
     RESOLVED = "resolved"
 
 
+class RiskAlertNotificationKind(StrEnum):
+    DETECTED = "detected"
+    ASSIGNED = "assigned"
+    ACKNOWLEDGEMENT_OVERDUE = "acknowledgement_overdue"
+    RESOLUTION_OVERDUE = "resolution_overdue"
+    RESOLVED = "resolved"
+    REOPENED = "reopened"
+
+
+class RiskAlertNotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class RiskAlert(Base):
     """Current risk-alert projection. Detection and handling history lives in events."""
 
@@ -51,8 +66,12 @@ class RiskAlert(Base):
         index=True,
     )
     rule_version: Mapped[str] = mapped_column(String(32), index=True)
+    sla_rule_version: Mapped[str] = mapped_column(String(32), index=True)
     window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     window_ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    acknowledge_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    resolve_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     independent_failure_count: Mapped[int] = mapped_column(Integer)
     failure_weight: Mapped[float] = mapped_column(Float)
     assigned_to_id: Mapped[str | None] = mapped_column(
@@ -72,16 +91,24 @@ class RiskAlert(Base):
     )
 
     candidate = relationship("PasswordCandidate")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_id])
+    resolved_by = relationship("User", foreign_keys=[resolved_by_id])
     events = relationship(
         "RiskAlertEvent",
         back_populates="alert",
         cascade="all, delete-orphan",
         order_by="RiskAlertEvent.created_at",
     )
+    notifications = relationship(
+        "RiskAlertNotification",
+        back_populates="alert",
+        cascade="all, delete-orphan",
+        order_by="RiskAlertNotification.created_at",
+    )
 
 
 class RiskAlertEvent(Base):
-    """Append-only alert detection and administration timeline."""
+    """Append-only alert detection, assignment and administration timeline."""
 
     __tablename__ = "risk_alert_events"
 
@@ -98,6 +125,12 @@ class RiskAlertEvent(Base):
     next_status: Mapped[RiskAlertStatus] = mapped_column(
         Enum(RiskAlertStatus, native_enum=False, length=16)
     )
+    previous_assignee_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    next_assignee_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     action: Mapped[str] = mapped_column(String(64))
     reason_code: Mapped[str] = mapped_column(String(64))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -107,3 +140,44 @@ class RiskAlertEvent(Base):
     )
 
     alert = relationship("RiskAlert", back_populates="events")
+
+
+class RiskAlertNotification(Base):
+    """Transactional outbox entry for minimum-disclosure operator notifications."""
+
+    __tablename__ = "risk_alert_notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    alert_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("risk_alerts.id", ondelete="CASCADE"), index=True
+    )
+    event_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("risk_alert_events.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[RiskAlertNotificationKind] = mapped_column(
+        Enum(RiskAlertNotificationKind, native_enum=False, length=32), index=True
+    )
+    status: Mapped[RiskAlertNotificationStatus] = mapped_column(
+        Enum(RiskAlertNotificationStatus, native_enum=False, length=16),
+        default=RiskAlertNotificationStatus.PENDING,
+        index=True,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    alert = relationship("RiskAlert", back_populates="notifications")
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
