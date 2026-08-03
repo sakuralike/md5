@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：M4 第 9 次迭代已完成提供商无关的 SMTP 邮件投递、STARTTLS/SSL 生产门禁、纯文本账户/风险模板和 Message-ID 回执；签名 Webhook、投递指标、失败重放、`risk-alert-sla-v1`、MFA 值班指派、事务通知 Outbox、候选关联降权及 M3 桌面发布闭环保持完成。当前工程估算为：功能代码约 93%、MVP 验收约 81%、生产上线准备度约 53%；该估算不替代真实 SMTP 服务商、发件域名和目标环境验收。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：M4 第 9 次迭代已完成提供商无关的 SMTP 邮件投递、STARTTLS/SSL 生产门禁、纯文本账户/风险模板和 Message-ID 回执；签名 Webhook、投递指标、失败重放、`risk-alert-sla-v1`、MFA 值班指派、事务通知 Outbox、候选关联降权及 M3 桌面发布闭环保持完成。2026 年 8 月 3 日整体复核估算为：全规格功能实现度约 82%、MVP 验收约 68%、生产上线准备度约 45%；用户中心隐私能力、管理治理菜单、跨端 E2E、安全扫描、恢复演练和生产环境验收仍未闭环。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -70,7 +70,7 @@ docker compose up --build
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
-- [项目整体完成度审计](./docs/development/2026-08-02-completion-audit.md)
+- [项目整体完成度审计（2026-08-03 复核）](./docs/development/2026-08-03-completion-audit.md)
 - [M4 第 9 次迭代记录](./docs/development/2026-08-03-m4-iteration-9.md)
 - [M4 第 8 次迭代记录](./docs/development/2026-08-03-m4-iteration-8.md)
 - [M4 第 7 次迭代记录](./docs/development/2026-08-03-m4-iteration-7.md)
