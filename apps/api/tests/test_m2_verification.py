@@ -95,7 +95,7 @@ def test_two_independent_success_feedbacks_verify_and_settle_points(client):
     assert second.status_code == 200
     assert second.json()["candidate_status"] == "verified"
     assert second.json()["snapshot"]["independent_success_count"] == 2
-    assert second.json()["snapshot"]["rule_version"] == "verification-v1"
+    assert second.json()["snapshot"]["rule_version"] == "verification-v2"
 
     cached = _feedback(
         client,

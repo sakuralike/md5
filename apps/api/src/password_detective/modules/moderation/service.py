@@ -22,12 +22,21 @@ from password_detective.db.models.verification import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.correlation.analysis import (
+    CORRELATION_RULE_VERSION,
+    CorrelationAnalysis,
+    CorrelationGroup,
+    list_correlation_assessments,
+)
 from password_detective.modules.moderation.schemas import (
     CandidateModerationDetail,
     CandidateModerationListResponse,
     CandidateModerationSummary,
     CandidateTransitionRequest,
     CandidateTransitionResponse,
+    CorrelationAssessmentResponse,
+    CorrelationGroupResponse,
+    CorrelationSnapshotResponse,
     EvidenceEventResponse,
     EvidenceSnapshotResponse,
     FingerprintSummary,
@@ -44,6 +53,7 @@ from password_detective.modules.reputation.adjustments import (
 )
 from password_detective.modules.verification.service import (
     ACTIVE_RULE,
+    candidate_correlation_analysis,
     candidate_evidence_totals,
     has_ever_been_verified,
     settle_first_verification_rewards,
@@ -141,6 +151,7 @@ def get_candidate_detail(db: Session, candidate_id: str) -> CandidateModerationD
         raise AppError("moderation.candidate_not_found", "未找到候选记录", status_code=404)
     counts = _candidate_counts(db, [candidate.id])
     totals = candidate_evidence_totals(db, candidate.id)
+    correlation = candidate_correlation_analysis(db, candidate.id)
     evidence_events = list(
         db.scalars(
             select(VerificationEvidenceEvent)
@@ -165,6 +176,25 @@ def get_candidate_detail(db: Session, candidate_id: str) -> CandidateModerationD
             success_weight=round(totals.success_weight, 3),
             failure_weight=round(totals.failure_weight, 3),
         ),
+        correlation_snapshot=_correlation_snapshot(correlation),
+        correlation_groups=[_correlation_group(group) for group in correlation.groups],
+        correlation_assessments=[
+            CorrelationAssessmentResponse(
+                id=assessment.id,
+                trigger_evidence_id=assessment.trigger_evidence_id,
+                rule_version=assessment.rule_version,
+                feedback_count=assessment.feedback_count,
+                independent_group_count=assessment.independent_group_count,
+                correlated_group_count=assessment.correlated_group_count,
+                downweighted_feedback_count=assessment.downweighted_feedback_count,
+                raw_success_weight=round(assessment.raw_success_weight, 3),
+                effective_success_weight=round(assessment.effective_success_weight, 3),
+                raw_failure_weight=round(assessment.raw_failure_weight, 3),
+                effective_failure_weight=round(assessment.effective_failure_weight, 3),
+                created_at=assessment.created_at,
+            )
+            for assessment in list_correlation_assessments(db, candidate.id)
+        ],
         evidence_events=[
             EvidenceEventResponse(
                 id=event.id,
@@ -391,4 +421,34 @@ def _reward_adjustment(
         reason_code=event.reason_code,
         rule_version=event.rule_version,
         created_at=event.created_at,
+    )
+
+
+def _correlation_snapshot(analysis: CorrelationAnalysis) -> CorrelationSnapshotResponse:
+    return CorrelationSnapshotResponse(
+        rule_version=CORRELATION_RULE_VERSION,
+        feedback_count=analysis.feedback_count,
+        independent_group_count=analysis.independent_group_count,
+        correlated_group_count=analysis.correlated_group_count,
+        downweighted_feedback_count=analysis.downweighted_feedback_count,
+        raw_success_weight=round(analysis.raw_success_weight, 3),
+        effective_success_weight=round(analysis.effective_success_weight, 3),
+        raw_failure_weight=round(analysis.raw_failure_weight, 3),
+        effective_failure_weight=round(analysis.effective_failure_weight, 3),
+    )
+
+
+def _correlation_group(group: CorrelationGroup) -> CorrelationGroupResponse:
+    return CorrelationGroupResponse(
+        group_id=f"group-{group.ordinal:02d}",
+        feedback_ids=list(group.feedback_ids),
+        user_ids=list(group.user_ids),
+        shared_signals=list(group.shared_signals),
+        member_count=group.member_count,
+        success_count=group.success_count,
+        failure_count=group.failure_count,
+        raw_success_weight=round(group.raw_success_weight, 3),
+        effective_success_weight=round(group.effective_success_weight, 3),
+        raw_failure_weight=round(group.raw_failure_weight, 3),
+        effective_failure_weight=round(group.effective_failure_weight, 3),
     )

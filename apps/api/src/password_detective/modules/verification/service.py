@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 
 from sqlalchemy import desc, func, select
@@ -24,6 +23,11 @@ from password_detective.db.models.verification import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.correlation.analysis import (
+    CorrelationAnalysis,
+    analyze_feedback_correlations,
+    persist_correlation_assessment,
+)
 from password_detective.modules.reputation.adjustments import (
     reconcile_candidate_rewards,
 )
@@ -51,7 +55,7 @@ class VerificationRule:
 
 
 ACTIVE_RULE = VerificationRule(
-    version="verification-v1",
+    version="verification-v2",
     independent_success_required=2,
     maximum_failure_weight_for_verification=2.0,
     independent_failure_quarantine=3,
@@ -65,6 +69,10 @@ class EvidenceTotals:
     independent_failure_count: int
     success_weight: float
     failure_weight: float
+    raw_success_weight: float
+    raw_failure_weight: float
+    correlated_group_count: int
+    downweighted_feedback_count: int
 
     def to_snapshot(self, rule: VerificationRule = ACTIVE_RULE) -> VerificationSnapshot:
         return VerificationSnapshot(
@@ -89,29 +97,29 @@ def feedback_weight(role: UserRole) -> float:
 
 
 def summarize_feedbacks(feedbacks: list[CandidateFeedback]) -> EvidenceTotals:
-    """Deduplicate correlated evidence by installation, then IP subnet, then account."""
+    """Apply candidate-local connected-component correlation and dynamic weight caps."""
 
-    grouped: dict[FeedbackOutcome, dict[str, list[float]]] = {
-        FeedbackOutcome.SUCCESS: defaultdict(list),
-        FeedbackOutcome.FAILURE: defaultdict(list),
-    }
-    for feedback in feedbacks:
-        correlation_key = (
-            f"installation:{feedback.installation_id_hash}"
-            if feedback.installation_id_hash
-            else f"ip:{feedback.ip_prefix}"
-            if feedback.ip_prefix
-            else f"user:{feedback.user_id}"
-        )
-        grouped[feedback.outcome][correlation_key].append(feedback.weight)
+    analysis = analyze_feedback_correlations(feedbacks)
+    return _evidence_totals(analysis)
 
-    success_groups = grouped[FeedbackOutcome.SUCCESS]
-    failure_groups = grouped[FeedbackOutcome.FAILURE]
+
+def candidate_correlation_analysis(db: Session, candidate_id: str) -> CorrelationAnalysis:
+    feedbacks = list(
+        db.scalars(select(CandidateFeedback).where(CandidateFeedback.candidate_id == candidate_id))
+    )
+    return analyze_feedback_correlations(feedbacks)
+
+
+def _evidence_totals(analysis: CorrelationAnalysis) -> EvidenceTotals:
     return EvidenceTotals(
-        independent_success_count=len(success_groups),
-        independent_failure_count=len(failure_groups),
-        success_weight=sum(max(weights) for weights in success_groups.values()),
-        failure_weight=sum(max(weights) for weights in failure_groups.values()),
+        independent_success_count=analysis.independent_success_count,
+        independent_failure_count=analysis.independent_failure_count,
+        success_weight=analysis.effective_success_weight,
+        failure_weight=analysis.effective_failure_weight,
+        raw_success_weight=analysis.raw_success_weight,
+        raw_failure_weight=analysis.raw_failure_weight,
+        correlated_group_count=analysis.correlated_group_count,
+        downweighted_feedback_count=analysis.downweighted_feedback_count,
     )
 
 
@@ -127,10 +135,7 @@ def has_ever_been_verified(db: Session, candidate_id: str) -> bool:
 
 
 def candidate_evidence_totals(db: Session, candidate_id: str) -> EvidenceTotals:
-    feedbacks = list(
-        db.scalars(select(CandidateFeedback).where(CandidateFeedback.candidate_id == candidate_id))
-    )
-    return summarize_feedbacks(feedbacks)
+    return _evidence_totals(candidate_correlation_analysis(db, candidate_id))
 
 
 @dataclass(frozen=True)
@@ -229,7 +234,14 @@ def apply_candidate_evidence(
     )
     db.add(evidence_event)
     db.flush()
-    totals = candidate_evidence_totals(db, candidate.id)
+    analysis = candidate_correlation_analysis(db, candidate.id)
+    totals = _evidence_totals(analysis)
+    persist_correlation_assessment(
+        db,
+        candidate_id=candidate.id,
+        trigger_evidence_id=evidence_event.id,
+        analysis=analysis,
+    )
     _apply_automatic_transition(
         db,
         settings,
