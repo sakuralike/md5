@@ -448,3 +448,129 @@ def test_alert_sla_overdue_notifications_are_deduplicated_and_queryable(client):
     detail = client.get(f"/api/v1/admin/risk-alerts/{alert_id}", headers=admin_headers)
     assert detail.status_code == 200
     assert detail.json()["sla_state"] == "resolution_overdue"
+
+
+class _FailingRiskAlertGateway:
+    provider_name = "synthetic-failing"
+
+    def send_risk_alert(self, **kwargs):  # noqa: ANN003, ANN201
+        del kwargs
+        raise RuntimeError("synthetic provider outage")
+
+
+def test_failed_notification_delivery_metrics_and_idempotent_replay(client):
+    admin_headers = _admin_headers(client, "delivery_ops_admin")
+    candidate_id, _ = _trigger_failure_surge(client, "delivery_ops")
+    alert_id = client.get(
+        "/api/v1/admin/risk-alerts",
+        headers=admin_headers,
+        params={"query": candidate_id},
+    ).json()["items"][0]["id"]
+    gateway = _FailingRiskAlertGateway()
+    observed_at = utc_now() + timedelta(seconds=1)
+
+    with client.app.state.database.session_factory() as db:
+        assert dispatch_pending_notifications(db, gateway, now=observed_at) == {
+            "selected": 1,
+            "sent": 0,
+            "failed": 1,
+        }
+        assert dispatch_pending_notifications(
+            db, gateway, now=observed_at + timedelta(minutes=2)
+        ) == {"selected": 1, "sent": 0, "failed": 1}
+        assert dispatch_pending_notifications(
+            db, gateway, now=observed_at + timedelta(minutes=5)
+        ) == {"selected": 1, "sent": 0, "failed": 1}
+        notification = db.scalar(
+            select(RiskAlertNotification).where(RiskAlertNotification.alert_id == alert_id)
+        )
+        assert notification is not None
+        notification_id = notification.id
+        assert notification.status == RiskAlertNotificationStatus.FAILED
+        assert notification.provider == "synthetic-failing"
+        assert notification.failed_at is not None
+        assert notification.failed_at.replace(tzinfo=observed_at.tzinfo) == (
+            observed_at + timedelta(minutes=5)
+        )
+        assert notification.attempts == 3
+
+    metrics = client.get(
+        "/api/v1/admin/risk-alerts/notification-deliveries/metrics",
+        headers=admin_headers,
+    )
+    assert metrics.status_code == 200
+    metrics_body = metrics.json()
+    assert metrics_body["failed_count"] == 1
+    assert metrics_body["failed_last_24_hours"] == 1
+    assert metrics_body["providers"] == [
+        {
+            "provider": "synthetic-failing",
+            "pending_count": 0,
+            "sent_count": 0,
+            "failed_count": 1,
+        }
+    ]
+
+    deliveries = client.get(
+        "/api/v1/admin/risk-alerts/notification-deliveries",
+        headers=admin_headers,
+        params={"status": "failed", "provider": "synthetic-failing"},
+    )
+    assert deliveries.status_code == 200
+    assert deliveries.json()["total"] == 1
+    item = deliveries.json()["items"][0]
+    assert item["id"] == notification_id
+    assert item["alert_id"] == alert_id
+    assert item["provider"] == "synthetic-failing"
+    assert item["failed_at"] is not None
+    assert "recipient_email" not in item
+
+    replay_headers = {
+        **admin_headers,
+        "Idempotency-Key": "risk-alert-notification-replay-synthetic",
+    }
+    first_replay = client.post(
+        f"/api/v1/admin/risk-alerts/notification-deliveries/{notification_id}/replay",
+        headers=replay_headers,
+        json={"reason": "  synthetic provider recovered  "},
+    )
+    second_replay = client.post(
+        f"/api/v1/admin/risk-alerts/notification-deliveries/{notification_id}/replay",
+        headers=replay_headers,
+        json={"reason": "  synthetic provider recovered  "},
+    )
+    assert first_replay.status_code == 200
+    assert second_replay.status_code == 200
+    assert first_replay.json() == second_replay.json()
+    assert first_replay.json()["status"] == "pending"
+    assert first_replay.json()["replay_count"] == 1
+
+    with client.app.state.database.session_factory() as db:
+        notification = db.get(RiskAlertNotification, notification_id)
+        assert notification is not None
+        assert notification.status == RiskAlertNotificationStatus.PENDING
+        assert notification.attempts == 0
+        assert notification.provider is None
+        assert notification.provider_message_id is None
+        assert notification.failed_at is None
+        assert notification.last_error_code is None
+        assert notification.replay_count == 1
+        assert notification.last_replayed_by_id is not None
+        audits = list(
+            db.scalars(
+                select(AuditLog).where(
+                    AuditLog.action == "risk_alert.notification_replay",
+                    AuditLog.target_id == notification_id,
+                )
+            )
+        )
+        assert len(audits) == 1
+        assert audits[0].details["reason"] == "synthetic provider recovered"
+
+    invalid_replay = client.post(
+        f"/api/v1/admin/risk-alerts/notification-deliveries/{notification_id}/replay",
+        headers={**admin_headers, "Idempotency-Key": "risk-alert-replay-not-failed"},
+        json={"reason": "synthetic duplicate replay"},
+    )
+    assert invalid_replay.status_code == 409
+    assert invalid_replay.json()["code"] == "risk_alert.notification_not_failed"

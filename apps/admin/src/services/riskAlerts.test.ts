@@ -2,9 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assignRiskAlert,
   createRiskAlertAssignmentKey,
+  createRiskAlertNotificationReplayKey,
   createRiskAlertTransitionKey,
+  getRiskAlertNotificationMetrics,
+  listRiskAlertNotifications,
   listRiskAlertOperators,
   listRiskAlerts,
+  replayRiskAlertNotification,
   transitionRiskAlert,
 } from "./riskAlerts";
 
@@ -107,6 +111,59 @@ describe("risk-alert administration", () => {
     });
   });
 
+  it("loads and filters notification delivery operations", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ pending_count: 0, sent_count: 1, failed_count: 1 }))
+      .mockResolvedValueOnce(jsonResponse({ items: [], page: 1, page_size: 50, total: 0 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getRiskAlertNotificationMetrics("mfa-token");
+    await listRiskAlertNotifications(
+      {
+        status: "failed",
+        kind: "detected",
+        provider: "  synthetic-provider  ",
+        pageSize: 50,
+      },
+      "mfa-token",
+    );
+
+    const [metricsUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [listUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const parsed = new URL(listUrl, "http://synthetic.local");
+    expect(metricsUrl).toContain("/admin/risk-alerts/notification-deliveries/metrics");
+    expect(parsed.pathname).toContain("/admin/risk-alerts/notification-deliveries");
+    expect(parsed.searchParams.get("status")).toBe("failed");
+    expect(parsed.searchParams.get("kind")).toBe("detected");
+    expect(parsed.searchParams.get("provider")).toBe("synthetic-provider");
+    expect(parsed.searchParams.get("page_size")).toBe("50");
+  });
+
+  it("replays a failed delivery idempotently", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ notification_id: "delivery-1", status: "pending", replay_count: 1 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await replayRiskAlertNotification(
+      "delivery/synthetic",
+      { reason: "synthetic provider recovered" },
+      "mfa-token",
+      "risk-alert-notification-replay-key",
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(url).toContain(
+      "/admin/risk-alerts/notification-deliveries/delivery%2Fsynthetic/replay",
+    );
+    expect(headers.get("Idempotency-Key")).toBe("risk-alert-notification-replay-key");
+    expect(JSON.parse(String(init.body))).toEqual({
+      reason: "synthetic provider recovered",
+    });
+  });
+
   it("creates namespaced idempotency keys", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
     expect(createRiskAlertTransitionKey()).toBe(
@@ -114,6 +171,9 @@ describe("risk-alert administration", () => {
     );
     expect(createRiskAlertAssignmentKey()).toBe(
       "admin-risk-alert-assignment-synthetic-request-id",
+    );
+    expect(createRiskAlertNotificationReplayKey()).toBe(
+      "admin-risk-alert-notification-replay-synthetic-request-id",
     );
   });
 });

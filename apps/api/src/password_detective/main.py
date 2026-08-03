@@ -11,9 +11,8 @@ from password_detective.core.config import Settings, get_settings
 from password_detective.core.errors import AppError, app_error_handler, validation_error_handler
 from password_detective.core.logging import configure_logging
 from password_detective.core.notifications import (
-    LoggingNotificationGateway,
-    MemoryNotificationGateway,
     NotificationGateway,
+    build_notification_gateway,
 )
 from password_detective.core.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from password_detective.core.request_context import RequestContextMiddleware
@@ -59,11 +58,7 @@ def create_app(
         )
     else:
         rate_limiter = InMemoryRateLimiter()
-    notifications = notification_gateway or (
-        MemoryNotificationGateway()
-        if resolved_settings.notification_backend == "memory"
-        else LoggingNotificationGateway()
-    )
+    notifications = notification_gateway or build_notification_gateway(resolved_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

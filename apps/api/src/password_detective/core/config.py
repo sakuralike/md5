@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,7 +42,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     rate_limit_namespace: str = "password-detective"
-    notification_backend: Literal["memory", "log"] = "memory"
+    notification_backend: Literal["memory", "log", "webhook"] = "memory"
+    notification_webhook_url: str = ""
+    notification_webhook_secret: str = ""
+    notification_webhook_timeout_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
     browser_cookie_secure: bool = False
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     auto_create_tables: bool = True
@@ -62,6 +65,16 @@ class Settings(BaseSettings):
         if info.data.get("app_env") == "production" and not value:
             raise ValueError("生产环境必须启用安全 Cookie")
         return value
+
+    @model_validator(mode="after")
+    def validate_notification_webhook(self) -> Settings:
+        if self.notification_backend != "webhook":
+            return self
+        if not self.notification_webhook_url.startswith("https://"):
+            raise ValueError("Webhook 通知后端必须配置 HTTPS URL")
+        if len(self.notification_webhook_secret) < 32:
+            raise ValueError("Webhook 通知签名密钥至少需要 32 个字符")
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

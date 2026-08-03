@@ -16,6 +16,8 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.risk_alert import (
     RiskAlertKind,
+    RiskAlertNotificationKind,
+    RiskAlertNotificationStatus,
     RiskAlertSeverity,
     RiskAlertStatus,
 )
@@ -26,6 +28,10 @@ from password_detective.modules.risk_alerts.schemas import (
     RiskAlertAssignmentResponse,
     RiskAlertDetail,
     RiskAlertListResponse,
+    RiskAlertNotificationListResponse,
+    RiskAlertNotificationMetricsResponse,
+    RiskAlertNotificationReplayRequest,
+    RiskAlertNotificationReplayResponse,
     RiskAlertOperator,
     RiskAlertTransitionRequest,
     RiskAlertTransitionResponse,
@@ -33,8 +39,11 @@ from password_detective.modules.risk_alerts.schemas import (
 from password_detective.modules.risk_alerts.service import (
     assign_risk_alert,
     get_risk_alert_detail,
+    get_risk_alert_notification_metrics,
+    list_risk_alert_notifications,
     list_risk_alert_operators,
     list_risk_alerts,
+    replay_risk_alert_notification,
     transition_risk_alert,
 )
 
@@ -75,6 +84,88 @@ def risk_alert_operators(
 ) -> list[RiskAlertOperator]:
     del principal
     return list_risk_alert_operators(db)
+
+
+@router.get(
+    "/notification-deliveries/metrics",
+    response_model=RiskAlertNotificationMetricsResponse,
+)
+def risk_alert_notification_metrics(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+) -> RiskAlertNotificationMetricsResponse:
+    del principal
+    return get_risk_alert_notification_metrics(db)
+
+
+@router.get(
+    "/notification-deliveries",
+    response_model=RiskAlertNotificationListResponse,
+)
+def risk_alert_notification_list(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    status: RiskAlertNotificationStatus | None = None,
+    kind: RiskAlertNotificationKind | None = None,
+    provider: Annotated[str | None, Query(max_length=32)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> RiskAlertNotificationListResponse:
+    del principal
+    return list_risk_alert_notifications(
+        db,
+        status=status,
+        kind=kind,
+        provider=provider,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post(
+    "/notification-deliveries/{notification_id}/replay",
+    response_model=RiskAlertNotificationReplayResponse,
+    dependencies=[
+        Depends(rate_limit("admin.risk_alert.notification_replay", limit=20, window_seconds=60))
+    ],
+)
+def risk_alert_notification_replay(
+    notification_id: str,
+    payload: RiskAlertNotificationReplayRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> RiskAlertNotificationReplayResponse:
+    request_body = payload.model_dump(mode="json")
+    lease = acquire_idempotency(
+        db,
+        scope="admin.risk_alert.notification_replay",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest({"notification_id": notification_id, **request_body}),
+    )
+    if lease.cached_response is not None:
+        return RiskAlertNotificationReplayResponse.model_validate(lease.cached_response)
+    try:
+        response = replay_risk_alert_notification(
+            db,
+            notification_id=notification_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=200,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
 
 
 @router.get("/{alert_id}", response_model=RiskAlertDetail)
