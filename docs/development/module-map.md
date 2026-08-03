@@ -9,9 +9,9 @@
 |---|---|---|---|
 | Core | `apps/api/src/password_detective/core/` | 配置、令牌、Argon2id、错误、request_id、Redis 限流、数据库幂等、统一通知网关、`notification-webhook-v1` HTTPS/HMAC 签名、浏览器 Cookie、TOTP 秘钥加密、候选秘密保险库、递归日志脱敏 | 生产 KMS 适配器、通知凭据轮换、指标导出与清理任务 |
 | Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务、可选身份解析 | M2 个人资料扩展与风险策略 |
-| Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数和个人贡献列表 | 高风险揭示二次验证、规模查询优化 |
+| Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数、个人贡献列表和不保存完整指纹的查询遥测 | 高风险揭示二次验证、遥测保留/归档和规模查询优化 |
 | Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v2` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
-| Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定与 MFA 访问门禁 | 举报、配置、危险操作二次确认和审计查询 |
+| Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP 绑定、MFA 访问门禁和真实治理仪表盘聚合 | 用户治理、配置、危险操作二次确认和审计查询/导出 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
 | Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人案件列表、MFA 统一队列/详情、受控状态矩阵、不可变事件、限流、幂等和审计脱敏 | 结果通知、SLA、候选处置编排、账号申诉和自动分派 |
 | Risk Alerts | `apps/api/src/password_detective/modules/risk_alerts/` | `risk-alert-v1` 检测、`risk-alert-sla-v1` 响应/解决时限、MFA 值班人员指派、负责人/超时筛选、不可变事件、事务通知 Outbox、SMTP/Webhook 投递、投递指标/失败队列、幂等人工重放和处置 | 排班与升级链、真实 SMTP 服务商/发件域名验收、最终送达回调、指标导出、动态规则和批量操作；关联分析由 Correlation 模块提供 |
@@ -28,7 +28,7 @@
 | 模块 | 路径 | 当前职责 | 下一步 |
 |---|---|---|---|
 | 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈、个人贡献、举报/申诉，以及积分/信誉/反馈历史中心 | Web Worker 隔离、案件结果通知、超大文件性能与浏览器 E2E |
-| 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、候选审核队列/详情/人工处置、状态与奖励校正时间线、举报/申诉队列/详情、风险告警 SLA/负责人/投递指标/失败重放闭环、桌面发布草稿/上传重试/发布/撤回工作台 | 用户处置、危险操作确认、审计查询、案件与候选状态编排、真实通知环境验收与全局风险指标工作台 |
+| 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、真实治理指标仪表盘、候选审核队列/详情/人工处置、状态与奖励校正时间线、举报/申诉队列/详情、风险告警 SLA/负责人/投递指标/失败重放闭环、桌面发布草稿/上传重试/发布/撤回工作台 | 用户处置、危险操作确认、审计查询/导出、系统配置、案件与候选状态编排和真实通知环境验收 |
 | Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执、稳定通道自动检查与显式浏览器下载入口 | Windows 10/11 实机 E2E、物理超大样本、静默安装与正式发布签名 |
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
 | API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、候选审核/状态事件/奖励校正、关联组/动态限权摘要、举报/申诉案件、风险告警 SLA/投递指标/失败重放、桌面安装/挑战/回执、发布记录和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |

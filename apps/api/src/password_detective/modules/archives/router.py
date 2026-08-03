@@ -46,11 +46,18 @@ router = APIRouter(tags=["档案与贡献"])
 )
 def search(
     fingerprint: Annotated[str, Query(min_length=32, max_length=128)],
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
     algorithm: FingerprintAlgorithm | None = None,
 ) -> ArchiveSearchResponse:
-    return search_archive(db, digest=fingerprint, algorithm=algorithm, principal=principal)
+    return search_archive(
+        db,
+        digest=fingerprint,
+        algorithm=algorithm,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @router.post(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,8 @@ from password_detective.core.security import hash_refresh_token
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.user import UserRole
 from password_detective.db.models.user_session import UserSession
+from password_detective.modules.admin.dashboard import get_dashboard_summary
+from password_detective.modules.admin.dashboard_schemas import AdminDashboardSummary
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
@@ -120,6 +122,15 @@ def access_check(
     principal: Annotated[Principal, Depends(require_admin_mfa)],
 ) -> dict[str, str]:
     return {"status": "authorized", "role": principal.user.role.value, "mfa": "verified"}
+
+
+@router.get("/dashboard/summary", response_model=AdminDashboardSummary)
+def dashboard_summary(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+    window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
+) -> AdminDashboardSummary:
+    return get_dashboard_summary(db, window_hours=window_hours)
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse)

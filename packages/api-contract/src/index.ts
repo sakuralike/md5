@@ -933,3 +933,30 @@ export interface RiskAlertAssignmentResponse {
   event_id: string;
   request_id: string | null;
 }
+
+export interface AdminQueueBacklog {
+  pending_candidates: number;
+  active_trust_cases: number;
+  active_risk_alerts: number;
+  pending_privacy_exports: number;
+  pending_deletion_requests: number;
+  total: number;
+}
+
+export interface AdminDashboardSummary {
+  window_hours: number;
+  window_started_at: string;
+  generated_at: string;
+  search_count: number;
+  search_hit_count: number;
+  search_hit_rate: number;
+  contribution_count: number;
+  candidate_count: number;
+  verified_candidate_count: number;
+  candidate_verification_rate: number;
+  quarantined_candidate_count: number;
+  audited_operation_count: number;
+  audited_error_count: number;
+  audited_error_rate: number;
+  queue_backlog: AdminQueueBacklog;
+}

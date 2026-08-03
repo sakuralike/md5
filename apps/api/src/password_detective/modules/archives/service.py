@@ -130,12 +130,39 @@ def _candidate_summary(candidate: PasswordCandidate, principal: Principal) -> Ca
     )
 
 
+def _record_search(
+    db: Session,
+    *,
+    query: NormalizedFingerprint,
+    principal: Principal | None,
+    context: ClientContext,
+    archive_id: str | None,
+) -> None:
+    write_audit_log(
+        db,
+        action="archive.search",
+        target_type="archive",
+        target_id=archive_id,
+        result="success",
+        actor_id=principal.user.id if principal is not None else None,
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "algorithm": query.algorithm.value,
+            "matched": archive_id is not None,
+            "authenticated": principal is not None,
+        },
+    )
+    db.commit()
+
+
 def search_archive(
     db: Session,
     *,
     digest: str,
     algorithm: FingerprintAlgorithm | str | None,
     principal: Principal | None,
+    context: ClientContext,
 ) -> ArchiveSearchResponse:
     query = normalize_fingerprint(digest, algorithm)
     fingerprint = db.scalar(
@@ -147,11 +174,19 @@ def search_archive(
         .options(selectinload(ArchiveFingerprint.archive))
     )
     if fingerprint is None:
-        return ArchiveSearchResponse(
+        response = ArchiveSearchResponse(
             matched=False,
             query=query,
             authenticated=principal is not None,
         )
+        _record_search(
+            db,
+            query=query,
+            principal=principal,
+            context=context,
+            archive_id=None,
+        )
+        return response
 
     archive = db.scalar(
         select(Archive)
@@ -177,11 +212,19 @@ def search_archive(
         reverse=True,
     )
     if not visible:
-        return ArchiveSearchResponse(
+        response = ArchiveSearchResponse(
             matched=False,
             query=query,
             authenticated=principal is not None,
         )
+        _record_search(
+            db,
+            query=query,
+            principal=principal,
+            context=context,
+            archive_id=None,
+        )
+        return response
     counts = Counter(candidate.status.value for candidate in visible)
     candidates = (
         [
@@ -191,8 +234,8 @@ def search_archive(
         if principal is not None
         else []
     )
-    return ArchiveSearchResponse(
-        matched=bool(visible),
+    response = ArchiveSearchResponse(
+        matched=True,
         query=query,
         authenticated=principal is not None,
         archive=ArchiveSearchResult(
@@ -211,6 +254,14 @@ def search_archive(
             candidates=candidates,
         ),
     )
+    _record_search(
+        db,
+        query=query,
+        principal=principal,
+        context=context,
+        archive_id=archive.id,
+    )
+    return response
 
 
 def create_submission(
