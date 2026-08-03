@@ -34,6 +34,7 @@ from password_detective.modules.auth.account_tokens import (
 )
 from password_detective.modules.auth.context import get_client_context, get_notification_gateway
 from password_detective.modules.auth.dependencies import Principal, get_current_principal
+from password_detective.modules.auth.reauthentication import issue_reauthentication_grant
 from password_detective.modules.auth.schemas import (
     BrowserTokenResponse,
     EmailTokenRequest,
@@ -43,11 +44,14 @@ from password_detective.modules.auth.schemas import (
     PasswordForgotRequest,
     PasswordResetRequest,
     ProfileUpdateRequest,
+    ReauthenticationRequest,
+    ReauthenticationResponse,
     RefreshRequest,
     RegisterRequest,
     SessionResponse,
     TokenResponse,
     TotpCodeRequest,
+    TotpDisableRequest,
     TotpSetupResponse,
     UserResponse,
 )
@@ -349,6 +353,32 @@ def update_my_profile(
 
 
 @router.post(
+    "/me/security/reauthenticate",
+    response_model=ReauthenticationResponse,
+    dependencies=[Depends(rate_limit("me.reauthenticate", limit=10, window_seconds=3600))],
+)
+def reauthenticate_my_session(
+    payload: ReauthenticationRequest,
+    request: Request,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ReauthenticationResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return issue_reauthentication_grant(
+        db,
+        settings,
+        user=principal.user,
+        session_family_id=principal.session_family_id,
+        purpose=payload.purpose,
+        current_password=payload.current_password,
+        totp_code=payload.totp_code,
+        context=get_client_context(request),
+    )
+
+
+@router.post(
     "/me/security/password/change",
     response_model=MessageResponse,
     dependencies=[Depends(rate_limit("me.password.change", limit=10, window_seconds=3600))],
@@ -359,7 +389,6 @@ def change_my_password(
     principal: Annotated[Principal, Depends(get_current_principal)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     db: Annotated[Session, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
 ) -> MessageResponse:
     lease = acquire_idempotency(
         db,
@@ -374,7 +403,6 @@ def change_my_password(
     try:
         change_password(
             db,
-            settings,
             user=principal.user,
             session_family_id=principal.session_family_id,
             payload=payload,
@@ -463,12 +491,11 @@ def confirm_my_totp(
     dependencies=[Depends(rate_limit("me.totp.disable", limit=10, window_seconds=3600))],
 )
 def disable_my_totp(
-    payload: TotpCodeRequest,
+    payload: TotpDisableRequest,
     request: Request,
     principal: Annotated[Principal, Depends(get_current_principal)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     db: Annotated[Session, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
 ) -> MessageResponse:
     lease = acquire_idempotency(
         db,
@@ -483,9 +510,9 @@ def disable_my_totp(
     try:
         disable_totp(
             db,
-            settings,
             user=principal.user,
-            code=payload.code,
+            session_family_id=principal.session_family_id,
+            reauth_token=payload.reauth_token,
             context=get_client_context(request),
         )
         complete_idempotency(

@@ -4,6 +4,7 @@ import {
   changePassword,
   confirmTotp,
   disableTotp,
+  reauthenticate,
   updateProfile,
 } from "./account";
 
@@ -38,20 +39,32 @@ describe("account security service", () => {
     expect(headers.get("Idempotency-Key")).toBe("synthetic-operation-key");
   });
 
-  it("sends password changes to the dedicated high-risk endpoint", async () => {
-    const fetchMock = stubJsonResponse();
-    const payload = {
+  it("reauthenticates before sending a password change", async () => {
+    const fetchMock = stubJsonResponse({
+      reauth_token: "reauth_synthetic-token-value-000000000000",
+      purpose: "password_change",
+      expires_at: "2026-08-03T12:00:00Z",
+    });
+    const reauthPayload = {
+      purpose: "password_change",
       current_password: "SyntheticPass123!",
-      new_password: "SyntheticNext456!",
       totp_code: "123456",
+    } as const;
+    const passwordPayload = {
+      reauth_token: "reauth_synthetic-token-value-000000000000",
+      new_password: "SyntheticNext456!",
     };
 
-    await changePassword("access-token", payload);
+    await reauthenticate("access-token", reauthPayload);
+    await changePassword("access-token", passwordPayload);
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/me/security/password/change");
-    expect(init.method).toBe("POST");
-    expect(init.body).toBe(JSON.stringify(payload));
+    const requests = fetchMock.mock.calls as [string, RequestInit][];
+    expect(requests.map(([url]) => url)).toEqual([
+      "/api/v1/me/security/reauthenticate",
+      "/api/v1/me/security/password/change",
+    ]);
+    expect(requests[0][1].body).toBe(JSON.stringify(reauthPayload));
+    expect(requests[1][1].body).toBe(JSON.stringify(passwordPayload));
   });
 
   it("uses separate TOTP setup, confirm and disable operations", async () => {
@@ -63,7 +76,9 @@ describe("account security service", () => {
 
     await beginTotpSetup("access-token");
     await confirmTotp("access-token", { code: "123456" });
-    await disableTotp("access-token", { code: "654321" });
+    await disableTotp("access-token", {
+      reauth_token: "reauth_synthetic-token-value-000000000000",
+    });
 
     const requests = fetchMock.mock.calls as [string, RequestInit][];
     expect(requests.map(([url]) => url)).toEqual([

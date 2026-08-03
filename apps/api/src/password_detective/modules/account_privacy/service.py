@@ -16,7 +16,6 @@ from password_detective.core.errors import AppError
 from password_detective.core.security import (
     hash_account_password,
     hash_opaque_token,
-    verify_account_password,
 )
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
@@ -30,6 +29,7 @@ from password_detective.db.models.privacy_request import (
     PrivacyExport,
     PrivacyExportStatus,
 )
+from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.submission import Submission
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
@@ -44,7 +44,10 @@ from password_detective.modules.account_privacy.schemas import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
-from password_detective.modules.auth.totp import verify_user_totp
+from password_detective.modules.auth.reauthentication import (
+    consume_reauthentication_grant,
+    revoke_reauthentication_grants,
+)
 
 
 def _aware(value: datetime) -> datetime:
@@ -463,14 +466,16 @@ def create_deletion_request(
     settings: Settings,
     *,
     principal: Principal,
-    current_password: str,
-    totp_code: str | None,
+    reauth_token: str,
     context: ClientContext,
 ) -> PrivacyDeletionResponse:
-    if not verify_account_password(principal.user.account_password_hash, current_password):
-        raise AppError("auth.invalid_current_password", "当前密码不正确", status_code=400)
-    if principal.user.totp_enabled:
-        verify_user_totp(principal.user, settings, totp_code)
+    consume_reauthentication_grant(
+        db,
+        raw_token=reauth_token,
+        user_id=principal.user.id,
+        session_family_id=principal.session_family_id,
+        expected_purpose=ReauthenticationPurpose.ACCOUNT_DELETION,
+    )
     active = db.scalar(
         select(PrivacyDeletionRequest)
         .where(
@@ -490,6 +495,7 @@ def create_deletion_request(
     )
     db.add(record)
     db.flush()
+    revoke_reauthentication_grants(db, user_id=principal.user.id)
     write_audit_log(
         db,
         actor_id=principal.user.id,

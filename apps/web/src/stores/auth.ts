@@ -3,8 +3,11 @@ import type {
   MessageResponse,
   PasswordChangeRequest,
   ProfileUpdateRequest,
+  ReauthenticationRequest,
+  ReauthenticationResponse,
   Session,
   TotpCodeRequest,
+  TotpDisableRequest,
   TotpSetupResponse,
   User,
 } from "@password-detective/api-contract";
@@ -152,6 +155,12 @@ export const useAuthStore = defineStore("auth", () => {
     return profile;
   }
 
+  async function reauthenticate(
+    payload: ReauthenticationRequest,
+  ): Promise<ReauthenticationResponse> {
+    return accountApi.reauthenticate(accessToken.value, payload);
+  }
+
   async function changePassword(payload: PasswordChangeRequest): Promise<MessageResponse> {
     return accountApi.changePassword(accessToken.value, payload);
   }
@@ -170,7 +179,7 @@ export const useAuthStore = defineStore("auth", () => {
     return result;
   }
 
-  async function disableTotp(payload: TotpCodeRequest): Promise<MessageResponse> {
+  async function disableTotp(payload: TotpDisableRequest): Promise<MessageResponse> {
     const result = await accountApi.disableTotp(accessToken.value, payload);
     await refresh();
     return result;
@@ -197,6 +206,7 @@ export const useAuthStore = defineStore("auth", () => {
     logout,
     loadProfile,
     updateProfile,
+    reauthenticate,
     changePassword,
     resendVerificationEmail,
     beginTotpSetup,

@@ -36,6 +36,23 @@ def _register_and_login(client, suffix: str = "one") -> tuple[dict, dict[str, st
     return login.json(), {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
+
+def _reauthenticate(
+    client,
+    headers: dict[str, str],
+    *,
+    purpose: str = "account_deletion",
+    password: str = PASSWORD,
+) -> str:
+    response = client.post(
+        "/api/v1/me/security/reauthenticate",
+        json={"purpose": purpose, "current_password": password},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    return response.json()["reauth_token"]
+
+
 def test_reveal_history_masks_fingerprints_and_never_returns_plaintext(client):
     tokens, headers = _register_and_login(client)
     with client.app.state.database.session_factory() as db:
@@ -164,21 +181,32 @@ def test_privacy_export_expiry_clears_artifact(client):
 def test_deletion_request_requires_reauthentication_and_can_be_cancelled(client):
     _, headers = _register_and_login(client)
     wrong = client.post(
-        "/api/v1/me/privacy/deletion-requests",
-        json={"current_password": "WrongPassword123!"},
-        headers={**headers, "Idempotency-Key": "privacy-delete-request-0001"},
+        "/api/v1/me/security/reauthenticate",
+        json={
+            "purpose": "account_deletion",
+            "current_password": "WrongPassword123!",
+        },
+        headers=headers,
     )
     assert wrong.status_code == 400
     assert wrong.json()["code"] == "auth.invalid_current_password"
 
+    reauth_token = _reauthenticate(client, headers)
     created = client.post(
         "/api/v1/me/privacy/deletion-requests",
-        json={"current_password": PASSWORD},
+        json={"reauth_token": reauth_token},
         headers={**headers, "Idempotency-Key": "privacy-delete-request-0002"},
     )
     assert created.status_code == 202
     assert created.json()["status"] == "pending"
     assert created.json()["can_cancel"] is True
+    replay = client.post(
+        "/api/v1/me/privacy/deletion-requests",
+        json={"reauth_token": reauth_token},
+        headers={**headers, "Idempotency-Key": "privacy-delete-request-0002"},
+    )
+    assert replay.status_code == 202
+    assert replay.json() == created.json()
 
     cancelled = client.post(
         f"/api/v1/me/privacy/deletion-requests/{created.json()['id']}/cancel",
@@ -191,9 +219,10 @@ def test_deletion_request_requires_reauthentication_and_can_be_cancelled(client)
 
 def test_due_deletion_anonymizes_account_and_revokes_access(client):
     tokens, headers = _register_and_login(client, "delete")
+    reauth_token = _reauthenticate(client, headers)
     created = client.post(
         "/api/v1/me/privacy/deletion-requests",
-        json={"current_password": PASSWORD},
+        json={"reauth_token": reauth_token},
         headers={**headers, "Idempotency-Key": "privacy-delete-request-0003"},
     )
     assert created.status_code == 202

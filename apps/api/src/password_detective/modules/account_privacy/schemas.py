@@ -68,8 +68,7 @@ class PrivacyExportDownloadRequest(BaseModel):
 
 
 class PrivacyDeletionCreateRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
-    totp_code: str | None = Field(default=None, min_length=6, max_length=8, pattern=r"^[0-9]+$")
+    reauth_token: str = Field(min_length=32, max_length=256)
 
 
 class PrivacyDeletionResponse(BaseModel):

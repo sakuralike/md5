@@ -24,7 +24,9 @@ const username = ref("");
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
+const passwordTotpCode = ref("");
 const totpCode = ref("");
+const totpCurrentPassword = ref("");
 const setup = ref<TotpSetupResponse | null>(null);
 const error = ref("");
 const success = ref("");
@@ -84,15 +86,19 @@ async function savePassword(): Promise<void> {
   }
   busy.value = true;
   try {
-    await auth.changePassword({
+    const grant = await auth.reauthenticate({
+      purpose: "password_change",
       current_password: currentPassword.value,
+      totp_code: passwordTotpCode.value || null,
+    });
+    await auth.changePassword({
+      reauth_token: grant.reauth_token,
       new_password: newPassword.value,
-      totp_code: totpCode.value || null,
     });
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
-    totpCode.value = "";
+    passwordTotpCode.value = "";
     success.value = "密码已修改，其他登录会话已撤销";
     sessions.value = await auth.listSessions();
   } catch (caught) {
@@ -135,9 +141,15 @@ async function disableTotp(): Promise<void> {
   clearFeedback();
   busy.value = true;
   try {
-    await auth.disableTotp({ code: totpCode.value });
+    const grant = await auth.reauthenticate({
+      purpose: "totp_disable",
+      current_password: totpCurrentPassword.value,
+      totp_code: totpCode.value || null,
+    });
+    await auth.disableTotp({ reauth_token: grant.reauth_token });
     setup.value = null;
     totpCode.value = "";
+    totpCurrentPassword.value = "";
     success.value = "TOTP 已停用";
     sessions.value = await auth.listSessions();
   } catch (caught) {
@@ -251,7 +263,7 @@ onMounted(load);
             </div>
             <div v-if="auth.user?.totp_enabled" class="space-y-2">
               <Label for="password-totp">TOTP 验证码</Label>
-              <Input id="password-totp" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="启用 TOTP 时必填" />
+              <Input id="password-totp" v-model="passwordTotpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="启用 TOTP 时必填" />
             </div>
           </CardContent>
           <CardFooter>
@@ -275,6 +287,10 @@ onMounted(load);
               <p class="mt-2 break-all font-mono text-xs text-muted-foreground">{{ setup.secret }}</p>
               <p class="mt-2 break-all text-xs text-muted-foreground">{{ setup.provisioning_uri }}</p>
             </div>
+            <div v-if="auth.user?.totp_enabled" class="max-w-xl space-y-2">
+              <Label for="totp-current-password">当前密码</Label>
+              <Input id="totp-current-password" v-model="totpCurrentPassword" type="password" autocomplete="current-password" />
+            </div>
             <div class="max-w-xl space-y-2">
               <Label for="totp-code">认证器验证码</Label>
               <Input id="totp-code" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="输入 6 位验证码" />
@@ -283,7 +299,7 @@ onMounted(load);
           <CardFooter class="flex flex-wrap gap-3">
             <Button v-if="!auth.user?.totp_enabled" :disabled="busy" variant="outline" @click="startTotp">生成 TOTP 配置</Button>
             <Button v-if="setup && !auth.user?.totp_enabled" :disabled="busy || totpCode.length < 6" @click="confirmTotp">确认启用</Button>
-            <Button v-if="auth.user?.totp_enabled" :disabled="busy || totpCode.length < 6" variant="destructive" @click="disableTotp">停用 TOTP</Button>
+            <Button v-if="auth.user?.totp_enabled" :disabled="busy || !totpCurrentPassword || totpCode.length < 6" variant="destructive" @click="disableTotp">停用 TOTP</Button>
           </CardFooter>
         </Card>
       </TabsContent>

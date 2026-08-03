@@ -9,8 +9,11 @@ import type {
   PrivacyExport,
   RevealHistoryResponse,
   ProfileUpdateRequest,
+  ReauthenticationRequest,
+  ReauthenticationResponse,
   Session,
   TotpCodeRequest,
+  TotpDisableRequest,
   TotpSetupResponse,
   User,
 } from "@password-detective/api-contract";
@@ -31,6 +34,17 @@ export function updateProfile(
   return apiRequest<User>(
     "/me/profile",
     { method: "PATCH", headers: idempotencyHeaders(), body: JSON.stringify(payload) },
+    accessToken,
+  );
+}
+
+export function reauthenticate(
+  accessToken: string,
+  payload: ReauthenticationRequest,
+): Promise<ReauthenticationResponse> {
+  return apiRequest<ReauthenticationResponse>(
+    "/me/security/reauthenticate",
+    { method: "POST", body: JSON.stringify(payload) },
     accessToken,
   );
 }
@@ -67,7 +81,7 @@ export function confirmTotp(
 
 export function disableTotp(
   accessToken: string,
-  payload: TotpCodeRequest,
+  payload: TotpDisableRequest,
 ): Promise<MessageResponse> {
   return apiRequest<MessageResponse>(
     "/me/security/totp",

@@ -33,7 +33,7 @@
 - `POST /admin/totp/confirm`
 - `POST /admin/totp/disable`
 
-密码重置请求无论邮箱是否存在都返回相同消息，防止账号枚举。本人资料修改当前只开放用户名；邮箱变更必须使用后续独立验证流程。修改密码要求当前密码作为近期再认证，启用 TOTP 的账号还需动态验证码；成功后保留当前会话并撤销其他会话族。用户 TOTP 生成接口返回敏感密钥，因此只做限流，不将响应写入幂等缓存；确认和停用操作要求 `Idempotency-Key`。
+密码重置请求无论邮箱是否存在都返回相同消息，防止账号枚举。本人资料修改当前只开放用户名；邮箱变更必须使用后续独立验证流程。密码修改、TOTP 停用和账号删除申请统一先调用再认证接口，要求当前密码；启用 TOTP 的账号还需动态验证码。再认证接口签发默认 5 分钟有效、绑定当前会话族和精确目的的一次性凭据，仅保存 SHA-256 摘要并返回 `Cache-Control: no-store`，不使用 `Idempotency-Key`；消费接口仍可使用幂等键，幂等重放必须在消费前返回原成功响应。用户 TOTP 生成接口返回敏感密钥，因此只做限流，不将响应写入幂等缓存；确认和停用操作要求 `Idempotency-Key`。
 
 Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。邮件链接中的一次性凭证由页面读入内存后立即从地址栏移除，只通过 JSON 请求体提交；不得写入浏览器持久化存储、遥测或日志。浏览器登录支持可选 `totp_code`，已启用 TOTP 时由服务端强制校验。
 
@@ -59,6 +59,17 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 
 候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `correlation-v1` 先构建候选内关联组，再由 `verification-v2` 聚合：共享安装标识哈希或 IP 网段的传递关联反馈，在成功/失败两个结果维度内分别最多保留组内最高单条权重；两个独立成功且有效失败权重低于阈值时自动验证，三个独立失败或有效失败权重达到阈值时自动隔离。每次材料变化追加 `evidence_correlation_assessments` 聚合快照，所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
 
+### 高风险用户操作再认证
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `POST` | `/me/security/reauthenticate` | 必需 | `purpose` 仅允许 `password_change`、`totp_disable`、`account_deletion`；当前密码必需，启用 TOTP 时还需动态码；签发短时一次性凭据，响应不缓存，不使用幂等键 |
+| `POST` | `/me/security/password/change` | 必需 | 消费 `password_change` 凭据；业务写入与消费同事务；支持 `Idempotency-Key`，成功后撤销其他会话和未消费再认证凭据 |
+| `DELETE` | `/me/security/totp` | 必需 | 消费 `totp_disable` 凭据；支持 `Idempotency-Key`，清理会话 MFA 标记 |
+| `POST` | `/me/privacy/deletion-requests` | 必需 | 消费 `account_deletion` 凭据；支持 `Idempotency-Key`，进入可撤销宽限期 |
+
+令牌原文只在签发响应中出现，不写入数据库、日志、审计或幂等响应；凭据绑定用户和当前会话族，过期、跨会话、跨目的或重复消费必须拒绝。
+
 ## 账号活动与隐私接口
 
 | 方法 | 路径 | 认证 | 关键约束 |
@@ -69,7 +80,7 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 | `POST` | `/me/privacy/exports` | 必需 | 返回 `202`；重复活动申请复用活动请求；本地可内联处理，部署环境可投递 Celery |
 | `GET` | `/me/privacy/exports/{export_id}` | 必需 | 强制所有权校验；准备完成后返回短时下载凭证；过期时清理导出制品 |
 | `POST` | `/me/privacy/exports/{export_id}/download` | 必需 | 提交短时凭证；一次性消费；响应不缓存；导出不含密码、候选秘密或 TOTP 密钥 |
-| `POST` | `/me/privacy/deletion-requests` | 必需 | 必须重新验证当前密码；启用 TOTP 时还需动态码；进入可撤销宽限期 |
+| `POST` | `/me/privacy/deletion-requests` | 必需 | 消费 `account_deletion` 一次性再认证凭据；支持幂等和审计；进入可撤销宽限期 |
 | `GET` | `/me/privacy/deletion-requests/current` | 必需 | 仅返回本人最近一次删除申请及状态 |
 | `POST` | `/me/privacy/deletion-requests/{request_id}/cancel` | 必需 | 仅 `pending` 且未超过 `cancel_before` 时允许撤销；必须幂等和审计 |
 

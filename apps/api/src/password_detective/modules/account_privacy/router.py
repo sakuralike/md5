@@ -236,8 +236,7 @@ def request_deletion(
             db,
             settings,
             principal=principal,
-            current_password=payload.current_password,
-            totp_code=payload.totp_code,
+            reauth_token=payload.reauth_token,
             context=get_client_context(request),
         )
         complete_idempotency(

@@ -21,10 +21,15 @@ from password_detective.core.security import (
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.account_action_token import AccountTokenKind
+from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import User, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.auth.account_tokens import issue_account_token
 from password_detective.modules.auth.context import ClientContext
+from password_detective.modules.auth.reauthentication import (
+    consume_reauthentication_grant,
+    revoke_reauthentication_grants,
+)
 from password_detective.modules.auth.schemas import (
     LoginRequest,
     PasswordChangeRequest,
@@ -304,20 +309,21 @@ def update_profile(
 
 def change_password(
     db: Session,
-    settings: Settings,
     *,
     user: User,
     session_family_id: str,
     payload: PasswordChangeRequest,
     context: ClientContext,
 ) -> int:
-    if not verify_account_password(user.account_password_hash, payload.current_password):
-        raise AppError("auth.invalid_current_password", "当前密码不正确", status_code=400)
+    consume_reauthentication_grant(
+        db,
+        raw_token=payload.reauth_token,
+        user_id=user.id,
+        session_family_id=session_family_id,
+        expected_purpose=ReauthenticationPurpose.PASSWORD_CHANGE,
+    )
     if verify_account_password(user.account_password_hash, payload.new_password):
         raise AppError("auth.password_unchanged", "新密码不能与当前密码相同", status_code=400)
-    if user.totp_secret_ciphertext:
-        verify_user_totp(user, settings, payload.totp_code)
-
     user.account_password_hash = hash_account_password(payload.new_password)
     now = utc_now()
     result = db.execute(
@@ -330,6 +336,7 @@ def change_password(
         .values(revoked_at=now, revoked_reason="password_changed")
     )
     revoked_rows = result.rowcount or 0
+    revoked_reauthentication_grants = revoke_reauthentication_grants(db, user_id=user.id)
     write_audit_log(
         db,
         actor_id=user.id,
@@ -339,7 +346,10 @@ def change_password(
         result="success",
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
-        details={"revoked_other_sessions": revoked_rows},
+        details={
+            "revoked_other_sessions": revoked_rows,
+            "revoked_reauthentication_grants": revoked_reauthentication_grants,
+        },
     )
     db.commit()
     return revoked_rows

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cancelAccountDeletion,
   confirmAuthorizationDeclaration,
+  reauthenticate,
   requestAccountDeletion,
   requestPrivacyExport,
 } from "./account";
@@ -41,18 +42,24 @@ describe("account privacy service", () => {
     const fetchMock = stubJsonResponse({ id: "request-1" });
 
     await requestPrivacyExport("access-token");
-    await requestAccountDeletion("access-token", {
+    await reauthenticate("access-token", {
+      purpose: "account_deletion",
       current_password: "SyntheticPrivacyPass123!",
       totp_code: "123456",
+    });
+    await requestAccountDeletion("access-token", {
+      reauth_token: "reauth_synthetic-token-value-000000000000",
     });
     await cancelAccountDeletion("access-token", "request-1");
 
     const requests = fetchMock.mock.calls as [string, RequestInit][];
     expect(requests.map(([url]) => url)).toEqual([
       "/api/v1/me/privacy/exports",
+      "/api/v1/me/security/reauthenticate",
       "/api/v1/me/privacy/deletion-requests",
       "/api/v1/me/privacy/deletion-requests/request-1/cancel",
     ]);
     expect(requests.every(([, init]) => init.method === "POST")).toBe(true);
+    expect((requests[1][1].headers as Headers).get("Idempotency-Key")).toBeNull();
   });
 });

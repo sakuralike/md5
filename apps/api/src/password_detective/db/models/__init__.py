@@ -35,6 +35,10 @@ from password_detective.db.models.privacy_request import (
     PrivacyExport,
     PrivacyExportStatus,
 )
+from password_detective.db.models.reauthentication_grant import (
+    ReauthenticationGrant,
+    ReauthenticationPurpose,
+)
 from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.reward_adjustment_event import (
     RewardAdjustmentDirection,
@@ -99,6 +103,8 @@ __all__ = [
     "PrivacyDeletionStatus",
     "PrivacyExport",
     "PrivacyExportStatus",
+    "ReauthenticationGrant",
+    "ReauthenticationPurpose",
     "RecordStateEvent",
     "RiskAlert",
     "RiskAlertEvent",

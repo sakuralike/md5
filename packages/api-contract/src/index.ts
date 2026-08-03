@@ -45,14 +45,34 @@ export interface ProfileUpdateRequest {
   username: string;
 }
 
-export interface PasswordChangeRequest {
+export type ReauthenticationPurpose =
+  | "password_change"
+  | "totp_disable"
+  | "account_deletion";
+
+export interface ReauthenticationRequest {
+  purpose: ReauthenticationPurpose;
   current_password: string;
-  new_password: string;
   totp_code?: string | null;
+}
+
+export interface ReauthenticationResponse {
+  reauth_token: string;
+  purpose: ReauthenticationPurpose;
+  expires_at: string;
+}
+
+export interface PasswordChangeRequest {
+  reauth_token: string;
+  new_password: string;
 }
 
 export interface TotpCodeRequest {
   code: string;
+}
+
+export interface TotpDisableRequest {
+  reauth_token: string;
 }
 
 export interface TotpSetupResponse {
@@ -146,8 +166,7 @@ export interface PrivacyExport {
 }
 
 export interface PrivacyDeletionCreateRequest {
-  current_password: string;
-  totp_code?: string | null;
+  reauth_token: string;
 }
 
 export interface PrivacyDeletionRequest {

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pyotp
 from sqlalchemy import select
 
+from password_detective.core.security import hash_opaque_token
+from password_detective.core.time import utc_now
 from password_detective.db.models.audit_log import AuditLog
+from password_detective.db.models.reauthentication_grant import ReauthenticationGrant
 from password_detective.db.models.user import User
 from password_detective.db.models.user_session import UserSession
 
@@ -35,6 +40,26 @@ def auth_headers(tokens, *, idempotency_key=None):
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
     return headers
+
+
+
+def reauthenticate(
+    client,
+    tokens,
+    *,
+    purpose: str,
+    password: str = REGISTER_PAYLOAD["password"],
+    totp_code: str | None = None,
+):
+    return client.post(
+        "/api/v1/me/security/reauthenticate",
+        json={
+            "purpose": purpose,
+            "current_password": password,
+            "totp_code": totp_code,
+        },
+        headers=auth_headers(tokens),
+    )
 
 
 def test_register_hashes_password_and_rejects_duplicate(client):
@@ -128,15 +153,27 @@ def test_password_change_revokes_other_sessions_and_rejects_reuse(client):
     assert register(client).status_code == 201
     current = login(client).json()
     other = login(client).json()
+    grant = reauthenticate(client, current, purpose="password_change")
+    assert grant.status_code == 200
     response = client.post(
         "/api/v1/me/security/password/change",
         json={
-            "current_password": REGISTER_PAYLOAD["password"],
+            "reauth_token": grant.json()["reauth_token"],
             "new_password": "SyntheticNext456!",
         },
         headers=auth_headers(current, idempotency_key="password-change-key-001"),
     )
     assert response.status_code == 200
+    replay = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": grant.json()["reauth_token"],
+            "new_password": "SyntheticNext456!",
+        },
+        headers=auth_headers(current, idempotency_key="password-change-key-001"),
+    )
+    assert replay.status_code == 200
+    assert replay.json() == response.json()
 
     current_profile = client.get("/api/v1/me/profile", headers=auth_headers(current))
     other_profile = client.get("/api/v1/me/profile", headers=auth_headers(other))
@@ -186,25 +223,137 @@ def test_user_totp_setup_confirm_login_and_disable(client):
     assert valid_login.status_code == 200
     assert valid_login.json()["mfa_verified"] is True
 
-    password_without_totp = client.post(
-        "/api/v1/me/security/password/change",
-        json={
-            "current_password": REGISTER_PAYLOAD["password"],
-            "new_password": "SyntheticNext456!",
-        },
-        headers=auth_headers(tokens, idempotency_key="password-without-totp-001"),
+    password_without_totp = reauthenticate(
+        client,
+        tokens,
+        purpose="password_change",
     )
     assert password_without_totp.status_code == 401
     assert password_without_totp.json()["code"] == "auth.totp_required"
 
+    disable_grant = reauthenticate(
+        client,
+        tokens,
+        purpose="totp_disable",
+        totp_code=pyotp.TOTP(secret).now(),
+    )
+    assert disable_grant.status_code == 200
     disable = client.request(
         "DELETE",
         "/api/v1/me/security/totp",
-        json={"code": pyotp.TOTP(secret).now()},
+        json={"reauth_token": disable_grant.json()["reauth_token"]},
         headers=auth_headers(tokens, idempotency_key="totp-disable-key-001"),
     )
     assert disable.status_code == 200
+    disable_replay = client.request(
+        "DELETE",
+        "/api/v1/me/security/totp",
+        json={"reauth_token": disable_grant.json()["reauth_token"]},
+        headers=auth_headers(tokens, idempotency_key="totp-disable-key-001"),
+    )
+    assert disable_replay.status_code == 200
+    assert disable_replay.json() == disable.json()
     assert login(client).status_code == 200
+
+
+
+def test_reauthentication_grant_is_purpose_session_and_one_time_bound(client):
+    assert register(client).status_code == 201
+    first = login(client).json()
+    second = login(client).json()
+
+    wrong_password = reauthenticate(
+        client,
+        first,
+        purpose="password_change",
+        password="WrongSyntheticPassword123!",
+    )
+    assert wrong_password.status_code == 400
+    assert wrong_password.json()["code"] == "auth.invalid_current_password"
+
+    grant = reauthenticate(client, first, purpose="password_change")
+    assert grant.status_code == 200
+    assert grant.headers["cache-control"] == "no-store"
+    assert grant.json()["reauth_token"].startswith("reauth_")
+    with client.app.state.database.session_factory() as db:
+        record = db.scalar(select(ReauthenticationGrant))
+        assert record is not None
+        assert record.token_hash != grant.json()["reauth_token"]
+
+    wrong_session = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": grant.json()["reauth_token"],
+            "new_password": "SyntheticNext456!",
+        },
+        headers=auth_headers(second, idempotency_key="reauth-wrong-session-001"),
+    )
+    assert wrong_session.status_code == 401
+    assert wrong_session.json()["code"] == "auth.invalid_reauthentication_token"
+
+    deletion_grant = reauthenticate(client, first, purpose="account_deletion")
+    assert deletion_grant.status_code == 200
+    wrong_purpose = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": deletion_grant.json()["reauth_token"],
+            "new_password": "SyntheticNext456!",
+        },
+        headers=auth_headers(first, idempotency_key="reauth-wrong-purpose-001"),
+    )
+    assert wrong_purpose.status_code == 401
+    assert wrong_purpose.json()["code"] == "auth.invalid_reauthentication_token"
+
+    changed = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": grant.json()["reauth_token"],
+            "new_password": "SyntheticNext456!",
+        },
+        headers=auth_headers(first, idempotency_key="reauth-consume-001"),
+    )
+    assert changed.status_code == 200
+
+    reused = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": grant.json()["reauth_token"],
+            "new_password": "SyntheticThird789!",
+        },
+        headers=auth_headers(first, idempotency_key="reauth-consume-002"),
+    )
+    assert reused.status_code == 401
+    assert reused.json()["code"] == "auth.invalid_reauthentication_token"
+
+
+
+def test_reauthentication_grant_expiry_is_enforced(client):
+    assert register(client).status_code == 201
+    tokens = login(client).json()
+    grant = reauthenticate(client, tokens, purpose="password_change")
+    assert grant.status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        record = db.scalar(
+            select(ReauthenticationGrant).where(
+                ReauthenticationGrant.token_hash
+                == hash_opaque_token(grant.json()["reauth_token"])
+            )
+        )
+        assert record is not None
+        record.expires_at = utc_now() - timedelta(seconds=1)
+        db.commit()
+
+    expired = client.post(
+        "/api/v1/me/security/password/change",
+        json={
+            "reauth_token": grant.json()["reauth_token"],
+            "new_password": "SyntheticNext456!",
+        },
+        headers=auth_headers(tokens, idempotency_key="reauth-expired-001"),
+    )
+    assert expired.status_code == 401
+    assert expired.json()["code"] == "auth.invalid_reauthentication_token"
 
 
 def test_invalid_login_does_not_reveal_account_details(client):

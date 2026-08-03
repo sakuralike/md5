@@ -9,9 +9,14 @@ from password_detective.core.errors import AppError
 from password_detective.core.security import decrypt_secret, encrypt_secret
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
+from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import User
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.auth.context import ClientContext
+from password_detective.modules.auth.reauthentication import (
+    consume_reauthentication_grant,
+    revoke_reauthentication_grants,
+)
 from password_detective.modules.auth.schemas import TotpSetupResponse
 
 
@@ -84,20 +89,25 @@ def confirm_totp_setup(
 
 def disable_totp(
     db: Session,
-    settings: Settings,
     *,
     user: User,
-    code: str,
+    session_family_id: str,
+    reauth_token: str,
     context: ClientContext,
 ) -> None:
     if not user.totp_secret_ciphertext:
         raise AppError("auth.totp_not_enabled", "TOTP 尚未启用", status_code=409)
-    secret = decrypt_secret(user.totp_secret_ciphertext, settings.app_secret_key)
-    if not pyotp.TOTP(secret).verify(code, valid_window=1):
-        raise AppError("auth.invalid_totp_code", "动态验证码不正确", status_code=400)
+    consume_reauthentication_grant(
+        db,
+        raw_token=reauth_token,
+        user_id=user.id,
+        session_family_id=session_family_id,
+        expected_purpose=ReauthenticationPurpose.TOTP_DISABLE,
+    )
     user.totp_secret_ciphertext = None
     user.totp_pending_secret_ciphertext = None
     user.totp_enabled_at = None
+    revoke_reauthentication_grants(db, user_id=user.id)
     db.execute(
         update(UserSession)
         .where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))

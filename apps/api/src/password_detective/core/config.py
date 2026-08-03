@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = Field(default=15, ge=5, le=60)
     refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
     account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
+    reauthentication_ttl_minutes: int = Field(default=5, ge=1, le=15)
     candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)
     daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
     authorization_declaration_version: str = Field(

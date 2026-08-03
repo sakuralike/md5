@@ -24,6 +24,7 @@ import {
   downloadPrivacyExport,
   getCurrentDeletionRequest,
   listAuthorizationDeclarations,
+  reauthenticate,
   requestAccountDeletion,
   requestPrivacyExport,
 } from "../services/account";
@@ -153,9 +154,13 @@ async function createDeletion(): Promise<void> {
   busy.value = "deletion";
   clearFeedback();
   try {
-    deletion.value = await requestAccountDeletion(auth.accessToken, {
+    const grant = await reauthenticate(auth.accessToken, {
+      purpose: "account_deletion",
       current_password: currentPassword.value,
       totp_code: totpCode.value || null,
+    });
+    deletion.value = await requestAccountDeletion(auth.accessToken, {
+      reauth_token: grant.reauth_token,
     });
     currentPassword.value = "";
     totpCode.value = "";
@@ -276,7 +281,7 @@ onMounted(load);
       <CardHeader>
         <CardTitle>账号删除请求</CardTitle>
         <CardDescription>
-          创建请求前必须重新验证当前密码；启用 TOTP 时还需动态验证码。撤销期结束后，账号将被停用并去标识化。
+          创建请求前会签发绑定当前会话与用途的 5 分钟一次性再认证凭据；启用 TOTP 时还需动态验证码。撤销期结束后，账号将被停用并去标识化。
         </CardDescription>
       </CardHeader>
       <CardContent class="grid gap-5 lg:grid-cols-2">

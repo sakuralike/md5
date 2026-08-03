@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
+
 _USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 
 
@@ -47,14 +49,8 @@ class ProfileUpdateRequest(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
+    reauth_token: str = Field(min_length=32, max_length=256)
     new_password: str = Field(min_length=12, max_length=128)
-    totp_code: str | None = Field(
-        default=None,
-        min_length=6,
-        max_length=8,
-        pattern=r"^[0-9]+$",
-    )
 
     @field_validator("new_password")
     @classmethod
@@ -92,6 +88,24 @@ class PasswordResetRequest(BaseModel):
 
 class TotpCodeRequest(BaseModel):
     code: str = Field(min_length=6, max_length=8, pattern=r"^[0-9]+$")
+
+
+class TotpDisableRequest(BaseModel):
+    reauth_token: str = Field(min_length=32, max_length=256)
+
+
+class ReauthenticationRequest(BaseModel):
+    purpose: ReauthenticationPurpose
+    current_password: str = Field(min_length=1, max_length=128)
+    totp_code: str | None = Field(
+        default=None, min_length=6, max_length=8, pattern=r"^[0-9]+$"
+    )
+
+
+class ReauthenticationResponse(BaseModel):
+    reauth_token: str
+    purpose: ReauthenticationPurpose
+    expires_at: datetime
 
 
 class UserResponse(BaseModel):
