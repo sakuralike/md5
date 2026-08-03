@@ -142,9 +142,10 @@ def dispatch_pending_notifications(
     failed = 0
     for notification in notifications:
         notification.attempts += 1
+        notification.provider = gateway.provider_name
         notification.updated_at = observed_at
         try:
-            gateway.send_risk_alert(
+            provider_message_id = gateway.send_risk_alert(
                 delivery_id=notification.id,
                 kind=notification.kind.value,
                 recipient=notification.recipient.email,
@@ -155,16 +156,22 @@ def dispatch_pending_notifications(
         except Exception as exc:  # provider failures are converted to bounded retries
             failed += 1
             notification.last_error_code = type(exc).__name__[:128]
+            notification.provider_message_id = None
+            notification.sent_at = None
             if notification.attempts >= MAX_NOTIFICATION_ATTEMPTS:
                 notification.status = RiskAlertNotificationStatus.FAILED
+                notification.failed_at = observed_at
             else:
+                notification.failed_at = None
                 notification.available_at = observed_at + timedelta(
                     minutes=2 ** (notification.attempts - 1)
                 )
         else:
             sent += 1
             notification.status = RiskAlertNotificationStatus.SENT
+            notification.provider_message_id = provider_message_id
             notification.sent_at = observed_at
+            notification.failed_at = None
             notification.last_error_code = None
     db.commit()
     return {"selected": len(notifications), "sent": sent, "failed": failed}

@@ -118,10 +118,13 @@
 | `GET` | `/admin/risk-alerts/{alert_id}` | 审核员/管理员 + MFA | 返回告警投影、SLA、负责人、不可变时间线和通知投递状态，不返回邮箱、IP、安装标识或关联键 |
 | `POST` | `/admin/risk-alerts/{alert_id}/assign` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；只允许指派给可用 MFA 操作者，写入负责人变化事件、通知 Outbox 和最小披露审计 |
 | `POST` | `/admin/risk-alerts/{alert_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；目标状态与结果码强匹配，写入不可变事件、通知 Outbox 与最小披露审计 |
+| `GET` | `/admin/risk-alerts/notification-deliveries/metrics` | 审核员/管理员 + MFA | 返回状态总量、近 24 小时失败数、最老待发送时长和按提供商聚合指标 |
+| `GET` | `/admin/risk-alerts/notification-deliveries?status=...&kind=...&provider=...` | 审核员/管理员 + MFA | 分页筛选投递记录；不返回邮箱、Webhook 地址、密钥或原始载荷 |
+| `POST` | `/admin/risk-alerts/notification-deliveries/{notification_id}/replay` | 审核员/管理员 + MFA | 仅失败记录；要求 `Idempotency-Key`、受控原因和端点限流，复用原 Outbox 与去重键并写审计 |
 
 `risk-alert-v1` 在 15 分钟内观察到至少 3 个独立当前失败组且失败权重不低于 3.0 时创建 `failure_surge/high` 告警。同一候选、类型和规则版本只保留一个活跃告警；处置状态为 `open/acknowledged/resolved`，已解决告警可受控重开。`risk-alert-sla-v1` 固定 15 分钟首次响应和 240 分钟解决目标；告警保存规则版本和绝对截止时间，Worker 扫描响应/解决超时并通过事务 Outbox 有限重试投递。首版不自动封禁账号或扣减信誉。
 
-Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/resolved/reopened`，状态为 `pending/sent/failed`。通知记录不复制接收地址；投递时从用户记录读取地址，载荷只包含投递 ID、类型、告警 ID、严重级别和适用截止时间。
+Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/resolved/reopened`，状态为 `pending/sent/failed`。通知记录不复制接收地址；投递时从用户记录读取地址，载荷只包含投递 ID、类型、告警 ID、严重级别和适用截止时间。`notification-webhook-v1` 强制 HTTPS，并以 UTC 时间戳、规范 JSON 和 HMAC-SHA256 签名；投递表只保存提供商、回执、失败摘要和重放元数据。第三次失败进入终态，MFA 操作者可通过幂等重放接口恢复为待发送。
 
 ## 桌面更新发布与下载
 

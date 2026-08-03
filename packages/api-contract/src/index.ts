@@ -694,15 +694,59 @@ export interface RiskAlertEvent {
 
 export interface RiskAlertNotification {
   id: string;
+  alert_id: string;
+  event_id: string | null;
   recipient_user_id: string;
   recipient_username: string;
   kind: RiskAlertNotificationKind;
   status: RiskAlertNotificationStatus;
   attempts: number;
+  provider: string | null;
+  provider_message_id: string | null;
   available_at: string;
   sent_at: string | null;
+  failed_at: string | null;
   last_error_code: string | null;
+  replay_count: number;
+  last_replayed_at: string | null;
+  last_replayed_by_id: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface RiskAlertNotificationProviderMetrics {
+  provider: string;
+  pending_count: number;
+  sent_count: number;
+  failed_count: number;
+}
+
+export interface RiskAlertNotificationMetricsResponse {
+  generated_at: string;
+  pending_count: number;
+  sent_count: number;
+  failed_count: number;
+  failed_last_24_hours: number;
+  oldest_pending_seconds: number | null;
+  providers: RiskAlertNotificationProviderMetrics[];
+}
+
+export interface RiskAlertNotificationListResponse {
+  items: RiskAlertNotification[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RiskAlertNotificationReplayRequest {
+  reason: string;
+}
+
+export interface RiskAlertNotificationReplayResponse {
+  notification_id: string;
+  status: RiskAlertNotificationStatus;
+  replay_count: number;
+  request_id: string | null;
 }
 
 export interface RiskAlertDetail extends RiskAlertSummary {

@@ -120,15 +120,64 @@ class RiskAlertEventResponse(BaseModel):
 
 class RiskAlertNotificationResponse(BaseModel):
     id: str
+    alert_id: str
+    event_id: str | None
     recipient_user_id: str
     recipient_username: str
     kind: RiskAlertNotificationKind
     status: RiskAlertNotificationStatus
     attempts: int
+    provider: str | None
+    provider_message_id: str | None
     available_at: datetime
     sent_at: datetime | None
+    failed_at: datetime | None
     last_error_code: str | None
+    replay_count: int
+    last_replayed_at: datetime | None
+    last_replayed_by_id: str | None
     created_at: datetime
+    updated_at: datetime
+
+
+class RiskAlertNotificationProviderMetrics(BaseModel):
+    provider: str
+    pending_count: int
+    sent_count: int
+    failed_count: int
+
+
+class RiskAlertNotificationMetricsResponse(BaseModel):
+    generated_at: datetime
+    pending_count: int
+    sent_count: int
+    failed_count: int
+    failed_last_24_hours: int
+    oldest_pending_seconds: int | None
+    providers: list[RiskAlertNotificationProviderMetrics]
+
+
+class RiskAlertNotificationListResponse(BaseModel):
+    items: list[RiskAlertNotificationResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class RiskAlertNotificationReplayRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        return value.strip()
+
+
+class RiskAlertNotificationReplayResponse(BaseModel):
+    notification_id: str
+    status: RiskAlertNotificationStatus
+    replay_count: int
+    request_id: str | None
 
 
 class RiskAlertDetail(RiskAlertSummary):

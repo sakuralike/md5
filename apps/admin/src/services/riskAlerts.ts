@@ -4,6 +4,12 @@ import type {
   RiskAlertDetail,
   RiskAlertKind,
   RiskAlertListResponse,
+  RiskAlertNotificationKind,
+  RiskAlertNotificationListResponse,
+  RiskAlertNotificationMetricsResponse,
+  RiskAlertNotificationReplayRequest,
+  RiskAlertNotificationReplayResponse,
+  RiskAlertNotificationStatus,
   RiskAlertOperator,
   RiskAlertSeverity,
   RiskAlertStatus,
@@ -29,6 +35,10 @@ export function createRiskAlertTransitionKey(): string {
 
 export function createRiskAlertAssignmentKey(): string {
   return `admin-risk-alert-assignment-${crypto.randomUUID()}`;
+}
+
+export function createRiskAlertNotificationReplayKey(): string {
+  return `admin-risk-alert-notification-replay-${crypto.randomUUID()}`;
 }
 
 export function listRiskAlerts(
@@ -85,6 +95,60 @@ export function transitionRiskAlert(
 ): Promise<RiskAlertTransitionResponse> {
   return apiRequest<RiskAlertTransitionResponse>(
     `/admin/risk-alerts/${encodeURIComponent(alertId)}/transition`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+
+export interface RiskAlertNotificationFilters {
+  status?: RiskAlertNotificationStatus | "";
+  kind?: RiskAlertNotificationKind | "";
+  provider?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function getRiskAlertNotificationMetrics(
+  token: string,
+): Promise<RiskAlertNotificationMetricsResponse> {
+  return apiRequest<RiskAlertNotificationMetricsResponse>(
+    "/admin/risk-alerts/notification-deliveries/metrics",
+    {},
+    token,
+  );
+}
+
+export function listRiskAlertNotifications(
+  filters: RiskAlertNotificationFilters,
+  token: string,
+): Promise<RiskAlertNotificationListResponse> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.kind) params.set("kind", filters.kind);
+  const provider = filters.provider?.trim();
+  if (provider) params.set("provider", provider);
+  params.set("page", String(filters.page ?? 1));
+  params.set("page_size", String(filters.pageSize ?? 20));
+  return apiRequest<RiskAlertNotificationListResponse>(
+    `/admin/risk-alerts/notification-deliveries?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function replayRiskAlertNotification(
+  notificationId: string,
+  payload: RiskAlertNotificationReplayRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<RiskAlertNotificationReplayResponse> {
+  return apiRequest<RiskAlertNotificationReplayResponse>(
+    `/admin/risk-alerts/notification-deliveries/${encodeURIComponent(notificationId)}/replay`,
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },

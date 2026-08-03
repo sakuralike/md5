@@ -3,10 +3,7 @@ from __future__ import annotations
 from celery import Celery
 
 from password_detective.core.config import get_settings
-from password_detective.core.notifications import (
-    LoggingNotificationGateway,
-    MemoryNotificationGateway,
-)
+from password_detective.core.notifications import build_notification_gateway
 from password_detective.db.database import Database
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
@@ -59,11 +56,7 @@ def queue_risk_alert_sla_notifications() -> dict[str, int]:
 @celery_app.task(name="risk_alerts.dispatch_notifications")
 def dispatch_risk_alert_notifications() -> dict[str, int]:
     database = Database(settings)
-    gateway = (
-        MemoryNotificationGateway()
-        if settings.notification_backend == "memory"
-        else LoggingNotificationGateway()
-    )
+    gateway = build_notification_gateway(settings)
     try:
         with database.session_factory() as db:
             return dispatch_pending_notifications(db, gateway)

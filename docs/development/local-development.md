@@ -24,7 +24,17 @@ $env:REDIS_URL = "redis://localhost:6379/0"
 ./scripts/dev-api.ps1
 ```
 
-账号验证和密码重置默认使用内存通知网关。容器环境使用不输出邮箱和令牌的日志占位网关；接入正式邮件提供商前，不应将其视为真实投递。
+账号验证、密码重置和风险告警通知默认使用内存通知网关。容器环境默认使用不输出邮箱和令牌的日志占位网关；需要联调提供商适配器时可启用签名 Webhook：
+
+```powershell
+$env:NOTIFICATION_BACKEND = "webhook"
+$env:NOTIFICATION_WEBHOOK_URL = "https://notifications.synthetic.example.com/deliveries"
+$env:NOTIFICATION_WEBHOOK_SECRET = "replace-with-at-least-32-random-characters"
+$env:NOTIFICATION_WEBHOOK_TIMEOUT_SECONDS = "10"
+./scripts/dev-api.ps1
+```
+
+Webhook 仅允许 HTTPS，并使用 `notification-webhook-v1` 规范 JSON、UTC 时间戳和 HMAC-SHA256 签名。示例地址和密钥均为合成占位符；不得把真实令牌或密钥写入项目文档、提交或日志。真实 staging/production 端点、凭据轮换、网络白名单和数据处理协议仍需单独验收。
 
 M2 候选秘密和揭示策略可通过以下变量配置：
 

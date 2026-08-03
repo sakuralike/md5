@@ -167,11 +167,23 @@ class RiskAlertNotification(Base):
     )
     dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     available_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    replay_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_replayed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_replayed_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
@@ -181,3 +193,4 @@ class RiskAlertNotification(Base):
 
     alert = relationship("RiskAlert", back_populates="notifications")
     recipient = relationship("User", foreign_keys=[recipient_user_id])
+    last_replayed_by = relationship("User", foreign_keys=[last_replayed_by_id])

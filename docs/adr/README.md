@@ -17,6 +17,7 @@
 | [ADR-0013](./0013-failure-surge-risk-alerts.md) | 短时间窗失败激增风险告警与隐私边界 | 已接受 |
 | [ADR-0014](./0014-candidate-evidence-correlation-downweighting.md) | 候选内关联证据图与动态限权 | 已接受 |
 | [ADR-0015](./0015-risk-alert-sla-assignment-notification-outbox.md) | 风险告警 SLA、值班指派与事务通知 Outbox | 已接受 |
+| [ADR-0016](./0016-signed-webhook-and-notification-dead-letter-replay.md) | 签名 Webhook 与通知死信重放 | 已接受 |
 
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。

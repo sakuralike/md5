@@ -2,7 +2,9 @@
 import {
   ApiError,
   type RiskAlertDetail,
+  type RiskAlertNotification,
   type RiskAlertNotificationKind,
+  type RiskAlertNotificationMetricsResponse,
   type RiskAlertNotificationStatus,
   type RiskAlertOperator,
   type RiskAlertResolutionCode,
@@ -14,10 +16,14 @@ import { computed, onMounted, ref } from "vue";
 import {
   assignRiskAlert,
   createRiskAlertAssignmentKey,
+  createRiskAlertNotificationReplayKey,
   createRiskAlertTransitionKey,
   getRiskAlert,
+  getRiskAlertNotificationMetrics,
+  listRiskAlertNotifications,
   listRiskAlertOperators,
   listRiskAlerts,
+  replayRiskAlertNotification,
   transitionRiskAlert,
 } from "../services/riskAlerts";
 import { useAdminAuthStore } from "../stores/auth";
@@ -26,6 +32,8 @@ const auth = useAdminAuthStore();
 const alerts = ref<RiskAlertSummary[]>([]);
 const operators = ref<RiskAlertOperator[]>([]);
 const selected = ref<RiskAlertDetail | null>(null);
+const notificationMetrics = ref<RiskAlertNotificationMetricsResponse | null>(null);
+const failedDeliveries = ref<RiskAlertNotification[]>([]);
 const statusFilter = ref<RiskAlertStatus | "">("open");
 const assigneeFilter = ref("");
 const overdueOnly = ref(false);
@@ -38,6 +46,7 @@ const message = ref("");
 const resolutionNote = ref("");
 const assigneeId = ref("");
 const assignmentNote = ref("");
+const replayReason = ref("通知通道恢复，管理员手动重放");
 
 const statusLabels: Record<RiskAlertStatus, string> = {
   open: "待响应",
@@ -118,6 +127,13 @@ function shortId(value: string): string {
   return value.length > 20 ? `${value.slice(0, 9)}…${value.slice(-7)}` : value;
 }
 
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`;
+  return `${Math.floor(seconds / 3600)} 小时 ${Math.floor((seconds % 3600) / 60)} 分钟`;
+}
+
 function operatorName(operatorId: string | null): string {
   if (!operatorId) return "未指派";
   return operators.value.find((operator) => operator.id === operatorId)?.username ?? shortId(operatorId);
@@ -125,6 +141,15 @@ function operatorName(operatorId: string | null): string {
 
 async function loadOperators(): Promise<void> {
   operators.value = await listRiskAlertOperators(token());
+}
+
+async function loadNotificationOperations(): Promise<void> {
+  const [metrics, failures] = await Promise.all([
+    getRiskAlertNotificationMetrics(token()),
+    listRiskAlertNotifications({ status: "failed", pageSize: 10 }, token()),
+  ]);
+  notificationMetrics.value = metrics;
+  failedDeliveries.value = failures.items;
 }
 
 async function loadAlerts(selectFirst = false): Promise<void> {
@@ -187,8 +212,34 @@ async function applyAssignment(): Promise<void> {
     );
     assignmentNote.value = "";
     message.value = "告警负责人已更新，指派事件与通知已进入闭环。";
-    await loadAlerts();
+    await Promise.all([loadAlerts(), loadNotificationOperations()]);
     await openAlert(alertId);
+  } catch (value) {
+    error.value = describeError(value);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function replayDelivery(notificationId: string, alertId: string): Promise<void> {
+  const reason = replayReason.value.trim();
+  if (reason.length < 3) {
+    error.value = "请填写至少 3 个字符的重放原因。";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  message.value = "";
+  try {
+    await replayRiskAlertNotification(
+      notificationId,
+      { reason },
+      token(),
+      createRiskAlertNotificationReplayKey(),
+    );
+    message.value = "失败通知已重置为待发送，后台工作进程将继续投递。";
+    await Promise.all([loadAlerts(), loadNotificationOperations()]);
+    if (selected.value?.id === alertId) await openAlert(alertId);
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -215,7 +266,7 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
     );
     resolutionNote.value = "";
     message.value = `已完成“${action.label}”，处置事件已写入不可变时间线。`;
-    await loadAlerts();
+    await Promise.all([loadAlerts(), loadNotificationOperations()]);
     await openAlert(alertId);
   } catch (value) {
     error.value = describeError(value);
@@ -226,7 +277,7 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
 
 onMounted(async () => {
   try {
-    await loadOperators();
+    await Promise.all([loadOperators(), loadNotificationOperations()]);
     await loadAlerts(true);
   } catch (value) {
     error.value = describeError(value);
@@ -252,6 +303,19 @@ onMounted(async () => {
       <label class="query">候选或告警 ID<input v-model="query" maxlength="128" placeholder="输入合成候选 ID" /></label>
       <button class="button" :disabled="loading">{{ loading ? "加载中…" : "筛选" }}</button>
     </form>
+
+    <section v-if="notificationMetrics" class="metric-grid" aria-label="通知投递指标">
+      <article class="panel metric"><span>待发送</span><strong>{{ notificationMetrics.pending_count }}</strong></article>
+      <article class="panel metric"><span>已发送</span><strong>{{ notificationMetrics.sent_count }}</strong></article>
+      <article class="panel metric" :class="{ critical: notificationMetrics.failed_count > 0 }"><span>失败 / 24 小时</span><strong>{{ notificationMetrics.failed_count }} / {{ notificationMetrics.failed_last_24_hours }}</strong></article>
+      <article class="panel metric"><span>最老待发送</span><strong>{{ formatDuration(notificationMetrics.oldest_pending_seconds) }}</strong></article>
+    </section>
+
+    <section v-if="failedDeliveries.length" class="panel delivery-ops">
+      <div class="detail-title"><div><p class="eyebrow">DELIVERY DEAD LETTERS</p><h2>失败通知队列</h2></div><strong>{{ notificationMetrics?.failed_count ?? failedDeliveries.length }} 条</strong></div>
+      <label>重放原因（禁止填写密码、令牌、邮箱或 IP）<input v-model="replayReason" maxlength="500" /></label>
+      <ol class="timeline"><li v-for="notification in failedDeliveries" :key="notification.id"><strong>{{ notificationLabels[notification.kind] }} · {{ notification.provider || "未分配通道" }}</strong><p>告警 <button class="link-button" @click="openAlert(notification.alert_id)">{{ shortId(notification.alert_id) }}</button> · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次</p><small>{{ formatTime(notification.failed_at) }} · {{ notification.last_error_code || "未记录错误码" }}</small><button class="button secondary compact" :disabled="busy || replayReason.trim().length < 3" @click="replayDelivery(notification.id, notification.alert_id)">重放</button></li></ol>
+    </section>
 
     <p v-if="error" class="notice error">{{ error }}</p>
     <p v-if="message" class="notice success">{{ message }}</p>
@@ -302,7 +366,7 @@ onMounted(async () => {
           <div class="actions"><button v-for="action in actions" :key="action.code" class="button" :class="{ danger: action.danger }" :disabled="busy" @click="applyAction(action)">{{ action.label }}</button></div>
         </section>
 
-        <section><h3>通知投递记录</h3><p v-if="selected.notifications.length === 0" class="empty">暂无通知记录。</p><ol v-else class="timeline"><li v-for="notification in selected.notifications" :key="notification.id"><strong>{{ notificationLabels[notification.kind] }} · {{ notificationStatusLabels[notification.status] }}</strong><p>接收人 {{ notification.recipient_username }} · 尝试 {{ notification.attempts }} 次</p><small>{{ formatTime(notification.sent_at || notification.available_at) }}<template v-if="notification.last_error_code"> · {{ notification.last_error_code }}</template></small></li></ol></section>
+        <section><h3>通知投递记录</h3><p v-if="selected.notifications.length === 0" class="empty">暂无通知记录。</p><ol v-else class="timeline"><li v-for="notification in selected.notifications" :key="notification.id"><strong>{{ notificationLabels[notification.kind] }} · {{ notificationStatusLabels[notification.status] }}</strong><p>接收人 {{ notification.recipient_username }} · 通道 {{ notification.provider || "待分配" }} · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次</p><small>{{ formatTime(notification.failed_at || notification.sent_at || notification.available_at) }}<template v-if="notification.provider_message_id"> · 回执 {{ shortId(notification.provider_message_id) }}</template><template v-if="notification.last_error_code"> · {{ notification.last_error_code }}</template></small><button v-if="notification.status === 'failed'" class="button secondary compact" :disabled="busy || replayReason.trim().length < 3" @click="replayDelivery(notification.id, notification.alert_id)">重放</button></li></ol></section>
 
         <section><h3>不可变告警时间线</h3><ol class="timeline"><li v-for="event in selected.events" :key="event.id"><strong>{{ event.action }}</strong><p>{{ event.previous_status || "检测" }} → {{ event.next_status }} · {{ event.reason_code }}</p><p v-if="event.previous_assignee_id !== event.next_assignee_id">负责人：{{ operatorName(event.previous_assignee_id) }} → {{ operatorName(event.next_assignee_id) }}</p><p v-if="event.note">{{ event.note }}</p><small>{{ formatTime(event.created_at) }} · {{ event.request_id || "系统检测" }}</small></li></ol></section>
       </article>
@@ -313,11 +377,13 @@ onMounted(async () => {
 
 <style scoped>
 .risk-page { display: grid; gap: 18px; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }.metric { display: grid; gap: 8px; }.metric span { color: var(--muted); font-size: 13px; font-weight: 700; }.metric strong { font-size: 24px; }.metric.critical { border-color: #f04438; background: #fff5f4; color: #b42318; }
+.delivery-ops { display: grid; gap: 12px; }.delivery-ops label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }.delivery-ops input { box-sizing: border-box; width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: white; font: inherit; }.link-button { padding: 0; border: 0; background: none; color: #b42318; cursor: pointer; font: inherit; font-weight: 700; }.button.compact { margin-top: 8px; padding: 7px 11px; }
 .page-heading, .detail-title, .alert-row span, .actions, .badges { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .page-heading h1, .detail-title h2 { margin: 4px 0; }.page-heading p { margin: 0; color: var(--muted); }.eyebrow { color: #b42318 !important; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
 .filters { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }.filters label, .action-box label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }.filters select, .filters input, .action-box select, textarea { box-sizing: border-box; width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: white; font: inherit; }.filters .query { flex: 1; min-width: 250px; }.filters .check { display: flex; align-items: center; padding: 10px 0; }.filters .check input { width: auto; }
 .risk-layout { display: grid; grid-template-columns: minmax(300px, .72fr) minmax(0, 1.28fr); gap: 18px; align-items: start; }.alert-list { display: grid; gap: 10px; max-height: calc(100vh - 220px); overflow: auto; }.alert-row { display: grid; gap: 8px; padding: 14px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: white; cursor: pointer; }.alert-row.selected, .alert-row:hover { border-color: #f04438; background: #fff5f4; }.alert-row code, .alert-row small { color: var(--muted); overflow-wrap: anywhere; }
 .badges { justify-content: flex-end; flex-wrap: wrap; }.badge { padding: 4px 9px; border-radius: 999px; background: #e2e8f0; font-size: 12px; font-weight: 800; }.badge[data-status="open"], .badge[data-sla="acknowledgement_overdue"], .badge[data-sla="resolution_overdue"], .badge[data-sla="breached"] { background: #fef3f2; color: #b42318; }.badge[data-status="acknowledged"], .badge[data-sla="within_sla"] { background: #fff7ed; color: #9a3412; }.badge[data-status="resolved"], .badge[data-sla="met"] { background: #ecfdf3; color: #067647; }
 .detail { display: grid; gap: 18px; }.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }.detail-grid dt { color: var(--muted); font-size: 12px; font-weight: 700; }.detail-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }.note { padding: 13px; border-radius: 10px; background: #f8fafc; white-space: pre-wrap; }.action-box { display: grid; gap: 12px; padding: 15px; border-radius: 12px; background: #f8fafc; }.action-box h3 { margin: 0; }.actions { justify-content: flex-start; flex-wrap: wrap; }.button.danger { background: #b42318; }.button.secondary { background: #475467; }.timeline { display: grid; gap: 12px; padding-left: 20px; }.timeline li { padding-left: 8px; }.timeline p { margin: 5px 0; }.timeline small, .empty { color: var(--muted); }
-@media (max-width: 900px) { .risk-layout { grid-template-columns: 1fr; }.alert-list { max-height: none; } } @media (max-width: 600px) { .detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .metric-grid { grid-template-columns: 1fr 1fr; }.risk-layout { grid-template-columns: 1fr; }.alert-list { max-height: none; } } @media (max-width: 600px) { .metric-grid, .detail-grid { grid-template-columns: 1fr; } }
 </style>

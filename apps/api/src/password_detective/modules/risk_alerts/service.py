@@ -14,6 +14,7 @@ from password_detective.db.models.risk_alert import (
     RiskAlertKind,
     RiskAlertNotification,
     RiskAlertNotificationKind,
+    RiskAlertNotificationStatus,
     RiskAlertSeverity,
     RiskAlertStatus,
 )
@@ -31,6 +32,11 @@ from password_detective.modules.risk_alerts.schemas import (
     RiskAlertDetail,
     RiskAlertEventResponse,
     RiskAlertListResponse,
+    RiskAlertNotificationListResponse,
+    RiskAlertNotificationMetricsResponse,
+    RiskAlertNotificationProviderMetrics,
+    RiskAlertNotificationReplayRequest,
+    RiskAlertNotificationReplayResponse,
     RiskAlertNotificationResponse,
     RiskAlertOperator,
     RiskAlertSlaState,
@@ -110,6 +116,165 @@ def list_risk_alert_operators(db: Session) -> list[RiskAlertOperator]:
         for operator in operators
     ]
 
+
+def list_risk_alert_notifications(
+    db: Session,
+    *,
+    status: RiskAlertNotificationStatus | None,
+    kind: RiskAlertNotificationKind | None,
+    provider: str | None,
+    page: int,
+    page_size: int,
+) -> RiskAlertNotificationListResponse:
+    filters = []
+    if status is not None:
+        filters.append(RiskAlertNotification.status == status)
+    if kind is not None:
+        filters.append(RiskAlertNotification.kind == kind)
+    normalized_provider = provider.strip() if provider else None
+    if normalized_provider:
+        filters.append(RiskAlertNotification.provider == normalized_provider)
+    total = db.scalar(select(func.count(RiskAlertNotification.id)).where(*filters)) or 0
+    notifications = list(
+        db.scalars(
+            select(RiskAlertNotification)
+            .options(selectinload(RiskAlertNotification.recipient))
+            .where(*filters)
+            .order_by(RiskAlertNotification.created_at.desc(), RiskAlertNotification.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
+    return RiskAlertNotificationListResponse(
+        items=[_notification(notification) for notification in notifications],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def get_risk_alert_notification_metrics(
+    db: Session,
+) -> RiskAlertNotificationMetricsResponse:
+    now = utc_now()
+    status_counts = {
+        status: count
+        for status, count in db.execute(
+            select(RiskAlertNotification.status, func.count(RiskAlertNotification.id)).group_by(
+                RiskAlertNotification.status
+            )
+        )
+    }
+    provider_rows = db.execute(
+        select(
+            RiskAlertNotification.provider,
+            RiskAlertNotification.status,
+            func.count(RiskAlertNotification.id),
+        ).group_by(RiskAlertNotification.provider, RiskAlertNotification.status)
+    )
+    provider_counts: dict[str, dict[RiskAlertNotificationStatus, int]] = {}
+    for provider, status, count in provider_rows:
+        bucket = provider_counts.setdefault(provider or "unassigned", {})
+        bucket[status] = count
+    oldest_pending_at = db.scalar(
+        select(func.min(RiskAlertNotification.created_at)).where(
+            RiskAlertNotification.status == RiskAlertNotificationStatus.PENDING
+        )
+    )
+    failed_last_24_hours = (
+        db.scalar(
+            select(func.count(RiskAlertNotification.id)).where(
+                RiskAlertNotification.status == RiskAlertNotificationStatus.FAILED,
+                RiskAlertNotification.failed_at >= now - timedelta(hours=24),
+            )
+        )
+        or 0
+    )
+    oldest_pending_seconds = None
+    if oldest_pending_at is not None:
+        oldest_pending_seconds = max(0, int((now - _as_utc(oldest_pending_at)).total_seconds()))
+    return RiskAlertNotificationMetricsResponse(
+        generated_at=now,
+        pending_count=status_counts.get(RiskAlertNotificationStatus.PENDING, 0),
+        sent_count=status_counts.get(RiskAlertNotificationStatus.SENT, 0),
+        failed_count=status_counts.get(RiskAlertNotificationStatus.FAILED, 0),
+        failed_last_24_hours=failed_last_24_hours,
+        oldest_pending_seconds=oldest_pending_seconds,
+        providers=[
+            RiskAlertNotificationProviderMetrics(
+                provider=provider,
+                pending_count=counts.get(RiskAlertNotificationStatus.PENDING, 0),
+                sent_count=counts.get(RiskAlertNotificationStatus.SENT, 0),
+                failed_count=counts.get(RiskAlertNotificationStatus.FAILED, 0),
+            )
+            for provider, counts in sorted(provider_counts.items())
+        ],
+    )
+
+
+def replay_risk_alert_notification(
+    db: Session,
+    *,
+    notification_id: str,
+    payload: RiskAlertNotificationReplayRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> RiskAlertNotificationReplayResponse:
+    notification = db.scalar(
+        select(RiskAlertNotification)
+        .where(RiskAlertNotification.id == notification_id)
+        .with_for_update()
+    )
+    if notification is None:
+        raise AppError("risk_alert.notification_not_found", "未找到通知投递记录", status_code=404)
+    if notification.status != RiskAlertNotificationStatus.FAILED:
+        raise AppError(
+            "risk_alert.notification_not_failed",
+            "仅失败的通知投递记录可以重放",
+            status_code=409,
+        )
+    now = utc_now()
+    previous_attempts = notification.attempts
+    previous_error_code = notification.last_error_code
+    previous_provider = notification.provider
+    notification.status = RiskAlertNotificationStatus.PENDING
+    notification.attempts = 0
+    notification.provider = None
+    notification.provider_message_id = None
+    notification.available_at = now
+    notification.sent_at = None
+    notification.failed_at = None
+    notification.last_error_code = None
+    notification.replay_count += 1
+    notification.last_replayed_at = now
+    notification.last_replayed_by_id = principal.user.id
+    notification.updated_at = now
+    write_audit_log(
+        db,
+        action="risk_alert.notification_replay",
+        target_type="risk_alert_notification",
+        target_id=notification.id,
+        result="success",
+        actor_id=principal.user.id,
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "alert_id": notification.alert_id,
+            "kind": notification.kind.value,
+            "previous_attempts": previous_attempts,
+            "previous_error_code": previous_error_code,
+            "previous_provider": previous_provider,
+            "replay_count": notification.replay_count,
+            "reason": payload.reason,
+        },
+    )
+    db.commit()
+    return RiskAlertNotificationReplayResponse(
+        notification_id=notification.id,
+        status=notification.status,
+        replay_count=notification.replay_count,
+        request_id=context.request_id,
+    )
 
 def get_risk_alert_detail(db: Session, alert_id: str) -> RiskAlertDetail:
     alert = db.scalar(
@@ -364,15 +529,24 @@ def _event(event: RiskAlertEvent) -> RiskAlertEventResponse:
 def _notification(notification: RiskAlertNotification) -> RiskAlertNotificationResponse:
     return RiskAlertNotificationResponse(
         id=notification.id,
+        alert_id=notification.alert_id,
+        event_id=notification.event_id,
         recipient_user_id=notification.recipient_user_id,
         recipient_username=notification.recipient.username,
         kind=notification.kind,
         status=notification.status,
         attempts=notification.attempts,
+        provider=notification.provider,
+        provider_message_id=notification.provider_message_id,
         available_at=notification.available_at,
         sent_at=notification.sent_at,
+        failed_at=notification.failed_at,
         last_error_code=notification.last_error_code,
+        replay_count=notification.replay_count,
+        last_replayed_at=notification.last_replayed_at,
+        last_replayed_by_id=notification.last_replayed_by_id,
         created_at=notification.created_at,
+        updated_at=notification.updated_at,
     )
 
 
