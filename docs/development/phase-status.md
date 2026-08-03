@@ -169,6 +169,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 - `verification-v2` 消费关联降权后的有效权重与独立组数；每次有效反馈材料变化在同一事务内追加不可变聚合快照。
 - MFA 候选详情展示脱敏账号/反馈标识、信号类型、组数量和原始/有效权重，不返回原始 IP、安装哈希或关联键。
 - API 57 项通过、1 项真实 Redis 条件测试跳过，覆盖率 90.99%；共享契约 2 项、Web 10 项、Admin 16 项、Desktop 11 项测试通过；类型检查、生产构建、SQLite/MySQL 8.4.11 迁移往返、真实 Redis 和 Docker 空环境冒烟通过。
+- 堆叠 PR #21 已创建；GitHub Actions push 运行 `30775811539` 与 PR 运行 `30775831810` 的 API、Frontend、Desktop 和 Container Images 作业全部通过。
 
 ### 后续范围
 
