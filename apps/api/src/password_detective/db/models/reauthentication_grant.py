@@ -16,6 +16,7 @@ class ReauthenticationPurpose(StrEnum):
     TOTP_DISABLE = "totp_disable"
     ACCOUNT_DELETION = "account_deletion"
     ADMIN_USER_GOVERNANCE = "admin_user_governance"
+    ADMIN_SETTINGS_GOVERNANCE = "admin_settings_governance"
 
 
 class ReauthenticationGrant(Base):

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings, get_settings
+from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.desktop_update import (
@@ -75,13 +76,18 @@ def download_update(
 ) -> FileResponse:
     release, path = prepare_download(db, settings, release_id=release_id)
     digest = base64.b64encode(bytes.fromhex(release.artifact_sha256)).decode("ascii")
+    cache_seconds = get_operational_setting(
+        db,
+        "desktop_update_download_cache_seconds",
+        settings.desktop_update_download_cache_seconds,
+    )
     return FileResponse(
         path,
         media_type=release.content_type,
         filename=release.artifact_filename,
         headers={
             "Cache-Control": (
-                f"public, max-age={settings.desktop_update_download_cache_seconds}, immutable"
+                f"public, max-age={cache_seconds}, immutable"
             ),
             "ETag": f'"sha256-{release.artifact_sha256}"',
             "Digest": f"sha-256={digest}",

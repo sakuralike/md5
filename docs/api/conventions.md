@@ -214,7 +214,21 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 - 用户治理读取接口不返回完整邮箱、密码、TOTP 密钥、刷新令牌、IP 或秘密材料；邮箱查询只用于服务端筛选，响应使用首字符掩码。
 - 列表按注册时间和用户 ID 倒序分页；活跃会话定义为未撤销且未过期，会话总数与最近活跃时间只用于治理摘要。
-- 本切片仅提供只读总览，不提供封禁、解封或角色变更；这些危险写操作必须先实现管理员近期再认证、原因码、幂等和不可变审计。
+- 用户治理读取保持最小披露；停用、恢复和会话撤销已通过管理员近期再认证、原因码、幂等、乐观并发和不可变审计开放，角色变更仍保持关闭。
+
+## 管理端系统配置版本治理
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/admin/settings/versions?page=1&page_size=20` | 仅管理员 + MFA | 返回不可变版本摘要和 `published_version_id`；不返回秘密配置 |
+| `GET` | `/admin/settings/versions/{version_id}` | 仅管理员 + MFA | 返回固定 Schema 快照及相对基线的逐字段差异 |
+| `POST` | `/admin/settings/versions` | 仅管理员 + MFA | 要求 `Idempotency-Key`、`expected_base_version_id` 和结构化原因；只创建草稿，不直接生效 |
+| `POST` | `/admin/settings/versions/{version_id}/publish` | 仅管理员 + MFA | 要求 `admin_settings_governance` 一次性再认证、预期当前发布版本、原因码和幂等键 |
+| `POST` | `/admin/settings/versions/{version_id}/rollback` | 仅管理员 + MFA | 只能选择历史已发布版本；创建新的发布版本，不改写目标历史快照 |
+
+首批 `operational-v1` 快照仅允许每日揭示配额、再认证 TTL、账号删除宽限期、桌面最低版本和升级下载缓存五个字段。Pydantic 在草稿入口执行类型、范围和版本格式校验；不接受任意键值、秘密、令牌或自由文本。
+
+发布和回滚均使用当前生效版本进行乐观并发校验。服务端必须先检查冲突，再消费一次性再认证凭据；`409` 前置冲突不得消耗授权。成功后在同一事务更新 `system_settings` 运行时投影并写最小披露审计。幂等请求摘要不包含再认证令牌，缓存响应不得暴露该令牌。
 
 ## 成功响应
 
@@ -255,7 +269,7 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `POST` | `/admin/auth/reauthenticate` | 仅管理员 + MFA | 当前密码与 TOTP；签发短时、一次性、当前会话族绑定的 `admin_user_governance` 凭据；响应 `no-store` |
+| `POST` | `/admin/auth/reauthenticate` | 仅管理员 + MFA | 当前密码与 TOTP；按 `purpose` 签发短时、一次性、当前会话族绑定的 `admin_user_governance` 或 `admin_settings_governance` 凭据；响应 `no-store` |
 | `PATCH` | `/admin/users/{user_id}/status` | 仅管理员 + MFA | 仅 `active/disabled`；要求一次性再认证、结构化原因、`expected_status` 和 `Idempotency-Key`；停用自动撤销活跃会话 |
 | `POST` | `/admin/users/{user_id}/sessions/revoke` | 仅管理员 + MFA | 要求一次性再认证、结构化原因、`expected_active_session_count` 和 `Idempotency-Key` |
 

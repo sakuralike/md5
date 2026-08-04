@@ -26,7 +26,6 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.core.security import hash_refresh_token
 from password_detective.core.time import utc_now
 from password_detective.db.dependencies import get_db
-from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.admin.audit_logs import (
@@ -41,6 +40,21 @@ from password_detective.modules.admin.audit_schemas import (
 )
 from password_detective.modules.admin.dashboard import get_dashboard_summary
 from password_detective.modules.admin.dashboard_schemas import AdminDashboardSummary
+from password_detective.modules.admin.setting_schemas import (
+    SettingVersionCreateRequest,
+    SettingVersionDetail,
+    SettingVersionListResponse,
+    SettingVersionMutationResponse,
+    SettingVersionPublishRequest,
+    SettingVersionRollbackRequest,
+)
+from password_detective.modules.admin.settings import (
+    create_setting_version,
+    get_setting_version,
+    list_setting_versions,
+    publish_setting_version,
+    rollback_setting_version,
+)
 from password_detective.modules.admin.user_schemas import (
     AdminReauthenticationRequest,
     AdminReauthenticationResponse,
@@ -189,7 +203,7 @@ def admin_reauthenticate(
         settings,
         user=principal.user,
         session_family_id=principal.session_family_id,
-        purpose=ReauthenticationPurpose.ADMIN_USER_GOVERNANCE,
+        purpose=payload.purpose,
         current_password=payload.current_password,
         totp_code=payload.totp_code,
         context=get_client_context(request),
@@ -322,6 +336,169 @@ def admin_user_sessions_revoke(
         result = revoke_admin_user_sessions(
             db,
             user_id=user_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.get("/settings/versions", response_model=SettingVersionListResponse)
+def admin_setting_version_list(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> SettingVersionListResponse:
+    return list_setting_versions(db, page=page, page_size=page_size)
+
+
+@router.get("/settings/versions/{version_id}", response_model=SettingVersionDetail)
+def admin_setting_version_detail(
+    version_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> SettingVersionDetail:
+    return get_setting_version(db, version_id)
+
+
+@router.post(
+    "/settings/versions",
+    response_model=SettingVersionMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("admin.settings.create", limit=30, window_seconds=60))],
+)
+def admin_setting_version_create(
+    payload: SettingVersionCreateRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> SettingVersionMutationResponse:
+    request_hash = payload_digest(payload.model_dump(mode="json"))
+    lease = acquire_idempotency(
+        db,
+        scope="admin.settings.create",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        response.status_code = lease.cached_status or status.HTTP_201_CREATED
+        return SettingVersionMutationResponse.model_validate(lease.cached_response)
+    try:
+        result = create_setting_version(
+            db, payload=payload, principal=principal, context=get_client_context(request)
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_201_CREATED,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.post(
+    "/settings/versions/{version_id}/publish",
+    response_model=SettingVersionMutationResponse,
+    dependencies=[Depends(rate_limit("admin.settings.publish", limit=20, window_seconds=60))],
+)
+def admin_setting_version_publish(
+    version_id: str,
+    payload: SettingVersionPublishRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> SettingVersionMutationResponse:
+    request_hash = payload_digest(
+        {
+            "version_id": version_id,
+            "expected_published_version_id": payload.expected_published_version_id,
+            "reason_code": payload.reason_code.value,
+        }
+    )
+    lease = acquire_idempotency(
+        db,
+        scope="admin.settings.publish",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        return SettingVersionMutationResponse.model_validate(lease.cached_response)
+    try:
+        result = publish_setting_version(
+            db,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.post(
+    "/settings/versions/{version_id}/rollback",
+    response_model=SettingVersionMutationResponse,
+    dependencies=[Depends(rate_limit("admin.settings.rollback", limit=20, window_seconds=60))],
+)
+def admin_setting_version_rollback(
+    version_id: str,
+    payload: SettingVersionRollbackRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> SettingVersionMutationResponse:
+    request_hash = payload_digest(
+        {
+            "version_id": version_id,
+            "expected_published_version_id": payload.expected_published_version_id,
+            "reason_code": payload.reason_code.value,
+        }
+    )
+    lease = acquire_idempotency(
+        db,
+        scope="admin.settings.rollback",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        return SettingVersionMutationResponse.model_validate(lease.cached_response)
+    try:
+        result = rollback_setting_version(
+            db,
+            version_id=version_id,
             payload=payload,
             principal=principal,
             context=get_client_context(request),

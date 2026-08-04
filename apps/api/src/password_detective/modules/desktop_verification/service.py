@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from password_detective.core.candidate_secrets import CandidateSecretVault
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
+from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.archive import Archive
@@ -57,7 +58,7 @@ def register_installation(
     context: ClientContext,
 ) -> InstallationResponse:
     installation_id = str(payload.installation_id)
-    _require_supported_client_version(payload.client_version, settings)
+    _require_supported_client_version(db, payload.client_version, settings)
     public_key_der = _decode_and_validate_public_key(payload.public_key)
     public_key_fingerprint = hashlib.sha256(public_key_der).hexdigest()
     installation = db.get(ClientInstallation, installation_id)
@@ -198,7 +199,7 @@ def create_challenge(
         principal.user.id,
         for_update=True,
     )
-    _require_supported_client_version(payload.client_version, settings)
+    _require_supported_client_version(db, payload.client_version, settings)
     normalized = normalize_fingerprint(payload.fingerprint_digest, payload.fingerprint_algorithm)
     candidate = db.get(PasswordCandidate, payload.candidate_id)
     if candidate is None or candidate.status == CandidateStatus.REJECTED:
@@ -277,7 +278,7 @@ def submit_receipt(
     _validate_challenge_binding(challenge, payload, principal.user.id, installation.id)
     if not hmac.compare_digest(challenge.nonce_hash, _sha256_text(payload.challenge_nonce)):
         raise AppError("desktop.challenge_nonce_invalid", "验证挑战随机值无效", status_code=409)
-    _require_supported_client_version(payload.client_version, settings)
+    _require_supported_client_version(db, payload.client_version, settings)
     if payload.client_version != challenge.client_version:
         raise AppError(
             "desktop.client_version_changed",
@@ -500,16 +501,19 @@ def _sensitive_digest_hash(settings: Settings, digest: str) -> str:
     ).hexdigest()
 
 
-def _require_supported_client_version(version: str, settings: Settings) -> None:
+def _require_supported_client_version(db: Session, version: str, settings: Settings) -> None:
     parsed = _parse_version(version)
-    minimum = _parse_version(settings.desktop_min_client_version)
+    minimum_version = get_operational_setting(
+        db, "desktop_min_client_version", settings.desktop_min_client_version
+    )
+    minimum = _parse_version(minimum_version)
     if parsed < minimum:
         raise AppError(
             "desktop.client_version_unsupported",
-            f"客户端版本过低，最低要求为 {settings.desktop_min_client_version}",
+            f"客户端版本过低，最低要求为 {minimum_version}",
             status_code=426,
             details={
-                "minimum_client_version": settings.desktop_min_client_version,
+                "minimum_client_version": minimum_version,
                 "current_client_version": version,
             },
         )

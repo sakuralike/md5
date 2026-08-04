@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
+from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.security import (
     hash_account_password,
     hash_opaque_token,
@@ -491,7 +492,14 @@ def create_deletion_request(
     now = utc_now()
     record = PrivacyDeletionRequest(
         user_id=principal.user.id,
-        cancel_before=now + timedelta(hours=settings.privacy_deletion_grace_hours),
+        cancel_before=now
+        + timedelta(
+            hours=get_operational_setting(
+                db,
+                "privacy_deletion_grace_hours",
+                settings.privacy_deletion_grace_hours,
+            )
+        ),
     )
     db.add(record)
     db.flush()

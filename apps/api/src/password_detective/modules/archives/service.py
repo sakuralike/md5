@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from password_detective.core.candidate_secrets import CandidateSecretVault
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
+from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.archive import Archive
@@ -454,12 +455,15 @@ def reveal_best_candidate(
             AuditLog.result == "success",
         )
     ) or 0
-    if used >= settings.daily_reveal_quota:
+    daily_reveal_quota = get_operational_setting(
+        db, "daily_reveal_quota", settings.daily_reveal_quota
+    )
+    if used >= daily_reveal_quota:
         raise AppError(
             "archive.daily_reveal_quota_exceeded",
             "今日密码揭示配额已用完",
             status_code=429,
-            details={"daily_quota": settings.daily_reveal_quota},
+            details={"daily_quota": daily_reveal_quota},
         )
 
     vault = CandidateSecretVault(
@@ -488,7 +492,7 @@ def reveal_best_candidate(
         candidate_id=candidate.id,
         password=password,
         candidate_status=candidate.status,
-        remaining_daily_quota=max(settings.daily_reveal_quota - used - 1, 0),
+        remaining_daily_quota=max(daily_reveal_quota - used - 1, 0),
     )
 
 

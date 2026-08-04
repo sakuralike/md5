@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
+from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.security import hash_opaque_token, verify_account_password
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
@@ -66,7 +67,12 @@ def issue_reauthentication_grant(
         purpose=purpose,
         token_hash=hash_opaque_token(raw_token),
         mfa_verified=mfa_verified,
-        expires_at=now + timedelta(minutes=settings.reauthentication_ttl_minutes),
+        expires_at=now
+        + timedelta(
+            minutes=get_operational_setting(
+                db, "reauthentication_ttl_minutes", settings.reauthentication_ttl_minutes
+            )
+        ),
     )
     db.add(record)
     db.flush()

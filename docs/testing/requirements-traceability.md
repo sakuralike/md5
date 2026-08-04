@@ -1,6 +1,6 @@
 # 需求—模块—测试追踪矩阵
 
-- 更新日期：2026-08-03
+- 更新日期：2026-08-04
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
@@ -34,4 +34,5 @@
 | 管理员近期再认证 | `modules/auth/reauthentication.py`、`modules/admin/router.py`、`ReauthenticationPurpose.ADMIN_USER_GOVERNANCE` | `apps/api/tests/test_n2_admin_user_actions.py` | 已覆盖管理员专属、当前密码、TOTP、会话族/目的绑定、一次性消费、重放拒绝和 `no-store` |
 | 用户停用与恢复 | `modules/admin/users.py`、`apps/admin/src/pages/UserGovernancePage.vue` | `apps/api/tests/test_n2_admin_user_actions.py`、`apps/admin/src/services/users.test.ts`、`apps/admin/src/pages/UserGovernancePage.test.ts` | 已覆盖原因码、预期状态、幂等、自动会话撤销、自身/受保护角色边界和最小披露审计 |
 | 管理员撤销用户会话 | `modules/admin/users.py`、`apps/admin/src/services/users.ts` | `apps/api/tests/test_n2_admin_user_actions.py`、`apps/admin/src/services/users.test.ts` | 已覆盖预期活跃会话数、并发冲突、一次性凭据、幂等和审计 |
+| 系统配置版本治理 | `modules/admin/settings.py`、`core/operational_settings.py`、`apps/admin/src/pages/SystemSettingsPage.vue` | `apps/api/tests/test_n2_admin_settings.py`、`apps/admin/src/services/settings.test.ts`、`apps/admin/src/pages/SystemSettingsPage.test.ts` | 已覆盖固定 Schema 校验、不可变草稿、差异、基线并发、配置目的再认证、幂等发布、运行时投影、审计最小披露和新版本回滚 |
 | 角色变更与批量处置 | 未开放 | 无 | 待权限层级、双人复核、资源上限和对象级批量模型冻结后实施 |

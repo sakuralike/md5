@@ -55,6 +55,10 @@ from password_detective.db.models.risk_alert import (
     RiskAlertSeverity,
     RiskAlertStatus,
 )
+from password_detective.db.models.setting_version import (
+    SettingVersionStatus,
+    SystemSettingVersion,
+)
 from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.trust_case import (
@@ -118,10 +122,12 @@ __all__ = [
     "RewardAdjustmentDirection",
     "RewardAdjustmentEvent",
     "RewardKind",
+    "SettingVersionStatus",
     "StateTransitionSource",
     "Submission",
     "SubmissionSource",
     "SystemSetting",
+    "SystemSettingVersion",
     "TrustCase",
     "TrustCaseEvent",
     "TrustCaseKind",

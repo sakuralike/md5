@@ -1039,7 +1039,7 @@ export type AdminSessionRevocationReasonCode =
 
 export interface AdminReauthenticationResponse {
   reauth_token: string;
-  purpose: "admin_user_governance";
+  purpose: "admin_user_governance" | "admin_settings_governance";
   expires_at: string;
 }
 
@@ -1055,6 +1055,63 @@ export interface AdminUserStatusChangeResponse {
 export interface AdminUserSessionRevocationResponse {
   user_id: string;
   revoked_session_count: number;
+  audit_id: string;
+  request_id: string | null;
+}
+
+
+export type SettingVersionStatus = "draft" | "published" | "superseded";
+export type SettingChangeReasonCode =
+  | "security_hardening"
+  | "capacity_adjustment"
+  | "product_policy"
+  | "incident_response"
+  | "rollback";
+
+export interface OperationalSettingsSnapshot {
+  daily_reveal_quota: number;
+  reauthentication_ttl_minutes: number;
+  privacy_deletion_grace_hours: number;
+  desktop_min_client_version: string;
+  desktop_update_download_cache_seconds: number;
+}
+
+export interface SettingDifference {
+  key: keyof OperationalSettingsSnapshot;
+  previous: number | string | null;
+  current: number | string;
+}
+
+export interface SettingVersionSummary {
+  id: string;
+  status: SettingVersionStatus;
+  schema_version: string;
+  snapshot_hash: string;
+  base_version_id: string | null;
+  rollback_of_id: string | null;
+  reason_code: string;
+  created_by: string;
+  published_by: string | null;
+  created_at: string;
+  published_at: string | null;
+  effective_at: string | null;
+}
+
+export interface SettingVersionDetail extends SettingVersionSummary {
+  snapshot: OperationalSettingsSnapshot;
+  differences: SettingDifference[];
+}
+
+export interface SettingVersionListResponse {
+  items: SettingVersionSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  published_version_id: string | null;
+}
+
+export interface SettingVersionMutationResponse {
+  version: SettingVersionDetail;
   audit_id: string;
   request_id: string | null;
 }
