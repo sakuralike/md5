@@ -55,6 +55,10 @@ from password_detective.db.models.risk_alert import (
     RiskAlertSeverity,
     RiskAlertStatus,
 )
+from password_detective.db.models.role_change_request import (
+    RoleChangeRequest,
+    RoleChangeRequestStatus,
+)
 from password_detective.db.models.setting_version import (
     SettingVersionStatus,
     SystemSettingVersion,
@@ -119,6 +123,8 @@ __all__ = [
     "RiskAlertSeverity",
     "RiskAlertStatus",
     "ReputationEvent",
+    "RoleChangeRequest",
+    "RoleChangeRequestStatus",
     "RewardAdjustmentDirection",
     "RewardAdjustmentEvent",
     "RewardKind",

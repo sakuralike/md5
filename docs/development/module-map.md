@@ -11,7 +11,7 @@
 | Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务、可选身份解析 | M2 个人资料扩展与风险策略 |
 | Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数、个人贡献列表和不保存完整指纹的查询遥测 | 高风险揭示二次验证、遥测保留/归档和规模查询优化 |
 | Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v2` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
-| Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP/MFA、真实仪表盘、审计中心、用户处置，以及不可变配置草稿、差异预览、再认证发布、运行时投影和新版本回滚 | 受控角色变更、双人复核、批量资源上限、审计保留/归档和大规模异步导出 |
+| Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP/MFA、真实仪表盘、审计中心、用户处置、受控角色变更双人复核，以及不可变配置草稿、差异预览、再认证发布、运行时投影和新版本回滚 | 角色层级配置化、紧急撤权、批量资源上限、审计保留/归档和大规模异步导出 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
 | Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人案件列表、MFA 统一队列/详情、受控状态矩阵、不可变事件、限流、幂等和审计脱敏 | 结果通知、SLA、候选处置编排、账号申诉和自动分派 |
 | Risk Alerts | `apps/api/src/password_detective/modules/risk_alerts/` | `risk-alert-v1` 检测、`risk-alert-sla-v1` 响应/解决时限、MFA 值班人员指派、负责人/超时筛选、不可变事件、事务通知 Outbox、SMTP/Webhook 投递、投递指标/失败队列、幂等人工重放和处置 | 排班与升级链、真实 SMTP 服务商/发件域名验收、最终送达回调、指标导出、动态规则和批量操作；关联分析由 Correlation 模块提供 |

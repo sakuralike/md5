@@ -275,4 +275,15 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 管理员治理凭据不得由公开用户再认证接口签发。对象级规则禁止管理员处置自身、其他管理员和服务账号；状态或会话计数冲突返回 `409` 且不消费凭据。成功响应可由幂等记录重放，但同一再认证令牌用于新的幂等请求必须返回 `401`。审计详情不得包含当前密码、TOTP、再认证令牌、完整邮箱、完整 IP 或自由文本。
 
-角色变更与批量处置尚未开放，后续必须先冻结权限层级、双人复核和资源上限。
+受控角色变更已开放最小后端闭环：普通角色转换必须创建请求并由另一名管理员复核；管理员、服务账号、自身对象、批量处置和紧急撤权仍关闭。
+
+## 管理端受控角色变更
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/admin/role-change-requests` | 管理员 + 当前会话 MFA | 分页、状态筛选、最小披露 |
+| `POST` | `/admin/users/{user_id}/role-change-requests` | 管理员 + 当前会话 MFA | 用户治理一次性再认证、固定转换矩阵、对象保护、幂等和审计 |
+| `POST` | `/admin/role-change-requests/{request_id}/approve` | 不同管理员 + 当前会话 MFA | 请求状态与目标角色乐观并发、一次性再认证、批准后撤销目标活跃会话 |
+| `POST` | `/admin/role-change-requests/{request_id}/reject` | 不同管理员 + 当前会话 MFA | 请求状态乐观并发、一次性再认证、幂等和审计 |
+
+当前允许 `user`、`trusted_contributor`、`moderator` 之间的固定转换；管理员、服务账号、申请人自身、非正常账号和批量处置不允许进入该入口。请求响应不得包含密码、TOTP、再认证令牌或完整邮箱。

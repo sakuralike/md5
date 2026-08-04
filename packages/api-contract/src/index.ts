@@ -1060,6 +1060,47 @@ export interface AdminUserSessionRevocationResponse {
 }
 
 
+export type RoleChangeRequestStatus = "pending" | "approved" | "rejected";
+export type RoleChangeReasonCode =
+  | "trust_promotion"
+  | "role_alignment"
+  | "duty_assignment"
+  | "duty_removal"
+  | "security_response";
+export type RoleChangeReviewReasonCode =
+  | "verified"
+  | "insufficient_evidence"
+  | "policy_conflict"
+  | "security_response";
+
+export interface RoleChangeRequest {
+  id: string;
+  target_user_id: string;
+  expected_role: UserRole;
+  requested_role: UserRole;
+  status: RoleChangeRequestStatus;
+  requested_by: string;
+  reviewed_by: string | null;
+  reason_code: string;
+  review_reason_code: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface RoleChangeRequestListResponse {
+  items: RoleChangeRequest[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RoleChangeMutationResponse {
+  request: RoleChangeRequest;
+  revoked_session_count: number;
+  audit_id: string;
+  request_id: string | null;
+}
+
 export type SettingVersionStatus = "draft" | "published" | "superseded";
 export type SettingChangeReasonCode =
   | "security_hardening"

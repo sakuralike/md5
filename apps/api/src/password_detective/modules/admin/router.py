@@ -26,6 +26,9 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.core.security import hash_refresh_token
 from password_detective.core.time import utc_now
 from password_detective.db.dependencies import get_db
+from password_detective.db.models.role_change_request import (
+    RoleChangeRequestStatus as RoleChangeWorkflowStatus,
+)
 from password_detective.db.models.user import UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.admin.audit_logs import (
@@ -40,6 +43,17 @@ from password_detective.modules.admin.audit_schemas import (
 )
 from password_detective.modules.admin.dashboard import get_dashboard_summary
 from password_detective.modules.admin.dashboard_schemas import AdminDashboardSummary
+from password_detective.modules.admin.role_change_schemas import (
+    RoleChangeCreateRequest,
+    RoleChangeMutationResponse,
+    RoleChangeRequestListResponse,
+    RoleChangeReviewRequest,
+)
+from password_detective.modules.admin.role_changes import (
+    create_role_change_request,
+    list_role_change_requests,
+    review_role_change_request,
+)
 from password_detective.modules.admin.setting_schemas import (
     SettingVersionCreateRequest,
     SettingVersionDetail,
@@ -351,6 +365,179 @@ def admin_user_sessions_revoke(
         db.rollback()
         abandon_idempotency(db, lease)
         raise
+
+
+@router.get("/role-change-requests", response_model=RoleChangeRequestListResponse)
+def admin_role_change_request_list(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+    request_status: Annotated[
+        RoleChangeWorkflowStatus | None, Query(alias="status")
+    ] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> RoleChangeRequestListResponse:
+    return list_role_change_requests(
+        db, status=request_status, page=page, page_size=page_size
+    )
+
+
+@router.post(
+    "/users/{user_id}/role-change-requests",
+    response_model=RoleChangeMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("admin.role_changes.create", limit=20, window_seconds=60))],
+)
+def admin_role_change_request_create(
+    user_id: str,
+    payload: RoleChangeCreateRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> RoleChangeMutationResponse:
+    request_hash = payload_digest(
+        {
+            "user_id": user_id,
+            "expected_role": payload.expected_role.value,
+            "requested_role": payload.requested_role.value,
+            "reason_code": payload.reason_code.value,
+        }
+    )
+    lease = acquire_idempotency(
+        db,
+        scope="admin.role_changes.create",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        response.status_code = lease.cached_status or status.HTTP_201_CREATED
+        return RoleChangeMutationResponse.model_validate(lease.cached_response)
+    try:
+        result = create_role_change_request(
+            db,
+            user_id=user_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_201_CREATED,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+def _review_role_change(
+    *,
+    request_id: str,
+    approve: bool,
+    payload: RoleChangeReviewRequest,
+    request: Request,
+    response: Response,
+    db: Session,
+    principal: Principal,
+    idempotency_key: str,
+) -> RoleChangeMutationResponse:
+    action = "approve" if approve else "reject"
+    request_hash = payload_digest(
+        {
+            "request_id": request_id,
+            "action": action,
+            "expected_status": payload.expected_status.value,
+            "reason_code": payload.reason_code.value,
+        }
+    )
+    lease = acquire_idempotency(
+        db,
+        scope=f"admin.role_changes.{action}",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        response.status_code = lease.cached_status or status.HTTP_200_OK
+        return RoleChangeMutationResponse.model_validate(lease.cached_response)
+    try:
+        result = review_role_change_request(
+            db,
+            request_id=request_id,
+            approve=approve,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@router.post(
+    "/role-change-requests/{request_id}/approve",
+    response_model=RoleChangeMutationResponse,
+    dependencies=[Depends(rate_limit("admin.role_changes.approve", limit=20, window_seconds=60))],
+)
+def admin_role_change_request_approve(
+    request_id: str,
+    payload: RoleChangeReviewRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> RoleChangeMutationResponse:
+    return _review_role_change(
+        request_id=request_id,
+        approve=True,
+        payload=payload,
+        request=request,
+        response=response,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/role-change-requests/{request_id}/reject",
+    response_model=RoleChangeMutationResponse,
+    dependencies=[Depends(rate_limit("admin.role_changes.reject", limit=20, window_seconds=60))],
+)
+def admin_role_change_request_reject(
+    request_id: str,
+    payload: RoleChangeReviewRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> RoleChangeMutationResponse:
+    return _review_role_change(
+        request_id=request_id,
+        approve=False,
+        payload=payload,
+        request=request,
+        response=response,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.get("/settings/versions", response_model=SettingVersionListResponse)

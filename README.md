@@ -71,6 +71,7 @@ docker compose up --build
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
 - [项目整体完成度审计（2026-08-03 复核）](./docs/development/2026-08-03-completion-audit.md)
+- [N2 第 6 次迭代记录](./docs/development/2026-08-04-n2-iteration-6.md)
 - [N2 第 5 次迭代记录](./docs/development/2026-08-04-n2-iteration-5.md)
 - [N2 第 4 次迭代记录](./docs/development/2026-08-03-n2-iteration-4.md)
 - [N2 第 3 次迭代记录](./docs/development/2026-08-03-n2-iteration-3.md)
