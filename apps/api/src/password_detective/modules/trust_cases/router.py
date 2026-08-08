@@ -31,6 +31,8 @@ from password_detective.modules.trust_cases.schemas import (
     TrustCaseListResponse,
     TrustCaseReopenRequest,
     TrustCaseReopenResponse,
+    TrustCaseResolveRequest,
+    TrustCaseResolveResponse,
     TrustCaseTransitionRequest,
     TrustCaseTransitionResponse,
 )
@@ -43,6 +45,7 @@ from password_detective.modules.trust_cases.service import (
     list_admin_cases,
     list_my_cases,
     reopen_case,
+    resolve_case,
     transition_case,
 )
 
@@ -218,6 +221,46 @@ def admin_case_transition(
             lease,
             response_status=200,
             response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@admin_router.post(
+    "/{case_id}/resolve",
+    response_model=TrustCaseResolveResponse,
+    dependencies=[Depends(rate_limit("admin.trust_case.resolve", limit=20, window_seconds=60))],
+)
+def admin_case_resolve(
+    case_id: str,
+    payload: TrustCaseResolveRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> TrustCaseResolveResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="admin.trust_case.resolve",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest({"case_id": case_id, **payload.model_dump(mode="json")}),
+    )
+    if lease.cached_response is not None:
+        return TrustCaseResolveResponse.model_validate(lease.cached_response)
+    try:
+        response = resolve_case(
+            db,
+            case_id=case_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db, lease, response_status=200, response_body=response.model_dump(mode="json")
         )
         return response
     except Exception:

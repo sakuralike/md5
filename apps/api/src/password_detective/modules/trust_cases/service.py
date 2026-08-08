@@ -30,6 +30,8 @@ from password_detective.modules.trust_cases.schemas import (
     TrustCaseListResponse,
     TrustCaseReopenRequest,
     TrustCaseReopenResponse,
+    TrustCaseResolveRequest,
+    TrustCaseResolveResponse,
     TrustCaseSummary,
     TrustCaseTransitionRequest,
     TrustCaseTransitionResponse,
@@ -52,6 +54,25 @@ _ALLOWED_RESOLUTION_CODES = {
     # Final resolution must use the later atomic orchestration endpoint.
     TrustCaseKind.ACCOUNT_APPEAL: {CaseResolutionCode.REVIEW_STARTED},
 }
+
+_FINAL_RESOLUTIONS = {
+    TrustCaseKind.REPORT: {
+        CaseResolutionCode.ACTION_TAKEN: TrustCaseStatus.RESOLVED,
+        CaseResolutionCode.NO_VIOLATION: TrustCaseStatus.DISMISSED,
+        CaseResolutionCode.INSUFFICIENT_EVIDENCE: TrustCaseStatus.DISMISSED,
+    },
+    TrustCaseKind.APPEAL: {
+        CaseResolutionCode.APPEAL_UPHELD: TrustCaseStatus.RESOLVED,
+        CaseResolutionCode.APPEAL_DENIED: TrustCaseStatus.DISMISSED,
+        CaseResolutionCode.INSUFFICIENT_EVIDENCE: TrustCaseStatus.DISMISSED,
+    },
+    TrustCaseKind.ACCOUNT_APPEAL: {
+        CaseResolutionCode.ACCOUNT_RESTORED: TrustCaseStatus.RESOLVED,
+        CaseResolutionCode.ACCOUNT_RESTRICTION_UPHELD: TrustCaseStatus.DISMISSED,
+        CaseResolutionCode.INSUFFICIENT_EVIDENCE: TrustCaseStatus.DISMISSED,
+    },
+}
+
 
 _ALLOWED_TRANSITIONS = {
     TrustCaseStatus.OPEN: {
@@ -341,6 +362,99 @@ def transition_case(
         current_status=case.status,
         previous_assignee_id=previous_assignee_id,
         current_assignee_id=case.assigned_to_id,
+        version=case.version,
+        event_id=event.id,
+        resolution_code=payload.resolution_code,
+        request_id=context.request_id,
+    )
+
+
+def resolve_case(
+    db: Session,
+    *,
+    case_id: str,
+    payload: TrustCaseResolveRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> TrustCaseResolveResponse:
+    case = _locked_case(db, case_id)
+    _require_version(case, payload.expected_version)
+    if case.status not in {TrustCaseStatus.OPEN, TrustCaseStatus.IN_REVIEW}:
+        raise AppError(
+            "trust.resolve_not_allowed",
+            "只有待处理或审核中的案件可以处置",
+            status_code=409,
+        )
+    if case.assigned_to_id is not None and case.assigned_to_id != principal.user.id:
+        raise AppError(
+            "trust.case_assignee_mismatch",
+            "案件已指派给其他审核员，请先完成重新指派",
+            status_code=409,
+        )
+    target_status = _FINAL_RESOLUTIONS[case.kind].get(payload.resolution_code)
+    if target_status is None:
+        raise AppError(
+            "trust.resolution_not_allowed",
+            "处理结果码不适用于该案件类型",
+            status_code=422,
+        )
+
+    now = utc_now()
+    previous_status = case.status
+    previous_assignee_id = case.assigned_to_id
+    case.status = target_status
+    case.assigned_to_id = principal.user.id
+    case.resolved_by_id = principal.user.id
+    case.resolution_code = payload.resolution_code.value
+    case.resolution_note = payload.resolution_note
+    case.resolved_at = now
+    case.updated_at = now
+    case.version += 1
+    event = _append_event(
+        db,
+        case=case,
+        actor_id=principal.user.id,
+        previous_status=previous_status,
+        previous_assignee_id=previous_assignee_id,
+        next_status=target_status,
+        next_assignee_id=case.assigned_to_id,
+        action="case.resolved",
+        reason_code=payload.resolution_code.value,
+        note=payload.resolution_note,
+        request_id=context.request_id,
+    )
+    db.flush()
+    write_audit_log(
+        db,
+        action="trust_case.resolve",
+        target_type="trust_case",
+        target_id=case.id,
+        result="success",
+        actor_id=principal.user.id,
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "kind": case.kind.value,
+            "subject_type": case.subject_type.value,
+            "candidate_id": case.candidate_id,
+            "target_user_id": case.target_user_id,
+            "risk_alert_id": case.risk_alert_id,
+            "previous_status": previous_status.value,
+            "current_status": target_status.value,
+            "previous_assignee_id": previous_assignee_id,
+            "current_assignee_id": case.assigned_to_id,
+            "version": case.version,
+            "resolution_code": payload.resolution_code.value,
+            "event_id": event.id,
+        },
+    )
+    db.commit()
+    return TrustCaseResolveResponse(
+        case_id=case.id,
+        previous_status=previous_status,
+        current_status=target_status,
+        current_assignee_id=principal.user.id,
+        resolved_by_id=principal.user.id,
         version=case.version,
         event_id=event.id,
         resolution_code=payload.resolution_code,

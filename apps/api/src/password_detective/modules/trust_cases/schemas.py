@@ -54,6 +54,8 @@ class CaseResolutionCode(StrEnum):
     INSUFFICIENT_EVIDENCE = "admin.insufficient_evidence"
     APPEAL_UPHELD = "admin.appeal_upheld"
     APPEAL_DENIED = "admin.appeal_denied"
+    ACCOUNT_RESTORED = "admin.account_restored"
+    ACCOUNT_RESTRICTION_UPHELD = "admin.account_restriction_upheld"
     REOPENED = "admin.reopened"
 
 
@@ -135,6 +137,22 @@ class TrustCaseReopenRequest(BaseModel):
     @classmethod
     def normalize_note(cls, value: str | None) -> str | None:
         return _normalize_note(value)
+
+
+class TrustCaseResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    resolution_code: CaseResolutionCode
+    resolution_note: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("resolution_note")
+    @classmethod
+    def normalize_resolution_note(cls, value: str) -> str:
+        normalized = _normalize_note(value)
+        if normalized is None:
+            raise ValueError("处置说明不能为空")
+        return normalized
 
 
 class TrustCaseTransitionRequest(BaseModel):
@@ -227,6 +245,18 @@ class TrustCaseTransitionResponse(BaseModel):
     current_status: TrustCaseStatus
     previous_assignee_id: str | None
     current_assignee_id: str | None
+    version: int
+    event_id: str
+    resolution_code: CaseResolutionCode
+    request_id: str | None
+
+
+class TrustCaseResolveResponse(BaseModel):
+    case_id: str
+    previous_status: TrustCaseStatus
+    current_status: TrustCaseStatus
+    current_assignee_id: str
+    resolved_by_id: str
     version: int
     event_id: str
     resolution_code: CaseResolutionCode
