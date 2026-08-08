@@ -1,18 +1,1 @@
-{
-  "apps/admin/src/pages/CandidateModerationPage.vue": {
-    "style-block": 1,
-    "hex-color": 22,
-    "native-button": 3,
-    "native-input": 1,
-    "native-select": 1,
-    "native-textarea": 1
-  },
-  "apps/admin/src/pages/DesktopReleasesPage.vue": {
-    "style-block": 1,
-    "hex-color": 13,
-    "native-button": 5,
-    "native-input": 8,
-    "native-select": 3,
-    "native-textarea": 1
-  }
-}
+{}

@@ -6,6 +6,18 @@ import type {
   ManualTransitionReason,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
 import { ApiError } from "@password-detective/api-contract";
 import {
   createTransitionKey,
@@ -18,7 +30,7 @@ import { useAdminAuthStore } from "../stores/auth";
 const auth = useAdminAuthStore();
 const candidates = ref<CandidateModerationSummary[]>([]);
 const selected = ref<CandidateModerationDetail | null>(null);
-const statusFilter = ref<CandidateStatus | "">("");
+const statusFilter = ref<CandidateStatus | "all">("all");
 const query = ref("");
 const total = ref(0);
 const loading = ref(false);
@@ -108,6 +120,12 @@ function weightReduction(raw: number, effective: number): string {
   return Math.max(raw - effective, 0).toFixed(3);
 }
 
+function statusVariant(status: CandidateStatus): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "verified") return "secondary";
+  if (status === "rejected") return "destructive";
+  return status === "quarantined" ? "default" : "outline";
+}
+
 function describeError(value: unknown): string {
   return value instanceof ApiError ? `${value.body.message}（${value.body.code}）` : value instanceof Error ? value.message : "操作失败";
 }
@@ -117,7 +135,7 @@ async function loadCandidates(selectFirst = false): Promise<void> {
   error.value = "";
   try {
     const response = await listModerationCandidates(
-      { status: statusFilter.value, query: query.value, page: 1, pageSize: 50 },
+      { status: statusFilter.value === "all" ? "" : statusFilter.value, query: query.value, page: 1, pageSize: 50 },
       requireToken(),
     );
     candidates.value = response.items;
@@ -175,164 +193,285 @@ onMounted(() => loadCandidates(true));
 </script>
 
 <template>
-  <section class="stack">
-    <header class="panel moderation-heading">
-      <div>
-        <div class="eyebrow">M4 · 人工审核闭环</div>
-        <h1>候选审核</h1>
-        <p class="lead">按状态或指纹定位候选，查看独立证据与状态时间线，并执行具备 MFA、幂等和审计约束的人工处置。</p>
+  <section class="space-y-5">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          M4 · 人工审核闭环
+        </p>
+        <h1 class="text-2xl font-semibold tracking-tight">候选审核</h1>
+        <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
+          按状态或指纹定位候选，查看独立证据与状态时间线，并执行具备 MFA、幂等和审计约束的人工处置。
+        </p>
       </div>
-      <aside class="safety-note">
-        <strong>最小披露</strong>
-        <span>管理端只展示候选 ID、存档指纹和证据摘要，不读取或返回候选密码材料。</span>
+      <aside class="max-w-md space-y-2 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm">
+        <strong class="text-primary">最小披露</strong>
+        <p class="leading-6 text-muted-foreground">
+          管理端只展示候选 ID、存档指纹和证据摘要，不读取或返回候选密码材料。
+        </p>
       </aside>
     </header>
 
-    <section class="panel filter-bar" aria-label="候选筛选">
-      <label class="field"><span>状态</span><select v-model="statusFilter"><option value="">全部状态</option><option v-for="(label, value) in statusLabels" :key="value" :value="value">{{ label }}</option></select></label>
-      <label class="field query-field"><span>候选 / 存档 / 指纹</span><input v-model="query" placeholder="输入 ID 或哈希片段" @keyup.enter="loadCandidates()" /></label>
-      <button class="button" type="button" :disabled="loading" @click="loadCandidates()">{{ loading ? "查询中…" : "查询" }}</button>
-      <span class="muted">共 {{ total }} 条</span>
-    </section>
+    <form
+      class="grid gap-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm md:grid-cols-[minmax(10rem,0.7fr)_minmax(16rem,1.5fr)_auto_auto] md:items-end"
+      aria-label="候选筛选"
+      @submit.prevent="loadCandidates(true)"
+    >
+      <Label class="grid gap-2">
+        状态
+        <Select v-model="statusFilter">
+          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="pending">待验证</SelectItem>
+            <SelectItem value="verified">已验证</SelectItem>
+            <SelectItem value="rejected">已拒绝</SelectItem>
+            <SelectItem value="quarantined">隔离中</SelectItem>
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label class="grid gap-2">
+        候选 / 存档 / 指纹
+        <Input v-model="query" placeholder="输入 ID 或哈希片段" />
+      </Label>
+      <Button type="submit" :disabled="loading">
+        {{ loading ? "查询中…" : "查询" }}
+      </Button>
+      <Badge variant="secondary" class="justify-center md:mb-2">共 {{ total }} 条</Badge>
+    </form>
 
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="message" class="success" role="status">{{ message }}</p>
+    <p
+      v-if="error"
+      class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="message"
+      class="rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary"
+      role="status"
+    >
+      {{ message }}
+    </p>
 
-    <section class="moderation-layout">
-      <div class="panel candidate-list-panel">
-        <div class="section-title"><h2>审核队列</h2><span class="muted">当前页 {{ candidates.length }} 条</span></div>
-        <div v-if="!loading && candidates.length === 0" class="empty-state">没有符合条件的候选记录。</div>
-        <button v-for="candidate in candidates" :key="candidate.id" type="button" class="candidate-row" :class="{ selected: selected?.id === candidate.id }" @click="openCandidate(candidate.id)">
-          <div class="row-heading"><strong>{{ shortId(candidate.id) }}</strong><span class="badge status-badge" :data-status="candidate.status">{{ statusLabels[candidate.status] }}</span></div>
-          <code>{{ candidate.fingerprints[0]?.algorithm }}:{{ candidate.fingerprints[0]?.digest }}</code>
-          <div class="row-meta"><span>提交 {{ candidate.submission_count }}</span><span>反馈 {{ candidate.feedback_count }}</span><span>{{ formatTime(candidate.updated_at) }}</span></div>
-        </button>
-      </div>
+    <section class="grid items-start gap-5 lg:grid-cols-[minmax(18.75rem,0.72fr)_minmax(0,1.28fr)]">
+      <aside class="grid max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold">审核队列</h2>
+          <span class="text-xs text-muted-foreground">当前页 {{ candidates.length }} 条</span>
+        </div>
+        <p v-if="!loading && candidates.length === 0" class="py-8 text-center text-sm text-muted-foreground">
+          没有符合条件的候选记录。
+        </p>
+        <Button
+          v-for="candidate in candidates"
+          :key="candidate.id"
+          type="button"
+          variant="outline"
+          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
+          :class="selected?.id === candidate.id ? 'border-primary/60 bg-primary/10' : ''"
+          @click="openCandidate(candidate.id)"
+        >
+          <span class="grid w-full gap-2">
+            <span class="flex items-start justify-between gap-3">
+              <strong class="break-all">{{ shortId(candidate.id) }}</strong>
+              <Badge :variant="statusVariant(candidate.status)">
+                {{ statusLabels[candidate.status] }}
+              </Badge>
+            </span>
+            <code class="break-all text-xs text-muted-foreground">
+              {{ candidate.fingerprints[0]?.algorithm }}:{{ candidate.fingerprints[0]?.digest }}
+            </code>
+            <small class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+              <span>提交 {{ candidate.submission_count }}</span>
+              <span>反馈 {{ candidate.feedback_count }}</span>
+              <span>{{ formatTime(candidate.updated_at) }}</span>
+            </small>
+          </span>
+        </Button>
+      </aside>
 
-      <div class="stack detail-stack">
-        <section v-if="detailLoading" class="panel empty-state">正在加载审核详情…</section>
+      <div class="space-y-5">
+        <section v-if="detailLoading" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+          正在加载审核详情…
+        </section>
         <template v-else-if="selected">
-          <section class="panel stack">
-            <div class="section-title"><div><div class="eyebrow">候选详情</div><h2>{{ shortId(selected.id) }}</h2></div><span class="badge status-badge" :data-status="selected.status">{{ statusLabels[selected.status] }}</span></div>
-            <dl class="detail-grid">
-              <div><dt>存档 ID</dt><dd><code>{{ selected.archive_id }}</code></dd></div>
-              <div><dt>置信度</dt><dd>{{ selected.confidence_score.toFixed(3) }}</dd></div>
-              <div><dt>独立成功证据</dt><dd>{{ selected.evidence_snapshot.independent_success_count }} / 权重 {{ selected.evidence_snapshot.success_weight }}</dd></div>
-              <div><dt>独立失败证据</dt><dd>{{ selected.evidence_snapshot.independent_failure_count }} / 权重 {{ selected.evidence_snapshot.failure_weight }}</dd></div>
+          <section class="space-y-5 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">候选详情</p>
+                <h2 class="break-all text-lg font-semibold tracking-tight">{{ shortId(selected.id) }}</h2>
+              </div>
+              <Badge :variant="statusVariant(selected.status)">{{ statusLabels[selected.status] }}</Badge>
+            </div>
+            <dl class="grid gap-4 sm:grid-cols-2">
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">存档 ID</dt><dd><code class="break-all text-sm">{{ selected.archive_id }}</code></dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">置信度</dt><dd>{{ selected.confidence_score.toFixed(3) }}</dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">独立成功证据</dt><dd>{{ selected.evidence_snapshot.independent_success_count }} / 权重 {{ selected.evidence_snapshot.success_weight }}</dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">独立失败证据</dt><dd>{{ selected.evidence_snapshot.independent_failure_count }} / 权重 {{ selected.evidence_snapshot.failure_weight }}</dd></div>
             </dl>
-            <div class="fingerprints"><strong>存档指纹</strong><code v-for="fingerprint in selected.fingerprints" :key="`${fingerprint.algorithm}:${fingerprint.digest}`">{{ fingerprint.algorithm }}:{{ fingerprint.digest }}</code></div>
+            <div class="grid gap-2">
+              <strong class="text-sm">存档指纹</strong>
+              <code
+                v-for="fingerprint in selected.fingerprints"
+                :key="`${fingerprint.algorithm}:${fingerprint.digest}`"
+                class="break-all rounded-md bg-muted px-3 py-2 text-xs"
+              >
+                {{ fingerprint.algorithm }}:{{ fingerprint.digest }}
+              </code>
+            </div>
           </section>
 
-          <section class="panel stack correlation-panel">
-            <div class="section-title">
-              <div><div class="eyebrow">{{ selected.correlation_snapshot.rule_version }}</div><h2>关联证据与动态降权</h2></div>
-              <span class="badge" :class="{ warning: selected.correlation_snapshot.correlated_group_count > 0 }">{{ selected.correlation_snapshot.correlated_group_count }} 个关联组</span>
+          <section class="space-y-5 rounded-lg border border-primary/20 bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                  {{ selected.correlation_snapshot.rule_version }}
+                </p>
+                <h2 class="text-lg font-semibold tracking-tight">关联证据与动态降权</h2>
+              </div>
+              <Badge :variant="selected.correlation_snapshot.correlated_group_count > 0 ? 'default' : 'outline'">
+                {{ selected.correlation_snapshot.correlated_group_count }} 个关联组
+              </Badge>
             </div>
-            <p class="muted">关联键只在后端内存中参与计算；此处仅展示账号、证据 ID 和关联类型，不返回 IP 网段或安装标识哈希。</p>
-            <dl class="detail-grid correlation-metrics">
-              <div><dt>反馈 / 独立组</dt><dd>{{ selected.correlation_snapshot.feedback_count }} / {{ selected.correlation_snapshot.independent_group_count }}</dd></div>
-              <div><dt>被降权反馈</dt><dd>{{ selected.correlation_snapshot.downweighted_feedback_count }}</dd></div>
-              <div><dt>成功权重</dt><dd>{{ selected.correlation_snapshot.raw_success_weight }} → {{ selected.correlation_snapshot.effective_success_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_success_weight, selected.correlation_snapshot.effective_success_weight) }}）</dd></div>
-              <div><dt>失败权重</dt><dd>{{ selected.correlation_snapshot.raw_failure_weight }} → {{ selected.correlation_snapshot.effective_failure_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_failure_weight, selected.correlation_snapshot.effective_failure_weight) }}）</dd></div>
+            <p class="text-sm leading-6 text-muted-foreground">
+              关联键只在后端内存中参与计算；此处仅展示账号、证据 ID 和关联类型，不返回 IP 网段或安装标识哈希。
+            </p>
+            <dl class="grid gap-4 sm:grid-cols-2">
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">反馈 / 独立组</dt><dd>{{ selected.correlation_snapshot.feedback_count }} / {{ selected.correlation_snapshot.independent_group_count }}</dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">被降权反馈</dt><dd>{{ selected.correlation_snapshot.downweighted_feedback_count }}</dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">成功权重</dt><dd>{{ selected.correlation_snapshot.raw_success_weight }} → {{ selected.correlation_snapshot.effective_success_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_success_weight, selected.correlation_snapshot.effective_success_weight) }}）</dd></div>
+              <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">失败权重</dt><dd>{{ selected.correlation_snapshot.raw_failure_weight }} → {{ selected.correlation_snapshot.effective_failure_weight }}（降低 {{ weightReduction(selected.correlation_snapshot.raw_failure_weight, selected.correlation_snapshot.effective_failure_weight) }}）</dd></div>
             </dl>
-            <div v-if="selected.correlation_snapshot.correlated_group_count === 0" class="empty-state">当前未发现共享安装实例或 IP 网段形成的关联反馈组。</div>
-            <ol v-else class="correlation-groups">
-              <li v-for="group in selected.correlation_groups.filter((item) => item.member_count > 1)" :key="group.group_id">
-                <div class="timeline-title"><strong>{{ group.group_id }} · {{ group.member_count }} 个账号</strong><span class="badge warning">{{ group.shared_signals.map((signal) => correlationSignalLabels[signal]).join(" + ") }}</span></div>
-                <p>成功 {{ group.success_count }} 条，权重 {{ group.raw_success_weight }} → {{ group.effective_success_weight }}；失败 {{ group.failure_count }} 条，权重 {{ group.raw_failure_weight }} → {{ group.effective_failure_weight }}</p>
-                <small>账号：{{ group.user_ids.map(shortId).join("、") }} · 证据：{{ group.feedback_ids.map(shortId).join("、") }}</small>
+            <p
+              v-if="selected.correlation_snapshot.correlated_group_count === 0"
+              class="rounded-md bg-muted px-4 py-6 text-center text-sm text-muted-foreground"
+            >
+              当前未发现共享安装实例或 IP 网段形成的关联反馈组。
+            </p>
+            <ol v-else class="space-y-3">
+              <li
+                v-for="group in selected.correlation_groups.filter((item) => item.member_count > 1)"
+                :key="group.group_id"
+                class="space-y-2 rounded-lg border bg-background p-4"
+              >
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <strong>{{ group.group_id }} · {{ group.member_count }} 个账号</strong>
+                  <Badge variant="outline">
+                    {{ group.shared_signals.map((signal) => correlationSignalLabels[signal]).join(" + ") }}
+                  </Badge>
+                </div>
+                <p class="text-sm leading-6">成功 {{ group.success_count }} 条，权重 {{ group.raw_success_weight }} → {{ group.effective_success_weight }}；失败 {{ group.failure_count }} 条，权重 {{ group.raw_failure_weight }} → {{ group.effective_failure_weight }}</p>
+                <small class="block break-all text-muted-foreground">账号：{{ group.user_ids.map(shortId).join("、") }} · 证据：{{ group.feedback_ids.map(shortId).join("、") }}</small>
               </li>
             </ol>
-            <details v-if="selected.correlation_assessments.length > 0">
-              <summary>查看不可变评估历史（{{ selected.correlation_assessments.length }} 条）</summary>
-              <ol class="timeline compact-timeline">
-                <li v-for="assessment in selected.correlation_assessments.slice(0, 20)" :key="assessment.id">
+            <details v-if="selected.correlation_assessments.length > 0" class="rounded-lg border bg-muted/30 p-4">
+              <summary class="cursor-pointer font-semibold text-primary">
+                查看不可变评估历史（{{ selected.correlation_assessments.length }} 条）
+              </summary>
+              <ol class="mt-4 space-y-3 border-l pl-5">
+                <li v-for="assessment in selected.correlation_assessments.slice(0, 20)" :key="assessment.id" class="space-y-1">
                   <strong>{{ assessment.correlated_group_count }} 个关联组 · {{ assessment.downweighted_feedback_count }} 条降权</strong>
-                  <p>成功 {{ assessment.raw_success_weight }} → {{ assessment.effective_success_weight }}；失败 {{ assessment.raw_failure_weight }} → {{ assessment.effective_failure_weight }}</p>
-                  <small>{{ formatTime(assessment.created_at) }} · 触发证据 {{ shortId(assessment.trigger_evidence_id) }}</small>
+                  <p class="text-sm">成功 {{ assessment.raw_success_weight }} → {{ assessment.effective_success_weight }}；失败 {{ assessment.raw_failure_weight }} → {{ assessment.effective_failure_weight }}</p>
+                  <small class="text-muted-foreground">{{ formatTime(assessment.created_at) }} · 触发证据 {{ shortId(assessment.trigger_evidence_id) }}</small>
                 </li>
               </ol>
             </details>
           </section>
 
-          <section class="panel stack">
-            <div><div class="eyebrow">受控处置</div><h2>状态操作</h2></div>
-            <label class="field"><span>审核说明（进入状态时间线，不写入审计详情）</span><textarea v-model="reasonNote" rows="3" maxlength="500" placeholder="使用合成、非敏感说明；禁止粘贴密码、令牌或个人信息。"></textarea></label>
-            <div class="actions"><button v-for="action in availableActions" :key="`${action.target}:${action.reason}`" class="button" :class="{ danger: action.danger }" type="button" :disabled="Boolean(activeAction)" @click="applyTransition(action)">{{ activeAction === action.target ? "处理中…" : action.label }}</button></div>
+          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="space-y-1">
+              <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">受控处置</p>
+              <h2 class="text-lg font-semibold tracking-tight">状态操作</h2>
+            </div>
+            <Label class="grid gap-2">
+              审核说明（进入状态时间线，不写入审计详情）
+              <Textarea
+                v-model="reasonNote"
+                rows="3"
+                maxlength="500"
+                placeholder="使用合成、非敏感说明；禁止粘贴密码、令牌或个人信息。"
+              />
+            </Label>
+            <div class="flex flex-wrap gap-2">
+              <Button
+                v-for="action in availableActions"
+                :key="`${action.target}:${action.reason}`"
+                type="button"
+                :variant="action.danger ? 'destructive' : 'default'"
+                :disabled="Boolean(activeAction)"
+                @click="applyTransition(action)"
+              >
+                {{ activeAction === action.target ? "处理中…" : action.label }}
+              </Button>
+            </div>
           </section>
 
-          <section class="panel stack">
-            <div class="section-title"><h2>状态时间线</h2><span class="muted">{{ selected.state_events.length }} 条</span></div>
-            <div v-if="selected.state_events.length === 0" class="empty-state">尚无状态变更事件。</div>
-            <ol v-else class="timeline">
-              <li v-for="event in selected.state_events" :key="event.id">
-                <div class="timeline-title"><strong>{{ statusLabels[event.previous_status] }} → {{ statusLabels[event.next_status] }}</strong><span class="badge">{{ sourceLabels[event.transition_source] }}</span></div>
-                <p>{{ event.reason_code }}<span v-if="event.reason_note"> · {{ event.reason_note }}</span></p>
-                <small>{{ formatTime(event.created_at) }} · 规则 {{ event.rule_version }}<span v-if="event.actor_id"> · 操作人 {{ shortId(event.actor_id) }}</span></small>
+          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="flex items-start justify-between gap-3">
+              <h2 class="text-lg font-semibold tracking-tight">状态时间线</h2>
+              <Badge variant="secondary">{{ selected.state_events.length }} 条</Badge>
+            </div>
+            <p v-if="selected.state_events.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+              尚无状态变更事件。
+            </p>
+            <ol v-else class="space-y-3 border-l pl-5">
+              <li v-for="event in selected.state_events" :key="event.id" class="space-y-2">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <strong>{{ statusLabels[event.previous_status] }} → {{ statusLabels[event.next_status] }}</strong>
+                  <Badge variant="outline">{{ sourceLabels[event.transition_source] }}</Badge>
+                </div>
+                <p class="break-all text-sm">{{ event.reason_code }}<span v-if="event.reason_note"> · {{ event.reason_note }}</span></p>
+                <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · 规则 {{ event.rule_version }}<span v-if="event.actor_id"> · 操作人 {{ shortId(event.actor_id) }}</span></small>
               </li>
             </ol>
           </section>
 
-          <section class="panel stack">
-            <div class="section-title"><h2>积分 / 信誉调整</h2><span class="muted">{{ selected.reward_adjustments.length }} 条</span></div>
-            <div v-if="selected.reward_adjustments.length === 0" class="empty-state">尚无奖励扣回或恢复事件。</div>
-            <ol v-else class="timeline reward-timeline">
-              <li v-for="event in selected.reward_adjustments" :key="event.id">
-                <div class="timeline-title"><strong>{{ adjustmentDirectionLabels[event.direction] }} · {{ rewardKindLabels[event.reward_kind] }}</strong><span class="badge">{{ shortId(event.user_id) }}</span></div>
-                <p>积分 {{ signedAmount(event.points_amount) }} · 信誉 {{ signedAmount(event.reputation_amount) }}</p>
-                <small>{{ formatTime(event.created_at) }} · {{ event.rule_version }} · 状态事件 {{ shortId(event.state_event_id) }}</small>
+          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="flex items-start justify-between gap-3">
+              <h2 class="text-lg font-semibold tracking-tight">积分 / 信誉调整</h2>
+              <Badge variant="secondary">{{ selected.reward_adjustments.length }} 条</Badge>
+            </div>
+            <p v-if="selected.reward_adjustments.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+              尚无奖励扣回或恢复事件。
+            </p>
+            <ol v-else class="space-y-3 border-l pl-5">
+              <li v-for="event in selected.reward_adjustments" :key="event.id" class="space-y-2">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <strong>{{ adjustmentDirectionLabels[event.direction] }} · {{ rewardKindLabels[event.reward_kind] }}</strong>
+                  <Badge variant="outline">{{ shortId(event.user_id) }}</Badge>
+                </div>
+                <p class="text-sm">积分 {{ signedAmount(event.points_amount) }} · 信誉 {{ signedAmount(event.reputation_amount) }}</p>
+                <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · {{ event.rule_version }} · 状态事件 {{ shortId(event.state_event_id) }}</small>
               </li>
             </ol>
           </section>
 
-          <section class="panel stack">
-            <div class="section-title"><h2>证据修订</h2><span class="muted">{{ selected.evidence_events.length }} 条</span></div>
-            <div v-if="selected.evidence_events.length === 0" class="empty-state">尚无验证证据。</div>
-            <ol v-else class="timeline evidence-timeline"><li v-for="event in selected.evidence_events" :key="event.id"><div class="timeline-title"><strong>{{ event.outcome === "success" ? "成功" : "失败" }} · 权重 {{ event.weight }}</strong><span class="badge">{{ event.source }}</span></div><p>修订 {{ event.revision }} · 账号 {{ shortId(event.user_id) }}</p><small>{{ formatTime(event.created_at) }} · {{ event.rule_version }}</small></li></ol>
+          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+            <div class="flex items-start justify-between gap-3">
+              <h2 class="text-lg font-semibold tracking-tight">证据修订</h2>
+              <Badge variant="secondary">{{ selected.evidence_events.length }} 条</Badge>
+            </div>
+            <p v-if="selected.evidence_events.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+              尚无验证证据。
+            </p>
+            <ol v-else class="space-y-3 border-l pl-5">
+              <li v-for="event in selected.evidence_events" :key="event.id" class="space-y-2">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <strong>{{ event.outcome === "success" ? "成功" : "失败" }} · 权重 {{ event.weight }}</strong>
+                  <Badge variant="outline">{{ event.source }}</Badge>
+                </div>
+                <p class="text-sm">修订 {{ event.revision }} · 账号 {{ shortId(event.user_id) }}</p>
+                <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · {{ event.rule_version }}</small>
+              </li>
+            </ol>
           </section>
         </template>
-        <section v-else class="panel empty-state">从左侧审核队列选择一条候选记录。</section>
+        <section v-else class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+          从左侧审核队列选择一条候选记录。
+        </section>
       </div>
     </section>
   </section>
 </template>
-
-<style scoped>
-.moderation-heading { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 24px; align-items: center; }
-.safety-note { display: grid; gap: 8px; padding: 18px; border: 1px solid #bae6fd; border-radius: 14px; color: #0c4a6e; background: #f0f9ff; }
-.filter-bar { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; }
-.filter-bar .field { min-width: 150px; }
-.query-field { flex: 1; min-width: 260px !important; }
-.moderation-layout { display: grid; grid-template-columns: minmax(300px, .72fr) minmax(0, 1.28fr); gap: 20px; align-items: start; }
-.candidate-list-panel { display: grid; gap: 10px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
-.section-title, .row-heading, .timeline-title { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.candidate-row { display: grid; gap: 9px; width: 100%; padding: 16px; text-align: left; border: 1px solid var(--border); border-radius: 14px; background: #fff; cursor: pointer; }
-.candidate-row:hover, .candidate-row.selected { border-color: #60a5fa; background: #f0f7ff; }
-.candidate-row code { overflow-wrap: anywhere; font-size: 11px; color: var(--muted); }
-.row-meta { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
-.status-badge[data-status="verified"] { color: #067647; background: #ecfdf3; }
-.status-badge[data-status="rejected"] { color: #b42318; background: #fff1f0; }
-.status-badge[data-status="quarantined"] { color: #9a3412; background: #fff7ed; }
-.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; }
-.detail-grid dt { color: var(--muted); font-size: 12px; font-weight: 700; }
-.detail-grid dd { margin: 5px 0 0; overflow-wrap: anywhere; }
-.fingerprints { display: grid; gap: 8px; }
-.fingerprints code { overflow-wrap: anywhere; padding: 10px; border-radius: 10px; background: #f8fafc; font-size: 12px; }
-.timeline { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
-.timeline li { padding: 14px 0 14px 18px; border-left: 3px solid #bfdbfe; }
-.timeline p { margin: 7px 0; overflow-wrap: anywhere; }
-.timeline small { color: var(--muted); }
-.correlation-panel { border-color: #fed7aa; background: linear-gradient(180deg, #fff 0%, #fffaf3 100%); }
-.correlation-metrics dd { font-variant-numeric: tabular-nums; }
-.correlation-groups { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.correlation-groups li { padding: 14px; border: 1px solid #fed7aa; border-radius: 12px; background: #fff; }
-.correlation-groups p { margin: 8px 0; }
-.correlation-groups small { color: var(--muted); overflow-wrap: anywhere; }
-.badge.warning { color: #9a3412; background: #ffedd5; }
-details summary { cursor: pointer; color: #9a3412; font-weight: 700; }
-.compact-timeline { margin-top: 14px; }
-.field textarea, .field select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: white; font: inherit; }
-.empty-state { padding: 28px; text-align: center; color: var(--muted); }
-@media (max-width: 960px) { .moderation-heading, .moderation-layout { grid-template-columns: 1fr; } .candidate-list-panel { position: static; max-height: none; } }
-@media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } .filter-bar { align-items: stretch; } .filter-bar .field, .query-field { min-width: 100% !important; } }
-</style>

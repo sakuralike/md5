@@ -70,3 +70,11 @@
 | Admin 举报/申诉案件页面规范整改 | `apps/admin/src/pages/TrustCasesPage.vue`、Shadcn-Vue `Badge`/`Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/TrustCasesPage.test.ts`、既有 `apps/admin/src/services/trustCases.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留筛选、案件迁移、幂等和不可变事件时间线 |
 | Admin 风险告警页面规范整改 | `apps/admin/src/pages/RiskAlertsPage.vue`、Shadcn-Vue `Badge`/`Button`/`Checkbox`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/RiskAlertsPage.test.ts`、既有 `apps/admin/src/services/riskAlerts.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留 SLA、指派、通知重放与处置闭环 |
 | 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 117 → 60，新增违规 0；剩余候选审核和桌面发布 2 个 Admin 页面待关闭 |
+
+## WP1 第 5 次迭代追踪增量
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Admin 候选审核页面规范整改 | `apps/admin/src/pages/CandidateModerationPage.vue`、Shadcn-Vue `Badge`/`Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/CandidateModerationPage.test.ts`、既有 `apps/admin/src/services/candidateModeration.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留候选筛选、关联反馈降权、人工迁移、奖励调整和不可变时间线 |
+| Admin 桌面发布页面规范整改 | `apps/admin/src/pages/DesktopReleasesPage.vue`、Shadcn-Vue `Badge`/`Button`/`Checkbox`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/DesktopReleasesPage.test.ts`、既有 `apps/admin/src/services/desktopReleases.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留 SHA-256、签名记录、制品上传恢复、发布和撤回边界 |
+| WP1 前端规范债务清零 | `scripts/frontend-policy-baseline.json`、`scripts/check-frontend-policy.mjs` | 规范策略、Web/Admin lint/typecheck/test/build、Windows PowerShell 5.1 统一门禁 | 历史欠账 60 → 0，累计 164 → 0，新增违规 0；WP1 本地工程出口条件已满足 |
