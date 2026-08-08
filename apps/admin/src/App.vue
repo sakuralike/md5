@@ -20,6 +20,7 @@ const auth = useAdminAuthStore();
         <RouterLink to="/desktop-releases">桌面发布</RouterLink>
         <RouterLink to="/audit">审计日志</RouterLink>
         <RouterLink to="/users">用户治理</RouterLink>
+        <RouterLink to="/role-changes">角色审批</RouterLink>
         <RouterLink to="/settings">系统配置</RouterLink>
         <Button variant="outline" size="sm" @click="auth.logout()">退出</Button>
       </nav>
