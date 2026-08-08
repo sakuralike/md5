@@ -38,7 +38,7 @@
 - 根 `eslint.config.mjs` 统一 Web/Admin 的 Vue 3、TypeScript 严格检查，`src/components/ui/` 保持为 Shadcn-Vue CLI 生成边界。
 - `scripts/check-frontend-policy.mjs` 检查业务 `.vue` 的样式块、行内样式、硬编码颜色和原生表单控件；`scripts/frontend-policy-baseline.json` 只冻结存量欠账并阻止新增或基线回退。
 - 根 `pnpm lint` 已接入 `scripts/check.ps1` 与 `.github/workflows/ci.yml`；统一检查脚本兼容 Windows PowerShell 5.1 和 PowerShell 7。
-- WP1 已完成两轮：App、首页、注册页以及 Web 举报/申诉、积分/信誉页面完成整改；冻结欠账由 164 项降至 125 项，剩余 6 个 Admin 页面按风险批次收口。
+- WP1 已完成三轮：App、首页、注册页、Web 举报/申诉与积分/信誉页面，以及 Admin 登录/TOTP 页面完成整改；冻结欠账由 164 项降至 117 项，剩余 4 个 Admin 页面按风险批次收口。
 ## 模块边界规则
 
 1. API 模块不直接导入其他模块的内部仓储；跨模块操作通过公开服务函数或应用编排层完成。Archives 查询只调用 Verification 的公开证据汇总函数。

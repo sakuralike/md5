@@ -53,3 +53,11 @@
 | Web 积分与信誉页面规范整改 | `apps/web/src/pages/ReputationPage.vue`、Shadcn-Vue `Button`/`Progress` | `apps/web/src/pages/ReputationPage.test.ts`、Web 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、行内进度样式、硬编码颜色和原生按钮，保留积分/信誉只读业务语义 |
 | Web 举报与申诉页面规范整改 | `apps/web/src/pages/TrustCasesPage.vue`、Shadcn-Vue `Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/web/src/pages/TrustCasesPage.test.ts`、既有 `apps/web/src/services/trustCases.test.ts`、Web 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留原因码、必填条件、幂等和本人案件边界 |
 | 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 141 → 125，新增违规 0；剩余 6 个 Admin 页面待关闭 |
+
+## WP1 第 3 次迭代追踪增量
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Admin 登录页规范整改 | `apps/admin/src/pages/LoginPage.vue`、Shadcn-Vue `Button`/`Input`/`Label` | `apps/admin/src/pages/LoginPage.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除原生按钮与输入框，保留用户名/密码/TOTP 登录参数、忙碌态和错误反馈 |
+| Admin TOTP 设置页规范整改 | `apps/admin/src/pages/TotpSetupPage.vue`、Shadcn-Vue `Button`/`Input`/`Label` | `apps/admin/src/pages/TotpSetupPage.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除原生控件和行内样式；配置 URI 使用 Tailwind 换行，密钥仍仅在设置流程内存中展示 |
+| 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 125 → 117，新增违规 0；剩余 4 个 Admin 页面待关闭 |

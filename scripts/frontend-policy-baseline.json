@@ -15,10 +15,6 @@
     "native-select": 3,
     "native-textarea": 1
   },
-  "apps/admin/src/pages/LoginPage.vue": {
-    "native-button": 1,
-    "native-input": 3
-  },
   "apps/admin/src/pages/RiskAlertsPage.vue": {
     "style-block": 1,
     "hex-color": 18,
@@ -26,11 +22,6 @@
     "native-input": 3,
     "native-select": 3,
     "native-textarea": 2
-  },
-  "apps/admin/src/pages/TotpSetupPage.vue": {
-    "inline-style": 1,
-    "native-button": 1,
-    "native-input": 2
   },
   "apps/admin/src/pages/TrustCasesPage.vue": {
     "style-block": 1,

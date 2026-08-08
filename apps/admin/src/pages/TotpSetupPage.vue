@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
@@ -19,7 +22,7 @@ onMounted(async () => {
   }
 });
 
-async function confirm() {
+async function confirm(): Promise<void> {
   busy.value = true;
   error.value = "";
   try {
@@ -34,15 +37,37 @@ async function confirm() {
 
 <template>
   <section class="panel stack">
-    <div><div class="eyebrow">管理员安全基线</div><h1>绑定 TOTP</h1></div>
+    <div>
+      <div class="eyebrow">管理员安全基线</div>
+      <h1>绑定 TOTP</h1>
+    </div>
     <p class="muted">请将下方合成配置录入认证器。密钥只在本次设置流程中显示。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div v-if="secret" class="stack">
-      <div class="field"><label>手工密钥</label><input :value="secret" readonly /></div>
-      <details><summary>配置 URI</summary><code style="overflow-wrap:anywhere">{{ provisioningUri }}</code></details>
+      <div class="field">
+        <Label for="totp-secret">手工密钥</Label>
+        <Input id="totp-secret" :value="secret" readonly />
+      </div>
+      <details>
+        <summary>配置 URI</summary>
+        <code class="break-all">{{ provisioningUri }}</code>
+      </details>
       <form class="form stack" @submit.prevent="confirm">
-        <div class="field"><label for="confirm-code">动态验证码</label><input id="confirm-code" v-model="code" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="8" required /></div>
-        <button class="button" :disabled="busy">{{ busy ? "确认中…" : "确认并启用" }}</button>
+        <div class="field">
+          <Label for="confirm-code">动态验证码</Label>
+          <Input
+            id="confirm-code"
+            v-model="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            minlength="6"
+            maxlength="8"
+            required
+          />
+        </div>
+        <Button type="submit" :disabled="busy">
+          {{ busy ? "确认中…" : "确认并启用" }}
+        </Button>
       </form>
     </div>
   </section>
