@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pyotp
 from sqlalchemy import func, select
 
+from password_detective.core.time import utc_now
 from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.trust_case import (
     TrustCase,
@@ -11,6 +14,7 @@ from password_detective.db.models.trust_case import (
     TrustCaseSubjectType,
 )
 from password_detective.db.models.user import User, UserRole
+from password_detective.modules.trust_cases.sla import escalate_overdue_cases
 
 
 def _register_and_login(client, suffix: str) -> tuple[dict[str, str], dict[str, str]]:
@@ -155,9 +159,7 @@ def test_account_appeal_is_self_scoped_idempotent_and_minimum_disclosure(client)
         assert db.scalar(select(func.count(TrustCaseEvent.id))) == 2
         audits = list(
             db.scalars(
-                select(AuditLog)
-                .where(AuditLog.target_id == case_id)
-                .order_by(AuditLog.created_at)
+                select(AuditLog).where(AuditLog.target_id == case_id).order_by(AuditLog.created_at)
             )
         )
         assert len(audits) == 2
@@ -176,9 +178,7 @@ def test_account_appeal_rejects_idempotency_conflicts_and_client_selected_target
         "reason_code": "account_appeal.account_recovered",
         "description": "合成账号申诉说明。",
     }
-    created = client.post(
-        "/api/v1/trust/account-appeals", headers=request_headers, json=payload
-    )
+    created = client.post("/api/v1/trust/account-appeals", headers=request_headers, json=payload)
     assert created.status_code == 201
 
     conflict = client.post(
@@ -194,3 +194,49 @@ def test_account_appeal_rejects_idempotency_conflicts_and_client_selected_target
         json={**payload, "target_user_id": "synthetic-other-user"},
     )
     assert selected_target.status_code == 422
+
+
+def test_account_appeal_sla_is_visible_and_escalated_once(client):
+    _, headers = _register_and_login(client, "sla")
+    created = client.post(
+        "/api/v1/trust/account-appeals",
+        headers={**headers, "Idempotency-Key": "account-appeal-sla-0001"},
+        json={
+            "requested_action": "restore_access",
+            "reason_code": "account_appeal.account_recovered",
+            "description": "合成账号申诉 SLA 测试说明。",
+        },
+    )
+    assert created.status_code == 201
+    case_id = created.json()["id"]
+    assert created.json()["sla_due_at"] is not None
+    assert created.json()["escalated_at"] is None
+    assert created.json()["escalation_count"] == 0
+
+    with client.app.state.database.session_factory() as db:
+        case = db.get(TrustCase, case_id)
+        assert case is not None
+        case.sla_due_at = utc_now() - timedelta(minutes=1)
+        db.commit()
+        assert escalate_overdue_cases(db) == 1
+        assert escalate_overdue_cases(db) == 0
+
+        db.refresh(case)
+        assert case.escalated_at is not None
+        assert case.escalation_count == 1
+        assert case.last_escalation_reason == "system.sla_overdue"
+        event = db.scalar(
+            select(TrustCaseEvent).where(
+                TrustCaseEvent.case_id == case_id,
+                TrustCaseEvent.action == "case.sla_escalated",
+            )
+        )
+        assert event is not None
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.target_id == case_id,
+                AuditLog.action == "trust_case.sla.escalate",
+            )
+        )
+        assert audit is not None
+        assert audit.details["reason_code"] == "system.sla_overdue"

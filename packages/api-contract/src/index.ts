@@ -749,6 +749,10 @@ export interface TrustCaseSummary {
   resolution_code: string | null;
   resolution_note: string | null;
   resolved_at: string | null;
+  sla_due_at: string | null;
+  escalated_at: string | null;
+  escalation_count: number;
+  last_escalation_reason: string | null;
   created_at: string;
   updated_at: string;
 }

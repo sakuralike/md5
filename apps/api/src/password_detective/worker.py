@@ -16,6 +16,7 @@ from password_detective.modules.risk_alerts.notifications import (
 from password_detective.modules.trust_cases.notifications import (
     dispatch_pending_case_notifications,
 )
+from password_detective.modules.trust_cases.sla import escalate_overdue_cases
 
 settings = get_settings()
 celery_app = Celery(
@@ -39,6 +40,10 @@ celery_app.conf.update(
         "dispatch-risk-alert-notifications": {
             "task": "risk_alerts.dispatch_notifications",
             "schedule": 15.0,
+        },
+        "escalate-overdue-trust-cases": {
+            "task": "trust_cases.escalate_overdue",
+            "schedule": 60.0,
         },
         "dispatch-trust-case-notifications": {
             "task": "trust_cases.dispatch_notifications",
@@ -77,6 +82,17 @@ def dispatch_risk_alert_notifications() -> dict[str, int]:
             return dispatch_pending_notifications(db, gateway)
     finally:
         database.dispose()
+
+
+@celery_app.task(name="trust_cases.escalate_overdue")
+def escalate_overdue_trust_cases() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return {"escalated": escalate_overdue_cases(db)}
+    finally:
+        database.dispose()
+
 
 @celery_app.task(name="trust_cases.dispatch_notifications")
 def dispatch_trust_case_notifications() -> dict[str, int]:

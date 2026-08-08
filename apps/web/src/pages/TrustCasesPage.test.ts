@@ -16,6 +16,7 @@ vi.mock("../stores/auth", () => ({
 }));
 
 vi.mock("../services/trustCases", () => ({
+  createAccountAppeal: vi.fn(),
   createAppeal: vi.fn(),
   createReport: vi.fn(),
   createTrustCaseSubmissionKey: vi.fn(() => "synthetic-idempotency-key"),
@@ -43,6 +44,7 @@ describe("TrustCasesPage", () => {
     expect(html).toContain("举报与申诉");
     expect(html).toContain("提交举报");
     expect(html).toContain("发起申诉");
+    expect(html).toContain("账号申诉");
     expect(html).toContain("候选 ID");
     expect(html).toContain("原因");
     expect(html).toContain("我的案件");

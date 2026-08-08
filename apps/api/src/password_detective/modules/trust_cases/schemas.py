@@ -229,6 +229,10 @@ class TrustCaseSummary(BaseModel):
     resolution_code: str | None
     resolution_note: str | None
     resolved_at: datetime | None
+    sla_due_at: datetime | None
+    escalated_at: datetime | None
+    escalation_count: int = 0
+    last_escalation_reason: str | None
     created_at: datetime
     updated_at: datetime
 

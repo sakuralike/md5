@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -123,6 +125,7 @@ def create_report(
         candidate_id=candidate.id,
         reason_code=payload.reason_code.value,
         description=payload.description,
+        sla_due_at=_sla_due_at(TrustCaseKind.REPORT),
     )
     db.add(case)
     db.flush()
@@ -178,6 +181,7 @@ def create_appeal(
         related_case_id=payload.related_case_id,
         reason_code=payload.reason_code.value,
         description=payload.description,
+        sla_due_at=_sla_due_at(TrustCaseKind.APPEAL),
     )
     db.add(case)
     db.flush()
@@ -213,6 +217,7 @@ def create_account_appeal(
         requested_action=payload.requested_action.value,
         description=payload.description,
         evidence_summary=payload.evidence_summary,
+        sla_due_at=_sla_due_at(TrustCaseKind.ACCOUNT_APPEAL),
     )
     db.add(case)
     db.flush()
@@ -898,6 +903,10 @@ def _summary(case: TrustCase, reporter_username: str) -> TrustCaseSummary:
         resolution_code=case.resolution_code,
         resolution_note=case.resolution_note,
         resolved_at=case.resolved_at,
+        sla_due_at=case.sla_due_at,
+        escalated_at=case.escalated_at,
+        escalation_count=case.escalation_count,
+        last_escalation_reason=case.last_escalation_reason,
         created_at=case.created_at,
         updated_at=case.updated_at,
     )
@@ -917,6 +926,11 @@ def _event(event: TrustCaseEvent) -> TrustCaseEventResponse:
         request_id=event.request_id,
         created_at=event.created_at,
     )
+
+
+def _sla_due_at(kind: TrustCaseKind):
+    hours = 72 if kind == TrustCaseKind.ACCOUNT_APPEAL else 96
+    return utc_now() + timedelta(hours=hours)
 
 
 def _append_event(

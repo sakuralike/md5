@@ -96,4 +96,15 @@
 | 案件版本乐观并发 | `trust_cases.version`、`_require_version`、`20260808_0020_wp2_case_assignment_reopen.py` | 指派/重开/状态转换携带 `expected_version`；过期版本返回 `409 trust.case_version_conflict` | 已实现本轮 |
 | 独立案件指派/转派 | `modules/trust_cases/service.py::assign_case`、`router.py`、`apps/admin/src/pages/TrustCasesPage.vue` | 启用审核员/管理员校验；幂等重放；负责人前后事件快照；Admin 服务调用测试 | 已实现本轮 |
 | 独立受控案件重开 | `modules/trust_cases/service.py::reopen_case`、`router.py`、`apps/admin/src/pages/TrustCasesPage.vue` | 仅 `resolved/dismissed` 可重开；清理负责人/结论元数据；幂等重放和过期版本测试 | 已实现本轮 |
-| 原子处置与结果通知 | 后续 `resolve` 编排、候选/账号副作用、通知 Outbox | 尚未实现；本轮禁止以多个无事务写接口模拟 | 待后续 WP2 轮次 |
+| 原子处置与结果通知 | `modules/trust_cases` 的 `resolve` 编排、候选/账号副作用、`trust_case_effects`、通知 Outbox | `test_wp2_case_resolution.py`、`test_wp2_case_notifications.py`、Admin 服务/页面测试 | 第 3～4 轮本地闭环完成；正式 SMTP/Webhook、浏览器和目标环境验收未完成 |
+
+
+## WP2 第 3～4 次开发迭代追踪增量（2026-08-08）
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 案件原子最终处置 | `modules/trust_cases/service.py`、`POST /admin/trust-cases/{id}/resolve`、`trust_case_effects` | `test_wp2_case_resolution.py`、`test_m4_reward_compensation.py`、Admin `TrustCasesPage.test.ts` | 本地闭环完成；正式数据库、浏览器和生产验收未完成 |
+| 账号/候选副作用与补偿 | `TrustCaseEffect`、候选状态事件、账号恢复、奖励/信誉校正 | `test_wp2_case_resolution.py`、`test_m4_candidate_moderation.py`、`test_m4_reward_compensation.py` | 本地闭环完成；跨服务恢复演练未完成 |
+| 结果通知 Outbox | `trust_case_notifications`、`modules/trust_cases/notifications.py`、Celery 投递任务 | `test_wp2_case_notifications.py`、Admin `trustCases.test.ts` | 本地内存网关和失败重放完成；正式 SMTP/Webhook 送达未验收 |
+| 案件 SLA 自动升级 | `sla_due_at`、`escalated_at`、`modules/trust_cases/sla.py`、Beat 60 秒任务 | `test_wp2_account_appeals.py` | 本地单案一次升级完成；值班排班/外部通知链未验收 |
+| Web 本人账号申诉 | `apps/web/src/pages/TrustCasesPage.vue`、`createAccountAppeal` | `apps/web/src/pages/TrustCasesPage.test.ts`、Web typecheck/lint | SSR 基础渲染和类型门禁完成；浏览器交互 E2E 未验收 |

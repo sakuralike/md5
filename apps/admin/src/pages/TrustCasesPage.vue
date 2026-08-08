@@ -428,6 +428,8 @@ onMounted(() => loadCases(true));
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">当前版本</dt><dd>{{ selected.version }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">当前负责人</dt><dd class="break-all">{{ selected.assigned_to_id || "未指派" }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">SLA 截止</dt><dd>{{ formatTime(selected.sla_due_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">自动升级</dt><dd>{{ selected.escalated_at ? `${formatTime(selected.escalated_at)}（${selected.escalation_count} 次）` : "未升级" }}</dd></div>
         </dl>
 
         <section class="space-y-2">

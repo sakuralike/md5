@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type {
+  AccountAppealReason,
+  AccountAppealRequestedAction,
   AppealReason,
   ReportReason,
   TrustCaseKind,
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  createAccountAppeal,
   createAppeal,
   createReport,
   createTrustCaseSubmissionKey,
@@ -29,11 +32,21 @@ import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
 const route = useRoute();
-const caseKind = ref<TrustCaseKind>(route.query.kind === "appeal" ? "appeal" : "report");
+const initialKind: TrustCaseKind =
+  route.query.kind === "appeal" || route.query.kind === "account_appeal"
+    ? route.query.kind
+    : "report";
+const caseKind = ref<TrustCaseKind>(initialKind);
 const candidateId = ref(typeof route.query.candidate_id === "string" ? route.query.candidate_id : "");
 const relatedCaseId = ref("");
+const requestedAction = ref<AccountAppealRequestedAction>("restore_access");
+const evidenceSummary = ref("");
 const reasonCode = ref<string>(
-  caseKind.value === "appeal" ? "appeal.decision_incorrect" : "report.invalid_candidate",
+  caseKind.value === "account_appeal"
+    ? "account_appeal.restriction_incorrect"
+    : caseKind.value === "appeal"
+      ? "appeal.decision_incorrect"
+      : "report.invalid_candidate",
 );
 const description = ref("");
 const data = ref<TrustCaseListResponse | null>(null);
@@ -54,6 +67,12 @@ const appealReasons: Array<{ value: AppealReason; label: string }> = [
   { value: "appeal.context_missing", label: "审核遗漏了重要背景" },
   { value: "appeal.other", label: "其他" },
 ];
+const accountAppealReasons: Array<{ value: AccountAppealReason; label: string }> = [
+  { value: "account_appeal.restriction_incorrect", label: "账号限制不正确" },
+  { value: "account_appeal.account_recovered", label: "账号已恢复控制" },
+  { value: "account_appeal.context_missing", label: "限制决定遗漏背景" },
+  { value: "account_appeal.other", label: "其他" },
+];
 const statusClassMap: Record<TrustCaseSummary["status"], string> = {
   open: "text-destructive",
   in_review: "text-primary",
@@ -61,20 +80,28 @@ const statusClassMap: Record<TrustCaseSummary["status"], string> = {
   dismissed: "text-muted-foreground",
 };
 
-const reasonOptions = computed(() =>
-  caseKind.value === "appeal" ? appealReasons : reportReasons,
-);
+const reasonOptions = computed(() => {
+  if (caseKind.value === "account_appeal") return accountAppealReasons;
+  return caseKind.value === "appeal" ? appealReasons : reportReasons;
+});
 const isAppeal = computed(() => caseKind.value === "appeal");
+const isAccountAppeal = computed(() => caseKind.value === "account_appeal");
+const requiresDescription = computed(() => isAppeal.value || isAccountAppeal.value);
 const canSubmit = computed(
   () =>
-    candidateId.value.trim().length > 0 &&
+    (isAccountAppeal.value || candidateId.value.trim().length > 0) &&
     reasonCode.value.length > 0 &&
-    (!isAppeal.value || description.value.trim().length > 0),
+    (!requiresDescription.value || description.value.trim().length > 0),
 );
 
 watch(caseKind, (kind) => {
-  reasonCode.value = kind === "appeal" ? appealReasons[0].value : reportReasons[0].value;
-  if (kind === "report") relatedCaseId.value = "";
+  reasonCode.value =
+    kind === "account_appeal"
+      ? accountAppealReasons[0].value
+      : kind === "appeal"
+        ? appealReasons[0].value
+        : reportReasons[0].value;
+  if (kind !== "appeal") relatedCaseId.value = "";
 });
 
 onMounted(() => loadCases());
@@ -97,7 +124,19 @@ async function submitCase(): Promise<void> {
   error.value = "";
   success.value = "";
   try {
-    if (isAppeal.value) {
+    if (isAccountAppeal.value) {
+      await createAccountAppeal(
+        {
+          requested_action: requestedAction.value,
+          reason_code: reasonCode.value as AccountAppealReason,
+          description: description.value.trim(),
+          evidence_summary: evidenceSummary.value.trim() || null,
+        },
+        auth.accessToken,
+        createTrustCaseSubmissionKey("account_appeal"),
+      );
+      success.value = "账号申诉已提交，可在右侧跟踪 SLA 和处理结果。";
+    } else if (isAppeal.value) {
       await createAppeal(
         {
           candidate_id: candidateId.value.trim(),
@@ -124,6 +163,7 @@ async function submitCase(): Promise<void> {
     candidateId.value = "";
     relatedCaseId.value = "";
     description.value = "";
+    evidenceSummary.value = "";
     await loadCases();
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "案件提交失败";
@@ -133,7 +173,7 @@ async function submitCase(): Promise<void> {
 }
 
 function reasonLabel(value: string): string {
-  return [...reportReasons, ...appealReasons].find((item) => item.value === value)?.label ?? value;
+  return [...reportReasons, ...appealReasons, ...accountAppealReasons].find((item) => item.value === value)?.label ?? value;
 }
 
 function kindLabel(kind: TrustCaseKind): string {
@@ -170,7 +210,7 @@ function formatDate(value: string): string {
       <div class="eyebrow">用户中心</div>
       <h1 class="page-title">举报与申诉</h1>
       <p class="lead">
-        只提交候选内容的客观问题或你本人贡献的审核申诉。请勿在说明中填写密码、令牌、密钥或其他敏感信息。
+        可以提交候选内容举报、本人贡献申诉或本人账号限制申诉。请勿在说明中填写密码、令牌、密钥或其他敏感信息。
       </p>
     </div>
 
@@ -193,14 +233,25 @@ function formatDate(value: string): string {
           >
             发起申诉
           </Button>
+          <Button
+            type="button"
+            :variant="caseKind === 'account_appeal' ? 'default' : 'outline'"
+            :aria-pressed="caseKind === 'account_appeal'"
+            @click="caseKind = 'account_appeal'"
+          >
+            账号申诉
+          </Button>
         </div>
 
-        <p v-if="isAppeal" class="muted">
+        <p v-if="isAccountAppeal" class="muted">
+          账号申诉只针对当前登录账号，系统不会接受客户端指定其他目标账号。
+        </p>
+        <p v-else-if="isAppeal" class="muted">
           申诉仅适用于你本人提交且当前状态为“已拒绝”或“已隔离”的贡献。
         </p>
         <p v-else class="muted">举报面向候选内容本身，系统会将其交给内容治理队列复核。</p>
 
-        <div class="field">
+        <div v-if="!isAccountAppeal" class="field">
           <Label for="trust-candidate-id">候选 ID</Label>
           <Input
             id="trust-candidate-id"
@@ -221,6 +272,19 @@ function formatDate(value: string): string {
           />
         </div>
 
+        <div v-if="isAccountAppeal" class="field">
+          <Label for="trust-requested-action">期望处理</Label>
+          <Select v-model="requestedAction">
+            <SelectTrigger id="trust-requested-action">
+              <SelectValue placeholder="选择期望处理" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="restore_access">恢复账号访问</SelectItem>
+              <SelectItem value="review_restriction">复核账号限制</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div class="field">
           <Label for="trust-reason">原因</Label>
           <Select v-model="reasonCode">
@@ -237,22 +301,33 @@ function formatDate(value: string): string {
 
         <div class="field">
           <Label for="trust-description">
-            说明 <span class="muted">{{ isAppeal ? "（必填）" : "（可选）" }}</span>
+            说明 <span class="muted">{{ requiresDescription ? "（必填）" : "（可选）" }}</span>
           </Label>
           <Textarea
             id="trust-description"
             v-model="description"
             rows="5"
             maxlength="1000"
-            :required="isAppeal"
+            :required="requiresDescription"
             placeholder="请描述可核验的事实、时间或上下文，不要粘贴任何秘密材料"
+          />
+        </div>
+
+        <div v-if="isAccountAppeal" class="field">
+          <Label for="trust-evidence-summary">证据摘要（可选）</Label>
+          <Textarea
+            id="trust-evidence-summary"
+            v-model="evidenceSummary"
+            rows="3"
+            maxlength="1000"
+            placeholder="仅填写可核验时间线，不要粘贴令牌、身份证明或其他秘密材料"
           />
         </div>
 
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="success" class="success">{{ success }}</p>
         <Button type="submit" :disabled="submitting || !canSubmit">
-          {{ submitting ? "提交中…" : isAppeal ? "提交申诉" : "提交举报" }}
+          {{ submitting ? "提交中…" : isAccountAppeal ? "提交账号申诉" : isAppeal ? "提交申诉" : "提交举报" }}
         </Button>
       </form>
 
@@ -286,6 +361,10 @@ function formatDate(value: string): string {
             <strong>{{ reasonLabel(item.reason_code) }}</strong>
             <code class="break-all text-xs text-muted-foreground">{{ item.id }}</code>
             <small>{{ subjectLabel(item) }}</small>
+            <p v-if="item.sla_due_at && !item.resolved_at" class="muted">
+              SLA 截止：{{ formatDate(item.sla_due_at) }}
+              <span v-if="item.escalated_at"> · 已自动升级</span>
+            </p>
             <p v-if="item.resolution_note" class="muted">处理说明：{{ item.resolution_note }}</p>
           </article>
         </div>
