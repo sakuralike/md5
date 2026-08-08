@@ -33,6 +33,16 @@ class TrustCaseSubjectType(StrEnum):
     RISK_ALERT = "risk_alert"
 
 
+class TrustCaseNotificationKind(StrEnum):
+    RESOLUTION = "resolution"
+
+
+class TrustCaseNotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class TrustCaseStatus(StrEnum):
     OPEN = "open"
     IN_REVIEW = "in_review"
@@ -114,6 +124,12 @@ class TrustCase(Base):
         cascade="all, delete-orphan",
         order_by="TrustCaseEvent.created_at",
     )
+    notifications = relationship(
+        "TrustCaseNotification",
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="TrustCaseNotification.created_at",
+    )
 
 
 class TrustCaseEffectType(StrEnum):
@@ -149,6 +165,60 @@ class TrustCaseEffect(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
+
+
+class TrustCaseNotification(Base):
+    """Transactional outbox entry for minimum-disclosure case result notifications."""
+
+    __tablename__ = "trust_case_notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("trust_cases.id", ondelete="CASCADE"), index=True
+    )
+    event_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trust_case_events.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[TrustCaseNotificationKind] = mapped_column(
+        Enum(TrustCaseNotificationKind, native_enum=False, length=32), index=True
+    )
+    status: Mapped[TrustCaseNotificationStatus] = mapped_column(
+        Enum(TrustCaseNotificationStatus, native_enum=False, length=16),
+        default=TrustCaseNotificationStatus.PENDING,
+        index=True,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    replay_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_replayed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_replayed_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    case = relationship("TrustCase", back_populates="notifications")
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
+    last_replayed_by = relationship("User", foreign_keys=[last_replayed_by_id])
 
 
 class TrustCaseEvent(Base):

@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from password_detective.db.models.password_candidate import CandidateStatus
 from password_detective.db.models.trust_case import (
     TrustCaseKind,
+    TrustCaseNotificationKind,
+    TrustCaseNotificationStatus,
     TrustCaseStatus,
     TrustCaseSubjectType,
 )
@@ -245,8 +247,53 @@ class TrustCaseEventResponse(BaseModel):
     created_at: datetime
 
 
+class TrustCaseNotificationResponse(BaseModel):
+    id: str
+    case_id: str
+    recipient_user_id: str
+    kind: TrustCaseNotificationKind
+    status: TrustCaseNotificationStatus
+    attempts: int
+    provider: str | None
+    provider_message_id: str | None
+    available_at: datetime
+    sent_at: datetime | None
+    failed_at: datetime | None
+    last_error_code: str | None
+    replay_count: int
+    last_replayed_at: datetime | None
+    last_replayed_by_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TrustCaseNotificationReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: str = Field(min_length=1, max_length=64)
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("reason_code")
+    @classmethod
+    def normalize_reason_code(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("note")
+    @classmethod
+    def normalize_replay_note(cls, value: str | None) -> str | None:
+        return _normalize_note(value)
+
+
+class TrustCaseNotificationListResponse(BaseModel):
+    items: list[TrustCaseNotificationResponse]
+    page: int
+    page_size: int
+    total: int
+
+
 class TrustCaseDetail(TrustCaseSummary):
     events: list[TrustCaseEventResponse]
+    notifications: list[TrustCaseNotificationResponse] = Field(default_factory=list)
 
 
 class TrustCaseListResponse(BaseModel):

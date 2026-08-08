@@ -2,7 +2,9 @@
 import {
   ApiError,
   type TrustCaseDetail,
+  type TrustCaseCandidateTargetStatus,
   type TrustCaseKind,
+  type TrustCaseNotification,
   type TrustCaseResolutionCode,
   type TrustCaseStatus,
   type TrustCaseSummary,
@@ -23,11 +25,15 @@ import { Textarea } from "../components/ui/textarea";
 import {
   assignTrustCase,
   createTrustCaseAssignKey,
+  createTrustCaseNotificationReplayKey,
   createTrustCaseReopenKey,
+  createTrustCaseResolveKey,
   createTrustCaseTransitionKey,
   getTrustCase,
   listTrustCases,
   reopenTrustCase,
+  replayTrustCaseNotification,
+  resolveTrustCase,
   transitionTrustCase,
 } from "../services/trustCases";
 import { useAdminAuthStore } from "../stores/auth";
@@ -70,19 +76,26 @@ const actions = computed(() => {
   if (item.status === "open") {
     result.push({ target: "in_review", code: "admin.review_started", label: "开始处理" });
   }
-  // WP2 iteration 1 intentionally stops account appeals at in_review.
-  // Final account action/result delivery will use the dedicated atomic endpoint.
-  if (item.kind === "account_appeal") return result;
   if (item.status === "open" || item.status === "in_review") {
-    if (item.kind === "appeal") {
+    if (item.kind === "account_appeal") {
+      result.push(
+        { target: "resolved", code: "admin.account_restored", label: "恢复账号" },
+        {
+          target: "dismissed",
+          code: "admin.account_restriction_upheld",
+          label: "维持账号限制",
+          danger: true,
+        },
+      );
+    } else if (item.kind === "appeal") {
       result.push(
         { target: "resolved", code: "admin.appeal_upheld", label: "支持申诉" },
-        { target: "resolved", code: "admin.appeal_denied", label: "驳回申诉", danger: true },
+        { target: "dismissed", code: "admin.appeal_denied", label: "驳回申诉", danger: true },
       );
     } else {
       result.push(
         { target: "resolved", code: "admin.action_taken", label: "确认并已处置" },
-        { target: "resolved", code: "admin.no_violation", label: "确认无违规" },
+        { target: "dismissed", code: "admin.no_violation", label: "确认无违规" },
       );
     }
     result.push({
@@ -224,20 +237,61 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
   error.value = "";
   message.value = "";
   try {
-    await transitionTrustCase(
-      caseId,
-      {
-        expected_version: selected.value.version,
-        target_status: action.target,
-        resolution_code: action.code,
-        resolution_note: resolutionNote.value.trim() || null,
-      },
-      token(),
-      createTrustCaseTransitionKey(),
-    );
+    if (action.code === "admin.review_started") {
+      await transitionTrustCase(
+        caseId,
+        {
+          expected_version: selected.value.version,
+          target_status: action.target,
+          resolution_code: action.code,
+          resolution_note: resolutionNote.value.trim() || null,
+        },
+        token(),
+        createTrustCaseTransitionKey(),
+      );
+    } else {
+      const note = resolutionNote.value.trim();
+      if (!note) throw new Error("完成案件处置前必须填写处理说明");
+      let candidateTargetStatus: TrustCaseCandidateTargetStatus | null = null;
+      if (action.code === "admin.action_taken") candidateTargetStatus = "quarantined";
+      if (action.code === "admin.appeal_upheld") candidateTargetStatus = "verified";
+      await resolveTrustCase(
+        caseId,
+        {
+          expected_version: selected.value.version,
+          resolution_code: action.code,
+          resolution_note: note,
+          candidate_target_status: candidateTargetStatus,
+        },
+        token(),
+        createTrustCaseResolveKey(),
+      );
+    }
     resolutionNote.value = "";
-    message.value = `已完成“${action.label}”，处理事件已写入不可变时间线。`;
+    message.value = `已完成“${action.label}”，处理事件和副作用已原子写入。`;
     await loadCases();
+    await openCase(caseId);
+  } catch (value) {
+    error.value = describeError(value);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function replayNotification(notification: TrustCaseNotification): Promise<void> {
+  if (!selected.value) return;
+  const caseId = selected.value.id;
+  busy.value = true;
+  error.value = "";
+  message.value = "";
+  try {
+    await replayTrustCaseNotification(
+      notification.id,
+      { reason_code: "admin.manual_replay", note: resolutionNote.value.trim() || null },
+      token(),
+      createTrustCaseNotificationReplayKey(),
+    );
+    message.value = "通知已重新进入发送队列。";
     await openCase(caseId);
   } catch (value) {
     error.value = describeError(value);
@@ -434,6 +488,36 @@ onMounted(() => loadCases(true));
             >
               重新开启
             </Button>
+          </div>
+        </section>
+
+        <section v-if="selected.notifications.length" class="space-y-3">
+          <h3 class="font-semibold">结果通知</h3>
+          <div class="space-y-2">
+            <div
+              v-for="notification in selected.notifications"
+              :key="notification.id"
+              class="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div class="space-y-1 text-sm">
+                <p class="font-medium">{{ notification.kind }} · {{ notification.status }}</p>
+                <p class="text-muted-foreground">
+                  尝试 {{ notification.attempts }} 次 · {{ formatTime(notification.sent_at || notification.failed_at || notification.available_at) }}
+                </p>
+                <p v-if="notification.last_error_code" class="text-destructive">
+                  {{ notification.last_error_code }}
+                </p>
+              </div>
+              <Button
+                v-if="notification.status === 'failed'"
+                type="button"
+                variant="outline"
+                :disabled="busy"
+                @click="replayNotification(notification)"
+              >
+                重新发送
+              </Button>
+            </div>
           </div>
         </section>
 

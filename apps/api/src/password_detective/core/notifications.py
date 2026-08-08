@@ -37,6 +37,16 @@ class DeliveredRiskAlertNotification:
     due_at: datetime | None
 
 
+@dataclass(frozen=True)
+class DeliveredTrustCaseNotification:
+    delivery_id: str
+    recipient: str
+    case_id: str
+    case_kind: str
+    case_status: str
+    resolution_code: str
+
+
 class NotificationGateway(Protocol):
     provider_name: str
 
@@ -53,6 +63,17 @@ class NotificationGateway(Protocol):
         due_at: datetime | None,
     ) -> str | None: ...
 
+    def send_trust_case_result(
+        self,
+        *,
+        delivery_id: str,
+        recipient: str,
+        case_id: str,
+        case_kind: str,
+        case_status: str,
+        resolution_code: str,
+    ) -> str | None: ...
+
 
 class MemoryNotificationGateway:
     """Only for local development and tests; messages are never logged."""
@@ -62,6 +83,7 @@ class MemoryNotificationGateway:
     def __init__(self) -> None:
         self.messages: list[DeliveredNotification] = []
         self.risk_alert_messages: list[DeliveredRiskAlertNotification] = []
+        self.trust_case_messages: list[DeliveredTrustCaseNotification] = []
 
     def send_account_token(self, *, kind: str, recipient: str, token: str) -> str | None:
         self.messages.append(DeliveredNotification(kind=kind, recipient=recipient, token=token))
@@ -85,6 +107,28 @@ class MemoryNotificationGateway:
                 alert_id=alert_id,
                 severity=severity,
                 due_at=due_at,
+            )
+        )
+        return None
+
+    def send_trust_case_result(
+        self,
+        *,
+        delivery_id: str,
+        recipient: str,
+        case_id: str,
+        case_kind: str,
+        case_status: str,
+        resolution_code: str,
+    ) -> str | None:
+        self.trust_case_messages.append(
+            DeliveredTrustCaseNotification(
+                delivery_id=delivery_id,
+                recipient=recipient,
+                case_id=case_id,
+                case_kind=case_kind,
+                case_status=case_status,
+                resolution_code=resolution_code,
             )
         )
         return None
@@ -126,6 +170,28 @@ class LoggingNotificationGateway:
                 "alert_id": alert_id,
                 "severity": severity,
                 "has_deadline": due_at is not None,
+            },
+        )
+        return None
+
+    def send_trust_case_result(
+        self,
+        *,
+        delivery_id: str,
+        recipient: str,
+        case_id: str,
+        case_kind: str,
+        case_status: str,
+        resolution_code: str,
+    ) -> str | None:
+        logger.info(
+            "trust_case_notification_accepted_by_log_sink",
+            extra={
+                "event": "trust_case_notification_delivered",
+                "case_id": case_id,
+                "case_kind": case_kind,
+                "case_status": case_status,
+                "resolution_code": resolution_code,
             },
         )
         return None
@@ -180,6 +246,29 @@ class WebhookNotificationGateway:
                 "alert_id": alert_id,
                 "severity": severity,
                 "due_at": _isoformat_utc(due_at),
+            }
+        )
+
+    def send_trust_case_result(
+        self,
+        *,
+        delivery_id: str,
+        recipient: str,
+        case_id: str,
+        case_kind: str,
+        case_status: str,
+        resolution_code: str,
+    ) -> str | None:
+        return self._send(
+            {
+                "version": "notification-webhook-v1",
+                "type": "trust_case_result",
+                "delivery_id": delivery_id,
+                "recipient": recipient,
+                "case_id": case_id,
+                "case_kind": case_kind,
+                "case_status": case_status,
+                "resolution_code": resolution_code,
             }
         )
 
@@ -280,6 +369,34 @@ class SMTPNotificationGateway:
                 "证据原文或用户凭据。"
             ),
             notification_type="risk_alert",
+            message_key=delivery_id,
+            extra_headers={"X-Password-Detective-Delivery-ID": delivery_id},
+        )
+        return self._send_message(message=message, recipient=recipient)
+
+    def send_trust_case_result(
+        self,
+        *,
+        delivery_id: str,
+        recipient: str,
+        case_id: str,
+        case_kind: str,
+        case_status: str,
+        resolution_code: str,
+    ) -> str | None:
+        message = self._build_message(
+            recipient=recipient,
+            subject="[密码侦探社] 举报与申诉处理结果",
+            content=(
+                "您的举报或申诉案件已有处理结果。\n\n"
+                f"案件编号：{case_id}\n"
+                f"案件类型：{case_kind}\n"
+                f"案件状态：{case_status}\n"
+                f"处理结果：{resolution_code}\n\n"
+                "请登录密码侦探社查看案件时间线。为保护隐私，邮件不包含证据原文、"
+                "处置备注、候选密码或用户凭据。"
+            ),
+            notification_type="trust_case_result",
             message_key=delivery_id,
             extra_headers={"X-Password-Detective-Delivery-ID": delivery_id},
         )

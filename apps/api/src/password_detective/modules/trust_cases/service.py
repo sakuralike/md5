@@ -23,6 +23,10 @@ from password_detective.db.models.verification import RecordStateEvent, StateTra
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.reputation.adjustments import reconcile_candidate_rewards
+from password_detective.modules.trust_cases.notifications import (
+    notification_response,
+    queue_resolution_notification,
+)
 from password_detective.modules.trust_cases.schemas import (
     AccountAppealCreateRequest,
     AppealCreateRequest,
@@ -269,7 +273,12 @@ def list_admin_cases(
 
 def get_case_detail(db: Session, case_id: str, *, viewer_id: str | None = None) -> TrustCaseDetail:
     case = db.scalar(
-        select(TrustCase).options(selectinload(TrustCase.events)).where(TrustCase.id == case_id)
+        select(TrustCase)
+        .options(
+            selectinload(TrustCase.events),
+            selectinload(TrustCase.notifications),
+        )
+        .where(TrustCase.id == case_id)
     )
     if case is None or (viewer_id is not None and case.reporter_id != viewer_id):
         raise AppError("trust.case_not_found", "未找到举报或申诉案件", status_code=404)
@@ -278,6 +287,7 @@ def get_case_detail(db: Session, case_id: str, *, viewer_id: str | None = None) 
     return TrustCaseDetail(
         **_summary(case, reporter.username).model_dump(),
         events=[_event(item) for item in case.events],
+        notifications=[notification_response(item) for item in case.notifications],
     )
 
 
@@ -446,6 +456,7 @@ def resolve_case(
         request_id=context.request_id,
     )
     db.flush()
+    notification = queue_resolution_notification(db, case=case, event=event)
     write_audit_log(
         db,
         action="trust_case.resolve",
@@ -468,6 +479,7 @@ def resolve_case(
             "version": case.version,
             "resolution_code": payload.resolution_code.value,
             "event_id": event.id,
+            "notification_id": notification.id,
             "side_effects": [item.model_dump(mode="json") for item in side_effects],
         },
     )

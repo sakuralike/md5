@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assignTrustCase,
   createTrustCaseAssignKey,
+  createTrustCaseNotificationReplayKey,
   createTrustCaseReopenKey,
+  createTrustCaseResolveKey,
   createTrustCaseTransitionKey,
   listTrustCases,
   reopenTrustCase,
+  replayTrustCaseNotification,
+  resolveTrustCase,
   transitionTrustCase,
 } from "./trustCases";
 
@@ -105,6 +109,40 @@ describe("trust-case administration", () => {
     );
   });
 
+  it("uses the atomic resolution and notification replay endpoints", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ current_status: "dismissed" }))
+      .mockResolvedValueOnce(jsonResponse({ status: "pending" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resolveTrustCase(
+      "case/synthetic",
+      {
+        expected_version: 4,
+        resolution_code: "admin.account_restriction_upheld",
+        resolution_note: "合成处置说明",
+      },
+      "mfa-token",
+      "resolve-key",
+    );
+    await replayTrustCaseNotification(
+      "notification/synthetic",
+      { reason_code: "admin.manual_replay", note: "合成重发说明" },
+      "mfa-token",
+      "replay-key",
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/case%2Fsynthetic/resolve");
+    expect(((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get("Idempotency-Key")).toBe(
+      "resolve-key",
+    );
+    expect(fetchMock.mock.calls[1][0]).toContain("/notifications/notification%2Fsynthetic/replay");
+    expect(((fetchMock.mock.calls[1][1] as RequestInit).headers as Headers).get("Idempotency-Key")).toBe(
+      "replay-key",
+    );
+  });
+
   it("creates a namespaced idempotency key", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
     expect(createTrustCaseTransitionKey()).toBe(
@@ -115,6 +153,12 @@ describe("trust-case administration", () => {
     );
     expect(createTrustCaseReopenKey()).toBe(
       "admin-trust-case-reopen-synthetic-request-id",
+    );
+    expect(createTrustCaseResolveKey()).toBe(
+      "admin-trust-case-resolve-synthetic-request-id",
+    );
+    expect(createTrustCaseNotificationReplayKey()).toBe(
+      "admin-trust-case-notification-replay-synthetic-request-id",
     );
   });
 });

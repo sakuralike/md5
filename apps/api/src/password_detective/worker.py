@@ -13,6 +13,9 @@ from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
     queue_due_sla_notifications,
 )
+from password_detective.modules.trust_cases.notifications import (
+    dispatch_pending_case_notifications,
+)
 
 settings = get_settings()
 celery_app = Celery(
@@ -35,6 +38,10 @@ celery_app.conf.update(
         },
         "dispatch-risk-alert-notifications": {
             "task": "risk_alerts.dispatch_notifications",
+            "schedule": 15.0,
+        },
+        "dispatch-trust-case-notifications": {
+            "task": "trust_cases.dispatch_notifications",
             "schedule": 15.0,
         },
         "process-account-deletion-requests": {
@@ -70,6 +77,17 @@ def dispatch_risk_alert_notifications() -> dict[str, int]:
             return dispatch_pending_notifications(db, gateway)
     finally:
         database.dispose()
+
+@celery_app.task(name="trust_cases.dispatch_notifications")
+def dispatch_trust_case_notifications() -> dict[str, int]:
+    database = Database(settings)
+    gateway = build_notification_gateway(settings)
+    try:
+        with database.session_factory() as db:
+            return dispatch_pending_case_notifications(db, gateway)
+    finally:
+        database.dispose()
+
 
 @celery_app.task(name="privacy.build_export")
 def build_account_privacy_export(export_id: str) -> dict[str, str]:

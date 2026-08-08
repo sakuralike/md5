@@ -722,6 +722,8 @@ export type TrustCaseResolutionCode =
   | "admin.insufficient_evidence"
   | "admin.appeal_upheld"
   | "admin.appeal_denied"
+  | "admin.account_restored"
+  | "admin.account_restriction_upheld"
   | "admin.reopened";
 export type TrustCaseAssignmentReason = "admin.assigned" | "admin.reassigned";
 export type TrustCaseReopenReason = "admin.reopened";
@@ -765,8 +767,31 @@ export interface TrustCaseEvent {
   created_at: string;
 }
 
+export type TrustCaseNotificationStatus = "pending" | "sent" | "failed";
+
+export interface TrustCaseNotification {
+  id: string;
+  case_id: string;
+  recipient_user_id: string;
+  kind: "resolution";
+  status: TrustCaseNotificationStatus;
+  attempts: number;
+  provider: string | null;
+  provider_message_id: string | null;
+  available_at: string;
+  sent_at: string | null;
+  failed_at: string | null;
+  last_error_code: string | null;
+  replay_count: number;
+  last_replayed_at: string | null;
+  last_replayed_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TrustCaseDetail extends TrustCaseSummary {
   events: TrustCaseEvent[];
+  notifications: TrustCaseNotification[];
 }
 
 export interface TrustCaseListResponse {
@@ -793,6 +818,58 @@ export interface TrustCaseTransitionResponse {
   event_id: string;
   resolution_code: TrustCaseResolutionCode;
   request_id: string | null;
+}
+
+export type TrustCaseCandidateTargetStatus = "verified" | "rejected" | "quarantined";
+
+export interface TrustCaseResolveRequest {
+  expected_version: number;
+  resolution_code: TrustCaseResolutionCode;
+  resolution_note: string;
+  candidate_target_status?: TrustCaseCandidateTargetStatus | null;
+}
+
+export interface TrustCaseRewardAdjustment {
+  affected_users: number;
+  points_entries: number;
+  reputation_events: number;
+  points_amount: number;
+  reputation_amount: number;
+}
+
+export interface TrustCaseSideEffect {
+  effect_type: string;
+  target_type: string;
+  target_id: string;
+  previous_value: string | null;
+  next_value: string | null;
+  reference_id: string | null;
+  reward_adjustment: TrustCaseRewardAdjustment | null;
+}
+
+export interface TrustCaseResolveResponse {
+  case_id: string;
+  previous_status: TrustCaseStatus;
+  current_status: TrustCaseStatus;
+  current_assignee_id: string;
+  resolved_by_id: string;
+  version: number;
+  event_id: string;
+  resolution_code: TrustCaseResolutionCode;
+  side_effects: TrustCaseSideEffect[];
+  request_id: string | null;
+}
+
+export interface TrustCaseNotificationListResponse {
+  items: TrustCaseNotification[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface TrustCaseNotificationReplayRequest {
+  reason_code: string;
+  note?: string | null;
 }
 
 export interface TrustCaseAssignRequest {

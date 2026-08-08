@@ -15,12 +15,20 @@ from password_detective.core.idempotency import (
 )
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
-from password_detective.db.models.trust_case import TrustCaseKind, TrustCaseStatus
+from password_detective.db.models.trust_case import (
+    TrustCaseKind,
+    TrustCaseNotificationStatus,
+    TrustCaseStatus,
+)
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
     get_current_principal,
     require_admin_mfa,
+)
+from password_detective.modules.trust_cases.notifications import (
+    list_case_notifications,
+    replay_case_notification,
 )
 from password_detective.modules.trust_cases.schemas import (
     AccountAppealCreateRequest,
@@ -30,6 +38,9 @@ from password_detective.modules.trust_cases.schemas import (
     TrustCaseAssignResponse,
     TrustCaseDetail,
     TrustCaseListResponse,
+    TrustCaseNotificationListResponse,
+    TrustCaseNotificationReplayRequest,
+    TrustCaseNotificationResponse,
     TrustCaseReopenRequest,
     TrustCaseReopenResponse,
     TrustCaseResolveRequest,
@@ -174,6 +185,66 @@ def admin_case_list(
     return list_admin_cases(
         db, kind=kind, status=status, query=query, page=page, page_size=page_size
     )
+
+
+@admin_router.get(
+    "/notifications", response_model=TrustCaseNotificationListResponse
+)
+def admin_case_notification_list(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    status: TrustCaseNotificationStatus | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> TrustCaseNotificationListResponse:
+    del principal
+    return list_case_notifications(
+        db, status=status, page=page, page_size=page_size
+    )
+
+
+@admin_router.post(
+    "/notifications/{notification_id}/replay",
+    response_model=TrustCaseNotificationResponse,
+    dependencies=[
+        Depends(rate_limit("admin.trust_case.notification_replay", limit=20, window_seconds=60))
+    ],
+)
+def admin_case_notification_replay(
+    notification_id: str,
+    payload: TrustCaseNotificationReplayRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> TrustCaseNotificationResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="admin.trust_case.notification_replay",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest(
+            {"notification_id": notification_id, **payload.model_dump(mode="json")}
+        ),
+    )
+    if lease.cached_response is not None:
+        return TrustCaseNotificationResponse.model_validate(lease.cached_response)
+    try:
+        response = replay_case_notification(
+            db,
+            notification_id=notification_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db, lease, response_status=200, response_body=response.model_dump(mode="json")
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
 
 
 @admin_router.get("/{case_id}", response_model=TrustCaseDetail)

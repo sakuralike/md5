@@ -71,6 +71,9 @@ from password_detective.db.models.trust_case import (
     TrustCaseEffectType,
     TrustCaseEvent,
     TrustCaseKind,
+    TrustCaseNotification,
+    TrustCaseNotificationKind,
+    TrustCaseNotificationStatus,
     TrustCaseStatus,
 )
 from password_detective.db.models.user import User, UserRole, UserStatus
@@ -141,6 +144,9 @@ __all__ = [
     "TrustCaseEffectType",
     "TrustCaseEvent",
     "TrustCaseKind",
+    "TrustCaseNotification",
+    "TrustCaseNotificationKind",
+    "TrustCaseNotificationStatus",
     "TrustCaseStatus",
     "User",
     "UserRole",

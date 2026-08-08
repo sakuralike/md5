@@ -4,6 +4,10 @@ import type {
   TrustCaseDetail,
   TrustCaseKind,
   TrustCaseListResponse,
+  TrustCaseNotification,
+  TrustCaseNotificationReplayRequest,
+  TrustCaseResolveRequest,
+  TrustCaseResolveResponse,
   TrustCaseReopenRequest,
   TrustCaseReopenResponse,
   TrustCaseStatus,
@@ -30,6 +34,14 @@ export function createTrustCaseAssignKey(): string {
 
 export function createTrustCaseReopenKey(): string {
   return `admin-trust-case-reopen-${crypto.randomUUID()}`;
+}
+
+export function createTrustCaseResolveKey(): string {
+  return `admin-trust-case-resolve-${crypto.randomUUID()}`;
+}
+
+export function createTrustCaseNotificationReplayKey(): string {
+  return `admin-trust-case-notification-replay-${crypto.randomUUID()}`;
 }
 
 export function listTrustCases(
@@ -97,6 +109,40 @@ export function reopenTrustCase(
 ): Promise<TrustCaseReopenResponse> {
   return apiRequest<TrustCaseReopenResponse>(
     `/admin/trust-cases/${encodeURIComponent(caseId)}/reopen`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function resolveTrustCase(
+  caseId: string,
+  payload: TrustCaseResolveRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<TrustCaseResolveResponse> {
+  return apiRequest<TrustCaseResolveResponse>(
+    `/admin/trust-cases/${encodeURIComponent(caseId)}/resolve`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function replayTrustCaseNotification(
+  notificationId: string,
+  payload: TrustCaseNotificationReplayRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<TrustCaseNotification> {
+  return apiRequest<TrustCaseNotification>(
+    `/admin/trust-cases/notifications/${encodeURIComponent(notificationId)}/replay`,
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
