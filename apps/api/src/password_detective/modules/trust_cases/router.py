@@ -22,6 +22,7 @@ from password_detective.modules.auth.dependencies import (
     require_admin_mfa,
 )
 from password_detective.modules.trust_cases.schemas import (
+    AccountAppealCreateRequest,
     AppealCreateRequest,
     ReportCreateRequest,
     TrustCaseDetail,
@@ -30,6 +31,7 @@ from password_detective.modules.trust_cases.schemas import (
     TrustCaseTransitionResponse,
 )
 from password_detective.modules.trust_cases.service import (
+    create_account_appeal,
     create_appeal,
     create_report,
     get_case_detail,
@@ -98,6 +100,36 @@ def appeal_create(
     )
 
 
+@user_router.post(
+    "/account-appeals",
+    response_model=TrustCaseDetail,
+    status_code=201,
+    dependencies=[
+        Depends(rate_limit("trust.account_appeal.create", limit=3, window_seconds=86400))
+    ],
+)
+def account_appeal_create(
+    payload: AccountAppealCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> TrustCaseDetail:
+    return _create_with_idempotency(
+        db,
+        scope="trust.account_appeal.create",
+        idempotency_key=idempotency_key,
+        payload={"kind": "account_appeal", **payload.model_dump(mode="json")},
+        principal=principal,
+        create=lambda: create_account_appeal(
+            db,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    )
+
+
 @user_router.get("/cases", response_model=TrustCaseListResponse)
 def my_cases(
     db: Annotated[Session, Depends(get_db)],
@@ -107,6 +139,15 @@ def my_cases(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> TrustCaseListResponse:
     return list_my_cases(db, principal=principal, kind=kind, page=page, page_size=page_size)
+
+
+@user_router.get("/cases/{case_id}", response_model=TrustCaseDetail)
+def my_case_detail(
+    case_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> TrustCaseDetail:
+    return get_case_detail(db, case_id, viewer_id=principal.user.id)
 
 
 @admin_router.get("", response_model=TrustCaseListResponse)

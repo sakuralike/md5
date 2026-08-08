@@ -137,7 +137,13 @@ function reasonLabel(value: string): string {
 }
 
 function kindLabel(kind: TrustCaseKind): string {
-  return kind === "appeal" ? "申诉" : "举报";
+  return { report: "举报", appeal: "贡献申诉", account_appeal: "账号申诉" }[kind];
+}
+
+function subjectLabel(item: TrustCaseSummary): string {
+  if (item.subject_type === "account") return `账号 ${item.target_user_id ?? "—"}`;
+  if (item.subject_type === "risk_alert") return `风险告警 ${item.risk_alert_id ?? "—"}`;
+  return `候选 ${item.candidate_id ?? "—"}`;
 }
 
 function statusLabel(status: TrustCaseSummary["status"]): string {
@@ -279,7 +285,7 @@ function formatDate(value: string): string {
             </div>
             <strong>{{ reasonLabel(item.reason_code) }}</strong>
             <code class="break-all text-xs text-muted-foreground">{{ item.id }}</code>
-            <small>候选 {{ item.candidate_id }}</small>
+            <small>{{ subjectLabel(item) }}</small>
             <p v-if="item.resolution_note" class="muted">处理说明：{{ item.resolution_note }}</p>
           </article>
         </div>

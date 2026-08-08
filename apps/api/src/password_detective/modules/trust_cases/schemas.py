@@ -3,9 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from password_detective.db.models.trust_case import TrustCaseKind, TrustCaseStatus
+from password_detective.db.models.trust_case import (
+    TrustCaseKind,
+    TrustCaseStatus,
+    TrustCaseSubjectType,
+)
 
 
 class ReportReason(StrEnum):
@@ -20,6 +24,18 @@ class AppealReason(StrEnum):
     NEW_EVIDENCE = "appeal.new_evidence"
     CONTEXT_MISSING = "appeal.context_missing"
     OTHER = "appeal.other"
+
+
+class AccountAppealReason(StrEnum):
+    RESTRICTION_INCORRECT = "account_appeal.restriction_incorrect"
+    ACCOUNT_RECOVERED = "account_appeal.account_recovered"
+    CONTEXT_MISSING = "account_appeal.context_missing"
+    OTHER = "account_appeal.other"
+
+
+class AccountAppealRequestedAction(StrEnum):
+    RESTORE_ACCESS = "restore_access"
+    REVIEW_RESTRICTION = "review_restriction"
 
 
 class CaseResolutionCode(StrEnum):
@@ -58,6 +74,28 @@ class AppealCreateRequest(BaseModel):
         return normalized
 
 
+class AccountAppealCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requested_action: AccountAppealRequestedAction
+    reason_code: AccountAppealReason
+    description: str = Field(min_length=1, max_length=1000)
+    evidence_summary: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        normalized = _normalize_note(value)
+        if normalized is None:
+            raise ValueError("账号申诉说明不能为空")
+        return normalized
+
+    @field_validator("evidence_summary")
+    @classmethod
+    def normalize_evidence_summary(cls, value: str | None) -> str | None:
+        return _normalize_note(value)
+
+
 class TrustCaseTransitionRequest(BaseModel):
     target_status: TrustCaseStatus
     resolution_code: CaseResolutionCode
@@ -92,13 +130,18 @@ class TrustCaseTransitionRequest(BaseModel):
 class TrustCaseSummary(BaseModel):
     id: str
     kind: TrustCaseKind
+    subject_type: TrustCaseSubjectType
     status: TrustCaseStatus
     reporter_id: str
     reporter_username: str
-    candidate_id: str
+    candidate_id: str | None
+    target_user_id: str | None
+    risk_alert_id: str | None
     related_case_id: str | None
     reason_code: str
+    requested_action: str | None
     description: str | None
+    evidence_summary: str | None
     assigned_to_id: str | None
     resolved_by_id: str | None
     resolution_code: str | None

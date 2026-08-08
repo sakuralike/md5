@@ -1,4 +1,5 @@
 import type {
+  AccountAppealCreateRequest,
   AppealCreateRequest,
   ReportCreateRequest,
   TrustCaseDetail,
@@ -48,6 +49,30 @@ export function createAppeal(
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+export function createAccountAppeal(
+  payload: AccountAppealCreateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<TrustCaseDetail> {
+  return apiRequest<TrustCaseDetail>(
+    "/trust/account-appeals",
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function getMyTrustCase(caseId: string, token: string): Promise<TrustCaseDetail> {
+  return apiRequest<TrustCaseDetail>(
+    `/trust/cases/${encodeURIComponent(caseId)}`,
+    {},
     token,
   );
 }

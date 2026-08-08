@@ -78,3 +78,13 @@
 | Admin 候选审核页面规范整改 | `apps/admin/src/pages/CandidateModerationPage.vue`、Shadcn-Vue `Badge`/`Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/CandidateModerationPage.test.ts`、既有 `apps/admin/src/services/candidateModeration.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留候选筛选、关联反馈降权、人工迁移、奖励调整和不可变时间线 |
 | Admin 桌面发布页面规范整改 | `apps/admin/src/pages/DesktopReleasesPage.vue`、Shadcn-Vue `Badge`/`Button`/`Checkbox`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/DesktopReleasesPage.test.ts`、既有 `apps/admin/src/services/desktopReleases.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留 SHA-256、签名记录、制品上传恢复、发布和撤回边界 |
 | WP1 前端规范债务清零 | `scripts/frontend-policy-baseline.json`、`scripts/check-frontend-policy.mjs` | 规范策略、Web/Admin lint/typecheck/test/build、Windows PowerShell 5.1 统一门禁 | 历史欠账 60 → 0，累计 164 → 0，新增违规 0；WP1 本地工程出口条件已满足 |
+## WP2 第 1 次迭代追踪增量
+
+| 需求 | 实现位置 | 验证证据 | 状态 |
+|---|---|---|---|
+| 账号申诉统一案件主体 | `apps/api/src/password_detective/db/models/trust_case.py`、`apps/api/alembic/versions/20260808_0019_wp2_account_appeals.py` | 迁移升级/降级/再升级；账号主体 API 集成测试 | 已实现第一轮 |
+| 本人账号申诉创建 | `modules/trust_cases/router.py`、`service.py`、`schemas.py` | `apps/api/tests/test_wp2_account_appeals.py`：受控原因、恢复动作、服务端目标账号、限流入口、幂等 | 已实现第一轮 |
+| 本人案件详情与对象级隔离 | `GET /trust/cases/{case_id}` | 本人 200、跨账号 404、未登录 401 | 已实现第一轮 |
+| 最小披露审计 | `service.py::_audit_created` | 审计不含说明、证据摘要、处理自由文本；事件保留 request_id | 已实现第一轮 |
+| 共享契约与调用层 | `packages/api-contract/src/index.ts`、`apps/web/src/services/trustCases.ts`、Web/Admin 案件页 | API contract/Web/Admin typecheck 与相关测试 | 已实现第一轮 |
+| 指派、原子处置、重开、结果通知 | `modules/trust_cases`、通知 Outbox | 尚未实现 | 待后续 WP2 轮次 |

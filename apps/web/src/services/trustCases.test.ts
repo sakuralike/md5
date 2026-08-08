@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createAccountAppeal,
   createAppeal,
   createReport,
   createTrustCaseSubmissionKey,
+  getMyTrustCase,
   listMyTrustCases,
 } from "./trustCases";
 
@@ -80,5 +82,33 @@ describe("web trust cases", () => {
     );
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Headers).get("Idempotency-Key")).toBe("appeal-stable-key");
+  });
+  it("creates a self-scoped account appeal and loads its detail", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ id: "account-case-1" })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await createAccountAppeal(
+      {
+        requested_action: "review_restriction",
+        reason_code: "account_appeal.restriction_incorrect",
+        description: "合成账号申诉说明",
+        evidence_summary: "合成证据摘要",
+      },
+      "access-token",
+      "account-appeal-stable-key",
+    );
+    await getMyTrustCase("account/case 1", "access-token");
+
+    const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(createUrl).toContain("/trust/account-appeals");
+    expect((createInit.headers as Headers).get("Idempotency-Key")).toBe(
+      "account-appeal-stable-key",
+    );
+    expect(JSON.parse(String(createInit.body))).not.toHaveProperty("target_user_id");
+    const [detailUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(detailUrl).toContain("/trust/cases/account%2Fcase%201");
   });
 });

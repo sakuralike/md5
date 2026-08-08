@@ -41,7 +41,11 @@ const error = ref("");
 const message = ref("");
 const resolutionNote = ref("");
 
-const kindLabels: Record<TrustCaseKind, string> = { report: "内容举报", appeal: "贡献申诉" };
+const kindLabels: Record<TrustCaseKind, string> = {
+  report: "内容举报",
+  appeal: "贡献申诉",
+  account_appeal: "账号申诉",
+};
 const statusLabels: Record<TrustCaseStatus, string> = {
   open: "待处理",
   in_review: "处理中",
@@ -61,6 +65,9 @@ const actions = computed(() => {
   if (item.status === "open") {
     result.push({ target: "in_review", code: "admin.review_started", label: "开始处理" });
   }
+  // WP2 iteration 1 intentionally stops account appeals at in_review.
+  // Final account action/result delivery will use the dedicated atomic endpoint.
+  if (item.kind === "account_appeal") return result;
   if (item.status === "open" || item.status === "in_review") {
     if (item.kind === "appeal") {
       result.push(
@@ -104,6 +111,12 @@ function formatTime(value: string | null): string {
 
 function shortId(value: string): string {
   return value.length > 20 ? `${value.slice(0, 9)}…${value.slice(-7)}` : value;
+}
+
+function subjectLabel(item: TrustCaseSummary): string {
+  if (item.subject_type === "account") return `账号 ${shortId(item.target_user_id ?? "—")}`;
+  if (item.subject_type === "risk_alert") return `风险告警 ${shortId(item.risk_alert_id ?? "—")}`;
+  return `候选 ${shortId(item.candidate_id ?? "—")}`;
 }
 
 async function loadCases(selectFirst = false): Promise<void> {
@@ -265,7 +278,7 @@ onMounted(() => loadCases(true));
             <small class="text-muted-foreground">
               {{ item.reporter_username }} · {{ formatTime(item.created_at) }}
             </small>
-            <small class="break-all text-muted-foreground">候选 {{ shortId(item.candidate_id) }}</small>
+            <small class="break-all text-muted-foreground">{{ subjectLabel(item) }}</small>
           </span>
         </Button>
         <p v-if="!loading && cases.length === 0" class="py-8 text-center text-sm text-muted-foreground">
@@ -290,7 +303,9 @@ onMounted(() => loadCases(true));
 
         <dl class="grid gap-4 sm:grid-cols-2">
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">提交用户</dt><dd>{{ selected.reporter_username }}</dd></div>
-          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">候选 ID</dt><dd><code class="break-all text-sm">{{ selected.candidate_id }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">主体类型</dt><dd>{{ selected.subject_type }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">主体 ID</dt><dd><code class="break-all text-sm">{{ selected.candidate_id || selected.target_user_id || selected.risk_alert_id || "—" }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">期望动作</dt><dd><code class="break-all text-sm">{{ selected.requested_action || "—" }}</code></dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">原因码</dt><dd><code class="break-all text-sm">{{ selected.reason_code }}</code></dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">关联案件</dt><dd class="break-all">{{ selected.related_case_id || "—" }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">处理结果</dt><dd class="break-all">{{ selected.resolution_code || "—" }}</dd></div>
@@ -301,6 +316,12 @@ onMounted(() => loadCases(true));
           <h3 class="font-semibold">用户说明</h3>
           <p class="whitespace-pre-wrap rounded-md bg-muted/50 p-4 text-sm leading-6">
             {{ selected.description || "未填写说明" }}
+          </p>
+        </section>
+        <section v-if="selected.evidence_summary" class="space-y-2">
+          <h3 class="font-semibold">证据摘要</h3>
+          <p class="whitespace-pre-wrap rounded-md bg-muted/50 p-4 text-sm leading-6">
+            {{ selected.evidence_summary }}
           </p>
         </section>
         <section v-if="selected.resolution_note" class="space-y-2">

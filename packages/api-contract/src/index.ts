@@ -698,7 +698,22 @@ export interface AppealCreateRequest {
   description: string;
 }
 
-export type TrustCaseKind = "report" | "appeal";
+export type AccountAppealReason =
+  | "account_appeal.restriction_incorrect"
+  | "account_appeal.account_recovered"
+  | "account_appeal.context_missing"
+  | "account_appeal.other";
+export type AccountAppealRequestedAction = "restore_access" | "review_restriction";
+
+export interface AccountAppealCreateRequest {
+  requested_action: AccountAppealRequestedAction;
+  reason_code: AccountAppealReason;
+  description: string;
+  evidence_summary?: string | null;
+}
+
+export type TrustCaseKind = "report" | "appeal" | "account_appeal";
+export type TrustCaseSubjectType = "candidate" | "account" | "risk_alert";
 export type TrustCaseStatus = "open" | "in_review" | "resolved" | "dismissed";
 export type TrustCaseResolutionCode =
   | "admin.review_started"
@@ -712,13 +727,18 @@ export type TrustCaseResolutionCode =
 export interface TrustCaseSummary {
   id: string;
   kind: TrustCaseKind;
+  subject_type: TrustCaseSubjectType;
   status: TrustCaseStatus;
   reporter_id: string;
   reporter_username: string;
-  candidate_id: string;
+  candidate_id: string | null;
+  target_user_id: string | null;
+  risk_alert_id: string | null;
   related_case_id: string | null;
   reason_code: string;
+  requested_action: string | null;
   description: string | null;
+  evidence_summary: string | null;
   assigned_to_id: string | null;
   resolved_by_id: string | null;
   resolution_code: string | null;

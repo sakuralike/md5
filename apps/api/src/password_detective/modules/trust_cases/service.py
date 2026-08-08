@@ -13,11 +13,13 @@ from password_detective.db.models.trust_case import (
     TrustCaseEvent,
     TrustCaseKind,
     TrustCaseStatus,
+    TrustCaseSubjectType,
 )
 from password_detective.db.models.user import User
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.trust_cases.schemas import (
+    AccountAppealCreateRequest,
     AppealCreateRequest,
     CaseResolutionCode,
     ReportCreateRequest,
@@ -44,6 +46,9 @@ _ALLOWED_RESOLUTION_CODES = {
         CaseResolutionCode.APPEAL_DENIED,
         CaseResolutionCode.REOPENED,
     },
+    # WP2 iteration 1 only opens account appeals and lets an admin begin review.
+    # Final resolution must use the later atomic orchestration endpoint.
+    TrustCaseKind.ACCOUNT_APPEAL: {CaseResolutionCode.REVIEW_STARTED},
 }
 
 _ALLOWED_TRANSITIONS = {
@@ -74,6 +79,7 @@ def create_report(
         raise AppError("trust.candidate_not_found", "未找到举报目标候选", status_code=404)
     case = TrustCase(
         kind=TrustCaseKind.REPORT,
+        subject_type=TrustCaseSubjectType.CANDIDATE,
         reporter_id=principal.user.id,
         candidate_id=candidate.id,
         reason_code=payload.reason_code.value,
@@ -127,6 +133,7 @@ def create_appeal(
             )
     case = TrustCase(
         kind=TrustCaseKind.APPEAL,
+        subject_type=TrustCaseSubjectType.CANDIDATE,
         reporter_id=principal.user.id,
         candidate_id=candidate.id,
         related_case_id=payload.related_case_id,
@@ -142,6 +149,41 @@ def create_appeal(
         previous_status=None,
         next_status=TrustCaseStatus.OPEN,
         action="appeal.created",
+        reason_code=payload.reason_code.value,
+        note=payload.description,
+        request_id=context.request_id,
+    )
+    _audit_created(db, case=case, principal=principal, context=context)
+    db.commit()
+    return get_case_detail(db, case.id, viewer_id=principal.user.id)
+
+
+def create_account_appeal(
+    db: Session,
+    *,
+    payload: AccountAppealCreateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> TrustCaseDetail:
+    case = TrustCase(
+        kind=TrustCaseKind.ACCOUNT_APPEAL,
+        subject_type=TrustCaseSubjectType.ACCOUNT,
+        reporter_id=principal.user.id,
+        target_user_id=principal.user.id,
+        reason_code=payload.reason_code.value,
+        requested_action=payload.requested_action.value,
+        description=payload.description,
+        evidence_summary=payload.evidence_summary,
+    )
+    db.add(case)
+    db.flush()
+    _append_event(
+        db,
+        case=case,
+        actor_id=principal.user.id,
+        previous_status=None,
+        next_status=TrustCaseStatus.OPEN,
+        action="account_appeal.created",
         reason_code=payload.reason_code.value,
         note=payload.description,
         request_id=context.request_id,
@@ -272,7 +314,10 @@ def transition_case(
         request_id=context.request_id,
         details={
             "kind": case.kind.value,
+            "subject_type": case.subject_type.value,
             "candidate_id": case.candidate_id,
+            "target_user_id": case.target_user_id,
+            "risk_alert_id": case.risk_alert_id,
             "previous_status": previous_status.value,
             "current_status": payload.target_status.value,
             "resolution_code": payload.resolution_code.value,
@@ -311,6 +356,8 @@ def _list_cases(
             or_(
                 TrustCase.id == normalized_query,
                 TrustCase.candidate_id == normalized_query,
+                TrustCase.target_user_id == normalized_query,
+                TrustCase.risk_alert_id == normalized_query,
                 User.username.ilike(f"%{normalized_query}%"),
             )
         )
@@ -342,13 +389,18 @@ def _summary(case: TrustCase, reporter_username: str) -> TrustCaseSummary:
     return TrustCaseSummary(
         id=case.id,
         kind=case.kind,
+        subject_type=case.subject_type,
         status=case.status,
         reporter_id=case.reporter_id,
         reporter_username=reporter_username,
         candidate_id=case.candidate_id,
+        target_user_id=case.target_user_id,
+        risk_alert_id=case.risk_alert_id,
         related_case_id=case.related_case_id,
         reason_code=case.reason_code,
+        requested_action=case.requested_action,
         description=case.description,
+        evidence_summary=case.evidence_summary,
         assigned_to_id=case.assigned_to_id,
         resolved_by_id=case.resolved_by_id,
         resolution_code=case.resolution_code,
@@ -417,7 +469,11 @@ def _audit_created(
         request_id=context.request_id,
         details={
             "kind": case.kind.value,
+            "subject_type": case.subject_type.value,
             "candidate_id": case.candidate_id,
+            "target_user_id": case.target_user_id,
+            "risk_alert_id": case.risk_alert_id,
+            "requested_action": case.requested_action,
             "reason_code": case.reason_code,
             "related_case_id": case.related_case_id,
         },

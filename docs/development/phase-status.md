@@ -310,6 +310,15 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 异常检测和告警 | 五个垂直切片完成 | `risk-alert-v1`、`correlation-v1`、`risk-alert-sla-v1`、`notification-webhook-v1` 与 SMTP 邮件已实现失败激增、候选内关联降权、MFA 值班指派、签名/Webhook/邮件通知、投递指标、失败队列和幂等人工重放；真实 SMTP 服务商/发件域名、最终送达回调、排班升级链、指标导出和跨候选分析待实现 |
 | 安全与权限验收 | 局部自动化完成 | 用户治理已覆盖普通用户拒绝、MFA、对象级保护、并发冲突、幂等重放和最小披露；CSRF/XSS、批量接口资源消耗、角色层级和生产安全扫描待实施 |
 
+
+### WP2 第 1 次迭代：账号申诉与统一案件主体基线（已完成）
+
+- 统一 `trust_cases` 新增 `account_appeal` 与 `candidate/account/risk_alert` 单一主体约束；历史候选案件回填为 `candidate`。
+- 已实现 `POST /trust/account-appeals` 和 `GET /trust/cases/{case_id}`，覆盖服务端派生目标账号、幂等重放/冲突、本人详情、跨账号 404、事件 request_id 和审计最小披露。
+- Web/Admin 共享契约和案件列表已兼容账号/候选/风险告警主体；新增 WP2 API 集成测试与 Web 服务层测试。
+- 本轮仍未完成独立指派、原子 resolve/reopen、SLA、通知 Outbox、副作用补偿和 Web 账号申诉表单，不能宣称 WP2 或 N3 闭环完成。
+- Windows PowerShell 5.1 统一门禁通过：API 94 项通过、1 项真实 Redis 条件测试跳过、覆盖率 90%；共享契约 2 项、Web 23 项、Admin 49 项、Desktop 11 项测试通过；Ruff、前端规范检查、类型检查、生产构建、桌面 Release 构建及 SQLite 全量迁移 `upgrade → downgrade base → upgrade` 通过。
+
 ## M5：稳定、合规与发布
 
 | 范围 | 状态 | 说明 |
