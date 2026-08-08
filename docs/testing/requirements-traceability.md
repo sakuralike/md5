@@ -1,6 +1,6 @@
 # 需求—模块—测试追踪矩阵
 
-- 更新日期：2026-08-04
+- 更新日期：2026-08-08
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
@@ -61,3 +61,12 @@
 | Admin 登录页规范整改 | `apps/admin/src/pages/LoginPage.vue`、Shadcn-Vue `Button`/`Input`/`Label` | `apps/admin/src/pages/LoginPage.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除原生按钮与输入框，保留用户名/密码/TOTP 登录参数、忙碌态和错误反馈 |
 | Admin TOTP 设置页规范整改 | `apps/admin/src/pages/TotpSetupPage.vue`、Shadcn-Vue `Button`/`Input`/`Label` | `apps/admin/src/pages/TotpSetupPage.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除原生控件和行内样式；配置 URI 使用 Tailwind 换行，密钥仍仅在设置流程内存中展示 |
 | 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 125 → 117，新增违规 0；剩余 4 个 Admin 页面待关闭 |
+
+
+## WP1 第 4 次迭代追踪增量
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Admin 举报/申诉案件页面规范整改 | `apps/admin/src/pages/TrustCasesPage.vue`、Shadcn-Vue `Badge`/`Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/TrustCasesPage.test.ts`、既有 `apps/admin/src/services/trustCases.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留筛选、案件迁移、幂等和不可变事件时间线 |
+| Admin 风险告警页面规范整改 | `apps/admin/src/pages/RiskAlertsPage.vue`、Shadcn-Vue `Badge`/`Button`/`Checkbox`/`Input`/`Label`/`Select`/`Textarea` | `apps/admin/src/pages/RiskAlertsPage.test.ts`、既有 `apps/admin/src/services/riskAlerts.test.ts`、Admin 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留 SLA、指派、通知重放与处置闭环 |
+| 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 117 → 60，新增违规 0；剩余候选审核和桌面发布 2 个 Admin 页面待关闭 |

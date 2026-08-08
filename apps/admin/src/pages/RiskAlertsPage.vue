@@ -13,6 +13,19 @@ import {
   type RiskAlertSummary,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
 import {
   assignRiskAlert,
   createRiskAlertAssignmentKey,
@@ -34,8 +47,8 @@ const operators = ref<RiskAlertOperator[]>([]);
 const selected = ref<RiskAlertDetail | null>(null);
 const notificationMetrics = ref<RiskAlertNotificationMetricsResponse | null>(null);
 const failedDeliveries = ref<RiskAlertNotification[]>([]);
-const statusFilter = ref<RiskAlertStatus | "">("open");
-const assigneeFilter = ref("");
+const statusFilter = ref<RiskAlertStatus | "all">("open");
+const assigneeFilter = ref("all");
 const overdueOnly = ref(false);
 const query = ref("");
 const total = ref(0);
@@ -160,8 +173,8 @@ async function loadAlerts(selectFirst = false): Promise<void> {
       {
         kind: "failure_surge",
         severity: "high",
-        status: statusFilter.value,
-        assignedToId: assigneeFilter.value,
+        status: statusFilter.value === "all" ? "" : statusFilter.value,
+        assignedToId: assigneeFilter.value === "all" ? "" : assigneeFilter.value,
         overdue: overdueOnly.value ? true : undefined,
         query: query.value,
         page: 1,
@@ -286,104 +299,292 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="risk-page">
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">M4 · RISK OPERATIONS</p>
-        <h1>风险告警</h1>
-        <p>按版本化 SLA 完成检测、指派、响应、解决和通知闭环；页面只展示最小化聚合证据。</p>
+  <section class="space-y-5">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-destructive">
+          M4 · RISK OPERATIONS
+        </p>
+        <h1 class="text-2xl font-semibold tracking-tight">风险告警</h1>
+        <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
+          按版本化 SLA 完成检测、指派、响应、解决和通知闭环；页面只展示最小化聚合证据。
+        </p>
       </div>
-      <strong>{{ total }} 条</strong>
+      <Badge variant="secondary">{{ total }} 条</Badge>
     </header>
 
-    <form class="panel filters" @submit.prevent="loadAlerts(true)">
-      <label>状态<select v-model="statusFilter"><option value="">全部</option><option value="open">待响应</option><option value="acknowledged">核查中</option><option value="resolved">已解决</option></select></label>
-      <label>负责人<select v-model="assigneeFilter"><option value="">全部</option><option v-for="operator in operators" :key="operator.id" :value="operator.id">{{ operator.username }}</option></select></label>
-      <label class="check"><input v-model="overdueOnly" type="checkbox" />仅看超时</label>
-      <label class="query">候选或告警 ID<input v-model="query" maxlength="128" placeholder="输入合成候选 ID" /></label>
-      <button class="button" :disabled="loading">{{ loading ? "加载中…" : "筛选" }}</button>
+    <form
+      class="grid gap-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_auto_minmax(16rem,1.4fr)_auto] xl:items-end"
+      @submit.prevent="loadAlerts(true)"
+    >
+      <Label class="grid gap-2">
+        状态
+        <Select v-model="statusFilter">
+          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem value="open">待响应</SelectItem>
+            <SelectItem value="acknowledged">核查中</SelectItem>
+            <SelectItem value="resolved">已解决</SelectItem>
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label class="grid gap-2">
+        负责人
+        <Select v-model="assigneeFilter">
+          <SelectTrigger><SelectValue placeholder="全部负责人" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem v-for="operator in operators" :key="operator.id" :value="operator.id">
+              {{ operator.username }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label class="flex min-h-9 items-center gap-2 xl:pb-2">
+        <Checkbox v-model="overdueOnly" />
+        仅看超时
+      </Label>
+      <Label class="grid gap-2">
+        候选或告警 ID
+        <Input v-model="query" maxlength="128" placeholder="输入合成候选 ID" />
+      </Label>
+      <Button type="submit" :disabled="loading">
+        {{ loading ? "加载中…" : "筛选" }}
+      </Button>
     </form>
 
-    <section v-if="notificationMetrics" class="metric-grid" aria-label="通知投递指标">
-      <article class="panel metric"><span>待发送</span><strong>{{ notificationMetrics.pending_count }}</strong></article>
-      <article class="panel metric"><span>已发送</span><strong>{{ notificationMetrics.sent_count }}</strong></article>
-      <article class="panel metric" :class="{ critical: notificationMetrics.failed_count > 0 }"><span>失败 / 24 小时</span><strong>{{ notificationMetrics.failed_count }} / {{ notificationMetrics.failed_last_24_hours }}</strong></article>
-      <article class="panel metric"><span>最老待发送</span><strong>{{ formatDuration(notificationMetrics.oldest_pending_seconds) }}</strong></article>
+    <section v-if="notificationMetrics" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="通知投递指标">
+      <article class="space-y-2 rounded-lg border bg-card p-4 shadow-sm">
+        <span class="text-sm font-medium text-muted-foreground">待发送</span>
+        <strong class="block text-2xl">{{ notificationMetrics.pending_count }}</strong>
+      </article>
+      <article class="space-y-2 rounded-lg border bg-card p-4 shadow-sm">
+        <span class="text-sm font-medium text-muted-foreground">已发送</span>
+        <strong class="block text-2xl">{{ notificationMetrics.sent_count }}</strong>
+      </article>
+      <article
+        class="space-y-2 rounded-lg border bg-card p-4 shadow-sm"
+        :class="notificationMetrics.failed_count > 0 ? 'border-destructive/50 bg-destructive/10 text-destructive' : ''"
+      >
+        <span class="text-sm font-medium">失败 / 24 小时</span>
+        <strong class="block text-2xl">{{ notificationMetrics.failed_count }} / {{ notificationMetrics.failed_last_24_hours }}</strong>
+      </article>
+      <article class="space-y-2 rounded-lg border bg-card p-4 shadow-sm">
+        <span class="text-sm font-medium text-muted-foreground">最老待发送</span>
+        <strong class="block text-2xl">{{ formatDuration(notificationMetrics.oldest_pending_seconds) }}</strong>
+      </article>
     </section>
 
-    <section v-if="failedDeliveries.length" class="panel delivery-ops">
-      <div class="detail-title"><div><p class="eyebrow">DELIVERY DEAD LETTERS</p><h2>失败通知队列</h2></div><strong>{{ notificationMetrics?.failed_count ?? failedDeliveries.length }} 条</strong></div>
-      <label>重放原因（禁止填写密码、令牌、邮箱或 IP）<input v-model="replayReason" maxlength="500" /></label>
-      <ol class="timeline"><li v-for="notification in failedDeliveries" :key="notification.id"><strong>{{ notificationLabels[notification.kind] }} · {{ notification.provider || "未分配通道" }}</strong><p>告警 <button class="link-button" @click="openAlert(notification.alert_id)">{{ shortId(notification.alert_id) }}</button> · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次</p><small>{{ formatTime(notification.failed_at) }} · {{ notification.last_error_code || "未记录错误码" }}</small><button class="button secondary compact" :disabled="busy || replayReason.trim().length < 3" @click="replayDelivery(notification.id, notification.alert_id)">重放</button></li></ol>
+    <section v-if="failedDeliveries.length" class="space-y-4 rounded-lg border bg-card p-5 shadow-sm sm:p-6">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="space-y-1">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-destructive">DELIVERY DEAD LETTERS</p>
+          <h2 class="text-lg font-semibold tracking-tight">失败通知队列</h2>
+        </div>
+        <Badge variant="destructive">{{ notificationMetrics?.failed_count ?? failedDeliveries.length }} 条</Badge>
+      </div>
+      <Label class="grid gap-2">
+        重放原因（禁止填写密码、令牌、邮箱或 IP）
+        <Input v-model="replayReason" maxlength="500" />
+      </Label>
+      <ol class="space-y-3 border-l pl-5">
+        <li v-for="notification in failedDeliveries" :key="notification.id" class="space-y-2">
+          <strong>{{ notificationLabels[notification.kind] }} · {{ notification.provider || "未分配通道" }}</strong>
+          <p class="text-sm text-muted-foreground">
+            告警
+            <Button type="button" variant="link" class="h-auto p-0 text-destructive" @click="openAlert(notification.alert_id)">
+              {{ shortId(notification.alert_id) }}
+            </Button>
+            · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次
+          </p>
+          <small class="block text-muted-foreground">{{ formatTime(notification.failed_at) }} · {{ notification.last_error_code || "未记录错误码" }}</small>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :disabled="busy || replayReason.trim().length < 3"
+            @click="replayDelivery(notification.id, notification.alert_id)"
+          >
+            重放
+          </Button>
+        </li>
+      </ol>
     </section>
 
-    <p v-if="error" class="notice error">{{ error }}</p>
-    <p v-if="message" class="notice success">{{ message }}</p>
+    <p
+      v-if="error"
+      class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="message"
+      class="rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary"
+      role="status"
+    >
+      {{ message }}
+    </p>
 
-    <div class="risk-layout">
-      <aside class="panel alert-list">
-        <button v-for="alert in alerts" :key="alert.id" class="alert-row" :class="{ selected: selected?.id === alert.id }" @click="openAlert(alert.id)">
-          <span><strong>{{ statusLabels[alert.status] }}</strong><span class="badge" :data-sla="alert.sla_state">{{ slaLabels[alert.sla_state] }}</span></span>
-          <code>{{ shortId(alert.candidate_id) }}</code>
-          <small>{{ alert.independent_failure_count }} 个独立失败 · {{ operatorName(alert.assigned_to_id) }}</small>
-          <small>响应截止 {{ formatTime(alert.acknowledge_due_at) }}</small>
-        </button>
-        <p v-if="!loading && alerts.length === 0" class="empty">当前筛选条件下没有风险告警。</p>
+    <div class="grid items-start gap-5 lg:grid-cols-[minmax(18.75rem,0.72fr)_minmax(0,1.28fr)]">
+      <aside class="grid max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+        <Button
+          v-for="alert in alerts"
+          :key="alert.id"
+          type="button"
+          variant="outline"
+          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
+          :class="selected?.id === alert.id ? 'border-destructive/60 bg-destructive/10' : ''"
+          @click="openAlert(alert.id)"
+        >
+          <span class="grid w-full gap-2">
+            <span class="flex items-center justify-between gap-3">
+              <strong>{{ statusLabels[alert.status] }}</strong>
+              <Badge
+                :variant="['acknowledgement_overdue', 'resolution_overdue', 'breached'].includes(alert.sla_state) ? 'destructive' : alert.sla_state === 'met' ? 'secondary' : 'outline'"
+              >
+                {{ slaLabels[alert.sla_state] }}
+              </Badge>
+            </span>
+            <code class="break-all text-xs text-muted-foreground">{{ shortId(alert.candidate_id) }}</code>
+            <small class="text-muted-foreground">{{ alert.independent_failure_count }} 个独立失败 · {{ operatorName(alert.assigned_to_id) }}</small>
+            <small class="text-muted-foreground">响应截止 {{ formatTime(alert.acknowledge_due_at) }}</small>
+          </span>
+        </Button>
+        <p v-if="!loading && alerts.length === 0" class="py-8 text-center text-sm text-muted-foreground">
+          当前筛选条件下没有风险告警。
+        </p>
       </aside>
 
-      <article v-if="selected" class="panel detail">
-        <div class="detail-title">
-          <div><p class="eyebrow">HIGH · FAILURE SURGE</p><h2>{{ shortId(selected.id) }}</h2></div>
-          <div class="badges"><span class="badge" :data-status="selected.status">{{ statusLabels[selected.status] }}</span><span class="badge" :data-sla="selected.sla_state">{{ slaLabels[selected.sla_state] }}</span></div>
+      <article v-if="selected" class="space-y-6 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-destructive">HIGH · FAILURE SURGE</p>
+            <h2 class="break-all text-lg font-semibold tracking-tight">{{ shortId(selected.id) }}</h2>
+          </div>
+          <div class="flex flex-wrap gap-2 sm:justify-end">
+            <Badge :variant="selected.status === 'open' ? 'destructive' : selected.status === 'resolved' ? 'secondary' : 'outline'">
+              {{ statusLabels[selected.status] }}
+            </Badge>
+            <Badge
+              :variant="['acknowledgement_overdue', 'resolution_overdue', 'breached'].includes(selected.sla_state) ? 'destructive' : selected.sla_state === 'met' ? 'secondary' : 'outline'"
+            >
+              {{ slaLabels[selected.sla_state] }}
+            </Badge>
+          </div>
         </div>
-        <dl class="detail-grid">
-          <div><dt>候选 ID</dt><dd><code>{{ selected.candidate_id }}</code></dd></div>
-          <div><dt>检测规则</dt><dd><code>{{ selected.rule_version }}</code></dd></div>
-          <div><dt>SLA 规则</dt><dd><code>{{ selected.sla_rule_version }}</code></dd></div>
-          <div><dt>负责人</dt><dd>{{ selected.assigned_to_username || "未指派" }}</dd></div>
-          <div><dt>独立失败数</dt><dd>{{ selected.independent_failure_count }}</dd></div>
-          <div><dt>失败权重</dt><dd>{{ selected.failure_weight }}</dd></div>
-          <div><dt>响应截止</dt><dd>{{ formatTime(selected.acknowledge_due_at) }}</dd></div>
-          <div><dt>首次响应</dt><dd>{{ formatTime(selected.acknowledged_at) }}</dd></div>
-          <div><dt>解决截止</dt><dd>{{ formatTime(selected.resolve_due_at) }}</dd></div>
-          <div><dt>解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
-          <div><dt>观察窗口开始</dt><dd>{{ formatTime(selected.window_started_at) }}</dd></div>
-          <div><dt>观察窗口结束</dt><dd>{{ formatTime(selected.window_ended_at) }}</dd></div>
-          <div><dt>处理结果</dt><dd>{{ selected.resolution_code || "—" }}</dd></div>
+
+        <dl class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">候选 ID</dt><dd><code class="break-all text-sm">{{ selected.candidate_id }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">检测规则</dt><dd><code class="break-all text-sm">{{ selected.rule_version }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">SLA 规则</dt><dd><code class="break-all text-sm">{{ selected.sla_rule_version }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">负责人</dt><dd>{{ selected.assigned_to_username || "未指派" }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">独立失败数</dt><dd>{{ selected.independent_failure_count }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">失败权重</dt><dd>{{ selected.failure_weight }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">响应截止</dt><dd>{{ formatTime(selected.acknowledge_due_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">首次响应</dt><dd>{{ formatTime(selected.acknowledged_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">解决截止</dt><dd>{{ formatTime(selected.resolve_due_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">观察窗口开始</dt><dd>{{ formatTime(selected.window_started_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">观察窗口结束</dt><dd>{{ formatTime(selected.window_ended_at) }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">处理结果</dt><dd class="break-all">{{ selected.resolution_code || "—" }}</dd></div>
         </dl>
-        <section v-if="selected.resolution_note"><h3>处理说明</h3><p class="note">{{ selected.resolution_note }}</p></section>
 
-        <section v-if="selected.status !== 'resolved'" class="action-box">
-          <h3>负责人指派</h3>
-          <label>具备 MFA 的值班人员<select v-model="assigneeId"><option value="" disabled>请选择负责人</option><option v-for="operator in operators" :key="operator.id" :value="operator.id">{{ operator.username }} · {{ operator.role }}</option></select></label>
-          <label>指派说明（不要粘贴敏感标识）<textarea v-model="assignmentNote" maxlength="1000" rows="2" /></label>
-          <div class="actions"><button class="button secondary" :disabled="busy || !assigneeId || assigneeId === selected.assigned_to_id" @click="applyAssignment">更新负责人</button></div>
+        <section v-if="selected.resolution_note" class="space-y-2">
+          <h3 class="font-semibold">处理说明</h3>
+          <p class="whitespace-pre-wrap rounded-md bg-muted/50 p-4 text-sm leading-6">{{ selected.resolution_note }}</p>
         </section>
 
-        <section class="action-box">
-          <h3>告警处置</h3>
-          <label>处理说明（不要粘贴密码、令牌、IP 或安装标识）<textarea v-model="resolutionNote" maxlength="1000" rows="3" /></label>
-          <div class="actions"><button v-for="action in actions" :key="action.code" class="button" :class="{ danger: action.danger }" :disabled="busy" @click="applyAction(action)">{{ action.label }}</button></div>
+        <section v-if="selected.status !== 'resolved'" class="space-y-4 rounded-lg border bg-muted/30 p-4">
+          <h3 class="font-semibold">负责人指派</h3>
+          <Label class="grid gap-2">
+            具备 MFA 的值班人员
+            <Select v-model="assigneeId">
+              <SelectTrigger><SelectValue placeholder="请选择负责人" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="operator in operators" :key="operator.id" :value="operator.id">
+                  {{ operator.username }} · {{ operator.role }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </Label>
+          <Label class="grid gap-2">
+            指派说明（不要粘贴敏感标识）
+            <Textarea v-model="assignmentNote" maxlength="1000" rows="2" />
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            :disabled="busy || !assigneeId || assigneeId === selected.assigned_to_id"
+            @click="applyAssignment"
+          >
+            更新负责人
+          </Button>
         </section>
 
-        <section><h3>通知投递记录</h3><p v-if="selected.notifications.length === 0" class="empty">暂无通知记录。</p><ol v-else class="timeline"><li v-for="notification in selected.notifications" :key="notification.id"><strong>{{ notificationLabels[notification.kind] }} · {{ notificationStatusLabels[notification.status] }}</strong><p>接收人 {{ notification.recipient_username }} · 通道 {{ notification.provider || "待分配" }} · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次</p><small>{{ formatTime(notification.failed_at || notification.sent_at || notification.available_at) }}<template v-if="notification.provider_message_id"> · 回执 {{ shortId(notification.provider_message_id) }}</template><template v-if="notification.last_error_code"> · {{ notification.last_error_code }}</template></small><button v-if="notification.status === 'failed'" class="button secondary compact" :disabled="busy || replayReason.trim().length < 3" @click="replayDelivery(notification.id, notification.alert_id)">重放</button></li></ol></section>
+        <section class="space-y-4 rounded-lg border bg-muted/30 p-4">
+          <h3 class="font-semibold">告警处置</h3>
+          <Label class="grid gap-2">
+            处理说明（不要粘贴密码、令牌、IP 或安装标识）
+            <Textarea v-model="resolutionNote" maxlength="1000" rows="3" />
+          </Label>
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              v-for="action in actions"
+              :key="action.code"
+              type="button"
+              :variant="action.danger ? 'destructive' : 'default'"
+              :disabled="busy"
+              @click="applyAction(action)"
+            >
+              {{ action.label }}
+            </Button>
+          </div>
+        </section>
 
-        <section><h3>不可变告警时间线</h3><ol class="timeline"><li v-for="event in selected.events" :key="event.id"><strong>{{ event.action }}</strong><p>{{ event.previous_status || "检测" }} → {{ event.next_status }} · {{ event.reason_code }}</p><p v-if="event.previous_assignee_id !== event.next_assignee_id">负责人：{{ operatorName(event.previous_assignee_id) }} → {{ operatorName(event.next_assignee_id) }}</p><p v-if="event.note">{{ event.note }}</p><small>{{ formatTime(event.created_at) }} · {{ event.request_id || "系统检测" }}</small></li></ol></section>
+        <section class="space-y-3">
+          <h3 class="font-semibold">通知投递记录</h3>
+          <p v-if="selected.notifications.length === 0" class="text-sm text-muted-foreground">暂无通知记录。</p>
+          <ol v-else class="space-y-3 border-l pl-5">
+            <li v-for="notification in selected.notifications" :key="notification.id" class="space-y-2">
+              <strong>{{ notificationLabels[notification.kind] }} · {{ notificationStatusLabels[notification.status] }}</strong>
+              <p class="text-sm text-muted-foreground">接收人 {{ notification.recipient_username }} · 通道 {{ notification.provider || "待分配" }} · 尝试 {{ notification.attempts }} 次 · 重放 {{ notification.replay_count }} 次</p>
+              <small class="block text-muted-foreground">
+                {{ formatTime(notification.failed_at || notification.sent_at || notification.available_at) }}
+                <template v-if="notification.provider_message_id"> · 回执 {{ shortId(notification.provider_message_id) }}</template>
+                <template v-if="notification.last_error_code"> · {{ notification.last_error_code }}</template>
+              </small>
+              <Button
+                v-if="notification.status === 'failed'"
+                type="button"
+                variant="outline"
+                size="sm"
+                :disabled="busy || replayReason.trim().length < 3"
+                @click="replayDelivery(notification.id, notification.alert_id)"
+              >
+                重放
+              </Button>
+            </li>
+          </ol>
+        </section>
+
+        <section class="space-y-3">
+          <h3 class="font-semibold">不可变告警时间线</h3>
+          <ol class="space-y-3 border-l pl-5">
+            <li v-for="event in selected.events" :key="event.id" class="space-y-1">
+              <strong>{{ event.action }}</strong>
+              <p class="text-sm">{{ event.previous_status || "检测" }} → {{ event.next_status }} · {{ event.reason_code }}</p>
+              <p v-if="event.previous_assignee_id !== event.next_assignee_id" class="text-sm">负责人：{{ operatorName(event.previous_assignee_id) }} → {{ operatorName(event.next_assignee_id) }}</p>
+              <p v-if="event.note" class="whitespace-pre-wrap text-sm">{{ event.note }}</p>
+              <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · {{ event.request_id || "系统检测" }}</small>
+            </li>
+          </ol>
+        </section>
       </article>
-      <article v-else class="panel empty">请选择左侧告警查看详情。</article>
+      <article v-else class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+        请选择左侧告警查看详情。
+      </article>
     </div>
   </section>
 </template>
-
-<style scoped>
-.risk-page { display: grid; gap: 18px; }
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }.metric { display: grid; gap: 8px; }.metric span { color: var(--muted); font-size: 13px; font-weight: 700; }.metric strong { font-size: 24px; }.metric.critical { border-color: #f04438; background: #fff5f4; color: #b42318; }
-.delivery-ops { display: grid; gap: 12px; }.delivery-ops label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }.delivery-ops input { box-sizing: border-box; width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: white; font: inherit; }.link-button { padding: 0; border: 0; background: none; color: #b42318; cursor: pointer; font: inherit; font-weight: 700; }.button.compact { margin-top: 8px; padding: 7px 11px; }
-.page-heading, .detail-title, .alert-row span, .actions, .badges { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.page-heading h1, .detail-title h2 { margin: 4px 0; }.page-heading p { margin: 0; color: var(--muted); }.eyebrow { color: #b42318 !important; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
-.filters { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }.filters label, .action-box label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }.filters select, .filters input, .action-box select, textarea { box-sizing: border-box; width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: white; font: inherit; }.filters .query { flex: 1; min-width: 250px; }.filters .check { display: flex; align-items: center; padding: 10px 0; }.filters .check input { width: auto; }
-.risk-layout { display: grid; grid-template-columns: minmax(300px, .72fr) minmax(0, 1.28fr); gap: 18px; align-items: start; }.alert-list { display: grid; gap: 10px; max-height: calc(100vh - 220px); overflow: auto; }.alert-row { display: grid; gap: 8px; padding: 14px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: white; cursor: pointer; }.alert-row.selected, .alert-row:hover { border-color: #f04438; background: #fff5f4; }.alert-row code, .alert-row small { color: var(--muted); overflow-wrap: anywhere; }
-.badges { justify-content: flex-end; flex-wrap: wrap; }.badge { padding: 4px 9px; border-radius: 999px; background: #e2e8f0; font-size: 12px; font-weight: 800; }.badge[data-status="open"], .badge[data-sla="acknowledgement_overdue"], .badge[data-sla="resolution_overdue"], .badge[data-sla="breached"] { background: #fef3f2; color: #b42318; }.badge[data-status="acknowledged"], .badge[data-sla="within_sla"] { background: #fff7ed; color: #9a3412; }.badge[data-status="resolved"], .badge[data-sla="met"] { background: #ecfdf3; color: #067647; }
-.detail { display: grid; gap: 18px; }.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }.detail-grid dt { color: var(--muted); font-size: 12px; font-weight: 700; }.detail-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }.note { padding: 13px; border-radius: 10px; background: #f8fafc; white-space: pre-wrap; }.action-box { display: grid; gap: 12px; padding: 15px; border-radius: 12px; background: #f8fafc; }.action-box h3 { margin: 0; }.actions { justify-content: flex-start; flex-wrap: wrap; }.button.danger { background: #b42318; }.button.secondary { background: #475467; }.timeline { display: grid; gap: 12px; padding-left: 20px; }.timeline li { padding-left: 8px; }.timeline p { margin: 5px 0; }.timeline small, .empty { color: var(--muted); }
-@media (max-width: 900px) { .metric-grid { grid-template-columns: 1fr 1fr; }.risk-layout { grid-template-columns: 1fr; }.alert-list { max-height: none; } } @media (max-width: 600px) { .metric-grid, .detail-grid { grid-template-columns: 1fr; } }
-</style>

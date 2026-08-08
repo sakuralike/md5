@@ -8,6 +8,18 @@ import {
   type TrustCaseSummary,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
 import {
   createTrustCaseTransitionKey,
   getTrustCase,
@@ -19,8 +31,8 @@ import { useAdminAuthStore } from "../stores/auth";
 const auth = useAdminAuthStore();
 const cases = ref<TrustCaseSummary[]>([]);
 const selected = ref<TrustCaseDetail | null>(null);
-const kindFilter = ref<TrustCaseKind | "">("");
-const statusFilter = ref<TrustCaseStatus | "">("open");
+const kindFilter = ref<TrustCaseKind | "all">("all");
+const statusFilter = ref<TrustCaseStatus | "all">("open");
 const query = ref("");
 const total = ref(0);
 const loading = ref(false);
@@ -100,8 +112,8 @@ async function loadCases(selectFirst = false): Promise<void> {
   try {
     const response = await listTrustCases(
       {
-        kind: kindFilter.value,
-        status: statusFilter.value,
+        kind: kindFilter.value === "all" ? "" : kindFilter.value,
+        status: statusFilter.value === "all" ? "" : statusFilter.value,
         query: query.value,
         page: 1,
         pageSize: 50,
@@ -163,87 +175,175 @@ onMounted(() => loadCases(true));
 </script>
 
 <template>
-  <section class="trust-page">
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">M4 · COMMUNITY TRUST</p>
-        <h1>举报与申诉</h1>
-        <p>处理候选内容举报和贡献者申诉；自由文本只进入案件详情和事件时间线，不复制到审计摘要。</p>
+  <section class="space-y-5">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          M4 · COMMUNITY TRUST
+        </p>
+        <h1 class="text-2xl font-semibold tracking-tight">举报与申诉</h1>
+        <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
+          处理候选内容举报和贡献者申诉；自由文本只进入案件详情和事件时间线，不复制到审计摘要。
+        </p>
       </div>
-      <span class="badge">{{ total }} 个案件</span>
+      <Badge variant="secondary">{{ total }} 个案件</Badge>
     </header>
 
-    <form class="panel filters" @submit.prevent="loadCases(true)">
-      <label>类型<select v-model="kindFilter"><option value="">全部</option><option value="report">举报</option><option value="appeal">申诉</option></select></label>
-      <label>状态<select v-model="statusFilter"><option value="">全部</option><option value="open">待处理</option><option value="in_review">处理中</option><option value="resolved">已解决</option><option value="dismissed">已驳回</option></select></label>
-      <label class="query">搜索<input v-model="query" maxlength="128" placeholder="案件 ID、候选 ID 或用户名" /></label>
-      <button class="button" :disabled="loading">{{ loading ? "加载中…" : "筛选" }}</button>
+    <form
+      class="grid gap-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm md:grid-cols-[minmax(0,0.75fr)_minmax(0,0.75fr)_minmax(16rem,1.5fr)_auto] md:items-end"
+      @submit.prevent="loadCases(true)"
+    >
+      <Label class="grid gap-2">
+        类型
+        <Select v-model="kindFilter">
+          <SelectTrigger><SelectValue placeholder="全部类型" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem value="report">举报</SelectItem>
+            <SelectItem value="appeal">申诉</SelectItem>
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label class="grid gap-2">
+        状态
+        <Select v-model="statusFilter">
+          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem value="open">待处理</SelectItem>
+            <SelectItem value="in_review">处理中</SelectItem>
+            <SelectItem value="resolved">已解决</SelectItem>
+            <SelectItem value="dismissed">已驳回</SelectItem>
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label class="grid gap-2">
+        搜索
+        <Input v-model="query" maxlength="128" placeholder="案件 ID、候选 ID 或用户名" />
+      </Label>
+      <Button type="submit" :disabled="loading">
+        {{ loading ? "加载中…" : "筛选" }}
+      </Button>
     </form>
 
-    <p v-if="error" class="alert error">{{ error }}</p>
-    <p v-if="message" class="alert success">{{ message }}</p>
+    <p
+      v-if="error"
+      class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="message"
+      class="rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary"
+      role="status"
+    >
+      {{ message }}
+    </p>
 
-    <div class="case-layout">
-      <aside class="panel case-list">
-        <button
+    <div class="grid items-start gap-5 lg:grid-cols-[minmax(17.5rem,0.7fr)_minmax(0,1.3fr)]">
+      <aside class="grid max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+        <Button
           v-for="item in cases"
           :key="item.id"
-          class="case-row"
-          :class="{ selected: selected?.id === item.id }"
+          type="button"
+          variant="outline"
+          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
+          :class="selected?.id === item.id ? 'border-primary bg-accent text-accent-foreground' : ''"
           @click="openCase(item.id)"
         >
-          <span><strong>{{ kindLabels[item.kind] }}</strong><span class="badge" :data-status="item.status">{{ statusLabels[item.status] }}</span></span>
-          <code>{{ shortId(item.id) }}</code>
-          <small>{{ item.reporter_username }} · {{ formatTime(item.created_at) }}</small>
-          <small>候选 {{ shortId(item.candidate_id) }}</small>
-        </button>
-        <p v-if="!loading && cases.length === 0" class="empty">当前筛选条件下没有案件。</p>
+          <span class="grid w-full gap-2">
+            <span class="flex items-center justify-between gap-3">
+              <strong>{{ kindLabels[item.kind] }}</strong>
+              <Badge
+                :variant="item.status === 'open' ? 'destructive' : item.status === 'resolved' ? 'secondary' : 'outline'"
+              >
+                {{ statusLabels[item.status] }}
+              </Badge>
+            </span>
+            <code class="break-all text-xs text-muted-foreground">{{ shortId(item.id) }}</code>
+            <small class="text-muted-foreground">
+              {{ item.reporter_username }} · {{ formatTime(item.created_at) }}
+            </small>
+            <small class="break-all text-muted-foreground">候选 {{ shortId(item.candidate_id) }}</small>
+          </span>
+        </Button>
+        <p v-if="!loading && cases.length === 0" class="py-8 text-center text-sm text-muted-foreground">
+          当前筛选条件下没有案件。
+        </p>
       </aside>
 
-      <article v-if="selected" class="panel detail">
-        <div class="detail-title">
-          <div><p class="eyebrow">{{ kindLabels[selected.kind] }}</p><h2>{{ shortId(selected.id) }}</h2></div>
-          <span class="badge" :data-status="selected.status">{{ statusLabels[selected.status] }}</span>
+      <article v-if="selected" class="space-y-6 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              {{ kindLabels[selected.kind] }}
+            </p>
+            <h2 class="break-all text-lg font-semibold tracking-tight">{{ shortId(selected.id) }}</h2>
+          </div>
+          <Badge
+            :variant="selected.status === 'open' ? 'destructive' : selected.status === 'resolved' ? 'secondary' : 'outline'"
+          >
+            {{ statusLabels[selected.status] }}
+          </Badge>
         </div>
-        <dl class="detail-grid">
-          <div><dt>提交用户</dt><dd>{{ selected.reporter_username }}</dd></div>
-          <div><dt>候选 ID</dt><dd><code>{{ selected.candidate_id }}</code></dd></div>
-          <div><dt>原因码</dt><dd><code>{{ selected.reason_code }}</code></dd></div>
-          <div><dt>关联案件</dt><dd>{{ selected.related_case_id || "—" }}</dd></div>
-          <div><dt>处理结果</dt><dd>{{ selected.resolution_code || "—" }}</dd></div>
-          <div><dt>解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
+
+        <dl class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">提交用户</dt><dd>{{ selected.reporter_username }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">候选 ID</dt><dd><code class="break-all text-sm">{{ selected.candidate_id }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">原因码</dt><dd><code class="break-all text-sm">{{ selected.reason_code }}</code></dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">关联案件</dt><dd class="break-all">{{ selected.related_case_id || "—" }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">处理结果</dt><dd class="break-all">{{ selected.resolution_code || "—" }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
         </dl>
-        <section><h3>用户说明</h3><p class="note">{{ selected.description || "未填写说明" }}</p></section>
-        <section v-if="selected.resolution_note"><h3>处理说明</h3><p class="note">{{ selected.resolution_note }}</p></section>
-        <section class="action-box">
-          <label>处理说明（不要粘贴密码、令牌或个人敏感信息）<textarea v-model="resolutionNote" maxlength="1000" rows="3" /></label>
-          <div class="actions"><button v-for="action in actions" :key="action.code" class="button" :class="{ danger: action.danger }" :disabled="busy" @click="applyAction(action)">{{ action.label }}</button></div>
+
+        <section class="space-y-2">
+          <h3 class="font-semibold">用户说明</h3>
+          <p class="whitespace-pre-wrap rounded-md bg-muted/50 p-4 text-sm leading-6">
+            {{ selected.description || "未填写说明" }}
+          </p>
         </section>
-        <section><h3>不可变处理时间线</h3><ol class="timeline"><li v-for="event in selected.events" :key="event.id"><strong>{{ event.action }}</strong><p>{{ event.previous_status || "创建" }} → {{ event.next_status }} · {{ event.reason_code }}</p><p v-if="event.note">{{ event.note }}</p><small>{{ formatTime(event.created_at) }} · {{ event.request_id || "无请求号" }}</small></li></ol></section>
+        <section v-if="selected.resolution_note" class="space-y-2">
+          <h3 class="font-semibold">处理说明</h3>
+          <p class="whitespace-pre-wrap rounded-md bg-muted/50 p-4 text-sm leading-6">
+            {{ selected.resolution_note }}
+          </p>
+        </section>
+
+        <section class="space-y-4 rounded-lg border bg-muted/30 p-4">
+          <Label class="grid gap-2">
+            处理说明（不要粘贴密码、令牌或个人敏感信息）
+            <Textarea v-model="resolutionNote" maxlength="1000" rows="3" />
+          </Label>
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              v-for="action in actions"
+              :key="action.code"
+              type="button"
+              :variant="action.danger ? 'destructive' : 'default'"
+              :disabled="busy"
+              @click="applyAction(action)"
+            >
+              {{ action.label }}
+            </Button>
+          </div>
+        </section>
+
+        <section class="space-y-3">
+          <h3 class="font-semibold">不可变处理时间线</h3>
+          <ol class="space-y-3 border-l pl-5">
+            <li v-for="event in selected.events" :key="event.id" class="space-y-1">
+              <strong>{{ event.action }}</strong>
+              <p class="text-sm">{{ event.previous_status || "创建" }} → {{ event.next_status }} · {{ event.reason_code }}</p>
+              <p v-if="event.note" class="whitespace-pre-wrap text-sm">{{ event.note }}</p>
+              <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · {{ event.request_id || "无请求号" }}</small>
+            </li>
+          </ol>
+        </section>
       </article>
-      <article v-else class="panel empty">请选择左侧案件查看详情。</article>
+      <article v-else class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+        请选择左侧案件查看详情。
+      </article>
     </div>
   </section>
 </template>
-
-<style scoped>
-.trust-page { display: grid; gap: 18px; }
-.page-heading, .detail-title, .case-row span, .actions { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.page-heading h1, .detail-title h2 { margin: 4px 0; }
-.page-heading p { margin: 0; color: var(--muted); }
-.eyebrow { color: #2563eb !important; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
-.filters { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
-.filters label, .action-box label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
-.filters select, .filters input, textarea { box-sizing: border-box; width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: white; font: inherit; }
-.filters .query { flex: 1; min-width: 250px; }
-.case-layout { display: grid; grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr); gap: 18px; align-items: start; }
-.case-list { display: grid; gap: 10px; max-height: calc(100vh - 220px); overflow: auto; }
-.case-row { display: grid; gap: 8px; padding: 14px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: white; cursor: pointer; }
-.case-row.selected, .case-row:hover { border-color: #60a5fa; background: #eff6ff; }
-.case-row code, .case-row small { color: var(--muted); overflow-wrap: anywhere; }
-.badge { padding: 4px 9px; border-radius: 999px; background: #e2e8f0; font-size: 12px; font-weight: 800; }
-.badge[data-status="open"] { background: #fff7ed; color: #9a3412; }.badge[data-status="in_review"] { background: #eff6ff; color: #1d4ed8; }.badge[data-status="resolved"] { background: #ecfdf3; color: #067647; }.badge[data-status="dismissed"] { background: #f1f5f9; color: #475569; }
-.detail { display: grid; gap: 18px; }.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }.detail-grid dt { color: var(--muted); font-size: 12px; font-weight: 700; }.detail-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }
-.note { padding: 13px; border-radius: 10px; background: #f8fafc; white-space: pre-wrap; }.action-box { display: grid; gap: 12px; padding: 15px; border-radius: 12px; background: #f8fafc; }.actions { justify-content: flex-start; flex-wrap: wrap; }.button.danger { background: #b42318; }.timeline { display: grid; gap: 12px; padding-left: 20px; }.timeline li { padding-left: 8px; }.timeline p { margin: 5px 0; }.timeline small, .empty { color: var(--muted); }
-@media (max-width: 900px) { .case-layout { grid-template-columns: 1fr; }.case-list { max-height: none; } } @media (max-width: 600px) { .detail-grid { grid-template-columns: 1fr; } }
-</style>
