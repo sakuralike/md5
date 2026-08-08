@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from password_detective.core.ids import new_id
@@ -56,6 +56,7 @@ class TrustCase(Base):
         default=TrustCaseStatus.OPEN,
         index=True,
     )
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     reporter_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
@@ -118,8 +119,14 @@ class TrustCaseEvent(Base):
     previous_status: Mapped[TrustCaseStatus | None] = mapped_column(
         Enum(TrustCaseStatus, native_enum=False, length=16), nullable=True
     )
+    previous_assignee_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     next_status: Mapped[TrustCaseStatus] = mapped_column(
         Enum(TrustCaseStatus, native_enum=False, length=16)
+    )
+    next_assignee_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     action: Mapped[str] = mapped_column(String(64))
     reason_code: Mapped[str] = mapped_column(String(64))

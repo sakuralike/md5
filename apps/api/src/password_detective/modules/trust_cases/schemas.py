@@ -38,6 +38,15 @@ class AccountAppealRequestedAction(StrEnum):
     REVIEW_RESTRICTION = "review_restriction"
 
 
+class CaseAssignmentReason(StrEnum):
+    ASSIGNED = "admin.assigned"
+    REASSIGNED = "admin.reassigned"
+
+
+class CaseReopenReason(StrEnum):
+    REOPENED = "admin.reopened"
+
+
 class CaseResolutionCode(StrEnum):
     REVIEW_STARTED = "admin.review_started"
     ACTION_TAKEN = "admin.action_taken"
@@ -96,7 +105,42 @@ class AccountAppealCreateRequest(BaseModel):
         return _normalize_note(value)
 
 
+class TrustCaseAssignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    assignee_id: str = Field(min_length=1, max_length=36)
+    reason_code: CaseAssignmentReason
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("assignee_id")
+    @classmethod
+    def normalize_assignee_id(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        return _normalize_note(value)
+
+
+class TrustCaseReopenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    reason_code: CaseReopenReason = CaseReopenReason.REOPENED
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        return _normalize_note(value)
+
+
 class TrustCaseTransitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
     target_status: TrustCaseStatus
     resolution_code: CaseResolutionCode
     resolution_note: str | None = Field(default=None, max_length=1000)
@@ -129,6 +173,7 @@ class TrustCaseTransitionRequest(BaseModel):
 
 class TrustCaseSummary(BaseModel):
     id: str
+    version: int
     kind: TrustCaseKind
     subject_type: TrustCaseSubjectType
     status: TrustCaseStatus
@@ -155,7 +200,9 @@ class TrustCaseEventResponse(BaseModel):
     id: str
     actor_id: str | None
     previous_status: TrustCaseStatus | None
+    previous_assignee_id: str | None
     next_status: TrustCaseStatus
+    next_assignee_id: str | None
     action: str
     reason_code: str
     note: str | None
@@ -178,8 +225,35 @@ class TrustCaseTransitionResponse(BaseModel):
     case_id: str
     previous_status: TrustCaseStatus
     current_status: TrustCaseStatus
+    previous_assignee_id: str | None
+    current_assignee_id: str | None
+    version: int
     event_id: str
     resolution_code: CaseResolutionCode
+    request_id: str | None
+
+
+class TrustCaseAssignResponse(BaseModel):
+    case_id: str
+    previous_status: TrustCaseStatus
+    current_status: TrustCaseStatus
+    previous_assignee_id: str | None
+    current_assignee_id: str
+    version: int
+    event_id: str
+    reason_code: CaseAssignmentReason
+    request_id: str | None
+
+
+class TrustCaseReopenResponse(BaseModel):
+    case_id: str
+    previous_status: TrustCaseStatus
+    current_status: TrustCaseStatus
+    previous_assignee_id: str | None
+    current_assignee_id: str | None
+    version: int
+    event_id: str
+    reason_code: CaseReopenReason
     request_id: str | None
 
 

@@ -21,9 +21,13 @@ import {
 } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
 import {
+  assignTrustCase,
+  createTrustCaseAssignKey,
+  createTrustCaseReopenKey,
   createTrustCaseTransitionKey,
   getTrustCase,
   listTrustCases,
+  reopenTrustCase,
   transitionTrustCase,
 } from "../services/trustCases";
 import { useAdminAuthStore } from "../stores/auth";
@@ -40,6 +44,7 @@ const busy = ref(false);
 const error = ref("");
 const message = ref("");
 const resolutionNote = ref("");
+const assigneeId = ref("");
 
 const kindLabels: Record<TrustCaseKind, string> = {
   report: "内容举报",
@@ -86,8 +91,6 @@ const actions = computed(() => {
       label: "证据不足关闭",
       danger: true,
     });
-  } else {
-    result.push({ target: "open", code: "admin.reopened", label: "重新开启" });
   }
   return result;
 });
@@ -151,8 +154,66 @@ async function openCase(caseId: string): Promise<void> {
   message.value = "";
   try {
     selected.value = await getTrustCase(caseId, token());
+    assigneeId.value = selected.value.assigned_to_id ?? "";
   } catch (value) {
     error.value = describeError(value);
+  }
+}
+
+async function assignSelectedCase(): Promise<void> {
+  if (!selected.value || !assigneeId.value.trim()) return;
+  const caseId = selected.value.id;
+  busy.value = true;
+  error.value = "";
+  message.value = "";
+  try {
+    await assignTrustCase(
+      caseId,
+      {
+        expected_version: selected.value.version,
+        assignee_id: assigneeId.value.trim(),
+        reason_code: selected.value.assigned_to_id ? "admin.reassigned" : "admin.assigned",
+        note: resolutionNote.value.trim() || null,
+      },
+      token(),
+      createTrustCaseAssignKey(),
+    );
+    resolutionNote.value = "";
+    message.value = "已更新案件负责人，指派事件已写入不可变时间线。";
+    await loadCases();
+    await openCase(caseId);
+  } catch (value) {
+    error.value = describeError(value);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function reopenSelectedCase(): Promise<void> {
+  if (!selected.value) return;
+  const caseId = selected.value.id;
+  busy.value = true;
+  error.value = "";
+  message.value = "";
+  try {
+    await reopenTrustCase(
+      caseId,
+      {
+        expected_version: selected.value.version,
+        reason_code: "admin.reopened",
+        note: resolutionNote.value.trim() || null,
+      },
+      token(),
+      createTrustCaseReopenKey(),
+    );
+    resolutionNote.value = "";
+    message.value = "已重新开启案件，重开事件已写入不可变时间线。";
+    await loadCases();
+    await openCase(caseId);
+  } catch (value) {
+    error.value = describeError(value);
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -166,6 +227,7 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
     await transitionTrustCase(
       caseId,
       {
+        expected_version: selected.value.version,
         target_status: action.target,
         resolution_code: action.code,
         resolution_note: resolutionNote.value.trim() || null,
@@ -309,6 +371,8 @@ onMounted(() => loadCases(true));
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">原因码</dt><dd><code class="break-all text-sm">{{ selected.reason_code }}</code></dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">关联案件</dt><dd class="break-all">{{ selected.related_case_id || "—" }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">处理结果</dt><dd class="break-all">{{ selected.resolution_code || "—" }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">当前版本</dt><dd>{{ selected.version }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">当前负责人</dt><dd class="break-all">{{ selected.assigned_to_id || "未指派" }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">解决时间</dt><dd>{{ formatTime(selected.resolved_at) }}</dd></div>
         </dl>
 
@@ -332,6 +396,20 @@ onMounted(() => loadCases(true));
         </section>
 
         <section class="space-y-4 rounded-lg border bg-muted/30 p-4">
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <Label class="grid gap-2">
+              负责人用户 ID
+              <Input v-model="assigneeId" maxlength="36" placeholder="审核员或管理员用户 ID" />
+            </Label>
+            <Button
+              type="button"
+              variant="outline"
+              :disabled="busy || selected.status === 'resolved' || selected.status === 'dismissed' || !assigneeId.trim()"
+              @click="assignSelectedCase"
+            >
+              {{ selected.assigned_to_id ? "转派负责人" : "指派负责人" }}
+            </Button>
+          </div>
           <Label class="grid gap-2">
             处理说明（不要粘贴密码、令牌或个人敏感信息）
             <Textarea v-model="resolutionNote" maxlength="1000" rows="3" />
@@ -347,6 +425,15 @@ onMounted(() => loadCases(true));
             >
               {{ action.label }}
             </Button>
+            <Button
+              v-if="selected.status === 'resolved' || selected.status === 'dismissed'"
+              type="button"
+              variant="outline"
+              :disabled="busy"
+              @click="reopenSelectedCase"
+            >
+              重新开启
+            </Button>
           </div>
         </section>
 
@@ -356,6 +443,7 @@ onMounted(() => loadCases(true));
             <li v-for="event in selected.events" :key="event.id" class="space-y-1">
               <strong>{{ event.action }}</strong>
               <p class="text-sm">{{ event.previous_status || "创建" }} → {{ event.next_status }} · {{ event.reason_code }}</p>
+              <p v-if="event.previous_assignee_id || event.next_assignee_id" class="text-sm text-muted-foreground">负责人：{{ event.previous_assignee_id || "未指派" }} → {{ event.next_assignee_id || "未指派" }}</p>
               <p v-if="event.note" class="whitespace-pre-wrap text-sm">{{ event.note }}</p>
               <small class="text-muted-foreground">{{ formatTime(event.created_at) }} · {{ event.request_id || "无请求号" }}</small>
             </li>

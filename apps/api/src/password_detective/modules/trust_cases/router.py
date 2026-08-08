@@ -25,18 +25,24 @@ from password_detective.modules.trust_cases.schemas import (
     AccountAppealCreateRequest,
     AppealCreateRequest,
     ReportCreateRequest,
+    TrustCaseAssignRequest,
+    TrustCaseAssignResponse,
     TrustCaseDetail,
     TrustCaseListResponse,
+    TrustCaseReopenRequest,
+    TrustCaseReopenResponse,
     TrustCaseTransitionRequest,
     TrustCaseTransitionResponse,
 )
 from password_detective.modules.trust_cases.service import (
+    assign_case,
     create_account_appeal,
     create_appeal,
     create_report,
     get_case_detail,
     list_admin_cases,
     list_my_cases,
+    reopen_case,
     transition_case,
 )
 
@@ -212,6 +218,86 @@ def admin_case_transition(
             lease,
             response_status=200,
             response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@admin_router.post(
+    "/{case_id}/assign",
+    response_model=TrustCaseAssignResponse,
+    dependencies=[Depends(rate_limit("admin.trust_case.assign", limit=30, window_seconds=60))],
+)
+def admin_case_assign(
+    case_id: str,
+    payload: TrustCaseAssignRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> TrustCaseAssignResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="admin.trust_case.assign",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest({"case_id": case_id, **payload.model_dump(mode="json")}),
+    )
+    if lease.cached_response is not None:
+        return TrustCaseAssignResponse.model_validate(lease.cached_response)
+    try:
+        response = assign_case(
+            db,
+            case_id=case_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db, lease, response_status=200, response_body=response.model_dump(mode="json")
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
+
+
+@admin_router.post(
+    "/{case_id}/reopen",
+    response_model=TrustCaseReopenResponse,
+    dependencies=[Depends(rate_limit("admin.trust_case.reopen", limit=30, window_seconds=60))],
+)
+def admin_case_reopen(
+    case_id: str,
+    payload: TrustCaseReopenRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> TrustCaseReopenResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="admin.trust_case.reopen",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest({"case_id": case_id, **payload.model_dump(mode="json")}),
+    )
+    if lease.cached_response is not None:
+        return TrustCaseReopenResponse.model_validate(lease.cached_response)
+    try:
+        response = reopen_case(
+            db,
+            case_id=case_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db, lease, response_status=200, response_body=response.model_dump(mode="json")
         )
         return response
     except Exception:

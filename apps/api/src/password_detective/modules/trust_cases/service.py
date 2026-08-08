@@ -15,7 +15,7 @@ from password_detective.db.models.trust_case import (
     TrustCaseStatus,
     TrustCaseSubjectType,
 )
-from password_detective.db.models.user import User
+from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.trust_cases.schemas import (
@@ -23,9 +23,13 @@ from password_detective.modules.trust_cases.schemas import (
     AppealCreateRequest,
     CaseResolutionCode,
     ReportCreateRequest,
+    TrustCaseAssignRequest,
+    TrustCaseAssignResponse,
     TrustCaseDetail,
     TrustCaseEventResponse,
     TrustCaseListResponse,
+    TrustCaseReopenRequest,
+    TrustCaseReopenResponse,
     TrustCaseSummary,
     TrustCaseTransitionRequest,
     TrustCaseTransitionResponse,
@@ -37,14 +41,12 @@ _ALLOWED_RESOLUTION_CODES = {
         CaseResolutionCode.ACTION_TAKEN,
         CaseResolutionCode.NO_VIOLATION,
         CaseResolutionCode.INSUFFICIENT_EVIDENCE,
-        CaseResolutionCode.REOPENED,
     },
     TrustCaseKind.APPEAL: {
         CaseResolutionCode.REVIEW_STARTED,
         CaseResolutionCode.INSUFFICIENT_EVIDENCE,
         CaseResolutionCode.APPEAL_UPHELD,
         CaseResolutionCode.APPEAL_DENIED,
-        CaseResolutionCode.REOPENED,
     },
     # WP2 iteration 1 only opens account appeals and lets an admin begin review.
     # Final resolution must use the later atomic orchestration endpoint.
@@ -62,8 +64,8 @@ _ALLOWED_TRANSITIONS = {
         TrustCaseStatus.RESOLVED,
         TrustCaseStatus.DISMISSED,
     },
-    TrustCaseStatus.RESOLVED: {TrustCaseStatus.OPEN},
-    TrustCaseStatus.DISMISSED: {TrustCaseStatus.OPEN},
+    TrustCaseStatus.RESOLVED: set(),
+    TrustCaseStatus.DISMISSED: set(),
 }
 
 
@@ -257,7 +259,9 @@ def transition_case(
     case = db.scalar(select(TrustCase).where(TrustCase.id == case_id).with_for_update())
     if case is None:
         raise AppError("trust.case_not_found", "未找到举报或申诉案件", status_code=404)
+    _require_version(case, payload.expected_version)
     previous_status = case.status
+    previous_assignee_id = case.assigned_to_id
     if payload.target_status == previous_status:
         raise AppError("trust.noop_transition", "案件状态没有变化", status_code=409)
     if payload.target_status not in _ALLOWED_TRANSITIONS[previous_status]:
@@ -273,7 +277,7 @@ def transition_case(
     case.status = payload.target_status
     case.updated_at = now
     if payload.target_status == TrustCaseStatus.IN_REVIEW:
-        case.assigned_to_id = principal.user.id
+        case.assigned_to_id = case.assigned_to_id or principal.user.id
         case.resolution_code = None
         case.resolution_note = None
         case.resolved_by_id = None
@@ -290,13 +294,16 @@ def transition_case(
         case.resolution_code = None
         case.resolution_note = None
         case.resolved_at = None
+    case.version += 1
 
     event = _append_event(
         db,
         case=case,
         actor_id=principal.user.id,
         previous_status=previous_status,
+        previous_assignee_id=previous_assignee_id,
         next_status=payload.target_status,
+        next_assignee_id=case.assigned_to_id,
         action="case.transitioned",
         reason_code=payload.resolution_code.value,
         note=payload.resolution_note,
@@ -320,6 +327,9 @@ def transition_case(
             "risk_alert_id": case.risk_alert_id,
             "previous_status": previous_status.value,
             "current_status": payload.target_status.value,
+            "previous_assignee_id": previous_assignee_id,
+            "current_assignee_id": case.assigned_to_id,
+            "version": case.version,
             "resolution_code": payload.resolution_code.value,
             "event_id": event.id,
         },
@@ -329,10 +339,182 @@ def transition_case(
         case_id=case.id,
         previous_status=previous_status,
         current_status=case.status,
+        previous_assignee_id=previous_assignee_id,
+        current_assignee_id=case.assigned_to_id,
+        version=case.version,
         event_id=event.id,
         resolution_code=payload.resolution_code,
         request_id=context.request_id,
     )
+
+
+def assign_case(
+    db: Session,
+    *,
+    case_id: str,
+    payload: TrustCaseAssignRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> TrustCaseAssignResponse:
+    case = _locked_case(db, case_id)
+    _require_version(case, payload.expected_version)
+    if case.status not in {TrustCaseStatus.OPEN, TrustCaseStatus.IN_REVIEW}:
+        raise AppError("trust.assignment_not_allowed", "已关闭案件不能指派负责人", status_code=409)
+    assignee = db.get(User, payload.assignee_id)
+    if (
+        assignee is None
+        or assignee.status != UserStatus.ACTIVE
+        or assignee.role not in {UserRole.MODERATOR, UserRole.ADMIN}
+    ):
+        raise AppError(
+            "trust.invalid_assignee", "负责人必须是启用中的审核员或管理员", status_code=422
+        )
+    previous_assignee_id = case.assigned_to_id
+    if previous_assignee_id == assignee.id:
+        raise AppError("trust.noop_assignment", "案件已由该负责人处理", status_code=409)
+
+    case.assigned_to_id = assignee.id
+    case.updated_at = utc_now()
+    case.version += 1
+    event = _append_event(
+        db,
+        case=case,
+        actor_id=principal.user.id,
+        previous_status=case.status,
+        previous_assignee_id=previous_assignee_id,
+        next_status=case.status,
+        next_assignee_id=case.assigned_to_id,
+        action="case.assigned",
+        reason_code=payload.reason_code.value,
+        note=payload.note,
+        request_id=context.request_id,
+    )
+    db.flush()
+    write_audit_log(
+        db,
+        action="trust_case.assign",
+        target_type="trust_case",
+        target_id=case.id,
+        result="success",
+        actor_id=principal.user.id,
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "previous_status": case.status.value,
+            "current_status": case.status.value,
+            "previous_assignee_id": previous_assignee_id,
+            "current_assignee_id": case.assigned_to_id,
+            "version": case.version,
+            "reason_code": payload.reason_code.value,
+            "event_id": event.id,
+        },
+    )
+    db.commit()
+    return TrustCaseAssignResponse(
+        case_id=case.id,
+        previous_status=case.status,
+        current_status=case.status,
+        previous_assignee_id=previous_assignee_id,
+        current_assignee_id=case.assigned_to_id,
+        version=case.version,
+        event_id=event.id,
+        reason_code=payload.reason_code,
+        request_id=context.request_id,
+    )
+
+
+def reopen_case(
+    db: Session,
+    *,
+    case_id: str,
+    payload: TrustCaseReopenRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> TrustCaseReopenResponse:
+    case = _locked_case(db, case_id)
+    _require_version(case, payload.expected_version)
+    if case.status not in {TrustCaseStatus.RESOLVED, TrustCaseStatus.DISMISSED}:
+        raise AppError(
+            "trust.reopen_not_allowed", "只有已解决或已驳回案件可以重开", status_code=409
+        )
+
+    previous_status = case.status
+    previous_assignee_id = case.assigned_to_id
+    case.status = TrustCaseStatus.OPEN
+    case.assigned_to_id = None
+    case.resolved_by_id = None
+    case.resolution_code = None
+    case.resolution_note = None
+    case.resolved_at = None
+    case.updated_at = utc_now()
+    case.version += 1
+    event = _append_event(
+        db,
+        case=case,
+        actor_id=principal.user.id,
+        previous_status=previous_status,
+        previous_assignee_id=previous_assignee_id,
+        next_status=case.status,
+        next_assignee_id=None,
+        action="case.reopened",
+        reason_code=payload.reason_code.value,
+        note=payload.note,
+        request_id=context.request_id,
+    )
+    db.flush()
+    write_audit_log(
+        db,
+        action="trust_case.reopen",
+        target_type="trust_case",
+        target_id=case.id,
+        result="success",
+        actor_id=principal.user.id,
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "previous_status": previous_status.value,
+            "current_status": case.status.value,
+            "previous_assignee_id": previous_assignee_id,
+            "current_assignee_id": None,
+            "version": case.version,
+            "reason_code": payload.reason_code.value,
+            "event_id": event.id,
+        },
+    )
+    db.commit()
+    return TrustCaseReopenResponse(
+        case_id=case.id,
+        previous_status=previous_status,
+        current_status=case.status,
+        previous_assignee_id=previous_assignee_id,
+        current_assignee_id=None,
+        version=case.version,
+        event_id=event.id,
+        reason_code=payload.reason_code,
+        request_id=context.request_id,
+    )
+
+
+def _locked_case(db: Session, case_id: str) -> TrustCase:
+    case = db.scalar(select(TrustCase).where(TrustCase.id == case_id).with_for_update())
+    if case is None:
+        raise AppError("trust.case_not_found", "未找到举报或申诉案件", status_code=404)
+    return case
+
+
+def _require_version(case: TrustCase, expected_version: int) -> None:
+    if case.version != expected_version:
+        raise AppError(
+            "trust.case_version_conflict",
+            "案件已被其他管理员更新，请刷新后重试",
+            status_code=409,
+            details={
+                "expected_version": expected_version,
+                "current_version": case.version,
+                "current_status": case.status.value,
+                "current_assignee_id": case.assigned_to_id,
+            },
+        )
 
 
 def _list_cases(
@@ -388,6 +570,7 @@ def _list_cases(
 def _summary(case: TrustCase, reporter_username: str) -> TrustCaseSummary:
     return TrustCaseSummary(
         id=case.id,
+        version=case.version,
         kind=case.kind,
         subject_type=case.subject_type,
         status=case.status,
@@ -416,7 +599,9 @@ def _event(event: TrustCaseEvent) -> TrustCaseEventResponse:
         id=event.id,
         actor_id=event.actor_id,
         previous_status=event.previous_status,
+        previous_assignee_id=event.previous_assignee_id,
         next_status=event.next_status,
+        next_assignee_id=event.next_assignee_id,
         action=event.action,
         reason_code=event.reason_code,
         note=event.note,
@@ -436,12 +621,16 @@ def _append_event(
     reason_code: str,
     note: str | None,
     request_id: str | None,
+    previous_assignee_id: str | None = None,
+    next_assignee_id: str | None = None,
 ) -> TrustCaseEvent:
     event = TrustCaseEvent(
         case_id=case.id,
         actor_id=actor_id,
         previous_status=previous_status,
+        previous_assignee_id=previous_assignee_id,
         next_status=next_status,
+        next_assignee_id=next_assignee_id,
         action=action,
         reason_code=reason_code,
         note=note,

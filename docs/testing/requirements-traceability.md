@@ -87,4 +87,13 @@
 | 本人案件详情与对象级隔离 | `GET /trust/cases/{case_id}` | 本人 200、跨账号 404、未登录 401 | 已实现第一轮 |
 | 最小披露审计 | `service.py::_audit_created` | 审计不含说明、证据摘要、处理自由文本；事件保留 request_id | 已实现第一轮 |
 | 共享契约与调用层 | `packages/api-contract/src/index.ts`、`apps/web/src/services/trustCases.ts`、Web/Admin 案件页 | API contract/Web/Admin typecheck 与相关测试 | 已实现第一轮 |
-| 指派、原子处置、重开、结果通知 | `modules/trust_cases`、通知 Outbox | 尚未实现 | 待后续 WP2 轮次 |
+| 指派、原子处置、重开、结果通知 | `modules/trust_cases`、通知 Outbox | 第 1 轮未实现；由第 2 轮拆分收口 | 部分实现 |
+
+## WP2 第 2 次迭代追踪增量
+
+| 需求 | 实现位置 | 验证证据 | 状态 |
+|---|---|---|---|
+| 案件版本乐观并发 | `trust_cases.version`、`_require_version`、`20260808_0020_wp2_case_assignment_reopen.py` | 指派/重开/状态转换携带 `expected_version`；过期版本返回 `409 trust.case_version_conflict` | 已实现本轮 |
+| 独立案件指派/转派 | `modules/trust_cases/service.py::assign_case`、`router.py`、`apps/admin/src/pages/TrustCasesPage.vue` | 启用审核员/管理员校验；幂等重放；负责人前后事件快照；Admin 服务调用测试 | 已实现本轮 |
+| 独立受控案件重开 | `modules/trust_cases/service.py::reopen_case`、`router.py`、`apps/admin/src/pages/TrustCasesPage.vue` | 仅 `resolved/dismissed` 可重开；清理负责人/结论元数据；幂等重放和过期版本测试 | 已实现本轮 |
+| 原子处置与结果通知 | 后续 `resolve` 编排、候选/账号副作用、通知 Outbox | 尚未实现；本轮禁止以多个无事务写接口模拟 | 待后续 WP2 轮次 |

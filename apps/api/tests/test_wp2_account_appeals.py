@@ -120,6 +120,7 @@ def test_account_appeal_is_self_scoped_idempotent_and_minimum_disclosure(client)
             "X-Request-ID": "synthetic-account-appeal-review",
         },
         json={
+            "expected_version": 1,
             "target_status": "in_review",
             "resolution_code": "admin.review_started",
             "resolution_note": "合成处理说明：开始复核账号限制。",
@@ -134,6 +135,7 @@ def test_account_appeal_is_self_scoped_idempotent_and_minimum_disclosure(client)
             "Idempotency-Key": "account-appeal-resolution-0001",
         },
         json={
+            "expected_version": 2,
             "target_status": "resolved",
             "resolution_code": "admin.appeal_upheld",
             "resolution_note": "本轮不得通过通用状态转换执行账号恢复。",

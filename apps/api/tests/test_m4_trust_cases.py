@@ -109,6 +109,7 @@ def test_report_creation_is_idempotent_private_and_admin_audited(client):
         "X-Request-ID": "synthetic-trust-transition-request",
     }
     transition_payload = {
+        "expected_version": 1,
         "target_status": "in_review",
         "resolution_code": "admin.review_started",
         "resolution_note": "合成处理说明：进入人工核查。",
@@ -205,14 +206,22 @@ def test_case_transition_rejects_code_mismatch_and_idempotency_payload_conflict(
     mismatch = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/transition",
         headers={**admin_headers, "Idempotency-Key": "trust-transition-mismatch-0001"},
-        json={"target_status": "resolved", "resolution_code": "admin.review_started"},
+        json={
+            "expected_version": 1,
+            "target_status": "resolved",
+            "resolution_code": "admin.review_started",
+        },
     )
     assert mismatch.status_code == 422
 
     wrong_case_kind = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/transition",
         headers={**admin_headers, "Idempotency-Key": "trust-transition-kind-0001"},
-        json={"target_status": "resolved", "resolution_code": "admin.appeal_upheld"},
+        json={
+            "expected_version": 1,
+            "target_status": "resolved",
+            "resolution_code": "admin.appeal_upheld",
+        },
     )
     assert wrong_case_kind.status_code == 422
     assert wrong_case_kind.json()["code"] == "trust.resolution_not_allowed"
@@ -221,12 +230,16 @@ def test_case_transition_rejects_code_mismatch_and_idempotency_payload_conflict(
     first = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/transition",
         headers=key_headers,
-        json={"target_status": "dismissed", "resolution_code": "admin.no_violation"},
+        json={
+            "expected_version": 1,
+            "target_status": "dismissed",
+            "resolution_code": "admin.no_violation",
+        },
     )
     assert first.status_code == 200
     conflict = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/transition",
         headers=key_headers,
-        json={"target_status": "open", "resolution_code": "admin.reopened"},
+        json={"expected_version": 1, "target_status": "open", "resolution_code": "admin.reopened"},
     )
     assert conflict.status_code == 409

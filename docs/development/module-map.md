@@ -13,7 +13,7 @@
 | Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v2` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP/MFA、真实仪表盘、审计中心、用户处置、受控角色变更双人复核，以及不可变配置草稿、差异预览、再认证发布、运行时投影和新版本回滚 | 角色层级配置化、紧急撤权、批量资源上限、审计保留/归档和大规模异步导出 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
-| Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人账号申诉、本人案件列表/详情、`candidate/account/risk_alert` 单一主体约束、MFA 统一队列/详情、受控状态矩阵、不可变事件、限流、幂等和审计脱敏 | 独立指派/处置/重开接口、乐观并发、结果通知、SLA、候选/账号原子处置和自动分派 |
+| Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人账号申诉、本人案件列表/详情、`candidate/account/risk_alert` 单一主体约束、MFA 统一队列/详情、受控状态矩阵、独立指派/重开、案件版本乐观并发、负责人前后事件快照、限流、幂等和审计脱敏 | 原子 `resolve`、结果通知 Outbox、SLA、候选/账号副作用、奖励/信誉补偿、自动分派和用户案件交互收口 |
 | Risk Alerts | `apps/api/src/password_detective/modules/risk_alerts/` | `risk-alert-v1` 检测、`risk-alert-sla-v1` 响应/解决时限、MFA 值班人员指派、负责人/超时筛选、不可变事件、事务通知 Outbox、SMTP/Webhook 投递、投递指标/失败队列、幂等人工重放和处置 | 排班与升级链、真实 SMTP 服务商/发件域名验收、最终送达回调、指标导出、动态规则和批量操作；关联分析由 Correlation 模块提供 |
 | Reputation | `apps/api/src/password_detective/modules/reputation/` | 本人积分投影、贡献/反馈统计、积分流水、不可变信誉事件、0～100 分投影、`reputation-v1` 幂等奖励和 `reward-compensation-v1` 撤销/恢复校正 | 管理员用户处置、危险操作再次确认和动态风险权重 |
 | Correlation | `apps/api/src/password_detective/modules/correlation/` | `correlation-v1` 候选内安装/IP 传递关联组、成功/失败维度动态限权、聚合分析和不可变快照持久化 | 跨候选图谱、通知/SLA、自动处罚与可配置规则 |

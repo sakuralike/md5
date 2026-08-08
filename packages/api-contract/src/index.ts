@@ -723,9 +723,12 @@ export type TrustCaseResolutionCode =
   | "admin.appeal_upheld"
   | "admin.appeal_denied"
   | "admin.reopened";
+export type TrustCaseAssignmentReason = "admin.assigned" | "admin.reassigned";
+export type TrustCaseReopenReason = "admin.reopened";
 
 export interface TrustCaseSummary {
   id: string;
+  version: number;
   kind: TrustCaseKind;
   subject_type: TrustCaseSubjectType;
   status: TrustCaseStatus;
@@ -752,7 +755,9 @@ export interface TrustCaseEvent {
   id: string;
   actor_id: string | null;
   previous_status: TrustCaseStatus | null;
+  previous_assignee_id: string | null;
   next_status: TrustCaseStatus;
+  next_assignee_id: string | null;
   action: string;
   reason_code: string;
   note: string | null;
@@ -772,6 +777,7 @@ export interface TrustCaseListResponse {
 }
 
 export interface TrustCaseTransitionRequest {
+  expected_version: number;
   target_status: TrustCaseStatus;
   resolution_code: TrustCaseResolutionCode;
   resolution_note?: string | null;
@@ -781,8 +787,48 @@ export interface TrustCaseTransitionResponse {
   case_id: string;
   previous_status: TrustCaseStatus;
   current_status: TrustCaseStatus;
+  previous_assignee_id: string | null;
+  current_assignee_id: string | null;
+  version: number;
   event_id: string;
   resolution_code: TrustCaseResolutionCode;
+  request_id: string | null;
+}
+
+export interface TrustCaseAssignRequest {
+  expected_version: number;
+  assignee_id: string;
+  reason_code: TrustCaseAssignmentReason;
+  note?: string | null;
+}
+
+export interface TrustCaseAssignResponse {
+  case_id: string;
+  previous_status: TrustCaseStatus;
+  current_status: TrustCaseStatus;
+  previous_assignee_id: string | null;
+  current_assignee_id: string;
+  version: number;
+  event_id: string;
+  reason_code: TrustCaseAssignmentReason;
+  request_id: string | null;
+}
+
+export interface TrustCaseReopenRequest {
+  expected_version: number;
+  reason_code?: TrustCaseReopenReason;
+  note?: string | null;
+}
+
+export interface TrustCaseReopenResponse {
+  case_id: string;
+  previous_status: TrustCaseStatus;
+  current_status: TrustCaseStatus;
+  previous_assignee_id: string | null;
+  current_assignee_id: string | null;
+  version: number;
+  event_id: string;
+  reason_code: TrustCaseReopenReason;
   request_id: string | null;
 }
 
