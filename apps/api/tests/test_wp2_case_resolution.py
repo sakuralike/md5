@@ -4,8 +4,15 @@ from sqlalchemy import select
 from test_m4_trust_cases import _admin_headers, _create_candidate, _register_and_login
 
 from password_detective.db.models.audit_log import AuditLog
-from password_detective.db.models.trust_case import TrustCase, TrustCaseEvent, TrustCaseStatus
-from password_detective.db.models.user import User
+from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
+from password_detective.db.models.trust_case import (
+    TrustCase,
+    TrustCaseEffect,
+    TrustCaseEffectType,
+    TrustCaseEvent,
+    TrustCaseStatus,
+)
+from password_detective.db.models.user import User, UserStatus
 
 
 def test_atomic_case_resolution_is_idempotent_versioned_and_audited(client):
@@ -33,6 +40,7 @@ def test_atomic_case_resolution_is_idempotent_versioned_and_audited(client):
         "expected_version": 1,
         "resolution_code": "admin.action_taken",
         "resolution_note": "合成处置说明：确认需要采取治理动作。",
+        "candidate_target_status": "quarantined",
     }
     resolved = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/resolve",
@@ -53,7 +61,7 @@ def test_atomic_case_resolution_is_idempotent_versioned_and_audited(client):
     stale = client.post(
         f"/api/v1/admin/trust-cases/{case_id}/resolve",
         headers={**admin_headers, "Idempotency-Key": "wp2-case-resolution-stale-0001"},
-        json={**payload, "resolution_code": "admin.no_violation"},
+        json=payload,
     )
     assert stale.status_code == 409
     assert stale.json()["code"] == "trust.case_version_conflict"
@@ -64,6 +72,15 @@ def test_atomic_case_resolution_is_idempotent_versioned_and_audited(client):
         assert case.status == TrustCaseStatus.RESOLVED
         assert case.version == 2
         assert case.resolved_by_id == case.assigned_to_id
+        candidate = db.get(PasswordCandidate, candidate_id)
+        assert candidate is not None and candidate.status == CandidateStatus.QUARANTINED
+        effects = list(
+            db.scalars(select(TrustCaseEffect).where(TrustCaseEffect.case_id == case_id))
+        )
+        assert {item.effect_type for item in effects} == {
+            TrustCaseEffectType.CANDIDATE_STATUS,
+            TrustCaseEffectType.REWARD_RECONCILIATION,
+        }
         events = list(
             db.scalars(select(TrustCaseEvent).where(TrustCaseEvent.case_id == case_id))
         )
@@ -117,6 +134,7 @@ def test_case_resolution_enforces_kind_and_assignee(client):
             "expected_version": 2,
             "resolution_code": "admin.action_taken",
             "resolution_note": "合成错误负责人尝试。",
+            "candidate_target_status": "rejected",
         },
     )
     assert wrong_actor.status_code == 409
@@ -133,3 +151,65 @@ def test_case_resolution_enforces_kind_and_assignee(client):
     )
     assert wrong_kind.status_code == 422
     assert wrong_kind.json()["code"] == "trust.resolution_not_allowed"
+
+
+def test_account_appeal_resolution_restores_account_in_same_transaction(client):
+    registration, owner_headers = _register_and_login(client, "wp2_account_restore_owner")
+    created = client.post(
+        "/api/v1/trust/account-appeals",
+        headers={**owner_headers, "Idempotency-Key": "wp2-account-restore-create-0001"},
+        json={
+            "requested_action": "restore_access",
+            "reason_code": "account_appeal.account_recovered",
+            "description": "合成账号恢复申诉。",
+        },
+    )
+    assert created.status_code == 201
+    case_id = created.json()["id"]
+    with client.app.state.database.session_factory() as db:
+        owner = db.scalar(select(User).where(User.username == registration["username"]))
+        assert owner is not None
+        owner.status = UserStatus.LOCKED
+        owner.failed_login_count = 5
+        db.commit()
+        owner_id = owner.id
+
+    admin_headers = _admin_headers(client, "wp2_account_restore_admin")
+    resolved = client.post(
+        f"/api/v1/admin/trust-cases/{case_id}/resolve",
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "wp2-account-restore-resolution-0001",
+        },
+        json={
+            "expected_version": 1,
+            "resolution_code": "admin.account_restored",
+            "resolution_note": "合成处置说明：确认恢复账号访问。",
+        },
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["side_effects"] == [
+        {
+            "effect_type": "account_status",
+            "target_type": "user",
+            "target_id": owner_id,
+            "previous_value": "locked",
+            "next_value": "active",
+            "reference_id": None,
+            "reward_adjustment": None,
+        }
+    ]
+    with client.app.state.database.session_factory() as db:
+        owner = db.get(User, owner_id)
+        assert owner is not None
+        assert owner.status == UserStatus.ACTIVE
+        assert owner.failed_login_count == 0
+        effect = db.scalar(
+            select(TrustCaseEffect).where(
+                TrustCaseEffect.case_id == case_id,
+                TrustCaseEffect.effect_type == TrustCaseEffectType.ACCOUNT_STATUS,
+            )
+        )
+        assert effect is not None
+        assert effect.previous_value == "locked"
+        assert effect.next_value == "active"

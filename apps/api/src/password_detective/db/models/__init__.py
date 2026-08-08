@@ -67,6 +67,8 @@ from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.trust_case import (
     TrustCase,
+    TrustCaseEffect,
+    TrustCaseEffectType,
     TrustCaseEvent,
     TrustCaseKind,
     TrustCaseStatus,
@@ -135,6 +137,8 @@ __all__ = [
     "SystemSetting",
     "SystemSettingVersion",
     "TrustCase",
+    "TrustCaseEffect",
+    "TrustCaseEffectType",
     "TrustCaseEvent",
     "TrustCaseKind",
     "TrustCaseStatus",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
@@ -10,14 +11,18 @@ from password_detective.db.models.password_candidate import CandidateStatus, Pas
 from password_detective.db.models.submission import Submission
 from password_detective.db.models.trust_case import (
     TrustCase,
+    TrustCaseEffect,
+    TrustCaseEffectType,
     TrustCaseEvent,
     TrustCaseKind,
     TrustCaseStatus,
     TrustCaseSubjectType,
 )
 from password_detective.db.models.user import User, UserRole, UserStatus
+from password_detective.db.models.verification import RecordStateEvent, StateTransitionSource
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.reputation.adjustments import reconcile_candidate_rewards
 from password_detective.modules.trust_cases.schemas import (
     AccountAppealCreateRequest,
     AppealCreateRequest,
@@ -32,9 +37,16 @@ from password_detective.modules.trust_cases.schemas import (
     TrustCaseReopenResponse,
     TrustCaseResolveRequest,
     TrustCaseResolveResponse,
+    TrustCaseRewardAdjustment,
+    TrustCaseSideEffectResponse,
     TrustCaseSummary,
     TrustCaseTransitionRequest,
     TrustCaseTransitionResponse,
+)
+from password_detective.modules.verification.service import (
+    candidate_evidence_totals,
+    has_ever_been_verified,
+    settle_first_verification_rewards,
 )
 
 _ALLOWED_RESOLUTION_CODES = {
@@ -372,6 +384,7 @@ def transition_case(
 def resolve_case(
     db: Session,
     *,
+    settings: Settings,
     case_id: str,
     payload: TrustCaseResolveRequest,
     principal: Principal,
@@ -402,6 +415,15 @@ def resolve_case(
     now = utc_now()
     previous_status = case.status
     previous_assignee_id = case.assigned_to_id
+    side_effects = _apply_resolution_side_effects(
+        db,
+        settings=settings,
+        case=case,
+        payload=payload,
+        principal=principal,
+        context=context,
+        resulting_version=case.version + 1,
+    )
     case.status = target_status
     case.assigned_to_id = principal.user.id
     case.resolved_by_id = principal.user.id
@@ -446,6 +468,7 @@ def resolve_case(
             "version": case.version,
             "resolution_code": payload.resolution_code.value,
             "event_id": event.id,
+            "side_effects": [item.model_dump(mode="json") for item in side_effects],
         },
     )
     db.commit()
@@ -458,8 +481,168 @@ def resolve_case(
         version=case.version,
         event_id=event.id,
         resolution_code=payload.resolution_code,
+        side_effects=side_effects,
         request_id=context.request_id,
     )
+
+
+def _apply_resolution_side_effects(
+    db: Session,
+    *,
+    settings: Settings,
+    case: TrustCase,
+    payload: TrustCaseResolveRequest,
+    principal: Principal,
+    context: ClientContext,
+    resulting_version: int,
+) -> list[TrustCaseSideEffectResponse]:
+    effects: list[TrustCaseSideEffectResponse] = []
+    if payload.candidate_target_status is not None:
+        if case.candidate_id is None:
+            raise AppError(
+                "trust.candidate_effect_not_allowed",
+                "当前案件没有可处置的候选账号",
+                status_code=422,
+            )
+        candidate = db.scalar(
+            select(PasswordCandidate)
+            .where(PasswordCandidate.id == case.candidate_id)
+            .with_for_update()
+        )
+        if candidate is None:
+            raise AppError("trust.candidate_not_found", "未找到案件候选", status_code=404)
+        previous_status = candidate.status
+        target_status = payload.candidate_target_status
+        state_event_id: str | None = None
+        reward_summary: TrustCaseRewardAdjustment | None = None
+        if previous_status != target_status:
+            totals = candidate_evidence_totals(db, candidate.id)
+            first_verification = (
+                target_status == CandidateStatus.VERIFIED
+                and not has_ever_been_verified(db, candidate.id)
+            )
+            state_event = RecordStateEvent(
+                candidate_id=candidate.id,
+                previous_status=previous_status,
+                next_status=target_status,
+                reason_code=f"trust_case.{payload.resolution_code.value}",
+                reason_note=payload.resolution_note[:500],
+                rule_version="trust-case-resolution-v1",
+                transition_source=StateTransitionSource.MANUAL,
+                actor_id=principal.user.id,
+                request_id=context.request_id,
+                trigger_evidence_id=None,
+                independent_success_count=totals.independent_success_count,
+                independent_failure_count=totals.independent_failure_count,
+                success_weight=totals.success_weight,
+                failure_weight=totals.failure_weight,
+            )
+            candidate.status = target_status
+            candidate.updated_at = utc_now()
+            if target_status == CandidateStatus.VERIFIED:
+                candidate.last_verified_at = utc_now()
+            db.add(state_event)
+            db.flush()
+            state_event_id = state_event.id
+            if first_verification:
+                settle_first_verification_rewards(db, settings, candidate.id)
+                db.flush()
+            adjustment = reconcile_candidate_rewards(
+                db,
+                candidate_id=candidate.id,
+                state_event_id=state_event.id,
+                target_status=target_status,
+            )
+            reward_summary = TrustCaseRewardAdjustment(
+                affected_users=adjustment.affected_users,
+                points_entries=adjustment.points_entries,
+                reputation_events=adjustment.reputation_events,
+                points_amount=adjustment.points_amount,
+                reputation_amount=adjustment.reputation_amount,
+            )
+        candidate_effect = TrustCaseEffect(
+            case_id=case.id,
+            case_version=resulting_version,
+            effect_type=TrustCaseEffectType.CANDIDATE_STATUS,
+            target_type="password_candidate",
+            target_id=candidate.id,
+            previous_value=previous_status.value,
+            next_value=target_status.value,
+            reference_id=state_event_id,
+        )
+        db.add(candidate_effect)
+        effects.append(
+            TrustCaseSideEffectResponse(
+                effect_type=TrustCaseEffectType.CANDIDATE_STATUS.value,
+                target_type="password_candidate",
+                target_id=candidate.id,
+                previous_value=previous_status.value,
+                next_value=target_status.value,
+                reference_id=state_event_id,
+            )
+        )
+        reward_effect = TrustCaseEffect(
+            case_id=case.id,
+            case_version=resulting_version,
+            effect_type=TrustCaseEffectType.REWARD_RECONCILIATION,
+            target_type="password_candidate",
+            target_id=candidate.id,
+            previous_value=None,
+            next_value="reconciled",
+            reference_id=state_event_id,
+            details=(reward_summary.model_dump(mode="json") if reward_summary else {}),
+        )
+        db.add(reward_effect)
+        effects.append(
+            TrustCaseSideEffectResponse(
+                effect_type=TrustCaseEffectType.REWARD_RECONCILIATION.value,
+                target_type="password_candidate",
+                target_id=candidate.id,
+                previous_value=None,
+                next_value="reconciled",
+                reference_id=state_event_id,
+                reward_adjustment=reward_summary,
+            )
+        )
+
+    if payload.resolution_code == CaseResolutionCode.ACCOUNT_RESTORED:
+        if case.target_user_id is None:
+            raise AppError(
+                "trust.account_effect_not_allowed",
+                "当前案件没有可恢复的账号",
+                status_code=422,
+            )
+        target_user = db.scalar(
+            select(User).where(User.id == case.target_user_id).with_for_update()
+        )
+        if target_user is None:
+            raise AppError("trust.account_not_found", "未找到案件账号", status_code=404)
+        previous_status = target_user.status
+        target_user.status = UserStatus.ACTIVE
+        target_user.locked_until = None
+        target_user.failed_login_count = 0
+        target_user.updated_at = utc_now()
+        account_effect = TrustCaseEffect(
+            case_id=case.id,
+            case_version=resulting_version,
+            effect_type=TrustCaseEffectType.ACCOUNT_STATUS,
+            target_type="user",
+            target_id=target_user.id,
+            previous_value=previous_status.value,
+            next_value=UserStatus.ACTIVE.value,
+        )
+        db.add(account_effect)
+        effects.append(
+            TrustCaseSideEffectResponse(
+                effect_type=TrustCaseEffectType.ACCOUNT_STATUS.value,
+                target_type="user",
+                target_id=target_user.id,
+                previous_value=previous_status.value,
+                next_value=UserStatus.ACTIVE.value,
+            )
+        )
+    db.flush()
+    return effects
 
 
 def assign_case(

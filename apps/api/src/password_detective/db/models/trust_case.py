@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from password_detective.core.ids import new_id
@@ -103,6 +113,41 @@ class TrustCase(Base):
         back_populates="case",
         cascade="all, delete-orphan",
         order_by="TrustCaseEvent.created_at",
+    )
+
+
+class TrustCaseEffectType(StrEnum):
+    ACCOUNT_STATUS = "account_status"
+    CANDIDATE_STATUS = "candidate_status"
+    REWARD_RECONCILIATION = "reward_reconciliation"
+
+
+class TrustCaseEffect(Base):
+    """Append-only record of side effects applied by an atomic case resolution."""
+
+    __tablename__ = "trust_case_effects"
+    __table_args__ = (
+        UniqueConstraint(
+            "case_id", "case_version", "effect_type", name="uq_trust_case_effect_version_type"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("trust_cases.id", ondelete="CASCADE"), index=True
+    )
+    case_version: Mapped[int] = mapped_column(Integer)
+    effect_type: Mapped[TrustCaseEffectType] = mapped_column(
+        Enum(TrustCaseEffectType, native_enum=False, length=32), index=True
+    )
+    target_type: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[str] = mapped_column(String(36), index=True)
+    previous_value: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_value: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
     )
 
 

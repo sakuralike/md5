@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from password_detective.db.models.password_candidate import CandidateStatus
 from password_detective.db.models.trust_case import (
     TrustCaseKind,
     TrustCaseStatus,
@@ -145,6 +146,7 @@ class TrustCaseResolveRequest(BaseModel):
     expected_version: int = Field(ge=1)
     resolution_code: CaseResolutionCode
     resolution_note: str = Field(min_length=1, max_length=1000)
+    candidate_target_status: CandidateStatus | None = None
 
     @field_validator("resolution_note")
     @classmethod
@@ -153,6 +155,21 @@ class TrustCaseResolveRequest(BaseModel):
         if normalized is None:
             raise ValueError("处置说明不能为空")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_candidate_target(self) -> TrustCaseResolveRequest:
+        if self.resolution_code == CaseResolutionCode.ACTION_TAKEN:
+            if self.candidate_target_status not in {
+                CandidateStatus.REJECTED,
+                CandidateStatus.QUARANTINED,
+            }:
+                raise ValueError("采取治理动作时必须指定拒绝或隔离候选")
+        elif self.resolution_code == CaseResolutionCode.APPEAL_UPHELD:
+            if self.candidate_target_status != CandidateStatus.VERIFIED:
+                raise ValueError("候选申诉成立时必须恢复为已验证状态")
+        elif self.candidate_target_status is not None:
+            raise ValueError("该处置结果不允许修改候选状态")
+        return self
 
 
 class TrustCaseTransitionRequest(BaseModel):
@@ -251,6 +268,24 @@ class TrustCaseTransitionResponse(BaseModel):
     request_id: str | None
 
 
+class TrustCaseRewardAdjustment(BaseModel):
+    affected_users: int = 0
+    points_entries: int = 0
+    reputation_events: int = 0
+    points_amount: int = 0
+    reputation_amount: int = 0
+
+
+class TrustCaseSideEffectResponse(BaseModel):
+    effect_type: str
+    target_type: str
+    target_id: str
+    previous_value: str | None
+    next_value: str | None
+    reference_id: str | None = None
+    reward_adjustment: TrustCaseRewardAdjustment | None = None
+
+
 class TrustCaseResolveResponse(BaseModel):
     case_id: str
     previous_status: TrustCaseStatus
@@ -260,6 +295,7 @@ class TrustCaseResolveResponse(BaseModel):
     version: int
     event_id: str
     resolution_code: CaseResolutionCode
+    side_effects: list[TrustCaseSideEffectResponse] = Field(default_factory=list)
     request_id: str | None
 
 

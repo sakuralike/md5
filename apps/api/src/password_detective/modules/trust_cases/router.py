@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
+from password_detective.core.config import Settings, get_settings
 from password_detective.core.idempotency import (
     abandon_idempotency,
     acquire_idempotency,
@@ -239,6 +240,7 @@ def admin_case_resolve(
     payload: TrustCaseResolveRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
     principal: Annotated[Principal, Depends(require_admin_mfa)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> TrustCaseResolveResponse:
@@ -254,6 +256,7 @@ def admin_case_resolve(
     try:
         response = resolve_case(
             db,
+            settings=settings,
             case_id=case_id,
             payload=payload,
             principal=principal,
