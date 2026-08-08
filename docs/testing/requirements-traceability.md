@@ -37,3 +37,11 @@
 | 系统配置版本治理 | `modules/admin/settings.py`、`core/operational_settings.py`、`apps/admin/src/pages/SystemSettingsPage.vue` | `apps/api/tests/test_n2_admin_settings.py`、`apps/admin/src/services/settings.test.ts`、`apps/admin/src/pages/SystemSettingsPage.test.ts` | 已覆盖固定 Schema 校验、不可变草稿、差异、基线并发、配置目的再认证、幂等发布、运行时投影、审计最小披露和新版本回滚 |
 | 受控角色变更 | 后端与 Admin 工作台闭环 | `modules/admin/role_changes.py`、`db/models/role_change_request.py`、`modules/admin/router.py`、`apps/admin/src/pages/RoleChangesPage.vue`、`apps/admin/src/composables/useRoleChanges.ts` | `apps/api/tests/test_n2_role_change_requests.py`、`apps/admin/src/services/roleChanges.test.ts`、`apps/admin/src/composables/useRoleChanges.test.ts`、`apps/admin/src/pages/RoleChangesPage.test.ts` | 固定普通角色转换矩阵、管理员双人复核、一次性再认证、状态/角色乐观并发、批准后会话撤销、幂等、审计、筛选分页、加载/空/错误态、详情和敏感凭据清理已实现；独立事件时间线、紧急撤权和批量处置待实现 |
 | 批量处置与高级角色治理 | 未开放 | 无 | 待资源上限、角色层级配置化、紧急撤权和对象级批量模型冻结后实施 |
+## WP1 第 1 次迭代追踪增量
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web/Admin ESLint 统一门禁 | `eslint.config.mjs`、根/Web/Admin `package.json` | `pnpm lint` | 已接入 Vue、TypeScript 和未使用代码检查，Shadcn-Vue 生成目录排除业务误报 |
+| 业务 Vue 规范检查 | `scripts/check-frontend-policy.mjs`、`scripts/frontend-policy-baseline.json` | `pnpm lint` | 已阻止新增样式块、行内样式、十六进制颜色和原生表单控件；历史欠账 164 → 141 |
+| 本地与 CI 统一入口 | `scripts/check.ps1`、`.github/workflows/ci.yml` | Windows PowerShell 5.1 统一门禁、GitHub Actions 前端任务 | 已接入 lint，并移除 PowerShell 7 专属空值条件访问语法 |
+| 用户基础流程首批整改 | `apps/web/src/App.vue`、`pages/HomePage.vue`、`pages/RegisterPage.vue` | `apps/web/src/pages/HomePage.test.ts`、Web 类型检查/测试/构建 | 第一批完成；用户案件/信誉和 Admin 复杂页面仍待整改 |

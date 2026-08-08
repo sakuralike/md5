@@ -33,6 +33,12 @@
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
 | API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、管理仪表盘/审计日志/用户治理、候选审核/状态事件/奖励校正、关联组/动态限权摘要、举报/申诉案件、风险告警 SLA/投递指标/失败重放、桌面安装/挑战/回执、发布记录和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
 
+## 前端工程门禁
+
+- 根 `eslint.config.mjs` 统一 Web/Admin 的 Vue 3、TypeScript 严格检查，`src/components/ui/` 保持为 Shadcn-Vue CLI 生成边界。
+- `scripts/check-frontend-policy.mjs` 检查业务 `.vue` 的样式块、行内样式、硬编码颜色和原生表单控件；`scripts/frontend-policy-baseline.json` 只冻结存量欠账并阻止新增或基线回退。
+- 根 `pnpm lint` 已接入 `scripts/check.ps1` 与 `.github/workflows/ci.yml`；统一检查脚本兼容 Windows PowerShell 5.1 和 PowerShell 7。
+- WP1 第一轮已整改 App、首页、注册页，剩余用户案件/信誉和 Admin 复杂页面按批次收口。
 ## 模块边界规则
 
 1. API 模块不直接导入其他模块的内部仓储；跨模块操作通过公开服务函数或应用编排层完成。Archives 查询只调用 Verification 的公开证据汇总函数。

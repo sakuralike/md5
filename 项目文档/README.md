@@ -17,6 +17,7 @@
 ## 开发实施记录
 
 - [下一步开发方案（2026-08-08）](./密码侦探社下一步开发方案-2026-08-08.md)
+- [N2 第 8 次开发迭代：WP1 前端质量门禁与用户基础流程首批整改](../docs/development/2026-08-08-n2-iteration-8.md)
 - [N2 第 7 次开发迭代：Admin 角色审批工作台收口](../docs/development/2026-08-08-n2-iteration-7.md)
 - [当前阶段状态](../docs/development/phase-status.md)
 - [N1 第 1 次开发迭代：账号资料、密码与用户 TOTP](../docs/development/2026-08-03-n1-iteration-1.md)

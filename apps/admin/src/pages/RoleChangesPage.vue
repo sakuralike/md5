@@ -29,7 +29,6 @@ const {
   selected,
   filterStatus,
   page,
-  total,
   loading,
   busy,
   error,

@@ -4,7 +4,8 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Api = Join-Path $Root "apps/api"
 $Python = Join-Path $Api ".venv/Scripts/python.exe"
-$Pnpm = (Get-Command pnpm -ErrorAction SilentlyContinue)?.Source
+$PnpmCommand = Get-Command pnpm -ErrorAction SilentlyContinue
+$Pnpm = if ($PnpmCommand) { $PnpmCommand.Source } else { $null }
 $MigrationDatabase = Join-Path $Api ".local/migration-check.db"
 
 function Invoke-Checked {
@@ -14,12 +15,12 @@ function Invoke-Checked {
     )
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "命令执行失败（退出码 $LASTEXITCODE）：$Command $($Arguments -join ' ')"
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command $($Arguments -join ' ')"
     }
 }
 
 if (-not (Test-Path $Python)) { & (Join-Path $PSScriptRoot "setup-api.ps1") }
-if (-not $Pnpm) { throw "未找到 pnpm。" }
+if (-not $Pnpm) { throw "pnpm was not found." }
 
 if (-not $SkipInstall -or -not (Test-Path (Join-Path $Root "node_modules"))) {
     Push-Location $Root
@@ -59,6 +60,7 @@ try {
 
 Push-Location $Root
 try {
+    Invoke-Checked $Pnpm lint
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test
     Invoke-Checked $Pnpm build
@@ -68,4 +70,4 @@ try {
     Pop-Location
 }
 
-Write-Host "全部检查通过。"
+Write-Host "All checks passed."

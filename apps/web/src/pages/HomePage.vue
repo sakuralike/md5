@@ -10,6 +10,10 @@ import type {
   FeedbackOutcome,
 } from "@password-detective/api-contract";
 import { computed, ref } from "vue";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "../services/api";
 import {
   calculateArchiveFingerprints,
@@ -278,7 +282,7 @@ function statusLabel(status: CandidateStatus): string {
         <p class="muted">支持大文件分块读取；计算可取消，不会一次性载入整个文件。当前建议上限 {{ formatBytes(maxFileSizeBytes) }}。</p>
       </div>
       <label class="drop-zone" :class="{ disabled: calculating }">
-        <input type="file" :disabled="calculating" @change="onFileSelected" />
+        <Input type="file" :disabled="calculating" @change="onFileSelected" />
         <strong>{{ selectedFile?.name ?? "选择 ZIP、7z 或其他压缩包" }}</strong>
         <span v-if="selectedFile" class="muted">{{ formatBytes(selectedFile.size) }}</span>
         <span v-else class="muted">文件内容仅由当前浏览器读取</span>
@@ -287,7 +291,7 @@ function statusLabel(status: CandidateStatus): string {
         <progress :value="progress" max="100">{{ progress }}%</progress>
         <div class="actions">
           <span>{{ progress }}%</span>
-          <button class="button secondary" type="button" @click="cancelCalculation">取消</button>
+          <Button class="button secondary" type="button" @click="cancelCalculation">取消</Button>
         </div>
       </div>
       <p v-if="elapsedMs !== null" class="success">
@@ -297,7 +301,7 @@ function statusLabel(status: CandidateStatus): string {
       <div class="divider"><span>或手工输入完整指纹</span></div>
       <div class="field">
         <label for="manual-fingerprint">MD5 / SHA-1 / SHA-256 / SHA-512</label>
-        <textarea
+        <Textarea
           id="manual-fingerprint"
           v-model="manualFingerprint"
           rows="3"
@@ -305,9 +309,9 @@ function statusLabel(status: CandidateStatus): string {
           @keydown.ctrl.enter="searchManual"
         />
       </div>
-      <button class="button" type="button" :disabled="searching" @click="searchManual">
+      <Button class="button" type="button" :disabled="searching" @click="searchManual">
         {{ searching ? "查询中…" : "识别并精确查询" }}
-      </button>
+      </Button>
     </article>
 
     <article class="panel stack" aria-live="polite">
@@ -361,7 +365,7 @@ function statusLabel(status: CandidateStatus): string {
                   {{ candidate.failure_evidence_count }} 条
                 </small>
                 <div class="actions">
-                  <button
+                  <Button
                     class="button secondary"
                     type="button"
                     :disabled="Boolean(feedbackCandidateId)"
@@ -375,8 +379,8 @@ function statusLabel(status: CandidateStatus): string {
                           ? "已反馈成功"
                           : "本地验证成功"
                     }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     class="button secondary"
                     type="button"
                     :disabled="Boolean(feedbackCandidateId)"
@@ -384,7 +388,7 @@ function statusLabel(status: CandidateStatus): string {
                     @click="submitFeedback(candidate.id, 'failure')"
                   >
                     {{ candidate.my_feedback === "failure" ? "已反馈失败" : "本地验证失败" }}
-                  </button>
+                  </Button>
                   <RouterLink
                     class="button secondary"
                     :to="{ path: '/trust-cases', query: { kind: 'report', candidate_id: candidate.id } }"
@@ -394,7 +398,7 @@ function statusLabel(status: CandidateStatus): string {
                 </div>
                 <small class="muted">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
               </div>
-              <button
+              <Button
                 v-if="hasVerifiedCandidate"
                 class="button"
                 type="button"
@@ -402,7 +406,7 @@ function statusLabel(status: CandidateStatus): string {
                 @click="reveal"
               >
                 {{ revealing ? "安全揭示中…" : "揭示最高可信候选" }}
-              </button>
+              </Button>
               <p v-else class="muted">候选尚未满足独立验证门槛，暂不可揭示。</p>
             </template>
             <div v-else class="empty-state">
@@ -417,10 +421,10 @@ function statusLabel(status: CandidateStatus): string {
         <span>本次揭示结果</span>
         <code>{{ revealedPassword }}</code>
         <div class="actions">
-          <button class="button" type="button" @click="copyRevealedPassword">复制</button>
-          <button class="button secondary" type="button" @click="clearRevealedPassword">
+          <Button class="button" type="button" @click="copyRevealedPassword">复制</Button>
+          <Button class="button secondary" type="button" @click="clearRevealedPassword">
             从页面清除
-          </button>
+          </Button>
         </div>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
@@ -439,7 +443,7 @@ function statusLabel(status: CandidateStatus): string {
     <template v-if="auth.isAuthenticated">
       <div class="field">
         <label for="candidate-password">解压密码</label>
-        <input
+        <Input
           id="candidate-password"
           v-model="candidatePassword"
           type="password"
@@ -448,12 +452,12 @@ function statusLabel(status: CandidateStatus): string {
         />
       </div>
       <label class="authorization-check">
-        <input v-model="authorizationConfirmed" type="checkbox" />
+        <Checkbox v-model="authorizationConfirmed" />
         <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
       </label>
-      <button class="button" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">
+      <Button class="button" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">
         {{ submitting ? "提交中…" : "提交待验证贡献" }}
-      </button>
+      </Button>
     </template>
     <div v-else class="empty-state">
       <span>贡献需要登录，以记录授权声明、证据来源和待结算积分。</span>

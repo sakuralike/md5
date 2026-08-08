@@ -1,0 +1,38 @@
+import { renderToString } from "@vue/server-renderer";
+import { createSSRApp, defineComponent } from "vue";
+import { describe, expect, it, vi } from "vitest";
+import HomePage from "./HomePage.vue";
+
+vi.mock("../stores/auth", () => ({
+  useAuthStore: () => ({
+    isAuthenticated: false,
+    accessToken: "",
+  }),
+}));
+
+describe("HomePage", () => {
+  it("renders the local fingerprint workflow with Shadcn controls", async () => {
+    const app = createSSRApp(HomePage);
+    app.component(
+      "RouterLink",
+      defineComponent({
+        props: {
+          to: {
+            type: [String, Object],
+            required: true,
+          },
+        },
+        template: "<a><slot /></a>",
+      }),
+    );
+
+    const html = await renderToString(app);
+
+    expect(html).toContain("计算压缩包指纹，精确寻找可信候选");
+    expect(html).toContain("本地计算文件指纹");
+    expect(html).toContain("手工输入完整指纹");
+    expect(html).toContain("精确查询结果");
+    expect(html).toContain("选择文件或输入完整指纹后开始查询");
+    expect(html).toContain('type="file"');
+  });
+});

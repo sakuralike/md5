@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, ref } from "vue";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuthStore } from "./stores/auth";
 
 type BackgroundPreset = "frost" | "grid" | "aurora" | "halo" | "custom";
@@ -24,14 +26,6 @@ const activeBackground = ref<BackgroundPreset>(
 const backgroundPanelOpen = ref(false);
 const customBackgroundUrl = ref("");
 const backgroundError = ref("");
-
-const customBackgroundStyle = computed(() =>
-  activeBackground.value === "custom" && customBackgroundUrl.value
-    ? {
-        backgroundImage: `linear-gradient(rgba(244, 249, 255, 0.62), rgba(247, 250, 255, 0.78)), url("${customBackgroundUrl.value}")`,
-      }
-    : undefined,
-);
 
 function selectBackground(id: BackgroundOption["id"]): void {
   releaseCustomBackground();
@@ -81,9 +75,14 @@ onBeforeUnmount(releaseCustomBackground);
     <div
       class="ambient-background"
       :class="{ 'ambient-background-custom': activeBackground === 'custom' }"
-      :style="customBackgroundStyle"
       aria-hidden="true"
     >
+      <img
+        v-if="activeBackground === 'custom' && customBackgroundUrl"
+        :src="customBackgroundUrl"
+        alt=""
+        class="absolute inset-0 h-full w-full object-cover opacity-40"
+      />
       <span class="ambient-orb ambient-orb-one"></span>
       <span class="ambient-orb ambient-orb-two"></span>
       <span class="ambient-grid"></span>
@@ -118,7 +117,7 @@ onBeforeUnmount(releaseCustomBackground);
 
       <div class="topbar-actions">
         <div class="background-control">
-          <button
+          <Button
             class="icon-button"
             type="button"
             :aria-expanded="backgroundPanelOpen"
@@ -133,7 +132,7 @@ onBeforeUnmount(releaseCustomBackground);
               <circle cx="8.5" cy="15" r="1" />
             </svg>
             <span>背景</span>
-          </button>
+          </Button>
 
           <section v-if="backgroundPanelOpen" id="background-panel" class="background-panel" aria-label="背景选择">
             <div class="background-panel-heading">
@@ -141,10 +140,10 @@ onBeforeUnmount(releaseCustomBackground);
                 <strong>空间背景</strong>
                 <small>选择预设或上传本地图片</small>
               </div>
-              <button class="panel-close" type="button" aria-label="关闭背景选择" @click="backgroundPanelOpen = false">×</button>
+              <Button class="panel-close" type="button" aria-label="关闭背景选择" @click="backgroundPanelOpen = false">×</Button>
             </div>
             <div class="background-options">
-              <button
+              <Button
                 v-for="option in backgroundOptions"
                 :key="option.id"
                 class="background-option"
@@ -155,26 +154,26 @@ onBeforeUnmount(releaseCustomBackground);
                 <span class="background-swatch" aria-hidden="true"></span>
                 <span><strong>{{ option.name }}</strong><small>{{ option.description }}</small></span>
                 <span v-if="activeBackground === option.id" class="option-check" aria-hidden="true">✓</span>
-              </button>
+              </Button>
             </div>
             <div class="background-panel-actions">
               <label class="upload-background">
-                <input type="file" accept="image/*" @change="uploadBackground" />
+                <Input type="file" accept="image/*" @change="uploadBackground" />
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
                 </svg>
                 上传本地图片
               </label>
-              <button class="reset-background" type="button" @click="resetBackground">恢复默认</button>
+              <Button class="reset-background" type="button" @click="resetBackground">恢复默认</Button>
             </div>
             <p v-if="backgroundError" class="background-error">{{ backgroundError }}</p>
             <small class="background-privacy">图片仅在当前浏览器会话中显示，不会上传。</small>
           </section>
         </div>
 
-        <button v-if="auth.isAuthenticated" class="button secondary logout-button" @click="auth.logout()">
+        <Button v-if="auth.isAuthenticated" class="button secondary logout-button" @click="auth.logout()">
           退出
-        </button>
+        </Button>
       </div>
     </header>
 
