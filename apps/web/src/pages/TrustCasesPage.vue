@@ -8,6 +8,17 @@ import type {
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createAppeal,
   createReport,
@@ -43,6 +54,12 @@ const appealReasons: Array<{ value: AppealReason; label: string }> = [
   { value: "appeal.context_missing", label: "审核遗漏了重要背景" },
   { value: "appeal.other", label: "其他" },
 ];
+const statusClassMap: Record<TrustCaseSummary["status"], string> = {
+  open: "text-destructive",
+  in_review: "text-primary",
+  resolved: "text-accent-foreground",
+  dismissed: "text-muted-foreground",
+};
 
 const reasonOptions = computed(() =>
   caseKind.value === "appeal" ? appealReasons : reportReasons,
@@ -133,7 +150,7 @@ function statusLabel(status: TrustCaseSummary["status"]): string {
 }
 
 function statusClass(status: TrustCaseSummary["status"]): string {
-  return `case-status case-status-${status}`;
+  return `text-sm font-bold ${statusClassMap[status]}`;
 }
 
 function formatDate(value: string): string {
@@ -142,7 +159,7 @@ function formatDate(value: string): string {
 </script>
 
 <template>
-  <section class="panel stack trust-page">
+  <section class="panel stack">
     <div>
       <div class="eyebrow">用户中心</div>
       <h1 class="page-title">举报与申诉</h1>
@@ -151,25 +168,25 @@ function formatDate(value: string): string {
       </p>
     </div>
 
-    <div class="trust-layout">
-      <form class="card stack trust-form" @submit.prevent="submitCase">
+    <div class="grid items-start gap-6 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
+      <form class="card stack max-w-none" @submit.prevent="submitCase">
         <div class="actions">
-          <button
+          <Button
             type="button"
-            class="button secondary"
+            :variant="caseKind === 'report' ? 'default' : 'outline'"
             :aria-pressed="caseKind === 'report'"
             @click="caseKind = 'report'"
           >
             提交举报
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="button secondary"
+            :variant="caseKind === 'appeal' ? 'default' : 'outline'"
             :aria-pressed="caseKind === 'appeal'"
             @click="caseKind = 'appeal'"
           >
             发起申诉
-          </button>
+          </Button>
         </div>
 
         <p v-if="isAppeal" class="muted">
@@ -178,8 +195,8 @@ function formatDate(value: string): string {
         <p v-else class="muted">举报面向候选内容本身，系统会将其交给内容治理队列复核。</p>
 
         <div class="field">
-          <label for="trust-candidate-id">候选 ID</label>
-          <input
+          <Label for="trust-candidate-id">候选 ID</Label>
+          <Input
             id="trust-candidate-id"
             v-model="candidateId"
             autocomplete="off"
@@ -189,8 +206,8 @@ function formatDate(value: string): string {
         </div>
 
         <div v-if="isAppeal" class="field">
-          <label for="trust-related-case-id">关联举报 ID（可选）</label>
-          <input
+          <Label for="trust-related-case-id">关联举报 ID（可选）</Label>
+          <Input
             id="trust-related-case-id"
             v-model="relatedCaseId"
             autocomplete="off"
@@ -199,19 +216,24 @@ function formatDate(value: string): string {
         </div>
 
         <div class="field">
-          <label for="trust-reason">原因</label>
-          <select id="trust-reason" v-model="reasonCode" required>
-            <option v-for="option in reasonOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <Label for="trust-reason">原因</Label>
+          <Select v-model="reasonCode">
+            <SelectTrigger id="trust-reason">
+              <SelectValue placeholder="选择原因" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="option in reasonOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div class="field">
-          <label for="trust-description">
+          <Label for="trust-description">
             说明 <span class="muted">{{ isAppeal ? "（必填）" : "（可选）" }}</span>
-          </label>
-          <textarea
+          </Label>
+          <Textarea
             id="trust-description"
             v-model="description"
             rows="5"
@@ -223,9 +245,9 @@ function formatDate(value: string): string {
 
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="success" class="success">{{ success }}</p>
-        <button class="button" type="submit" :disabled="submitting || !canSubmit">
+        <Button type="submit" :disabled="submitting || !canSubmit">
           {{ submitting ? "提交中…" : isAppeal ? "提交申诉" : "提交举报" }}
-        </button>
+        </Button>
       </form>
 
       <div class="card stack">
@@ -234,9 +256,9 @@ function formatDate(value: string): string {
             <div class="eyebrow">透明处理</div>
             <h2>我的案件</h2>
           </div>
-          <button class="button secondary" type="button" :disabled="loading" @click="loadCases">
+          <Button type="button" variant="outline" :disabled="loading" @click="loadCases">
             刷新
-          </button>
+          </Button>
         </div>
         <p v-if="loading" class="muted">正在加载案件…</p>
         <p v-else-if="error && !data" class="error">{{ error }}</p>
@@ -244,15 +266,19 @@ function formatDate(value: string): string {
           <strong>暂无举报或申诉</strong>
           <span>提交后可以在这里查看处理状态。</span>
         </div>
-        <div v-else class="case-list">
-          <article v-for="item in data?.items" :key="item.id" class="candidate-card case-card">
-            <div class="actions">
+        <div v-else class="grid gap-3">
+          <article
+            v-for="item in data?.items"
+            :key="item.id"
+            class="candidate-card items-stretch"
+          >
+            <div class="actions justify-start">
               <span class="badge">{{ kindLabel(item.kind) }}</span>
               <span :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
               <span class="muted">{{ formatDate(item.created_at) }}</span>
             </div>
             <strong>{{ reasonLabel(item.reason_code) }}</strong>
-            <code>{{ item.id }}</code>
+            <code class="break-all text-xs text-muted-foreground">{{ item.id }}</code>
             <small>候选 {{ item.candidate_id }}</small>
             <p v-if="item.resolution_note" class="muted">处理说明：{{ item.resolution_note }}</p>
           </article>
@@ -267,31 +293,3 @@ function formatDate(value: string): string {
     </div>
   </section>
 </template>
-
-<style scoped>
-.trust-layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
-  gap: 24px;
-  align-items: start;
-}
-.trust-form { max-width: none; }
-.field select {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  padding: 12px 14px;
-  background: white;
-}
-.field select:focus { outline: 3px solid rgba(29,131,189,.16); border-color: var(--brand-500); }
-.case-list { display: grid; gap: 12px; }
-.case-card { align-items: stretch; }
-.case-card > .actions { justify-content: flex-start; }
-.case-card code { overflow-wrap: anywhere; font-size: 12px; color: #344054; }
-.case-status { font-size: 13px; font-weight: 700; }
-.case-status-open { color: #b54708; }
-.case-status-in_review { color: var(--brand-700); }
-.case-status-resolved { color: var(--success); }
-.case-status-dismissed { color: var(--muted); }
-@media (max-width: 900px) { .trust-layout { grid-template-columns: 1fr; } }
-</style>

@@ -1,18 +1,4 @@
 {
-  "apps/web/src/pages/ReputationPage.vue": {
-    "style-block": 1,
-    "inline-style": 1,
-    "hex-color": 2,
-    "native-button": 1
-  },
-  "apps/web/src/pages/TrustCasesPage.vue": {
-    "style-block": 1,
-    "hex-color": 2,
-    "native-button": 4,
-    "native-input": 2,
-    "native-select": 1,
-    "native-textarea": 1
-  },
   "apps/admin/src/pages/CandidateModerationPage.vue": {
     "style-block": 1,
     "hex-color": 22,

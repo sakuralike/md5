@@ -5,6 +5,8 @@ import type {
   TrustProfileResponse,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { loadTrustCenter, type TrustCenterData } from "../services/reputation";
 import { useAuthStore } from "../stores/auth";
 
@@ -71,47 +73,42 @@ function scoreText(profile: TrustProfileResponse): string {
         <h1 class="page-title">积分与信誉</h1>
         <p class="lead">积分用于激励结算，信誉用于风控判断；两者独立记录且不可互换。</p>
       </div>
-      <button class="button secondary" type="button" :disabled="loading" @click="load">
-        刷新
-      </button>
+      <Button type="button" variant="outline" :disabled="loading" @click="load">刷新</Button>
     </div>
 
     <p v-if="loading" class="muted">正在加载积分与信誉记录…</p>
     <p v-if="error" class="error">{{ error }}</p>
 
     <template v-if="data">
-      <div class="trust-stats">
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article class="card stack compact-stack">
           <span class="eyebrow">信誉分</span>
-          <strong class="metric">{{ scoreText(data.profile) }}</strong>
-          <div
-            class="reputation-track"
-            role="progressbar"
-            :aria-valuenow="data.profile.reputation_score"
-            :aria-valuemin="data.profile.reputation_min"
-            :aria-valuemax="data.profile.reputation_max"
-          >
-            <span :style="{ width: `${reputationPercent}%` }" />
-          </div>
+          <strong class="text-2xl font-semibold sm:text-3xl">{{ scoreText(data.profile) }}</strong>
+          <Progress
+            class="h-2.5 bg-muted"
+            :model-value="reputationPercent"
+            :max="100"
+            aria-label="信誉分完成度"
+          />
           <small>初始 50 分，所有增减均记录不可变事件。</small>
         </article>
         <article class="card stack compact-stack">
           <span class="eyebrow">可用积分</span>
-          <strong class="metric">{{ data.profile.points.available }}</strong>
+          <strong class="text-2xl font-semibold sm:text-3xl">{{ data.profile.points.available }}</strong>
           <small>
             待结算 {{ data.profile.points.pending }} · 已冲正 {{ data.profile.points.reversed }}
           </small>
         </article>
         <article class="card stack compact-stack">
           <span class="eyebrow">贡献</span>
-          <strong class="metric">
+          <strong class="text-2xl font-semibold sm:text-3xl">
             {{ data.profile.contributions.verified }} / {{ data.profile.contributions.total }}
           </strong>
           <small>当前已验证贡献 / 全部贡献</small>
         </article>
         <article class="card stack compact-stack">
           <span class="eyebrow">有效反馈</span>
-          <strong class="metric">
+          <strong class="text-2xl font-semibold sm:text-3xl">
             {{ data.profile.feedback.effective_success }} 成功 ·
             {{ data.profile.feedback.effective_failure }} 失败
           </strong>
@@ -119,11 +116,15 @@ function scoreText(profile: TrustProfileResponse): string {
         </article>
       </div>
 
-      <div class="trust-columns">
+      <div class="grid items-start gap-5 lg:grid-cols-2">
         <div class="card stack">
           <h2>积分流水</h2>
           <div v-if="data.points.items.length === 0" class="empty-state">暂无积分流水</div>
-          <article v-for="item in data.points.items" :key="item.id" class="timeline-item">
+          <article
+            v-for="item in data.points.items"
+            :key="item.id"
+            class="grid gap-2 border-t border-border/60 py-3.5"
+          >
             <div class="actions">
               <strong>{{ eventLabel(item.event_type) }}</strong>
               <span class="badge">{{ pointStatusLabel(item.status) }}</span>
@@ -136,7 +137,11 @@ function scoreText(profile: TrustProfileResponse): string {
         <div class="card stack">
           <h2>信誉事件</h2>
           <div v-if="data.reputation.items.length === 0" class="empty-state">暂无信誉变更</div>
-          <article v-for="item in data.reputation.items" :key="item.id" class="timeline-item">
+          <article
+            v-for="item in data.reputation.items"
+            :key="item.id"
+            class="grid gap-2 border-t border-border/60 py-3.5"
+          >
             <div class="actions">
               <strong>{{ eventLabel(item.event_type) }}</strong>
               <span class="badge">{{ item.amount > 0 ? "+" : "" }}{{ item.amount }}</span>
@@ -150,7 +155,11 @@ function scoreText(profile: TrustProfileResponse): string {
       <div class="card stack">
         <h2>反馈历史</h2>
         <div v-if="data.feedback.items.length === 0" class="empty-state">暂无反馈历史</div>
-        <article v-for="item in data.feedback.items" :key="item.evidence_event_id" class="timeline-item">
+        <article
+          v-for="item in data.feedback.items"
+          :key="item.evidence_event_id"
+          class="grid gap-2 border-t border-border/60 py-3.5"
+        >
           <div class="actions">
             <strong>{{ feedbackLabel(item.outcome) }}反馈</strong>
             <span class="badge">修订 {{ item.revision }}</span>
@@ -165,46 +174,3 @@ function scoreText(profile: TrustProfileResponse): string {
     </template>
   </section>
 </template>
-
-<style scoped>
-.trust-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-.trust-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  align-items: start;
-}
-.metric {
-  font-size: clamp(1.5rem, 4vw, 2.2rem);
-}
-.reputation-track {
-  width: 100%;
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.2);
-}
-.reputation-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #38bdf8, #34d399);
-}
-.timeline-item {
-  display: grid;
-  gap: 8px;
-  padding: 14px 0;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
-}
-@media (max-width: 900px) {
-  .trust-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .trust-columns { grid-template-columns: 1fr; }
-}
-@media (max-width: 560px) {
-  .trust-stats { grid-template-columns: 1fr; }
-}
-</style>

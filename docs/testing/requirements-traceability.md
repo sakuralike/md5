@@ -45,3 +45,11 @@
 | 业务 Vue 规范检查 | `scripts/check-frontend-policy.mjs`、`scripts/frontend-policy-baseline.json` | `pnpm lint` | 已阻止新增样式块、行内样式、十六进制颜色和原生表单控件；历史欠账 164 → 141 |
 | 本地与 CI 统一入口 | `scripts/check.ps1`、`.github/workflows/ci.yml` | Windows PowerShell 5.1 统一门禁、GitHub Actions 前端任务 | 已接入 lint，并移除 PowerShell 7 专属空值条件访问语法 |
 | 用户基础流程首批整改 | `apps/web/src/App.vue`、`pages/HomePage.vue`、`pages/RegisterPage.vue` | `apps/web/src/pages/HomePage.test.ts`、Web 类型检查/测试/构建 | 第一批完成；用户案件/信誉和 Admin 复杂页面仍待整改 |
+
+## WP1 第 2 次迭代追踪增量
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web 积分与信誉页面规范整改 | `apps/web/src/pages/ReputationPage.vue`、Shadcn-Vue `Button`/`Progress` | `apps/web/src/pages/ReputationPage.test.ts`、Web 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、行内进度样式、硬编码颜色和原生按钮，保留积分/信誉只读业务语义 |
+| Web 举报与申诉页面规范整改 | `apps/web/src/pages/TrustCasesPage.vue`、Shadcn-Vue `Button`/`Input`/`Label`/`Select`/`Textarea` | `apps/web/src/pages/TrustCasesPage.test.ts`、既有 `apps/web/src/services/trustCases.test.ts`、Web 类型检查/测试/构建、`pnpm lint` | 已删除页面样式块、硬编码颜色和原生表单控件，保留原因码、必填条件、幂等和本人案件边界 |
+| 前端规范基线继续收紧 | `scripts/frontend-policy-baseline.json` | `scripts/check-frontend-policy.mjs` | 历史欠账 141 → 125，新增违规 0；剩余 6 个 Admin 页面待关闭 |
