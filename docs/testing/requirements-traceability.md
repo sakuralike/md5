@@ -152,4 +152,4 @@
 |---|---|---|---|
 | Admin 用户停用、恢复与会话撤销 | `UserGovernancePage.vue`、`modules/admin/users.py`、隔离用户/会话种子 | `admin-governance-journeys.spec.ts`：一次性再认证、TOTP、结构化原因、停用并撤销 1 个会话、恢复账号 | Chromium 本地闭环完成；批量治理、紧急撤权和目标环境未验收 |
 | 普通角色双人申请与批准 | `RoleChangesPage.vue`、`modules/admin/role_changes.py`、`role_change_requests` | 不同合成管理员创建/批准普通用户到可信贡献者请求，确认目标会话撤销和角色更新 | Chromium 本地闭环完成；拒绝组合、独立角色事件时间线和目标环境未验收 |
-| Admin 治理敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/用户/会话，关闭截图和 Trace；完整 14 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI 待本轮推送验证 |
+| Admin 治理敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/用户/会话，关闭截图和 Trace；完整 14 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31298489273` 五个作业通过，目标环境待验收 |
