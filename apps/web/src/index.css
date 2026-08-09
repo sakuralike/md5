@@ -338,7 +338,7 @@ select {
 }
 
 .brand-copy small {
-  color: #8490a4;
+  color: hsl(var(--muted-foreground));
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.13em;
@@ -360,7 +360,7 @@ select {
   position: relative;
   flex: 0 0 auto;
   padding: 9px 12px;
-  color: #68758a;
+  color: hsl(var(--foreground) / 0.72);
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -786,7 +786,7 @@ h2 {
 }
 
 .muted {
-  color: #718096;
+  color: hsl(var(--muted-foreground));
   line-height: 1.65;
 }
 
@@ -945,7 +945,7 @@ h2 {
 
 .empty-state {
   padding: 22px;
-  color: #718097;
+  color: hsl(var(--muted-foreground));
   border-color: rgba(139, 160, 191, 0.28);
   border-radius: 16px;
   background: rgba(248, 251, 255, 0.52);
@@ -1041,7 +1041,7 @@ h2 {
   width: min(1180px, calc(100% - 36px));
   margin: 0 auto;
   padding: 0 4px 30px;
-  color: #7a879a;
+  color: hsl(var(--foreground) / 0.72);
   font-size: 11px;
 }
 

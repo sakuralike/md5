@@ -238,9 +238,34 @@ def rotate_refresh_token(
     if user is None or user.status != UserStatus.ACTIVE:
         raise AppError("auth.account_unavailable", "账号当前不可用", status_code=403)
 
-    session.revoked_at = now
-    session.revoked_reason = "rotated"
-    session.last_used_at = now
+    claimed = db.execute(
+        update(UserSession)
+        .where(UserSession.id == session.id, UserSession.revoked_at.is_(None))
+        .values(revoked_at=now, revoked_reason="rotated", last_used_at=now)
+    )
+    if claimed.rowcount != 1:
+        db.execute(
+            update(UserSession)
+            .where(UserSession.family_id == session.family_id, UserSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="refresh_token_reuse")
+        )
+        write_audit_log(
+            db,
+            actor_id=session.user_id,
+            action="auth.refresh_reuse_detected",
+            target_type="session",
+            target_id=session.family_id,
+            result="blocked",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+        )
+        db.commit()
+        raise AppError(
+            "auth.refresh_token_reused",
+            "检测到刷新令牌重复使用，相关会话已撤销",
+            status_code=401,
+        )
+
     new_token = create_refresh_token()
     next_session = UserSession(
         user_id=user.id,

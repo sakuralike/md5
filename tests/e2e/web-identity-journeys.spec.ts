@@ -127,6 +127,55 @@ test("Web 刷新令牌轮换后拒绝旧令牌重放并撤销令牌族", async (
   expectNoBrowserErrors(browserErrors);
 });
 
+test("Web 刷新在缺少 Cookie 与自然过期时返回明确拒绝", async ({ request }) => {
+  const missing = await request.post(`${apiBaseUrl}/web/auth/refresh`, {
+    headers: { Cookie: "", Origin: webOrigin },
+  });
+  await expectApiError(missing, 401, "auth.authentication_required");
+
+  const expired = await request.post(`${apiBaseUrl}/web/auth/refresh`, {
+    headers: {
+      Cookie: `pd_web_refresh=${required("E2E_WEB_EXPIRED_REFRESH_TOKEN")}`,
+      Origin: webOrigin,
+    },
+  });
+  await expectApiError(expired, 401, "auth.refresh_token_expired");
+});
+
+test("Web 多标签并发刷新只允许一次轮换并撤销竞争令牌族", async ({ request }) => {
+  const refreshUrl = `${apiBaseUrl}/web/auth/refresh`;
+  const headers = {
+    Cookie: `pd_web_refresh=${required("E2E_WEB_CONCURRENT_REFRESH_TOKEN")}`,
+    Origin: webOrigin,
+  };
+  const responses = await Promise.all([
+    request.post(refreshUrl, { headers }),
+    request.post(refreshUrl, { headers }),
+  ]);
+  const successful = responses.find((response) => response.status() === 200);
+  const rejected = responses.find((response) => response.status() === 401);
+  expect(successful, "并发刷新应有且仅有一个请求成功").toBeDefined();
+  expect(rejected, "竞争刷新应触发旧令牌重放拒绝").toBeDefined();
+  expect(responses.filter((response) => response.status() === 200)).toHaveLength(1);
+  expect(responses.filter((response) => response.status() === 401)).toHaveLength(1);
+  if (!successful || !rejected) return;
+  await expectApiError(rejected, 401, "auth.refresh_token_reused");
+
+  const tokens = (await successful.json()) as BrowserTokenPayload;
+  const currentTokenRejected = await request.get(`${apiBaseUrl}/me/profile`, {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+  await expectApiError(currentTokenRejected, 401, "auth.session_revoked");
+
+  const setCookie = successful.headers()["set-cookie"] ?? "";
+  const rotatedCookie = /pd_web_refresh=([^;]+)/u.exec(setCookie)?.[1];
+  expect(rotatedCookie, "成功响应应下发轮换后的刷新 Cookie").toBeTruthy();
+  if (!rotatedCookie) return;
+  const rotatedRefreshRejected = await request.post(refreshUrl, {
+    headers: { Cookie: `pd_web_refresh=${rotatedCookie}`, Origin: webOrigin },
+  });
+  await expectApiError(rotatedRefreshRejected, 401, "auth.refresh_token_reused");
+});
 test.describe("Web 移动端与键盘门禁", () => {
   test.use({
     viewport: { width: 390, height: 844 },

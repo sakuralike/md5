@@ -31,7 +31,7 @@ async function submit(): Promise<void> {
     </CardHeader>
     <CardContent>
       <form class="grid gap-5" @submit.prevent="submit">
-        <Alert v-if="auth.error" variant="destructive">
+        <Alert v-if="auth.error" variant="destructive" role="alert" aria-live="assertive">
           <AlertDescription>{{ auth.error }}</AlertDescription>
         </Alert>
         <div class="grid gap-2">

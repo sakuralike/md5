@@ -122,6 +122,7 @@ def ensure_refresh_session(
     family_id: str,
     raw_token: str,
     user_agent: str,
+    expires_in: timedelta = timedelta(days=7),
 ) -> UserSession:
     existing = db.scalar(select(UserSession).where(UserSession.family_id == family_id))
     if existing is not None:
@@ -134,7 +135,7 @@ def ensure_refresh_session(
         refresh_token_hash=hash_refresh_token(raw_token),
         user_agent=user_agent,
         ip_prefix="127.0.0.0/24",
-        expires_at=now + timedelta(days=7),
+        expires_at=now + expires_in,
         created_at=now,
         last_used_at=now,
     )
@@ -327,6 +328,10 @@ def main() -> None:
     email_verify_refresh_token = os.environ["E2E_WEB_EMAIL_VERIFY_REFRESH_TOKEN"]
     web_refresh_family_id = os.environ["E2E_WEB_REFRESH_FAMILY_ID"]
     web_refresh_token = os.environ["E2E_WEB_REFRESH_TOKEN"]
+    web_expired_refresh_family_id = os.environ["E2E_WEB_EXPIRED_REFRESH_FAMILY_ID"]
+    web_expired_refresh_token = os.environ["E2E_WEB_EXPIRED_REFRESH_TOKEN"]
+    web_concurrent_refresh_family_id = os.environ["E2E_WEB_CONCURRENT_REFRESH_FAMILY_ID"]
+    web_concurrent_refresh_token = os.environ["E2E_WEB_CONCURRENT_REFRESH_TOKEN"]
     verified_sha256 = os.environ["E2E_VERIFIED_SHA256"]
     verified_md5 = os.environ["E2E_VERIFIED_MD5"]
     verified_password = os.environ["E2E_VERIFIED_PASSWORD"]
@@ -450,6 +455,21 @@ def main() -> None:
             family_id=web_refresh_family_id,
             raw_token=web_refresh_token,
             user_agent="Synthetic refresh replay browser",
+        )
+        ensure_refresh_session(
+            db,
+            user_id=web_user.id,
+            family_id=web_expired_refresh_family_id,
+            raw_token=web_expired_refresh_token,
+            user_agent="Synthetic expired refresh browser",
+            expires_in=timedelta(minutes=-5),
+        )
+        ensure_refresh_session(
+            db,
+            user_id=web_user.id,
+            family_id=web_concurrent_refresh_family_id,
+            raw_token=web_concurrent_refresh_token,
+            user_agent="Synthetic concurrent refresh browser",
         )
         db.flush()
         for user, family_id, refresh_hash, user_agent in (

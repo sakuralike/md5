@@ -172,3 +172,13 @@
 | 邮箱验证页移动端与键盘操作 | `VerifyEmailPage.vue`、Shadcn-Vue `Button`/`Alert`/`Card` | 390 × 844 视口无横向溢出；返回登录链接可聚焦并由 Enter 激活 | 首个移动端/键盘门禁完成；其他 Web/Admin 核心页面、焦点顺序和错误提示可访问性待扩展 |
 | 身份旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成一次性凭证仅以 SHA-256 摘要落库，合成刷新令牌仅保存摘要，关闭截图/Trace；不放宽生产每分钟 10 次登录限流；完整 19 项 Chromium 旅程 | `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31301934873` 五个作业通过，目标环境待验收 |
 | Admin 候选审核 CI 重试稳定性 | `tests/e2e/admin-moderation-journeys.spec.ts` | 同一 Playwright 服务与数据库连续执行 2 次：首次完成审核，后续直接验证终态、原因码与说明 | 本地稳定性门禁通过；远端 CI `31302927800` 五个作业通过 |
+
+## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
+
+| 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| Web/Admin 首批视觉与布局门禁 | `tests/e2e/support/visual_assertions.ts`、`admin-visual-accessibility.spec.ts`、`web-visual-accessibility.spec.ts` | 全页 PNG 报告附件、可见背景、关键区域正向边界、页面级无横向溢出 | 4 个核心页面首批完成；跨平台像素差异批准和更多页面待补充 |
+| 键盘与错误提示可访问性 | `apps/admin/src/App.vue`、`apps/admin/src/pages/LoginPage.vue`、`apps/web/src/pages/LoginPage.vue` | 登录字段焦点顺序、可见焦点环、错误 `role=alert` 与 `aria-live=assertive` | 首批登录入口完成；复杂工作台键盘操作和屏幕阅读器实测待补充 |
+| WCAG 自动扫描 | `@axe-core/playwright`、`expectNoSeriousAccessibilityViolations`、Web 对比度语义色修正 | WCAG 2 A/AA、2.1 A/AA 严重和关键违规为零 | Web 登录/首页、Admin 仪表盘/登录页通过；中等违规与全页面矩阵待评估 |
+| 刷新令牌异常与竞争安全 | `modules/auth/service.py::rotate_refresh_token`、过期/并发会话种子 | 缺失 Cookie、自然过期、并发仅一次成功、竞争重放、访问与刷新令牌同族撤销 | SQLite 真实 API 闭环完成；MySQL 并发和高负载目标环境待验收 |
+| WP3 第 8 轮回归 | Playwright 25 项 Chromium 旅程、API 身份回归、Admin SSR/Vitest | `pnpm e2e` 25/25；`test_auth.py` 11/11；Admin 52/52；ESLint/TypeScript/Ruff 与统一门禁通过 | 本地回归完成；远端 CI 待推送后关闭 |

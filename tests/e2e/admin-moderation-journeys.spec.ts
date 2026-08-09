@@ -20,9 +20,9 @@ test("Admin 审核待验证候选并写入状态时间线", async ({ page }) => 
   const approveButton = page.getByRole("button", { name: "审核通过" });
   const verifiedTransition = page.getByText("待验证 → 已验证", { exact: true });
 
-  // CI 重试会复用已启动的 API 与数据库；若首次尝试已完成变更，重试应验证终态而不是重复处置。
-  await expect(approveButton.or(verifiedTransition)).toBeVisible();
-  if (await approveButton.isVisible()) {
+  // CI 重试会复用已启动的 API 与数据库；用终态事件是否存在决定是否处置，避免瞬时可见性竞态。
+  if ((await verifiedTransition.count()) === 0) {
+    await expect(approveButton).toBeVisible();
     await page
       .getByLabel("审核说明（进入状态时间线，不写入审计详情）")
       .fill("合成测试：独立证据满足人工审核要求。");
