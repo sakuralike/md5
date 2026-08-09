@@ -21,6 +21,10 @@
 - 定向已登录可访问性 E2E：3 项通过；其中 Web 2 项、Admin 1 项，覆盖桌面/移动、键盘跳转、视觉布局和 Axe 严重/关键违规。
 - `./scripts/check.ps1 -SkipInstall -IncludeE2E`：统一门禁通过，完整 Playwright Chromium 旅程 28/28 通过；API 测试、迁移往返、前端 lint/typecheck/test/build、桌面端检查和容器配置检查均通过。
 
+## 远端验证
+
+- 功能提交 GitHub Actions `31307983187`：API、Frontend、Desktop、E2E、Container Images 五个作业全部通过。
+
 ## 未关闭
 
 - 当前视觉门禁仍是结构化布局和全页报告附件；跨操作系统像素差异批准、人工设计验收和视觉基线存储策略仍待建立。

@@ -191,4 +191,4 @@
 | Web 账号安全和隐私中心响应式验收 | `SecurityPage.vue`、`AccountPrivacyPage.vue` | Web 桌面/移动视觉基线、页面级无溢出、关键区域边界、全页 PNG、Axe 严重/关键扫描 | 本地闭环完成；贡献/信誉/活动/举报页面同类覆盖待补充 |
 | Admin 用户治理和角色审批响应式验收 | `UserGovernancePage.vue`、`RoleChangesPage.vue` | Admin 桌面治理/移动审批视觉基线、无溢出、键盘跳转、Axe；筛选 SelectTrigger `aria-label` | 本地闭环完成；写操作全键盘流程和读屏器待验收 |
 | 反馈播报和表单控件可辨识名称 | Web/Admin `aria-live`/`role`、Admin SelectTrigger aria-label | Axe 自动门禁；修复实际发现的 `button-name` 严重违规 | 本地严重/关键违规为零；中等违规和人工读屏器体验待验收 |
-| E2E 合成状态隔离 | `tests/e2e/support/seed_api.py`、`web_session.ts`、`admin_session.ts` | 全量 28 项 Chromium 旅程在统一门禁通过；种子重建刷新 family，避免定向运行污染后续套件 | SQLite 本地完成；MySQL/Redis、并发压力与目标环境待验收 |
+| E2E 合成状态隔离 | `tests/e2e/support/seed_api.py`、`web_session.ts`、`admin_session.ts` | 全量 28 项 Chromium 旅程在统一门禁通过；种子重建刷新 family，避免定向运行污染后续套件 | 本地统一门禁与远端 CI `31307983187` 五个作业通过；MySQL/Redis、并发压力与目标环境待验收 |

@@ -11,7 +11,7 @@
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP3 第 9 次迭代新增已登录 Web 账号安全/隐私与 Admin 用户治理/角色审批的主内容跳转、移动端布局边界、反馈实时语义和 Select 可辨识名称门禁；真实 Axe 扫描发现的 Admin `button-name` 严重违规已修复。独立合成刷新会话按 family 在种子启动时重建，避免测试状态污染。完整 28 项 Chromium 旅程与统一本地门禁通过；远端 CI 待本轮提交推送后核验。跨平台像素差异批准、更多业务页面、屏幕阅读器、目标环境和生产验收仍未关闭。
+> 2026-08-09 WP3 第 9 次迭代新增已登录 Web 账号安全/隐私与 Admin 用户治理/角色审批的主内容跳转、移动端布局边界、反馈实时语义和 Select 可辨识名称门禁；真实 Axe 扫描发现的 Admin `button-name` 严重违规已修复。独立合成刷新会话按 family 在种子启动时重建，避免测试状态污染。完整 28 项 Chromium 旅程与统一本地门禁通过；远端 GitHub Actions `31307983187` 的 API、Frontend、Desktop、E2E 和 Container Images 五个作业全部通过。跨平台像素差异批准、更多业务页面、屏幕阅读器、目标环境和生产验收仍未关闭。
 
 ## 总体完成度快照
 
@@ -359,4 +359,4 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Admin 用户治理与角色审批可访问性 | `admin-authenticated-accessibility.spec.ts`、`UserGovernancePage.vue`、`RoleChangesPage.vue` | 桌面治理页、移动审批页；SelectTrigger 显式名称、主内容跳转和 Axe 门禁 | 本地 Chromium 与 Axe 严重/关键违规为零；复杂写操作键盘全流程和屏幕阅读器待验收 |
 | 错误/成功反馈实时语义 | Web/Admin 页面 `role`、`aria-live` 属性 | 页面结构和浏览器扫描门禁；错误提示使用 assertive，成功提示使用 polite | 本地代码与浏览器门禁完成；需补充读屏器播报实测 |
 | 可重复合成会话与全量回归 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`admin_session.ts`、`web_session.ts` | 独立 Web/Admin 刷新会话；种子按 family 清理轮换链后重建；`check.ps1 -SkipInstall -IncludeE2E` | 本地统一门禁 28/28；真实 MySQL/Redis 并发、目标环境和生产验收待关闭 |
-| WP3 第 9 轮回归 | `pnpm typecheck`、`pnpm lint`、Admin Vitest | 类型检查、ESLint、前端规范门禁、Admin 52/52、完整 28 项 Chromium 旅程通过 | 远端 CI 待提交推送后核验 |
+| WP3 第 9 轮回归 | `pnpm typecheck`、`pnpm lint`、Admin Vitest | 类型检查、ESLint、前端规范门禁、Admin 52/52、完整 28 项 Chromium 旅程通过 | 本地统一门禁通过；远端 CI `31307983187` 五个作业通过 |
