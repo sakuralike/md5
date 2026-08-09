@@ -15,7 +15,8 @@
     "e2e:cross-browser": "pnpm e2e && pnpm e2e:firefox && pnpm e2e:webkit",
     "e2e:headed": "playwright test --project=web-chromium --project=admin-chromium --headed",
     "e2e:report": "playwright show-report .local/playwright/report",
-    "e2e:install": "playwright install chromium firefox webkit"
+    "e2e:install": "playwright install chromium firefox webkit",
+    "security:audit": "pwsh ./scripts/security-gate.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

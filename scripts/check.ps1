@@ -1,4 +1,9 @@
-param([switch]$SkipInstall, [switch]$IncludeE2E, [switch]$IncludeCrossBrowserE2E)
+param(
+    [switch]$SkipInstall,
+    [switch]$IncludeE2E,
+    [switch]$IncludeCrossBrowserE2E,
+    [switch]$IncludeSecurity
+)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -64,6 +69,9 @@ try {
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test
     Invoke-Checked $Pnpm build
+    if ($IncludeSecurity) {
+        Invoke-Checked pwsh ./scripts/security-gate.ps1 -PythonCommand $Python
+    }
     if ($IncludeCrossBrowserE2E) {
         Invoke-Checked $Pnpm e2e:cross-browser
     } elseif ($IncludeE2E) {
