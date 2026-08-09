@@ -213,3 +213,13 @@
 | 远端浏览器矩阵 | `.github/workflows/ci.yml` | 三个浏览器独立安装、运行、重试和失败制品 | GitHub Actions `31319884808` 三个浏览器矩阵作业通过 |
 | WebKit 与 Safari 边界 | `tests/e2e/support/accessibility.ts`、`browser-matrix.md` | WebKit 验证跳过链接聚焦和 Enter 激活；Chromium/Firefox 验证首次 Tab | WebKit 预检通过；真实 Safari Tab/VoiceOver 未验证 |
 | 移动响应式跨引擎 | 三个移动视口 E2E 文件 | 去除 Firefox 不支持的 `isMobile`，保留固定视口、无溢出和键盘断言 | 三引擎预检通过；真实触摸设备未验证 |
+
+## 2026-08-09 WP4 第 1 次迭代补充：安全审计与 SBOM 门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Python 生产依赖无已知漏洞 | `apps/api/pyproject.toml`、`security-gate.ps1` | `pip-audit --strict` JSON 报告；CycloneDX API SBOM | 本地及 CI `31322842317` 通过；数据库/系统包不在此门禁范围 |
+| Node 高危/严重生产依赖阻断 | `pnpm-workspace.yaml`、`pnpm-lock.yaml` | `pnpm audit --prod --audit-level high`；修复 `nanoid` 3.3.16 | 高危 0、严重 0；中低风险后续纳入治理策略 |
+| API 静态安全扫描 | `security-gate.ps1`、`apps/api/src` | Bandit 中高置信度的中高危结果阻断；JSON 报告 | 首批通过；前端 SAST、秘密扫描、DAST 和人工渗透待实施 |
+| SBOM 与提交追溯 | `verify_security_artifacts.py`、Anchore SBOM Action | API/仓库 CycloneDX JSON、SHA-256 清单、`security-evidence-<commit-sha>` | 远端五份 JSON 已下载并复验；签名和生产来源证明待实施 |
+| 安全门禁可重复执行 | `pnpm security:audit`、`check.ps1 -IncludeSecurity` | 4 项校验器单测、统一门禁、CI 独立作业 | 本地与远端通过；镜像扫描与限期豁免结构为下一轮 |

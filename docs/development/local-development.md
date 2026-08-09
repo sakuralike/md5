@@ -188,6 +188,19 @@ Invoke-RestMethod `
 
 开发环境允许发布 `unsigned`/`test_signed` 制品；`APP_ENV=production` 时只有发布记录标记为 `verified` 且包含签名者与证书指纹才能发布。该门禁是发布流程声明，不替代 Authenticode 实际验证；生产流水线仍必须独立核验签名。
 
+## 安全与供应链门禁
+
+安装安全工具后，可独立运行生产依赖审计、API SAST 和 API CycloneDX SBOM：
+
+```powershell
+$env:PYTHONUTF8 = "1"
+./apps/api/.venv/Scripts/python.exe -m pip install -e ".\apps\api[dev,security]"
+pnpm install --frozen-lockfile
+pnpm security:audit
+```
+
+证据默认写入 `.local/security/`。也可以通过 `./scripts/check.ps1 -SkipInstall -IncludeSecurity` 将安全门禁并入统一检查。远端 CI 额外生成仓库级 CycloneDX SBOM，并以提交 SHA 命名上传证据。详细规则见[安全与供应链门禁](../security/supply-chain-gates.md)。
+
 ## 统一检查
 
 ```powershell

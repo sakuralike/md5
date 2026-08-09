@@ -1,25 +1,25 @@
 # 分阶段开发状态
 
 - 更新日期：2026-08-09
-- 当前里程碑：WP3 Web/Admin 端到端与视觉验收
-- 最近迭代：[WP3 第 11 次开发迭代：Firefox 与 WebKit 跨引擎门禁](./2026-08-09-wp3-iteration-11.md)
-- 前次迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
-- 前序迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
-- 更早迭代：[WP3 第 8 次开发迭代：视觉、可访问性与刷新竞争收口](./2026-08-09-wp3-iteration-8.md)
+- 当前里程碑：WP4 M5 安全、恢复、性能与可观测性准入
+- 最近迭代：[WP4 第 1 次开发迭代：安全审计与 SBOM 门禁](./2026-08-09-wp4-iteration-1.md)
+- 前次迭代：[WP3 第 11 次开发迭代：Firefox 与 WebKit 跨引擎门禁](./2026-08-09-wp3-iteration-11.md)
+- 前序迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
+- 更早迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
 - 总体审计：[项目整体完成度审计（2026-08-03 复核）](./2026-08-03-completion-audit.md)（历史审计：[2026-08-02](./2026-08-02-completion-audit.md)）
 - 下一阶段：[密码侦探社下一步开发方案（2026-08-08）](../../项目文档/密码侦探社下一步开发方案-2026-08-08.md)
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP3 第 11 次迭代把相同 30 项 Web/Admin 旅程扩展到 Playwright Firefox 与 WebKit；本地 Chromium/Firefox/WebKit 共 90/90 通过，并新增 `-IncludeCrossBrowserE2E` 统一门禁和远端三浏览器 E2E 矩阵。WebKit 预检明确不替代真实 Safari 系统键盘偏好、VoiceOver 或 macOS 实机结论。功能提交 `8274ea4` 的远端 GitHub Actions `31319884808` 七个作业全部通过；Edge、真实 Safari、读屏器、真实设备、目标环境和生产验收仍未关闭。
+> 2026-08-09 WP4 第 1 次迭代建立 Python/Node 生产依赖审计、API Bandit SAST、API/仓库 CycloneDX SBOM、证据结构校验和提交级 SHA-256 清单；修复 `nanoid` 与 `cryptography` 首次审计风险。功能提交 `dffdffc` 的远端 GitHub Actions `31322842317` 八个作业全部通过，安全证据制品已下载并二次校验；镜像/秘密扫描、DAST、人工安全测试、恢复、性能、可观测性和目标环境仍未关闭。
 
 ## 总体完成度快照
 
 | 维度 | 工程估算 | 说明 |
 |---|---:|---|
 | 全规格功能实现度 | 约 95% | M1～M3 主流程、M4 核心垂直切片和 N1 用户安全/隐私切片已形成；N2 已完成仪表盘、审计中心、用户处置、系统配置版本治理和普通角色双人审批，浏览器核心业务/视觉 E2E、真实通知环境和 M5 发布工程仍有明显缺口 |
-| MVP 验收完成度 | 约 91% | 相同 30 项 Web/Admin 旅程已在本地 Playwright Chromium、Firefox、WebKit 共 90/90 通过，结构视觉、无溢出和 Axe 严重/关键门禁覆盖主要页面；Edge、真实 Safari、NVDA/VoiceOver、跨平台像素批准、真实移动设备、实机桌面 E2E、规模压测、安全扫描、恢复演练、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
-| 生产上线准备度 | 约 45% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础已建立；发件域名、SPF/DKIM/DMARC、最终送达/退信、指标导出、监控平台、安全扫描、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
+| MVP 验收完成度 | 约 92% | 三浏览器 90 项本地旅程与远端矩阵通过，Python/Node 生产依赖审计、API SAST 和首版 CycloneDX SBOM 已形成自动门禁；Edge、真实 Safari、NVDA/VoiceOver、真实移动设备、镜像/秘密扫描、DAST、恢复演练、规模压测、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
+| 生产上线准备度 | 约 50% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础、生产依赖审计、API SAST 和首版 SBOM 已建立；镜像/秘密扫描、DAST、发件域名、指标出口、监控平台、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
 
 | 里程碑 | 工程估算 | 当前判断 |
 |---|---:|---|
@@ -28,7 +28,7 @@
 | M2 核心 Web 查询与贡献 | 约 80% | 业务闭环首版和用户 Web 视觉体系完成，用户中心、Web Worker、浏览器 E2E、规模性能和生产 KMS 未验收 |
 | M3 Windows 桌面验证 | 约 85% | 自动化核心和发布工作台完成，实机、大文件、正式签名与生产分发待验收 |
 | M4 社区信任与管理闭环 | 约 95% | 五个 M4 垂直切片和 N2 仪表盘、审计中心、用户处置、系统配置版本治理及普通角色双人审批完成；浏览器 E2E、真实 SMTP 服务商最终送达和目标环境验收待实现 |
-| M5 稳定、合规与发布 | 约 10% | 基础 CI/容器已建立，系统测试、安全扫描、恢复、监控、RC 和灰度未实施 |
+| M5 稳定、合规与发布 | 约 25% | 三浏览器系统旅程、生产依赖审计、API SAST、CycloneDX SBOM 和安全证据制品已建立；镜像/秘密扫描、DAST、恢复、性能、监控、RC 和灰度未实施 |
 
 ## M0：需求、安全与体验基线
 
@@ -336,7 +336,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 范围 | 状态 | 说明 |
 |---|---|---|
 | 系统测试与性能 | 部分实施 | Web/Admin 30 项已在本地 Playwright Chromium、Firefox、WebKit 共 90/90 通过，远端三浏览器矩阵已配置；Windows 10/11 Edge、真实 Safari、真实读屏器、移动实机、混合压测和跨平台像素批准待实施 |
-| 安全验证 | 未实施 | SAST、DAST、依赖/镜像扫描门禁和人工安全测试待实施 |
+| 安全验证 | 部分实施 | Python/Node 生产依赖审计、API Bandit SAST、API/仓库 CycloneDX SBOM、结构校验和提交级 SHA-256 清单已进入 CI；镜像/秘密扫描、DAST、专项越权/XSS/资源消耗和人工安全测试待实施 |
 | 恢复与密钥演练 | 未实施 | 备份恢复、迁移回滚、密钥轮换、Redis 丢失和 Worker 重启演练待实施 |
 | 合规与数据治理 | 未实施 | 隐私政策、条款、授权记录、投诉删除和数据保留配置待实施 |
 | 发布与运维 | 基础设施骨架 | Docker/CI 基线已有；预生产、监控告警、运行手册、RC、灰度、回滚和联合签字待实施 |
@@ -381,3 +381,13 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | GitHub Actions 浏览器矩阵 | `.github/workflows/ci.yml` | Chromium、Firefox、WebKit 独立安装、执行和失败制品命名 | 已通过，运行 `31319884808`（三个浏览器矩阵作业） |
 | WebKit 键盘边界 | `tests/e2e/support/accessibility.ts` | Chromium/Firefox 首次 Tab；WebKit 直接聚焦并用 Enter 验证跳转 | WebKit 功能预检完成；真实 Safari 系统完整键盘访问与 VoiceOver 未验证 |
 | 响应式跨引擎兼容 | 移动视口测试去除 Firefox 不支持的 `isMobile` 模拟 | 三引擎移动布局、无溢出和关键区域断言 | CSS 响应式预检完成；真实触摸/iOS/Android 未验证 |
+
+## 2026-08-09 WP4 第 1 次迭代补充：安全审计与 SBOM 门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Python/Node 生产依赖审计 | `apps/api/pyproject.toml`、`pnpm-workspace.yaml`、`security-gate.ps1` | `pip-audit --strict`、`pnpm audit --prod --audit-level high` | 本地与 GitHub Actions 通过；当前阻断范围为 Python 已知漏洞及 Node 高危/严重漏洞 |
+| API SAST | Bandit 1.9.4、`apps/api/src` | 中高置信度的中危/高危结果阻断；JSON 报告留存 | 首批门禁通过；前端 SAST、DAST 和人工测试未实施 |
+| CycloneDX SBOM | API `pip-audit` SBOM、Anchore 仓库 SBOM | `verify_security_artifacts.py` 校验格式、版本和组件；`SHA256SUMS` 记录摘要 | 远端运行 `31322842317` 制品已下载并二次校验；尚未签名或形成来源证明 |
+| 依赖风险修复 | `cryptography>=50,<51`、pytest `>=9.0.3`、pnpm `nanoid` override | API 全量测试、前端 lint/typecheck/test/build、安全审计 | 本地统一门禁和远端八个作业通过 |
+| 安全证据制品 | `.github/workflows/ci.yml` | `security-evidence-<commit-sha>`，失败也上传已有报告，保留 30 天 | 首版完成；长期制品库、豁免治理和发布绑定待实现 |

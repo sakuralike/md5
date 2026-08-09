@@ -67,6 +67,11 @@ docker compose up --build
 # 首次运行浏览器 E2E 前安装 Chromium
 pnpm e2e:install
 ./scripts/check.ps1 -IncludeE2E
+
+# 生产依赖审计、API SAST 与首版 SBOM
+pnpm security:audit
+# 或并入统一检查
+./scripts/check.ps1 -SkipInstall -IncludeSecurity
 ```
 
 ## 开发基线
@@ -74,6 +79,9 @@ pnpm e2e:install
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
+- [安全与供应链门禁](./docs/security/supply-chain-gates.md)
+- [WP4 第 1 次迭代记录](./docs/development/2026-08-09-wp4-iteration-1.md)
+- [WP3 第 11 次迭代记录](./docs/development/2026-08-09-wp3-iteration-11.md)
 - [WP3 第 1 次迭代记录](./docs/development/2026-08-09-wp3-iteration-1.md)
 - [WP2 第 1 次迭代记录](./docs/development/2026-08-08-wp2-iteration-1.md)
 - [WP2 第 2 次迭代记录](./docs/development/2026-08-08-wp2-iteration-2.md)
