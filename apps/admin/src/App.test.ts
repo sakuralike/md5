@@ -31,6 +31,10 @@ describe("App", () => {
 
     const html = await renderToString(app);
 
+    expect(html).toContain('href="#main-content"');
+    expect(html).toContain("跳到主要内容");
+    expect(html).toContain('id="main-content"');
+    expect(html).toContain('tabindex="-1"');
     expect(html).toContain('aria-label="管理导航"');
     expect(html).toContain("候选审核");
     expect(html).toContain("角色审批");

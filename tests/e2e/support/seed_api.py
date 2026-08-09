@@ -123,10 +123,18 @@ def ensure_refresh_session(
     raw_token: str,
     user_agent: str,
     expires_in: timedelta = timedelta(days=7),
+    mfa_verified: bool = False,
 ) -> UserSession:
-    existing = db.scalar(select(UserSession).where(UserSession.family_id == family_id))
-    if existing is not None:
-        return existing
+    existing_sessions = list(
+        db.scalars(select(UserSession).where(UserSession.family_id == family_id)).all()
+    )
+    if existing_sessions:
+        for existing in existing_sessions:
+            existing.rotated_from_id = None
+        db.flush()
+        for existing in existing_sessions:
+            db.delete(existing)
+        db.flush()
 
     now = utc_now()
     session = UserSession(
@@ -138,6 +146,7 @@ def ensure_refresh_session(
         expires_at=now + expires_in,
         created_at=now,
         last_used_at=now,
+        mfa_verified_at=now if mfa_verified else None,
     )
     db.add(session)
     return session
@@ -318,6 +327,12 @@ def main() -> None:
     privacy_username = os.environ["E2E_WEB_PRIVACY_USERNAME"]
     privacy_email = os.environ["E2E_WEB_PRIVACY_EMAIL"]
     privacy_password = os.environ["E2E_WEB_PRIVACY_PASSWORD"]
+    accessibility_security_username = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_USERNAME"]
+    accessibility_security_email = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_EMAIL"]
+    accessibility_security_password = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_PASSWORD"]
+    accessibility_privacy_username = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_USERNAME"]
+    accessibility_privacy_email = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_EMAIL"]
+    accessibility_privacy_password = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_PASSWORD"]
     email_verify_user_id = os.environ["E2E_WEB_EMAIL_VERIFY_USER_ID"]
     email_verify_username = os.environ["E2E_WEB_EMAIL_VERIFY_USERNAME"]
     email_verify_email = os.environ["E2E_WEB_EMAIL_VERIFY_EMAIL"]
@@ -332,6 +347,24 @@ def main() -> None:
     web_expired_refresh_token = os.environ["E2E_WEB_EXPIRED_REFRESH_TOKEN"]
     web_concurrent_refresh_family_id = os.environ["E2E_WEB_CONCURRENT_REFRESH_FAMILY_ID"]
     web_concurrent_refresh_token = os.environ["E2E_WEB_CONCURRENT_REFRESH_TOKEN"]
+    web_accessibility_security_refresh_family_id = os.environ[
+        "E2E_WEB_ACCESSIBILITY_SECURITY_REFRESH_FAMILY_ID"
+    ]
+    web_accessibility_security_refresh_token = os.environ[
+        "E2E_WEB_ACCESSIBILITY_SECURITY_REFRESH_TOKEN"
+    ]
+    web_accessibility_privacy_refresh_family_id = os.environ[
+        "E2E_WEB_ACCESSIBILITY_PRIVACY_REFRESH_FAMILY_ID"
+    ]
+    web_accessibility_privacy_refresh_token = os.environ[
+        "E2E_WEB_ACCESSIBILITY_PRIVACY_REFRESH_TOKEN"
+    ]
+    admin_accessibility_refresh_family_id = os.environ[
+        "E2E_ADMIN_ACCESSIBILITY_REFRESH_FAMILY_ID"
+    ]
+    admin_accessibility_refresh_token = os.environ[
+        "E2E_ADMIN_ACCESSIBILITY_REFRESH_TOKEN"
+    ]
     verified_sha256 = os.environ["E2E_VERIFIED_SHA256"]
     verified_md5 = os.environ["E2E_VERIFIED_MD5"]
     verified_password = os.environ["E2E_VERIFIED_PASSWORD"]
@@ -421,11 +454,23 @@ def main() -> None:
             email=totp_email,
             password=totp_password,
         )
-        ensure_user(
+        privacy_user = ensure_user(
             db,
             username=privacy_username,
             email=privacy_email,
             password=privacy_password,
+        )
+        accessibility_security_user = ensure_user(
+            db,
+            username=accessibility_security_username,
+            email=accessibility_security_email,
+            password=accessibility_security_password,
+        )
+        accessibility_privacy_user = ensure_user(
+            db,
+            username=accessibility_privacy_username,
+            email=accessibility_privacy_email,
+            password=accessibility_privacy_password,
         )
         email_verify_user = ensure_user(
             db,
@@ -470,6 +515,28 @@ def main() -> None:
             family_id=web_concurrent_refresh_family_id,
             raw_token=web_concurrent_refresh_token,
             user_agent="Synthetic concurrent refresh browser",
+        )
+        ensure_refresh_session(
+            db,
+            user_id=accessibility_security_user.id,
+            family_id=web_accessibility_security_refresh_family_id,
+            raw_token=web_accessibility_security_refresh_token,
+            user_agent="Synthetic security accessibility browser",
+        )
+        ensure_refresh_session(
+            db,
+            user_id=accessibility_privacy_user.id,
+            family_id=web_accessibility_privacy_refresh_family_id,
+            raw_token=web_accessibility_privacy_refresh_token,
+            user_agent="Synthetic privacy accessibility browser",
+        )
+        ensure_refresh_session(
+            db,
+            user_id=workflow_admin.id,
+            family_id=admin_accessibility_refresh_family_id,
+            raw_token=admin_accessibility_refresh_token,
+            user_agent="Synthetic admin accessibility browser",
+            mfa_verified=True,
         )
         db.flush()
         for user, family_id, refresh_hash, user_agent in (

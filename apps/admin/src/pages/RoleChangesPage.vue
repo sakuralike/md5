@@ -128,7 +128,7 @@ onMounted(() => void loadRequests());
           <Label class="grid gap-2">
             当前角色
             <Select v-model="createExpectedRole">
-              <SelectTrigger><SelectValue placeholder="选择当前角色" /></SelectTrigger>
+              <SelectTrigger aria-label="当前角色"><SelectValue placeholder="选择当前角色" /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="role in roles" :key="role" :value="role">{{ roleLabels[role] }}</SelectItem>
               </SelectContent>
@@ -137,7 +137,7 @@ onMounted(() => void loadRequests());
           <Label class="grid gap-2">
             申请角色
             <Select v-model="createRequestedRole">
-              <SelectTrigger><SelectValue placeholder="选择申请角色" /></SelectTrigger>
+              <SelectTrigger aria-label="申请角色"><SelectValue placeholder="选择申请角色" /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="role in roles" :key="role" :value="role">{{ roleLabels[role] }}</SelectItem>
               </SelectContent>
@@ -146,7 +146,7 @@ onMounted(() => void loadRequests());
           <Label class="grid gap-2">
             申请原因
             <Select v-model="createReason">
-              <SelectTrigger><SelectValue placeholder="选择原因" /></SelectTrigger>
+              <SelectTrigger aria-label="申请原因"><SelectValue placeholder="选择原因" /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="(label, reason) in reasonLabels" :key="reason" :value="reason">{{ label }}</SelectItem>
               </SelectContent>
@@ -200,7 +200,7 @@ onMounted(() => void loadRequests());
           <h2 class="text-lg font-semibold tracking-tight">角色变更请求</h2>
         </div>
         <Select v-model="filterStatus" @update:model-value="changeFilter">
-          <SelectTrigger class="w-full sm:w-44"><SelectValue placeholder="筛选状态" /></SelectTrigger>
+          <SelectTrigger class="w-full sm:w-44" aria-label="筛选角色变更状态"><SelectValue placeholder="筛选状态" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部状态</SelectItem>
             <SelectItem value="pending">待复核</SelectItem>
@@ -274,7 +274,7 @@ onMounted(() => void loadRequests());
         <Label class="grid gap-2">
           复核结论
           <Select v-model="reviewReason">
-            <SelectTrigger><SelectValue placeholder="选择复核原因" /></SelectTrigger>
+            <SelectTrigger aria-label="复核原因"><SelectValue placeholder="选择复核原因" /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="(label, reason) in reviewReasonLabels" :key="reason" :value="reason">{{ label }}</SelectItem>
             </SelectContent>

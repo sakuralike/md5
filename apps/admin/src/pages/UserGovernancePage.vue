@@ -344,7 +344,7 @@ onMounted(() => void loadUsers());
         <div class="space-y-2">
           <Label>账号状态</Label>
           <Select v-model="statusFilter">
-            <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+            <SelectTrigger aria-label="账号状态"><SelectValue placeholder="全部状态" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部状态</SelectItem>
               <SelectItem value="active">正常</SelectItem>
@@ -356,7 +356,7 @@ onMounted(() => void loadUsers());
         <div class="space-y-2">
           <Label>账号角色</Label>
           <Select v-model="roleFilter">
-            <SelectTrigger><SelectValue placeholder="全部角色" /></SelectTrigger>
+            <SelectTrigger aria-label="账号角色"><SelectValue placeholder="全部角色" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部角色</SelectItem>
               <SelectItem value="user">普通用户</SelectItem>
@@ -455,7 +455,7 @@ onMounted(() => void loadUsers());
             </div>
           </div>
 
-          <div v-if="actionSuccess" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
+          <div v-if="actionSuccess" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status" aria-live="polite">
             {{ actionSuccess }}
           </div>
 
@@ -493,7 +493,7 @@ onMounted(() => void loadUsers());
               <div class="space-y-2">
                 <Label>操作原因</Label>
                 <Select v-model="actionReason">
-                  <SelectTrigger><SelectValue placeholder="选择结构化原因码" /></SelectTrigger>
+                  <SelectTrigger aria-label="操作原因"><SelectValue placeholder="选择结构化原因码" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="option in reasonOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
                   </SelectContent>
@@ -509,7 +509,7 @@ onMounted(() => void loadUsers());
                   <Input id="admin-totp-code" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" />
                 </div>
               </div>
-              <div v-if="actionError" class="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+              <div v-if="actionError" class="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" aria-live="assertive">
                 {{ actionError }}
               </div>
               <div class="flex flex-wrap justify-end gap-2">

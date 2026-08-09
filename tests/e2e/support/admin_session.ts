@@ -8,6 +8,20 @@ export interface WorkflowAdminCredentials {
   totpSecret: string;
 }
 
+interface BrowserTokenPayload {
+  access_token: string;
+  user: Record<string, unknown>;
+}
+
+const apiBaseUrl = "http://127.0.0.1:18100/api/v1";
+const adminOrigin = "http://127.0.0.1:15174";
+
+export function requiredAdminFixture(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`缺少 ${name} 合成配置`);
+  return value;
+}
+
 export function workflowAdminCredentials(): WorkflowAdminCredentials {
   const id = process.env.E2E_ADMIN_WORKFLOW_ID;
   const username = process.env.E2E_ADMIN_WORKFLOW_USERNAME;
@@ -29,4 +43,31 @@ export async function loginWorkflowAdmin(page: Page): Promise<WorkflowAdminCrede
   await expect(page).toHaveURL(/\/$/u);
   await expect(page.getByRole("heading", { name: "真实指标仪表盘" })).toBeVisible();
   return credentials;
+}
+
+export async function bootstrapSeededAdminSession(page: Page, rawRefreshToken: string): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: "pd_admin_refresh",
+      value: rawRefreshToken,
+      domain: "127.0.0.1",
+      path: "/api/v1/admin/auth",
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+    },
+  ]);
+  const refreshed = await page.request.post(`${apiBaseUrl}/admin/auth/refresh`, {
+    headers: { Origin: adminOrigin },
+  });
+  expect(refreshed.status()).toBe(200);
+  const tokens = (await refreshed.json()) as BrowserTokenPayload;
+  await page.goto("/");
+  await page.evaluate((session) => {
+    sessionStorage.setItem(
+      "password_detective_admin_session_v2",
+      JSON.stringify({ accessToken: session.access_token, user: session.user, enrollmentOnly: false }),
+    );
+  }, tokens);
+  await page.reload();
 }

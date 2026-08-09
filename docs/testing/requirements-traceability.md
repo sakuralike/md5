@@ -182,3 +182,13 @@
 | WCAG 自动扫描 | `@axe-core/playwright`、`expectNoSeriousAccessibilityViolations`、Web 对比度语义色修正 | WCAG 2 A/AA、2.1 A/AA 严重和关键违规为零 | Web 登录/首页、Admin 仪表盘/登录页通过；中等违规与全页面矩阵待评估 |
 | 刷新令牌异常与竞争安全 | `modules/auth/service.py::rotate_refresh_token`、过期/并发会话种子 | 缺失 Cookie、自然过期、并发仅一次成功、竞争重放、访问与刷新令牌同族撤销 | SQLite 真实 API 闭环完成；MySQL 并发和高负载目标环境待验收 |
 | WP3 第 8 轮回归 | Playwright 25 项 Chromium 旅程、API 身份回归、Admin SSR/Vitest | `pnpm e2e` 25/25；`test_auth.py` 11/11；Admin 52/52；ESLint/TypeScript/Ruff 与统一门禁通过 | 本地回归完成；远端 CI `31305403414` 五个作业通过 |
+
+## 2026-08-09 WP3 第 9 次迭代补充：已登录核心页面无障碍与响应式收口
+
+| 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| Web/Admin 跳过链接和主内容焦点目标 | `apps/web/src/App.vue`、`apps/admin/src/App.vue` | `web-authenticated-accessibility.spec.ts`、`admin-authenticated-accessibility.spec.ts`：Tab/Enter 跳转 | 本地 Chromium 完成；读屏器、Safari/Firefox/Edge 目标矩阵待验收 |
+| Web 账号安全和隐私中心响应式验收 | `SecurityPage.vue`、`AccountPrivacyPage.vue` | Web 桌面/移动视觉基线、页面级无溢出、关键区域边界、全页 PNG、Axe 严重/关键扫描 | 本地闭环完成；贡献/信誉/活动/举报页面同类覆盖待补充 |
+| Admin 用户治理和角色审批响应式验收 | `UserGovernancePage.vue`、`RoleChangesPage.vue` | Admin 桌面治理/移动审批视觉基线、无溢出、键盘跳转、Axe；筛选 SelectTrigger `aria-label` | 本地闭环完成；写操作全键盘流程和读屏器待验收 |
+| 反馈播报和表单控件可辨识名称 | Web/Admin `aria-live`/`role`、Admin SelectTrigger aria-label | Axe 自动门禁；修复实际发现的 `button-name` 严重违规 | 本地严重/关键违规为零；中等违规和人工读屏器体验待验收 |
+| E2E 合成状态隔离 | `tests/e2e/support/seed_api.py`、`web_session.ts`、`admin_session.ts` | 全量 28 项 Chromium 旅程在统一门禁通过；种子重建刷新 family，避免定向运行污染后续套件 | SQLite 本地完成；MySQL/Redis、并发压力与目标环境待验收 |

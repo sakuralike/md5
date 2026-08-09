@@ -72,6 +72,12 @@ onBeforeUnmount(releaseCustomBackground);
 
 <template>
   <div class="shell" :data-background="activeBackground">
+    <a
+      href="#main-content"
+      class="sr-only z-50 rounded-md bg-background px-4 py-2 text-foreground shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+    >
+      跳到主要内容
+    </a>
     <div
       class="ambient-background"
       :class="{ 'ambient-background-custom': activeBackground === 'custom' }"
@@ -177,7 +183,7 @@ onBeforeUnmount(releaseCustomBackground);
       </div>
     </header>
 
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1">
       <RouterView />
     </main>
 

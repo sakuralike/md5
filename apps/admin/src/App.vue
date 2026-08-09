@@ -19,6 +19,12 @@ const navigationItems = [
 
 <template>
   <div class="min-h-screen bg-gradient-to-br from-slate-50 via-background to-sky-50/60 text-foreground">
+    <a
+      href="#main-content"
+      class="sr-only z-50 rounded-md bg-background px-4 py-2 text-foreground shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+    >
+      跳到主要内容
+    </a>
     <header class="sticky top-0 z-40 border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
       <div class="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:flex-nowrap lg:px-8">
         <RouterLink class="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" to="/">
@@ -46,7 +52,7 @@ const navigationItems = [
       </div>
     </header>
 
-    <main class="mx-auto min-h-[calc(100vh-4.5rem)] w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <main id="main-content" class="mx-auto min-h-[calc(100vh-4.5rem)] w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8" tabindex="-1">
       <RouterView />
     </main>
   </div>

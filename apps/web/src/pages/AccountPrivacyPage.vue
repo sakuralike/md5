@@ -199,7 +199,7 @@ onMounted(load);
       </p>
     </div>
 
-    <Alert v-if="error" variant="destructive" role="alert">
+    <Alert v-if="error" variant="destructive" role="alert" aria-live="assertive">
       <AlertTitle>操作未完成</AlertTitle>
       <AlertDescription>{{ error }}</AlertDescription>
     </Alert>
