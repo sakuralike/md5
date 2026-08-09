@@ -13,6 +13,7 @@
 - 修复 Admin TOTP 手工密钥向 Shadcn-Vue Input 传递 `value` 而非 `model-value`，导致真实浏览器中输入框属性有值但 DOM value 为空的问题。
 - 认证场景关闭截图和网络 Trace，并在读取后立即遮蔽 TOTP 密钥；无凭据游客场景保留失败 Trace，避免认证制品记录密码、访问令牌或 TOTP 密钥。
 - GitHub Actions 新增独立 `e2e` 作业，安装 API、Chromium 和前端依赖后运行真实浏览器测试；失败时仅上传 `.local/playwright` 短期证据。
+- 首次远端运行同时暴露并修复 `20260808_0022` 的 MySQL 回滚顺序问题：不再提前删除外键依赖索引，直接删除通知表完成约束与索引清理。
 
 ## 本地验证
 

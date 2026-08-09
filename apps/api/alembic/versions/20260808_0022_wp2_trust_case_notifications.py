@@ -85,20 +85,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for column in reversed(
-        (
-            "case_id",
-            "recipient_user_id",
-            "kind",
-            "status",
-            "provider",
-            "available_at",
-            "failed_at",
-            "created_at",
-        )
-    ):
-        op.drop_index(
-            op.f(f"ix_trust_case_notifications_{column}"),
-            table_name="trust_case_notifications",
-        )
+    # MySQL requires the recipient/case indexes while their foreign keys exist.
+    # Dropping the table removes its constraints and indexes in one operation on
+    # every supported database, avoiding an invalid intermediate schema.
     op.drop_table("trust_case_notifications")
