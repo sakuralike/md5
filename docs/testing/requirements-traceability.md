@@ -192,3 +192,14 @@
 | Admin 用户治理和角色审批响应式验收 | `UserGovernancePage.vue`、`RoleChangesPage.vue` | Admin 桌面治理/移动审批视觉基线、无溢出、键盘跳转、Axe；筛选 SelectTrigger `aria-label` | 本地闭环完成；写操作全键盘流程和读屏器待验收 |
 | 反馈播报和表单控件可辨识名称 | Web/Admin `aria-live`/`role`、Admin SelectTrigger aria-label | Axe 自动门禁；修复实际发现的 `button-name` 严重违规 | 本地严重/关键违规为零；中等违规和人工读屏器体验待验收 |
 | E2E 合成状态隔离 | `tests/e2e/support/seed_api.py`、`web_session.ts`、`admin_session.ts` | 全量 28 项 Chromium 旅程在统一门禁通过；种子重建刷新 family，避免定向运行污染后续套件 | 本地统一门禁与远端 CI `31307983187` 五个作业通过；MySQL/Redis、并发压力与目标环境待验收 |
+
+## 2026-08-09 WP3 第 10 次迭代补充：剩余业务页面无障碍矩阵收口
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web 贡献/信誉/案件/活动可访问性 | `SubmissionsPage.vue`、`ReputationPage.vue`、`TrustCasesPage.vue`、`web-authenticated-accessibility.spec.ts` | 桌面/移动无溢出、关键区域边界、全页 PNG、加载/错误/成功实时语义、Axe 严重/关键扫描 | 本地 Chromium 完成；读屏器、真实移动设备与跨浏览器待验收 |
+| Admin 候选/案件/配置/告警可访问性 | `CandidateModerationPage.vue`、`TrustCasesPage.vue`、`SystemSettingsPage.vue`、`RiskAlertsPage.vue`、`admin-authenticated-accessibility.spec.ts` | 桌面/移动结构门禁、SelectTrigger 名称、候选页超宽回归、Axe 扫描 | 本地 Chromium 完成；全键盘写操作、读屏器和目标环境待验收 |
+| Tailwind 内容扫描与语义变量 | `tailwind.config.js`、Web/Admin `index.css`、`packages/web-ui/src/styles.css` | 生产构建包含业务工具类；Axe 关闭登录页/配置页对比度问题 | 本地与 Linux CI 通过；跨 OS 字体与像素差异待批准 |
+| 可诊断视觉断言 | `tests/e2e/support/visual_assertions.ts` | 失败输出越界元素、Axe 目标、HTML 摘要和失败原因 | 自动化完成；像素快照跨平台批准未执行 |
+| 视觉/读屏器/浏览器验收策略 | `visual-baseline-strategy.md`、`screen-reader-checklist.md`、`browser-matrix.md` | 明确 Chromium 当前证据、Edge/Firefox/Safari/WebKit、NVDA/VoiceOver 和真实设备状态 | 策略已建立；外部/人工证据保持未验证 |
+| WP3 第 10 轮回归 | `playwright.config.ts`、E2E 隔离种子 | 30/30 Chromium 旅程；`check.ps1 -SkipInstall -IncludeE2E`；远端 CI `31310591798` 五作业通过 | 本地与 Linux CI 自动化通过；目标环境和生产验收未关闭 |

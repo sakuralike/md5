@@ -2,23 +2,23 @@
 
 - 更新日期：2026-08-09
 - 当前里程碑：WP3 Web/Admin 端到端与视觉验收
-- 最近迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
-- 前次迭代：[WP3 第 8 次开发迭代：视觉、可访问性与刷新竞争收口](./2026-08-09-wp3-iteration-8.md)
-- 前序迭代：[WP3 第 7 次开发迭代：Web 邮箱、刷新令牌与移动端键盘门禁](./2026-08-09-wp3-iteration-7.md)
-- 更早迭代：[WP3 第 6 次开发迭代：系统配置与风险告警浏览器闭环](./2026-08-09-wp3-iteration-6.md)
+- 最近迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
+- 前次迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
+- 前序迭代：[WP3 第 8 次开发迭代：视觉、可访问性与刷新竞争收口](./2026-08-09-wp3-iteration-8.md)
+- 更早迭代：[WP3 第 7 次开发迭代：Web 邮箱、刷新令牌与移动端键盘门禁](./2026-08-09-wp3-iteration-7.md)
 - 总体审计：[项目整体完成度审计（2026-08-03 复核）](./2026-08-03-completion-audit.md)（历史审计：[2026-08-02](./2026-08-02-completion-audit.md)）
 - 下一阶段：[密码侦探社下一步开发方案（2026-08-08）](../../项目文档/密码侦探社下一步开发方案-2026-08-08.md)
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP3 第 9 次迭代新增已登录 Web 账号安全/隐私与 Admin 用户治理/角色审批的主内容跳转、移动端布局边界、反馈实时语义和 Select 可辨识名称门禁；真实 Axe 扫描发现的 Admin `button-name` 严重违规已修复。独立合成刷新会话按 family 在种子启动时重建，避免测试状态污染。完整 28 项 Chromium 旅程与统一本地门禁通过；远端 GitHub Actions `31307983187` 的 API、Frontend、Desktop、E2E 和 Container Images 五个作业全部通过。跨平台像素差异批准、更多业务页面、屏幕阅读器、目标环境和生产验收仍未关闭。
+> 2026-08-09 WP3 第 10 次迭代把 Web 贡献/信誉/案件/活动与 Admin 候选/案件/配置/告警纳入桌面或移动结构化视觉、无溢出和 Axe 严重/关键门禁；修复 Tailwind 内容扫描根路径和共享旧变量冲突，关闭候选页超宽布局、Select 可辨识名称、实时反馈及实际对比度问题。完整 30 项 Chromium 旅程与统一本地门禁通过；远端 GitHub Actions `31310591798` 的 API、Frontend、Desktop、E2E 和 Container Images 五个作业全部通过。跨平台像素批准、真实屏幕阅读器、Edge/Firefox/Safari、真实设备、目标环境和生产验收仍未关闭。
 
 ## 总体完成度快照
 
 | 维度 | 工程估算 | 说明 |
 |---|---:|---|
 | 全规格功能实现度 | 约 95% | M1～M3 主流程、M4 核心垂直切片和 N1 用户安全/隐私切片已形成；N2 已完成仪表盘、审计中心、用户处置、系统配置版本治理和普通角色双人审批，浏览器核心业务/视觉 E2E、真实通知环境和 M5 发布工程仍有明显缺口 |
-| MVP 验收完成度 | 约 90% | 统一本地门禁历史轮次、1440 px Web 静态视觉复核和首批结构化视觉/可访问性门禁通过，管理端已具备用户处置、配置治理和普通角色双人审批，Web/Admin 28 项核心浏览器旅程通过；已登录安全/隐私/治理/审批页面增加桌面、移动、键盘和 Axe 严重/关键门禁；跨平台像素差异、实机桌面 E2E、规模压测、安全扫描、恢复演练、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
+| MVP 验收完成度 | 约 90% | 统一本地门禁、结构化视觉/可访问性门禁和 Web/Admin 30 项 Chromium 核心旅程通过；当前主要 Web/Admin 页面已纳入桌面或移动无溢出、关键区域和 Axe 严重/关键扫描；跨平台像素批准、真实屏幕阅读器、Edge/Firefox/Safari、真实移动设备、实机桌面 E2E、规模压测、安全扫描、恢复演练、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
 | 生产上线准备度 | 约 45% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础已建立；发件域名、SPF/DKIM/DMARC、最终送达/退信、指标导出、监控平台、安全扫描、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
 
 | 里程碑 | 工程估算 | 当前判断 |
@@ -335,7 +335,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 范围 | 状态 | 说明 |
 |---|---|---|
-| 系统测试与性能 | 未实施 | 完整 E2E、跨浏览器、Windows 10/11、混合压测、无障碍和视觉回归待实施 |
+| 系统测试与性能 | 部分实施 | Web/Admin 30 项本地与 Linux CI Chromium E2E、结构化视觉和 Axe 严重/关键门禁已完成；跨浏览器、Windows 10/11 目标验收、真实读屏器、移动实机、混合压测和跨平台像素批准待实施 |
 | 安全验证 | 未实施 | SAST、DAST、依赖/镜像扫描门禁和人工安全测试待实施 |
 | 恢复与密钥演练 | 未实施 | 备份恢复、迁移回滚、密钥轮换、Redis 丢失和 Worker 重启演练待实施 |
 | 合规与数据治理 | 未实施 | 隐私政策、条款、授权记录、投诉删除和数据保留配置待实施 |
@@ -360,3 +360,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 错误/成功反馈实时语义 | Web/Admin 页面 `role`、`aria-live` 属性 | 页面结构和浏览器扫描门禁；错误提示使用 assertive，成功提示使用 polite | 本地代码与浏览器门禁完成；需补充读屏器播报实测 |
 | 可重复合成会话与全量回归 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`admin_session.ts`、`web_session.ts` | 独立 Web/Admin 刷新会话；种子按 family 清理轮换链后重建；`check.ps1 -SkipInstall -IncludeE2E` | 本地统一门禁 28/28；真实 MySQL/Redis 并发、目标环境和生产验收待关闭 |
 | WP3 第 9 轮回归 | `pnpm typecheck`、`pnpm lint`、Admin Vitest | 类型检查、ESLint、前端规范门禁、Admin 52/52、完整 28 项 Chromium 旅程通过 | 本地统一门禁通过；远端 CI `31307983187` 五个作业通过 |
+
+## 2026-08-09 WP3 第 10 次迭代补充：剩余业务页面无障碍矩阵收口
+
+| 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| Web 剩余业务页面响应式与无障碍 | `SubmissionsPage.vue`、`ReputationPage.vue`、`TrustCasesPage.vue`、`web-authenticated-accessibility.spec.ts` | 贡献、信誉、案件、活动页面的桌面/移动结构边界、无横向溢出、全页 PNG、Axe 严重/关键扫描 | 本地 Chromium 通过；真实移动设备、读屏器和跨浏览器待验收 |
+| Admin 剩余业务页面响应式与无障碍 | `CandidateModerationPage.vue`、`TrustCasesPage.vue`、`SystemSettingsPage.vue`、`RiskAlertsPage.vue`、`admin-authenticated-accessibility.spec.ts` | 候选、案件、配置、告警页面的桌面/移动门禁；SelectTrigger 可辨识名称；候选页面超宽布局回归 | 本地 Chromium 通过；复杂写操作全键盘、读屏器和目标环境待验收 |
+| Tailwind 语义样式与对比度 | 根 `tailwind.config.js` 绝对内容路径、Web/Admin 主题变量、共享 `--legacy-*` 变量 | Web/Admin 生产构建、工具类产物检查、Axe 实际对比度扫描 | 本地与 Linux CI 构建通过；跨平台字体与像素差异仍需独立批准 |
+| 可诊断视觉门禁 | `tests/e2e/support/visual_assertions.ts` | 溢出元素前 10 项、Axe 目标/HTML/失败原因输出 | CI 失败定位能力完成；像素差异批准流程尚未自动化 |
+| WP3 外部验收策略 | `visual-baseline-strategy.md`、`screen-reader-checklist.md`、`browser-matrix.md` | 明确 L1～L4 基线、NVDA/VoiceOver 清单和浏览器/设备矩阵 | 策略完成，实际 Edge/Firefox/Safari/读屏器/真实设备证据未产生 |
+| WP3 第 10 轮回归 | `pnpm e2e`、`scripts/check.ps1 -SkipInstall -IncludeE2E` | 完整 30/30 Chromium 旅程、API/迁移/前端/Desktop/容器统一门禁 | 本地统一门禁与远端 CI `31310591798` 五个作业通过；目标环境和生产验收待关闭 |
