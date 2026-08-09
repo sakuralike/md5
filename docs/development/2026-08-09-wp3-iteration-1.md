@@ -14,12 +14,14 @@
 - 认证场景关闭截图和网络 Trace，并在读取后立即遮蔽 TOTP 密钥；无凭据游客场景保留失败 Trace，避免认证制品记录密码、访问令牌或 TOTP 密钥。
 - GitHub Actions 新增独立 `e2e` 作业，安装 API、Chromium 和前端依赖后运行真实浏览器测试；失败时仅上传 `.local/playwright` 短期证据。
 - 首次远端运行同时暴露并修复 `20260802_0009`、`20260804_0018` 及 `20260808_0019`～`0022` 的 MySQL 回滚顺序问题：先移除外键再删除依赖索引，整表回滚则直接删表并原子清理约束与索引。
+- 远端 GitHub Actions 运行 `31290619825` 已全部通过：API、Frontend、Desktop、E2E 和 Container Images 均为 success；期间补齐前端镜像构建上下文中的根级 `postcss.config.js` 与 `tailwind.config.js`。
 
 ## 本地验证
 
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm e2e`：Web/Admin 共 4 项通过
+- 远端 GitHub Actions `31290619825`：5 个作业全部通过。
 - E2E 使用 `127.0.0.1:18100` API、`15173` Web 和 `15174` Admin，数据库位于被 Git 忽略的 `.local/playwright/`。
 
 ## 未关闭
