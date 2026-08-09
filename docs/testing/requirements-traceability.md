@@ -203,3 +203,13 @@
 | 可诊断视觉断言 | `tests/e2e/support/visual_assertions.ts` | 失败输出越界元素、Axe 目标、HTML 摘要和失败原因 | 自动化完成；像素快照跨平台批准未执行 |
 | 视觉/读屏器/浏览器验收策略 | `visual-baseline-strategy.md`、`screen-reader-checklist.md`、`browser-matrix.md` | 明确 Chromium 当前证据、Edge/Firefox/Safari/WebKit、NVDA/VoiceOver 和真实设备状态 | 策略已建立；外部/人工证据保持未验证 |
 | WP3 第 10 轮回归 | `playwright.config.ts`、E2E 隔离种子 | 30/30 Chromium 旅程；`check.ps1 -SkipInstall -IncludeE2E`；远端 CI `31310591798` 五作业通过 | 本地与 Linux CI 自动化通过；目标环境和生产验收未关闭 |
+
+## 2026-08-09 WP3 第 11 次迭代补充：Firefox 与 WebKit 跨引擎门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Playwright 三引擎项目 | `playwright.config.ts`、`package.json` | `e2e`、`e2e:firefox`、`e2e:webkit` 分别执行完整 30 项 | 本地 Chromium/Firefox/WebKit 共 90/90 通过 |
+| 跨浏览器统一回归 | `scripts/check.ps1 -IncludeCrossBrowserE2E` | API/迁移/前端/Desktop 与三个浏览器隔离回归 | 本地统一门禁通过 |
+| 远端浏览器矩阵 | `.github/workflows/ci.yml` | 三个浏览器独立安装、运行、重试和失败制品 | GitHub Actions `31319884808` 三个浏览器矩阵作业通过 |
+| WebKit 与 Safari 边界 | `tests/e2e/support/accessibility.ts`、`browser-matrix.md` | WebKit 验证跳过链接聚焦和 Enter 激活；Chromium/Firefox 验证首次 Tab | WebKit 预检通过；真实 Safari Tab/VoiceOver 未验证 |
+| 移动响应式跨引擎 | 三个移动视口 E2E 文件 | 去除 Firefox 不支持的 `isMobile`，保留固定视口、无溢出和键盘断言 | 三引擎预检通过；真实触摸设备未验证 |

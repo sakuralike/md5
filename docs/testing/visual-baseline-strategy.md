@@ -2,7 +2,7 @@
 
 - 更新日期：2026-08-09
 - 适用范围：Web、Admin 的 Playwright 视觉验收
-- 当前状态：策略已冻结；本地与 CI Chromium 结构化视觉门禁已执行，跨操作系统像素基线尚未批准
+- 当前状态：策略已冻结；本地 Chromium、Firefox、WebKit 结构化视觉门禁已执行，远端矩阵状态待本轮 CI 回填，跨操作系统像素基线尚未批准
 
 ## 1. 目标与边界
 
@@ -68,6 +68,6 @@
 
 ## 6. 当前证据与下一步
 
-截至 2026-08-09，Web/Admin 30 项 Chromium 旅程已经覆盖公开入口、认证核心旅程以及主要已登录业务页面的桌面/移动结构化视觉、无溢出和 Axe 严重/关键门禁；GitHub Actions 在 `ubuntu-latest` 上运行 Chromium。该结果证明当前本地和 Linux CI 自动化链可重复，不证明 Edge、Firefox、Safari、Windows/macOS 像素一致或目标环境已验收。
+截至 2026-08-09，Web/Admin 相同的 30 项旅程已分别在本地 Playwright Chromium、Firefox、WebKit 通过，覆盖公开入口、认证核心旅程以及主要已登录业务页面的桌面/移动结构化视觉、无溢出和 Axe 严重/关键门禁；GitHub Actions 已配置为在 `ubuntu-latest` 上并行运行三引擎矩阵。该结果不证明 Edge、真实 Safari、Windows/macOS 像素一致、真实辅助技术或目标环境已验收。
 
-下一步：为 `chromium-linux-ci` 建立受控像素基线试点，再分别增加 Edge/Windows、Firefox 和 WebKit/macOS 通道；所有跨平台差异仍按通道独立批准。
+下一步：为 Linux CI 三引擎分别建立受控结构/像素基线试点，再增加 Edge/Windows 和真实 Safari/macOS 通道；所有跨平台差异仍按通道独立批准，Playwright WebKit 不继承真实 Safari 的批准结论。

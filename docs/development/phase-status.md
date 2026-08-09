@@ -2,23 +2,23 @@
 
 - 更新日期：2026-08-09
 - 当前里程碑：WP3 Web/Admin 端到端与视觉验收
-- 最近迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
-- 前次迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
-- 前序迭代：[WP3 第 8 次开发迭代：视觉、可访问性与刷新竞争收口](./2026-08-09-wp3-iteration-8.md)
-- 更早迭代：[WP3 第 7 次开发迭代：Web 邮箱、刷新令牌与移动端键盘门禁](./2026-08-09-wp3-iteration-7.md)
+- 最近迭代：[WP3 第 11 次开发迭代：Firefox 与 WebKit 跨引擎门禁](./2026-08-09-wp3-iteration-11.md)
+- 前次迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
+- 前序迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
+- 更早迭代：[WP3 第 8 次开发迭代：视觉、可访问性与刷新竞争收口](./2026-08-09-wp3-iteration-8.md)
 - 总体审计：[项目整体完成度审计（2026-08-03 复核）](./2026-08-03-completion-audit.md)（历史审计：[2026-08-02](./2026-08-02-completion-audit.md)）
 - 下一阶段：[密码侦探社下一步开发方案（2026-08-08）](../../项目文档/密码侦探社下一步开发方案-2026-08-08.md)
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP3 第 10 次迭代把 Web 贡献/信誉/案件/活动与 Admin 候选/案件/配置/告警纳入桌面或移动结构化视觉、无溢出和 Axe 严重/关键门禁；修复 Tailwind 内容扫描根路径和共享旧变量冲突，关闭候选页超宽布局、Select 可辨识名称、实时反馈及实际对比度问题。完整 30 项 Chromium 旅程与统一本地门禁通过；远端 GitHub Actions `31310591798` 的 API、Frontend、Desktop、E2E 和 Container Images 五个作业全部通过。跨平台像素批准、真实屏幕阅读器、Edge/Firefox/Safari、真实设备、目标环境和生产验收仍未关闭。
+> 2026-08-09 WP3 第 11 次迭代把相同 30 项 Web/Admin 旅程扩展到 Playwright Firefox 与 WebKit；本地 Chromium/Firefox/WebKit 共 90/90 通过，并新增 `-IncludeCrossBrowserE2E` 统一门禁和远端三浏览器 E2E 矩阵。WebKit 预检明确不替代真实 Safari 系统键盘偏好、VoiceOver 或 macOS 实机结论。功能提交 `8274ea4` 的远端 GitHub Actions `31319884808` 七个作业全部通过；Edge、真实 Safari、读屏器、真实设备、目标环境和生产验收仍未关闭。
 
 ## 总体完成度快照
 
 | 维度 | 工程估算 | 说明 |
 |---|---:|---|
 | 全规格功能实现度 | 约 95% | M1～M3 主流程、M4 核心垂直切片和 N1 用户安全/隐私切片已形成；N2 已完成仪表盘、审计中心、用户处置、系统配置版本治理和普通角色双人审批，浏览器核心业务/视觉 E2E、真实通知环境和 M5 发布工程仍有明显缺口 |
-| MVP 验收完成度 | 约 90% | 统一本地门禁、结构化视觉/可访问性门禁和 Web/Admin 30 项 Chromium 核心旅程通过；当前主要 Web/Admin 页面已纳入桌面或移动无溢出、关键区域和 Axe 严重/关键扫描；跨平台像素批准、真实屏幕阅读器、Edge/Firefox/Safari、真实移动设备、实机桌面 E2E、规模压测、安全扫描、恢复演练、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
+| MVP 验收完成度 | 约 91% | 相同 30 项 Web/Admin 旅程已在本地 Playwright Chromium、Firefox、WebKit 共 90/90 通过，结构视觉、无溢出和 Axe 严重/关键门禁覆盖主要页面；Edge、真实 Safari、NVDA/VoiceOver、跨平台像素批准、真实移动设备、实机桌面 E2E、规模压测、安全扫描、恢复演练、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
 | 生产上线准备度 | 约 45% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础已建立；发件域名、SPF/DKIM/DMARC、最终送达/退信、指标导出、监控平台、安全扫描、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
 
 | 里程碑 | 工程估算 | 当前判断 |
@@ -335,7 +335,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 范围 | 状态 | 说明 |
 |---|---|---|
-| 系统测试与性能 | 部分实施 | Web/Admin 30 项本地与 Linux CI Chromium E2E、结构化视觉和 Axe 严重/关键门禁已完成；跨浏览器、Windows 10/11 目标验收、真实读屏器、移动实机、混合压测和跨平台像素批准待实施 |
+| 系统测试与性能 | 部分实施 | Web/Admin 30 项已在本地 Playwright Chromium、Firefox、WebKit 共 90/90 通过，远端三浏览器矩阵已配置；Windows 10/11 Edge、真实 Safari、真实读屏器、移动实机、混合压测和跨平台像素批准待实施 |
 | 安全验证 | 未实施 | SAST、DAST、依赖/镜像扫描门禁和人工安全测试待实施 |
 | 恢复与密钥演练 | 未实施 | 备份恢复、迁移回滚、密钥轮换、Redis 丢失和 Worker 重启演练待实施 |
 | 合规与数据治理 | 未实施 | 隐私政策、条款、授权记录、投诉删除和数据保留配置待实施 |
@@ -371,3 +371,13 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 可诊断视觉门禁 | `tests/e2e/support/visual_assertions.ts` | 溢出元素前 10 项、Axe 目标/HTML/失败原因输出 | CI 失败定位能力完成；像素差异批准流程尚未自动化 |
 | WP3 外部验收策略 | `visual-baseline-strategy.md`、`screen-reader-checklist.md`、`browser-matrix.md` | 明确 L1～L4 基线、NVDA/VoiceOver 清单和浏览器/设备矩阵 | 策略完成，实际 Edge/Firefox/Safari/读屏器/真实设备证据未产生 |
 | WP3 第 10 轮回归 | `pnpm e2e`、`scripts/check.ps1 -SkipInstall -IncludeE2E` | 完整 30/30 Chromium 旅程、API/迁移/前端/Desktop/容器统一门禁 | 本地统一门禁与远端 CI `31310591798` 五个作业通过；目标环境和生产验收待关闭 |
+
+## 2026-08-09 WP3 第 11 次迭代补充：Firefox 与 WebKit 跨引擎门禁
+
+| 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| 三引擎隔离执行 | `playwright.config.ts`、根 `package.json` | Chromium/Firefox/WebKit 分别启动隔离服务与数据库，每个引擎 30 项 | 本地三引擎共 90/90；真实 Edge/Safari 和设备未验证 |
+| 跨浏览器统一门禁 | `scripts/check.ps1 -IncludeCrossBrowserE2E` | API、迁移、前端、Desktop 与三引擎 E2E 在同一命令通过 | 本地完成；执行耗时增加但不使用无界重试 |
+| GitHub Actions 浏览器矩阵 | `.github/workflows/ci.yml` | Chromium、Firefox、WebKit 独立安装、执行和失败制品命名 | 已通过，运行 `31319884808`（三个浏览器矩阵作业） |
+| WebKit 键盘边界 | `tests/e2e/support/accessibility.ts` | Chromium/Firefox 首次 Tab；WebKit 直接聚焦并用 Enter 验证跳转 | WebKit 功能预检完成；真实 Safari 系统完整键盘访问与 VoiceOver 未验证 |
+| 响应式跨引擎兼容 | 移动视口测试去除 Firefox 不支持的 `isMobile` 模拟 | 三引擎移动布局、无溢出和关键区域断言 | CSS 响应式预检完成；真实触摸/iOS/Android 未验证 |

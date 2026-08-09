@@ -76,6 +76,31 @@ pnpm dev:admin
 
 默认地址分别为 `http://localhost:5173` 和 `http://localhost:5174`。Web 本地指纹计算建议上限由 `VITE_MAX_ARCHIVE_SIZE_BYTES` 控制，默认 20 GiB；仍采用分块读取，不一次性载入内存。两者使用独立 HttpOnly 刷新 Cookie；如果更换端口或域名，必须同步更新 `CORS_ORIGINS`。生产环境必须设置 `BROWSER_COOKIE_SECURE=true` 并使用 HTTPS。
 
+### Playwright 浏览器门禁
+
+首次使用时安装项目锁定版本的浏览器：
+
+```powershell
+pnpm e2e:install
+```
+
+各命令会独立重建合成 SQLite 和测试账号，不要在同一 Playwright 进程中直接运行全部六个项目：
+
+```powershell
+pnpm e2e                 # Chromium 30 项
+pnpm e2e:firefox        # Firefox 30 项
+pnpm e2e:webkit         # WebKit 30 项
+pnpm e2e:cross-browser  # 依次执行三个隔离浏览器，共 90 项
+```
+
+完整统一门禁可使用：
+
+```powershell
+./scripts/check.ps1 -SkipInstall -IncludeCrossBrowserE2E
+```
+
+无头 WebKit 不能注入 Safari 的系统“完整键盘访问”偏好，因此自动化仅验证跳过链接可聚焦和可由 Enter 激活；macOS Safari 的首次 Tab 可达性、VoiceOver 和真实设备行为必须按浏览器矩阵人工执行。
+
 ## Windows Desktop
 
 ```powershell
