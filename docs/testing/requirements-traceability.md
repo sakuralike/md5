@@ -108,3 +108,13 @@
 | 结果通知 Outbox | `trust_case_notifications`、`modules/trust_cases/notifications.py`、Celery 投递任务 | `test_wp2_case_notifications.py`、Admin `trustCases.test.ts` | 本地内存网关和失败重放完成；正式 SMTP/Webhook 送达未验收 |
 | 案件 SLA 自动升级 | `sla_due_at`、`escalated_at`、`modules/trust_cases/sla.py`、Beat 60 秒任务 | `test_wp2_account_appeals.py` | 本地单案一次升级完成；值班排班/外部通知链未验收 |
 | Web 本人账号申诉 | `apps/web/src/pages/TrustCasesPage.vue`、`createAccountAppeal` | `apps/web/src/pages/TrustCasesPage.test.ts`、Web typecheck/lint | SSR 基础渲染和类型门禁完成；浏览器交互 E2E 未验收 |
+
+## WP3 第 1 次开发迭代追踪增量（2026-08-09）
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 可重复浏览器测试基础设施 | `playwright.config.ts`、`scripts/e2e/start-api.mjs`、`tests/e2e/support/seed_api.py` | `pnpm e2e`、隔离 SQLite 重建、Web/Admin 独立端口 | 本地完成；目标 Compose/预生产环境未验收 |
+| Web 认证核心旅程 | `tests/e2e/web-auth.spec.ts`、`web-guest.spec.ts` | 游客门禁、注册、自动登录、退出、重新登录 | Chromium 本地闭环完成；邮箱验证/刷新过期旅程待后续 |
+| Admin 认证与 TOTP | `tests/e2e/admin-auth.spec.ts`、`admin-guest.spec.ts`、`TotpSetupPage.vue` | 游客门禁、首次 TOTP 绑定、动态码确认、MFA 二次登录 | Chromium 本地闭环完成；跨账号双人审批旅程待后续 |
+| E2E 敏感制品控制 | 认证测试关闭截图/Trace、TOTP 读取后遮蔽、`.local/playwright` Git 忽略 | ESLint、E2E typecheck、Playwright 失败策略 | 本地策略完成；CI 失败制品仍需首轮远端运行复核 |
+| CI 浏览器门禁 | `.github/workflows/ci.yml::e2e` | 安装 API/Chromium、`pnpm e2e`、失败证据上传 | 配置已实现；远端执行结果以本轮推送后 CI 为准 |

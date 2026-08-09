@@ -46,7 +46,7 @@ async function confirm(): Promise<void> {
     <div v-if="secret" class="stack">
       <div class="field">
         <Label for="totp-secret">手工密钥</Label>
-        <Input id="totp-secret" :value="secret" readonly />
+        <Input id="totp-secret" :model-value="secret" readonly />
       </div>
       <details>
         <summary>配置 URI</summary>

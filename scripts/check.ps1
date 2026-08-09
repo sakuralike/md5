@@ -1,4 +1,4 @@
-param([switch]$SkipInstall)
+param([switch]$SkipInstall, [switch]$IncludeE2E)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -64,6 +64,9 @@ try {
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test
     Invoke-Checked $Pnpm build
+    if ($IncludeE2E) {
+        Invoke-Checked $Pnpm e2e
+    }
     Invoke-Checked dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
     Invoke-Checked dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
 } finally {

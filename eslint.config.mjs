@@ -40,7 +40,7 @@ export default [
     },
   },
   {
-    files: ["**/*.test.ts", "**/*.spec.ts", "**/vite.config.ts"],
+    files: ["**/*.test.ts", "**/*.spec.ts", "**/vite.config.ts", "playwright.config.ts", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         ...globals.node,

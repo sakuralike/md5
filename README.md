@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：M4 核心闭环、N1 用户安全/隐私和 N2 管理员治理保持完成；WP1 前端规范欠账已收口，WP2 第 1 轮已建立账号申诉与统一案件主体基线，第 2 轮已完成独立案件指派/重开和版本乐观并发。原子处置、结果通知、SLA、关联账号/候选副作用和 Web 账号申诉交互仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：WP2 账号申诉、案件编排、原子处置、结果通知和 SLA 本地闭环已经完成；WP3 第 1 轮已建立 Playwright 隔离运行环境，并覆盖 Web 注册/登录/退出以及 Admin 首次 TOTP 绑定/二次登录。查询、贡献、案件处置、视觉、移动端和目标环境 E2E 仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -63,6 +63,10 @@ docker compose up --build
 
 ```powershell
 ./scripts/check.ps1
+
+# 首次运行浏览器 E2E 前安装 Chromium
+pnpm e2e:install
+./scripts/check.ps1 -IncludeE2E
 ```
 
 ## 开发基线
@@ -70,6 +74,7 @@ docker compose up --build
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
+- [WP3 第 1 次迭代记录](./docs/development/2026-08-09-wp3-iteration-1.md)
 - [WP2 第 1 次迭代记录](./docs/development/2026-08-08-wp2-iteration-1.md)
 - [WP2 第 2 次迭代记录](./docs/development/2026-08-08-wp2-iteration-2.md)
 - [项目整体完成度审计（2026-08-03 复核）](./docs/development/2026-08-03-completion-audit.md)
