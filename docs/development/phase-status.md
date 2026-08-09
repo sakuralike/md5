@@ -2,24 +2,24 @@
 
 - 更新日期：2026-08-09
 - 当前里程碑：WP4 M5 安全、恢复、性能与可观测性准入
-- 最近迭代：[WP4 第 1 次开发迭代：安全审计与 SBOM 门禁](./2026-08-09-wp4-iteration-1.md)
-- 前次迭代：[WP3 第 11 次开发迭代：Firefox 与 WebKit 跨引擎门禁](./2026-08-09-wp3-iteration-11.md)
-- 前序迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
-- 更早迭代：[WP3 第 9 次开发迭代：已登录核心页面无障碍与响应式收口](./2026-08-09-wp3-iteration-9.md)
+- 最近迭代：[WP4 第 2 次开发迭代：镜像、Secret 与限期风险豁免门禁](./2026-08-09-wp4-iteration-2.md)
+- 前次迭代：[WP4 第 1 次开发迭代：安全审计与 SBOM 门禁](./2026-08-09-wp4-iteration-1.md)
+- 前序迭代：[WP3 第 11 次开发迭代：Firefox 与 WebKit 跨引擎门禁](./2026-08-09-wp3-iteration-11.md)
+- 更早迭代：[WP3 第 10 次开发迭代：剩余业务页面无障碍矩阵收口](./2026-08-09-wp3-iteration-10.md)
 - 总体审计：[项目整体完成度审计（2026-08-03 复核）](./2026-08-03-completion-audit.md)（历史审计：[2026-08-02](./2026-08-02-completion-audit.md)）
 - 下一阶段：[密码侦探社下一步开发方案（2026-08-08）](../../项目文档/密码侦探社下一步开发方案-2026-08-08.md)
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP4 第 1 次迭代建立 Python/Node 生产依赖审计、API Bandit SAST、API/仓库 CycloneDX SBOM、证据结构校验和提交级 SHA-256 清单；修复 `nanoid` 与 `cryptography` 首次审计风险。功能提交 `dffdffc` 的远端 GitHub Actions `31322842317` 八个作业全部通过，安全证据制品已下载并二次校验；镜像/秘密扫描、DAST、人工安全测试、恢复、性能、可观测性和目标环境仍未关闭。
+> 2026-08-09 WP4 第 2 次迭代在第 1 轮依赖/SAST/SBOM 基础上增加三个最终容器镜像和仓库 Secret 扫描、限期风险接受登记、双人批准与提交级证据。首次运行 `31331415752` 阻断旧基础镜像风险后，没有新增豁免，而是更新 Python/Node/Nginx 基础镜像；提交 `07abd25` 的远端 GitHub Actions `31331945963` 八个作业全部通过，三个镜像高危/严重漏洞、仓库 Secret 和风险接受均为 0。DAST、专项人工安全测试、恢复、性能、可观测性和目标环境仍未关闭。
 
 ## 总体完成度快照
 
 | 维度 | 工程估算 | 说明 |
 |---|---:|---|
 | 全规格功能实现度 | 约 95% | M1～M3 主流程、M4 核心垂直切片和 N1 用户安全/隐私切片已形成；N2 已完成仪表盘、审计中心、用户处置、系统配置版本治理和普通角色双人审批，浏览器核心业务/视觉 E2E、真实通知环境和 M5 发布工程仍有明显缺口 |
-| MVP 验收完成度 | 约 92% | 三浏览器 90 项本地旅程与远端矩阵通过，Python/Node 生产依赖审计、API SAST 和首版 CycloneDX SBOM 已形成自动门禁；Edge、真实 Safari、NVDA/VoiceOver、真实移动设备、镜像/秘密扫描、DAST、恢复演练、规模压测、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
-| 生产上线准备度 | 约 50% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础、生产依赖审计、API SAST 和首版 SBOM 已建立；镜像/秘密扫描、DAST、发件域名、指标出口、监控平台、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
+| MVP 验收完成度 | 约 93% | 三浏览器 90 项本地旅程与远端矩阵通过，依赖审计、API SAST、CycloneDX SBOM、三个最终镜像高危/严重扫描、仓库 Secret 扫描和限期风险接受已形成自动门禁；Edge、真实 Safari、NVDA/VoiceOver、真实移动设备、DAST、恢复演练、规模压测、真实 SMTP 服务商/发件域名和生产密钥验收未完成 |
+| 生产上线准备度 | 约 55% | 容器、MySQL/SQLite 迁移、CI、告警/通知基础、依赖审计、API SAST、SBOM、最终镜像与仓库 Secret 阻断已建立；DAST、发件域名、指标出口、监控平台、恢复演练、密钥轮换、合规和灰度发布尚未闭环 |
 
 | 里程碑 | 工程估算 | 当前判断 |
 |---|---:|---|
@@ -28,7 +28,7 @@
 | M2 核心 Web 查询与贡献 | 约 80% | 业务闭环首版和用户 Web 视觉体系完成，用户中心、Web Worker、浏览器 E2E、规模性能和生产 KMS 未验收 |
 | M3 Windows 桌面验证 | 约 85% | 自动化核心和发布工作台完成，实机、大文件、正式签名与生产分发待验收 |
 | M4 社区信任与管理闭环 | 约 95% | 五个 M4 垂直切片和 N2 仪表盘、审计中心、用户处置、系统配置版本治理及普通角色双人审批完成；浏览器 E2E、真实 SMTP 服务商最终送达和目标环境验收待实现 |
-| M5 稳定、合规与发布 | 约 25% | 三浏览器系统旅程、生产依赖审计、API SAST、CycloneDX SBOM 和安全证据制品已建立；镜像/秘密扫描、DAST、恢复、性能、监控、RC 和灰度未实施 |
+| M5 稳定、合规与发布 | 约 35% | 三浏览器系统旅程、依赖审计、API SAST、CycloneDX SBOM、最终镜像与仓库 Secret 阻断、限期风险接受和提交级证据已建立；DAST、恢复、性能、监控、RC 和灰度未实施 |
 
 ## M0：需求、安全与体验基线
 
@@ -336,7 +336,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 范围 | 状态 | 说明 |
 |---|---|---|
 | 系统测试与性能 | 部分实施 | Web/Admin 30 项已在本地 Playwright Chromium、Firefox、WebKit 共 90/90 通过，远端三浏览器矩阵已配置；Windows 10/11 Edge、真实 Safari、真实读屏器、移动实机、混合压测和跨平台像素批准待实施 |
-| 安全验证 | 部分实施 | Python/Node 生产依赖审计、API Bandit SAST、API/仓库 CycloneDX SBOM、结构校验和提交级 SHA-256 清单已进入 CI；镜像/秘密扫描、DAST、专项越权/XSS/资源消耗和人工安全测试待实施 |
+| 安全验证 | 部分实施 | Python/Node 依赖审计、API Bandit SAST、API/仓库 CycloneDX SBOM、三个最终镜像 HIGH/CRITICAL 扫描、仓库 Secret 扫描、限期双人风险接受和提交级 SHA-256 证据已进入 CI；DAST、专项越权/XSS/资源消耗和人工安全测试待实施 |
 | 恢复与密钥演练 | 未实施 | 备份恢复、迁移回滚、密钥轮换、Redis 丢失和 Worker 重启演练待实施 |
 | 合规与数据治理 | 未实施 | 隐私政策、条款、授权记录、投诉删除和数据保留配置待实施 |
 | 发布与运维 | 基础设施骨架 | Docker/CI 基线已有；预生产、监控告警、运行手册、RC、灰度、回滚和联合签字待实施 |
@@ -391,3 +391,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | CycloneDX SBOM | API `pip-audit` SBOM、Anchore 仓库 SBOM | `verify_security_artifacts.py` 校验格式、版本和组件；`SHA256SUMS` 记录摘要 | 远端运行 `31322842317` 制品已下载并二次校验；尚未签名或形成来源证明 |
 | 依赖风险修复 | `cryptography>=50,<51`、pytest `>=9.0.3`、pnpm `nanoid` override | API 全量测试、前端 lint/typecheck/test/build、安全审计 | 本地统一门禁和远端八个作业通过 |
 | 安全证据制品 | `.github/workflows/ci.yml` | `security-evidence-<commit-sha>`，失败也上传已有报告，保留 30 天 | 首版完成；长期制品库、豁免治理和发布绑定待实现 |
+
+
+## 2026-08-09 WP4 第 2 次迭代补充：镜像、Secret 与限期风险豁免门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 三个最终镜像高危/严重扫描 | `.github/workflows/ci.yml`、`infra/docker/*.Dockerfile` | Trivy `v0.73.0` JSON；API/Web/Admin 独立作用域 | 运行 `31331945963` 三个镜像均为 0；本机 Docker 引擎未运行，真实证据来自远端 Linux CI |
+| 仓库 Secret 扫描 | Trivy filesystem secret scanner | `trivy-repository-secrets.json`、本地与远端扫描 | 结果 0；正式秘密托管与轮换仍待实施 |
+| 默认阻断与限期接受 | `verify_release_security.py`、`security/risk-acceptances.json` | 5 项新增校验器测试；作用域/Finding/严重级别精确匹配；到期当天阻断 | 当前登记 0；正式组织审批系统未接入 |
+| 双人批准 | 风险登记 `owner` 与 `approved_by` | 同人批准、重复登记、过期登记自动失败 | 静态治理完成，外部审批签字待实施 |
+| 基础镜像风险整改 | Python 3.12.13 Alpine 3.23、Node 22.23.1 Alpine 3.23、Nginx 1.30.4 Alpine 3.24 | 首次运行 `31331415752` 阻断，更新后 `31331945963` 通过 | 未使用豁免掩盖首批风险 |
+| 提交级证据 | `release-security-evidence-<commit-sha>`、`release-security-summary.json`、`RELEASE_SHA256SUMS` | 远端制品下载并由本地校验器二次复核 | finding/accepted/blocking/acceptance 均为 0；签名和长期证据库待实施 |
+| 本地访问 | API、Web、Admin 开发进程 | 三个入口及两个前端 `/api` 代理健康检查 HTTP 200 | 本机可访问；不等同于 Compose 或预生产验收 |

@@ -227,6 +227,18 @@ Copy-Item .env.example .env
 
 脚本会删除本项目 Compose 卷、重新构建并等待服务就绪，然后用合成账号完成注册和登录，并检查 Web/Admin HTTP 响应。若项目路径包含中文等非 ASCII 字符，脚本会自动分配临时 ASCII 盘符以兼容 Docker BuildKit，并在结束时释放。默认结束后清理环境；调试时可使用 `-KeepEnvironment`。此脚本会清除当前 Compose 项目的数据库和 Redis 数据，不应用于含有需要保留数据的环境。
 
+## 发布镜像与 Secret 门禁
+
+只验证限期风险接受登记的结构、双人批准和有效期：
+
+```powershell
+pnpm security:release-policy
+```
+
+完整 CI 会构建并加载 API、Web、Admin 三个最终镜像，执行 HIGH/CRITICAL 漏洞扫描和仓库 Secret 扫描，再由仓库校验器统一应用 `security/risk-acceptances.json`。本地拥有可运行的 Docker 引擎和 Trivy 时，可以按 [发布镜像、Secret 与风险接受门禁](../security/release-security-gates.md) 复现；引擎不可用时，不得用策略单测替代镜像实扫证据。
+
+2026-08-09 首批远端通过证据为 GitHub Actions `31331945963`：三个镜像高危/严重漏洞 0、仓库 Secret 0、风险接受 0。
+
 ## 安全要求
 
 1. `.env` 不进入版本库。

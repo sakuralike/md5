@@ -80,6 +80,8 @@ pnpm security:audit
 - [开发实施计划](./项目文档/密码侦探社开发实施计划-v1.0.md)
 - [阶段状态](./docs/development/phase-status.md)
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
+- [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
+- [WP4 第 2 次迭代记录](./docs/development/2026-08-09-wp4-iteration-2.md)
 - [WP4 第 1 次迭代记录](./docs/development/2026-08-09-wp4-iteration-1.md)
 - [WP3 第 11 次迭代记录](./docs/development/2026-08-09-wp3-iteration-11.md)
 - [WP3 第 1 次迭代记录](./docs/development/2026-08-09-wp3-iteration-1.md)

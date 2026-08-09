@@ -223,3 +223,15 @@
 | API 静态安全扫描 | `security-gate.ps1`、`apps/api/src` | Bandit 中高置信度的中高危结果阻断；JSON 报告 | 首批通过；前端 SAST、秘密扫描、DAST 和人工渗透待实施 |
 | SBOM 与提交追溯 | `verify_security_artifacts.py`、Anchore SBOM Action | API/仓库 CycloneDX JSON、SHA-256 清单、`security-evidence-<commit-sha>` | 远端五份 JSON 已下载并复验；签名和生产来源证明待实施 |
 | 安全门禁可重复执行 | `pnpm security:audit`、`check.ps1 -IncludeSecurity` | 4 项校验器单测、统一门禁、CI 独立作业 | 本地与远端通过；镜像扫描与限期豁免结构为下一轮 |
+
+
+## 2026-08-09 WP4 第 2 次迭代补充：镜像、Secret 与限期风险豁免门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 最终镜像 HIGH/CRITICAL 默认阻断 | `container-images` CI 作业、三个 Trivy JSON | 首次运行 `31331415752` 阻断旧基础层；更新基础镜像后 `31331945963` 通过 | API/Web/Admin 均为 0；本机 Docker 引擎未运行，远端 CI 为实扫证据 |
+| 已提交仓库 Secret 阻断 | Trivy filesystem secret scanner | 本地和远端 `trivy-repository-secrets.json` | Secret 0；本地 `.env` 和秘密托管平台不在仓库扫描范围 |
+| 风险接受必须限期 | `security/risk-acceptances.json`、`verify_release_security.py` | 过期、重复、作用域不匹配、严重级别不匹配均阻断 | 当前接受记录 0 |
+| 风险接受双人批准 | `owner`、`approved_by` 字段 | 同一主体负责与批准的合成测试失败 | 静态规则完成，正式审批流和电子签字未接入 |
+| 镜像基础层维护 | `api.Dockerfile`、`frontend.Dockerfile` | 明确 Python/Node/Nginx 与 Alpine 版本并执行系统包安全更新 | 首批高危/严重项清零；后续由每次 CI 持续复扫 |
+| 安全证据可复核 | `release-security-summary.json`、`RELEASE_SHA256SUMS` | 提交级制品下载后二次执行校验器 | `finding_count=0`、`accepted_count=0`、`blocking_count=0` |
