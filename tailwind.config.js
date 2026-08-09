@@ -1,12 +1,14 @@
+const path = require("node:path");
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
   content: [
-    "./apps/web/index.html",
-    "./apps/web/src/**/*.{vue,js,ts,jsx,tsx}",
-    "./apps/admin/index.html",
-    "./apps/admin/src/**/*.{vue,js,ts,jsx,tsx}",
-    "./packages/web-ui/src/**/*.{vue,js,ts,jsx,tsx}",
+    path.join(__dirname, "apps/web/index.html"),
+    path.join(__dirname, "apps/web/src/**/*.{vue,js,ts,jsx,tsx}"),
+    path.join(__dirname, "apps/admin/index.html"),
+    path.join(__dirname, "apps/admin/src/**/*.{vue,js,ts,jsx,tsx}"),
+    path.join(__dirname, "packages/web-ui/src/**/*.{vue,js,ts,jsx,tsx}"),
   ],
   theme: {
     container: {

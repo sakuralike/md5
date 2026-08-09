@@ -44,8 +44,8 @@ function statusLabel(status: string): string {
       <h1 class="page-title">我的贡献</h1>
       <p class="lead">查看授权贡献证据及当前候选状态。此页面不会返回或缓存候选密码。</p>
     </div>
-    <p v-if="loading" class="muted">正在加载贡献记录…</p>
-    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="loading" class="muted" role="status" aria-live="polite">正在加载贡献记录…</p>
+    <p v-if="error" class="error" role="alert" aria-live="assertive">{{ error }}</p>
     <div v-else-if="data && data.items.length === 0" class="empty-state">
       <strong>还没有贡献记录</strong>
       <RouterLink class="button" to="/">前往本地查询</RouterLink>

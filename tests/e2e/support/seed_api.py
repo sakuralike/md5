@@ -333,6 +333,9 @@ def main() -> None:
     accessibility_privacy_username = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_USERNAME"]
     accessibility_privacy_email = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_EMAIL"]
     accessibility_privacy_password = os.environ["E2E_WEB_ACCESSIBILITY_PRIVACY_PASSWORD"]
+    accessibility_workflow_username = os.environ["E2E_WEB_ACCESSIBILITY_WORKFLOW_USERNAME"]
+    accessibility_workflow_email = os.environ["E2E_WEB_ACCESSIBILITY_WORKFLOW_EMAIL"]
+    accessibility_workflow_password = os.environ["E2E_WEB_ACCESSIBILITY_WORKFLOW_PASSWORD"]
     email_verify_user_id = os.environ["E2E_WEB_EMAIL_VERIFY_USER_ID"]
     email_verify_username = os.environ["E2E_WEB_EMAIL_VERIFY_USERNAME"]
     email_verify_email = os.environ["E2E_WEB_EMAIL_VERIFY_EMAIL"]
@@ -364,6 +367,18 @@ def main() -> None:
     ]
     admin_accessibility_refresh_token = os.environ[
         "E2E_ADMIN_ACCESSIBILITY_REFRESH_TOKEN"
+    ]
+    web_accessibility_workflow_refresh_family_id = os.environ[
+        "E2E_WEB_ACCESSIBILITY_WORKFLOW_REFRESH_FAMILY_ID"
+    ]
+    web_accessibility_workflow_refresh_token = os.environ[
+        "E2E_WEB_ACCESSIBILITY_WORKFLOW_REFRESH_TOKEN"
+    ]
+    admin_accessibility_operations_refresh_family_id = os.environ[
+        "E2E_ADMIN_ACCESSIBILITY_OPERATIONS_REFRESH_FAMILY_ID"
+    ]
+    admin_accessibility_operations_refresh_token = os.environ[
+        "E2E_ADMIN_ACCESSIBILITY_OPERATIONS_REFRESH_TOKEN"
     ]
     verified_sha256 = os.environ["E2E_VERIFIED_SHA256"]
     verified_md5 = os.environ["E2E_VERIFIED_MD5"]
@@ -472,6 +487,12 @@ def main() -> None:
             email=accessibility_privacy_email,
             password=accessibility_privacy_password,
         )
+        accessibility_workflow_user = ensure_user(
+            db,
+            username=accessibility_workflow_username,
+            email=accessibility_workflow_email,
+            password=accessibility_workflow_password,
+        )
         email_verify_user = ensure_user(
             db,
             user_id=email_verify_user_id,
@@ -532,10 +553,25 @@ def main() -> None:
         )
         ensure_refresh_session(
             db,
+            user_id=accessibility_workflow_user.id,
+            family_id=web_accessibility_workflow_refresh_family_id,
+            raw_token=web_accessibility_workflow_refresh_token,
+            user_agent="Synthetic workflow accessibility browser",
+        )
+        ensure_refresh_session(
+            db,
             user_id=workflow_admin.id,
             family_id=admin_accessibility_refresh_family_id,
             raw_token=admin_accessibility_refresh_token,
             user_agent="Synthetic admin accessibility browser",
+            mfa_verified=True,
+        )
+        ensure_refresh_session(
+            db,
+            user_id=workflow_admin.id,
+            family_id=admin_accessibility_operations_refresh_family_id,
+            raw_token=admin_accessibility_operations_refresh_token,
+            user_agent="Synthetic admin operations accessibility browser",
             mfa_verified=True,
         )
         db.flush()

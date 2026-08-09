@@ -220,7 +220,7 @@ onMounted(() => loadCandidates(true));
       <Label class="grid gap-2">
         状态
         <Select v-model="statusFilter">
-          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectTrigger aria-label="候选状态筛选"><SelectValue placeholder="全部状态" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部状态</SelectItem>
             <SelectItem value="pending">待验证</SelectItem>
@@ -255,8 +255,8 @@ onMounted(() => loadCandidates(true));
       {{ message }}
     </p>
 
-    <section class="grid items-start gap-5 lg:grid-cols-[minmax(18.75rem,0.72fr)_minmax(0,1.28fr)]">
-      <aside class="grid max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+    <section class="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+      <aside class="grid min-w-0 max-w-full max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
         <div class="flex items-start justify-between gap-3">
           <h2 class="font-semibold">审核队列</h2>
           <span class="text-xs text-muted-foreground">当前页 {{ candidates.length }} 条</span>
@@ -269,11 +269,11 @@ onMounted(() => loadCandidates(true));
           :key="candidate.id"
           type="button"
           variant="outline"
-          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
+          class="h-auto min-w-0 w-full overflow-hidden justify-start whitespace-normal p-4 text-left"
           :class="selected?.id === candidate.id ? 'border-primary/60 bg-primary/10' : ''"
           @click="openCandidate(candidate.id)"
         >
-          <span class="grid w-full gap-2">
+          <span class="grid min-w-0 w-full gap-2">
             <span class="flex items-start justify-between gap-3">
               <strong class="break-all">{{ shortId(candidate.id) }}</strong>
               <Badge :variant="statusVariant(candidate.status)">
@@ -292,7 +292,7 @@ onMounted(() => loadCandidates(true));
         </Button>
       </aside>
 
-      <div class="space-y-5">
+      <div class="min-w-0 space-y-5">
         <section v-if="detailLoading" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
           正在加载审核详情…
         </section>

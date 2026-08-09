@@ -320,7 +320,7 @@ onMounted(async () => {
       <Label class="grid gap-2">
         状态
         <Select v-model="statusFilter">
-          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectTrigger aria-label="风险告警状态筛选"><SelectValue placeholder="全部状态" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部</SelectItem>
             <SelectItem value="open">待响应</SelectItem>
@@ -332,7 +332,7 @@ onMounted(async () => {
       <Label class="grid gap-2">
         负责人
         <Select v-model="assigneeFilter">
-          <SelectTrigger><SelectValue placeholder="全部负责人" /></SelectTrigger>
+          <SelectTrigger aria-label="风险告警负责人筛选"><SelectValue placeholder="全部负责人" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部</SelectItem>
             <SelectItem v-for="operator in operators" :key="operator.id" :value="operator.id">
@@ -501,7 +501,7 @@ onMounted(async () => {
           <Label class="grid gap-2">
             具备 MFA 的值班人员
             <Select v-model="assigneeId">
-              <SelectTrigger><SelectValue placeholder="请选择负责人" /></SelectTrigger>
+              <SelectTrigger aria-label="风险告警负责人"><SelectValue placeholder="请选择负责人" /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="operator in operators" :key="operator.id" :value="operator.id">
                   {{ operator.username }} · {{ operator.role }}

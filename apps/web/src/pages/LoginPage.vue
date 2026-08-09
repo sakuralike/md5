@@ -25,7 +25,7 @@ async function submit(): Promise<void> {
 <template>
   <Card class="mx-auto w-full max-w-md border-white/60 bg-white/70 shadow-xl shadow-slate-200/40 backdrop-blur-xl">
     <CardHeader>
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-600">安全会话</p>
+      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">安全会话</p>
       <CardTitle class="text-2xl">登录密码侦探社</CardTitle>
       <CardDescription>使用用户名或邮箱进入你的安全工作台。</CardDescription>
     </CardHeader>

@@ -327,7 +327,7 @@ onMounted(() => loadCases(true));
       <Label class="grid gap-2">
         类型
         <Select v-model="kindFilter">
-          <SelectTrigger><SelectValue placeholder="全部类型" /></SelectTrigger>
+          <SelectTrigger aria-label="案件类型筛选"><SelectValue placeholder="全部类型" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部</SelectItem>
             <SelectItem value="report">举报</SelectItem>
@@ -338,7 +338,7 @@ onMounted(() => loadCases(true));
       <Label class="grid gap-2">
         状态
         <Select v-model="statusFilter">
-          <SelectTrigger><SelectValue placeholder="全部状态" /></SelectTrigger>
+          <SelectTrigger aria-label="案件状态筛选"><SelectValue placeholder="全部状态" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部</SelectItem>
             <SelectItem value="open">待处理</SelectItem>

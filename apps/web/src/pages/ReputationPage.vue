@@ -76,8 +76,8 @@ function scoreText(profile: TrustProfileResponse): string {
       <Button type="button" variant="outline" :disabled="loading" @click="load">刷新</Button>
     </div>
 
-    <p v-if="loading" class="muted">正在加载积分与信誉记录…</p>
-    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="loading" class="muted" role="status" aria-live="polite">正在加载积分与信誉记录…</p>
+    <p v-if="error" class="error" role="alert" aria-live="assertive">{{ error }}</p>
 
     <template v-if="data">
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

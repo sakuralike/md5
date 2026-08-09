@@ -357,7 +357,7 @@ onMounted(() => void loadVersions());
             <div class="space-y-2">
               <Label>变更原因码</Label>
               <Select v-model="reasonCode">
-                <SelectTrigger><SelectValue placeholder="选择原因" /></SelectTrigger>
+                <SelectTrigger aria-label="配置变更原因码"><SelectValue placeholder="选择原因" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="security_hardening">安全加固</SelectItem>
                   <SelectItem value="capacity_adjustment">容量调整</SelectItem>
@@ -394,7 +394,7 @@ onMounted(() => void loadVersions());
             >
               <p class="text-sm font-medium text-slate-800">{{ settingLabels[difference.key] }}</p>
               <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
-                <code class="rounded bg-slate-100 px-2 py-1 text-slate-500">{{ difference.previous ?? "未设置" }}</code>
+                <code class="rounded bg-muted px-2 py-1 text-muted-foreground">{{ difference.previous ?? "未设置" }}</code>
                 <span class="text-slate-400">→</span>
                 <code class="rounded bg-sky-50 px-2 py-1 text-sky-700">{{ difference.current }}</code>
               </div>
