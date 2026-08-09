@@ -17,18 +17,23 @@ test("Admin 审核待验证候选并写入状态时间线", async ({ page }) => 
   await page.getByRole("button", { name: "查询", exact: true }).click();
 
   await expect(page.getByText(`sha256:${fingerprint}`, { exact: true }).first()).toBeVisible();
-  await page
-    .getByLabel("审核说明（进入状态时间线，不写入审计详情）")
-    .fill("合成测试：独立证据满足人工审核要求。");
-  await page.getByRole("button", { name: "审核通过" }).click();
+  const approveButton = page.getByRole("button", { name: "审核通过" });
+  const verifiedTransition = page.getByText("待验证 → 已验证", { exact: true });
 
-  await expect(page.getByRole("status")).toContainText("已完成“审核通过”");
-  await expect(page.getByText("待验证 → 已验证", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("manual.verified_by_review · 合成测试：独立证据满足人工审核要求。", {
-      exact: true,
-    }),
-  ).toBeVisible();
+  // CI 重试会复用已启动的 API 与数据库；若首次尝试已完成变更，重试应验证终态而不是重复处置。
+  await expect(approveButton.or(verifiedTransition)).toBeVisible();
+  if (await approveButton.isVisible()) {
+    await page
+      .getByLabel("审核说明（进入状态时间线，不写入审计详情）")
+      .fill("合成测试：独立证据满足人工审核要求。");
+    await approveButton.click();
+    await expect(page.getByRole("status")).toContainText("已完成“审核通过”");
+  }
+
+  await expect(verifiedTransition).toBeVisible();
+  const verifiedEvent = verifiedTransition.locator("xpath=ancestor::li[1]");
+  await expect(verifiedEvent).toContainText("manual.verified_by_review");
+  await expect(verifiedEvent).toContainText("合成测试：独立证据满足人工审核要求。");
   expectNoBrowserErrors(browserErrors);
 });
 
