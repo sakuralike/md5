@@ -126,4 +126,4 @@
 | Web 已验证查询、揭示、配额与页面清除 | `apps/web/src/pages/HomePage.vue`、`tests/e2e/support/seed_api.py` | `tests/e2e/web-core-journeys.spec.ts`：已验证查询、揭示最高可信候选、剩余配额和页面清除 | Chromium 本地闭环完成；复制、过期会话和目标环境未验收 |
 | Web 授权贡献与待验证结果刷新 | `apps/web/src/pages/HomePage.vue`、`createContribution` | `tests/e2e/web-core-journeys.spec.ts`：未匹配指纹、授权声明、贡献提交、待验证候选刷新 | Chromium 本地闭环完成；重复贡献、本人贡献历史和目标环境未验收 |
 | Web 候选举报与本人案件时间线 | `apps/web/src/pages/HomePage.vue`、`apps/web/src/pages/TrustCasesPage.vue`、`createTrustCaseReport` | `tests/e2e/web-core-journeys.spec.ts`：候选跳转、举报提交、待处理案件时间线 | Chromium 本地闭环完成；候选申诉、账号申诉、Admin 处置和通知送达未验收 |
-| Web 核心旅程敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`tests/e2e/web-core-journeys.spec.ts` | E2E typecheck、ESLint、浏览器错误断言；种子候选密码加密写入 | 本地策略完成；推送后的 CI 失败制品和目标环境仍需复核 |
+| Web 核心旅程敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`tests/e2e/web-core-journeys.spec.ts` | E2E typecheck、ESLint、浏览器错误断言；种子候选密码加密写入 | 本地策略完成；远端 CI `31292352350` 通过，目标环境仍需复核 |

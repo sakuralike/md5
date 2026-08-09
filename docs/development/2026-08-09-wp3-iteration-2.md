@@ -23,7 +23,7 @@
 - `node ./scripts/check-frontend-policy.mjs`：通过。
 - `pnpm exec tsc -p tsconfig.e2e.json --noEmit`：通过。
 - `.\scripts\check.ps1 -SkipInstall -IncludeE2E`：通过；覆盖 Ruff、API 测试与覆盖率、SQLite 全量迁移往返、前端规范/类型/单测/构建、7 项 Playwright Chromium 旅程和桌面端 Release 构建/测试。
-- 本轮推送后的远端 CI 结果仍需复核。
+- 远端 GitHub Actions `31292352350`：API、Frontend、Desktop、E2E 和 Container Images 5 个作业全部通过。
 
 ## 未关闭
 
