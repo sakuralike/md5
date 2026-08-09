@@ -3,6 +3,7 @@ ENV COREPACK_HOME=/corepack
 WORKDIR /workspace
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY postcss.config.js tailwind.config.js ./
 COPY packages ./packages
 COPY apps/web ./apps/web
 COPY apps/admin ./apps/admin
