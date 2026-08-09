@@ -224,9 +224,9 @@ async function applyAssignment(): Promise<void> {
       createRiskAlertAssignmentKey(),
     );
     assignmentNote.value = "";
-    message.value = "告警负责人已更新，指派事件与通知已进入闭环。";
     await Promise.all([loadAlerts(), loadNotificationOperations()]);
     await openAlert(alertId);
+    message.value = "告警负责人已更新，指派事件与通知已进入闭环。";
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -250,9 +250,9 @@ async function replayDelivery(notificationId: string, alertId: string): Promise<
       token(),
       createRiskAlertNotificationReplayKey(),
     );
-    message.value = "失败通知已重置为待发送，后台工作进程将继续投递。";
     await Promise.all([loadAlerts(), loadNotificationOperations()]);
     if (selected.value?.id === alertId) await openAlert(alertId);
+    message.value = "失败通知已重置为待发送，后台工作进程将继续投递。";
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -278,9 +278,9 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
       createRiskAlertTransitionKey(),
     );
     resolutionNote.value = "";
-    message.value = `已完成“${action.label}”，处置事件已写入不可变时间线。`;
     await Promise.all([loadAlerts(), loadNotificationOperations()]);
     await openAlert(alertId);
+    message.value = `已完成“${action.label}”，处置事件已写入不可变时间线。`;
   } catch (value) {
     error.value = describeError(value);
   } finally {

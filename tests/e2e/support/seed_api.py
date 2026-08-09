@@ -26,6 +26,13 @@ from password_detective.db.models.password_candidate import (
     CandidateStatus,
     PasswordCandidate,
 )
+from password_detective.db.models.risk_alert import (
+    RiskAlert,
+    RiskAlertEvent,
+    RiskAlertKind,
+    RiskAlertSeverity,
+    RiskAlertStatus,
+)
 from password_detective.db.models.trust_case import (
     TrustCase,
     TrustCaseKind,
@@ -34,6 +41,12 @@ from password_detective.db.models.trust_case import (
 )
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
+from password_detective.db.models.verification import (
+    CandidateFeedback,
+    FeedbackOutcome,
+    VerificationEvidenceEvent,
+    VerificationSource,
+)
 
 
 def ensure_user(
@@ -123,6 +136,87 @@ def ensure_candidate(
     return candidate
 
 
+def ensure_risk_alert(
+    db: Session,
+    *,
+    owner_id: str,
+    candidate_id: str,
+    feedback_id: str,
+    evidence_id: str,
+    alert_id: str,
+) -> None:
+    if db.get(RiskAlert, alert_id) is not None:
+        return
+
+    now = utc_now()
+    if db.get(CandidateFeedback, feedback_id) is None:
+        db.add(
+            CandidateFeedback(
+                id=feedback_id,
+                candidate_id=candidate_id,
+                user_id=owner_id,
+                outcome=FeedbackOutcome.FAILURE,
+                source=VerificationSource.WEB_FEEDBACK,
+                weight=3.0,
+                rule_version="risk-alert-v1",
+                revision=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    if db.get(VerificationEvidenceEvent, evidence_id) is None:
+        db.add(
+            VerificationEvidenceEvent(
+                id=evidence_id,
+                feedback_id=feedback_id,
+                candidate_id=candidate_id,
+                user_id=owner_id,
+                previous_outcome=None,
+                outcome=FeedbackOutcome.FAILURE,
+                source=VerificationSource.WEB_FEEDBACK,
+                weight=3.0,
+                rule_version="risk-alert-v1",
+                revision=1,
+                created_at=now,
+            )
+        )
+    db.add(
+        RiskAlert(
+            id=alert_id,
+            candidate_id=candidate_id,
+            trigger_evidence_id=evidence_id,
+            kind=RiskAlertKind.FAILURE_SURGE,
+            severity=RiskAlertSeverity.HIGH,
+            status=RiskAlertStatus.OPEN,
+            rule_version="risk-alert-v1",
+            sla_rule_version="risk-alert-sla-v1",
+            window_started_at=now - timedelta(minutes=10),
+            window_ended_at=now,
+            acknowledge_due_at=now + timedelta(minutes=15),
+            resolve_due_at=now + timedelta(hours=2),
+            independent_failure_count=3,
+            failure_weight=3.0,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.add(
+        RiskAlertEvent(
+            alert_id=alert_id,
+            actor_id=None,
+            previous_status=None,
+            next_status=RiskAlertStatus.OPEN,
+            previous_assignee_id=None,
+            next_assignee_id=None,
+            action="risk_alert.detected",
+            reason_code="detection.failure_surge",
+            note=None,
+            request_id=None,
+            created_at=now,
+        )
+    )
+
+
 def main() -> None:
     settings = Settings()
     database = Database(settings)
@@ -173,6 +267,11 @@ def main() -> None:
     case_candidate_id = os.environ["E2E_ADMIN_CASE_CANDIDATE_ID"]
     case_sha256 = os.environ["E2E_ADMIN_CASE_SHA256"]
     case_id = os.environ["E2E_ADMIN_CASE_ID"]
+    risk_candidate_id = os.environ["E2E_ADMIN_RISK_CANDIDATE_ID"]
+    risk_sha256 = os.environ["E2E_ADMIN_RISK_SHA256"]
+    risk_feedback_id = os.environ["E2E_ADMIN_RISK_FEEDBACK_ID"]
+    risk_evidence_id = os.environ["E2E_ADMIN_RISK_EVIDENCE_ID"]
+    risk_alert_id = os.environ["E2E_ADMIN_RISK_ALERT_ID"]
     vault = CandidateSecretVault(settings.app_secret_key)
 
     with database.session_factory() as db:
@@ -303,6 +402,23 @@ def main() -> None:
             sha256=case_sha256,
             password="Synthetic-Reported-Candidate-2026!",
             status=CandidateStatus.VERIFIED,
+        )
+        risk_candidate = ensure_candidate(
+            db,
+            vault=vault,
+            owner_id=web_user.id,
+            candidate_id=risk_candidate_id,
+            sha256=risk_sha256,
+            password="Synthetic-Risk-Candidate-2026!",
+            status=CandidateStatus.QUARANTINED,
+        )
+        ensure_risk_alert(
+            db,
+            owner_id=web_user.id,
+            candidate_id=risk_candidate.id,
+            feedback_id=risk_feedback_id,
+            evidence_id=risk_evidence_id,
+            alert_id=risk_alert_id,
         )
         if db.get(TrustCase, case_id) is None:
             db.add(

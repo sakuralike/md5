@@ -178,8 +178,8 @@ async function createDraft(): Promise<void> {
       auth.accessToken,
       crypto.randomUUID(),
     );
-    success.value = `不可变草稿 ${shortId(response.version.id)} 已创建，可在差异确认后发布。`;
     await loadVersions(response.version.id);
+    success.value = `不可变草稿 ${shortId(response.version.id)} 已创建，可在差异确认后发布。`;
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -218,8 +218,8 @@ async function publishSelected(): Promise<void> {
       auth.accessToken,
       crypto.randomUUID(),
     );
-    success.value = `版本 ${shortId(response.version.id)} 已发布并写入运行时配置投影。`;
     await loadVersions(response.version.id);
+    success.value = `版本 ${shortId(response.version.id)} 已发布并写入运行时配置投影。`;
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -234,8 +234,9 @@ async function rollbackSelected(): Promise<void> {
   resetMessages();
   try {
     const reauthToken = await acquireSettingsGrant();
+    const historicalVersionId = selected.value.id;
     const response = await rollbackSettingVersion(
-      selected.value.id,
+      historicalVersionId,
       {
         expectedPublishedVersionId: publishedVersionId.value,
         reasonCode: "rollback",
@@ -244,8 +245,8 @@ async function rollbackSelected(): Promise<void> {
       auth.accessToken,
       crypto.randomUUID(),
     );
-    success.value = `已从历史版本 ${shortId(selected.value.id)} 创建新的不可变回滚版本。`;
     await loadVersions(response.version.id);
+    success.value = `已从历史版本 ${shortId(historicalVersionId)} 创建新的不可变回滚版本。`;
   } catch (value) {
     error.value = describeError(value);
   } finally {
