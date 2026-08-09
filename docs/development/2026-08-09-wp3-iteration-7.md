@@ -12,17 +12,20 @@
   3. 在 390 × 844 移动视口检查邮箱验证页不存在横向溢出，确认返回登录入口可获得焦点并由 Enter 键激活。
 - 扩展 `playwright.config.ts` 与 `tests/e2e/support/seed_api.py`：增加隔离的未验证用户、一次性邮箱凭证和两组可轮换合成刷新会话；数据库只保存凭证摘要，测试制品关闭截图和 Trace。
 - 完整套件曾触发生产登录端点每分钟 10 次的真实限流门禁；本轮没有放宽生产限流，而是改用隔离预置刷新会话建立浏览器认证状态，避免跨用例共享来源地址造成伪失败。
+- 远端文档提交暴露 Admin 候选审核用例在 CI 重试时复用已变更数据库状态的问题；用例现先等待“可执行审核”或“审核已完成”任一稳定状态，已完成时仅核对不可变时间线，并将原因码与说明改为同一事件内的分段断言。
 
 ## 本地验证
 
 - 定向 Web 身份 E2E：3 项通过。
+- Admin 审核重试稳定性：同一 Playwright 服务和数据库下 `--repeat-each=2` 连续 2 项通过。
 - `pnpm e2e`：19 项 Chromium 旅程通过。
 - E2E ESLint、TypeScript 与种子 Ruff 通过。
 - `./scripts/check.ps1 -SkipInstall -IncludeE2E`：统一门禁通过，覆盖 API、SQLite 全量迁移往返、前端 lint/typecheck/test/build、桌面端 Release 检查和 19 项 Chromium 旅程。
 
 ## 远端验证
 
-- GitHub Actions `31301934873`：API、Frontend、Desktop、E2E、Container Images 五个作业全部通过。
+- 功能提交 GitHub Actions `31301934873`：API、Frontend、Desktop、E2E、Container Images 五个作业全部通过。
+- 审核重试稳定性提交 GitHub Actions `31302927800`：同五个作业全部通过。
 
 ## 未关闭
 

@@ -171,3 +171,4 @@
 | Web 刷新令牌轮换与重放处置 | `modules/auth/service.py::rotate_refresh_token`、`core/browser_session.py`、隔离刷新会话种子 | HttpOnly Cookie 轮换、旧令牌重放返回 `auth.refresh_token_reused`、新访问令牌返回 `auth.session_revoked`、轮换后刷新令牌同族失效 | Chromium/APIRequest 浏览器上下文闭环完成；缺失 Cookie、自然过期和多标签页竞争组合待补充 |
 | 邮箱验证页移动端与键盘操作 | `VerifyEmailPage.vue`、Shadcn-Vue `Button`/`Alert`/`Card` | 390 × 844 视口无横向溢出；返回登录链接可聚焦并由 Enter 激活 | 首个移动端/键盘门禁完成；其他 Web/Admin 核心页面、焦点顺序和错误提示可访问性待扩展 |
 | 身份旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成一次性凭证仅以 SHA-256 摘要落库，合成刷新令牌仅保存摘要，关闭截图/Trace；不放宽生产每分钟 10 次登录限流；完整 19 项 Chromium 旅程 | `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31301934873` 五个作业通过，目标环境待验收 |
+| Admin 候选审核 CI 重试稳定性 | `tests/e2e/admin-moderation-journeys.spec.ts` | 同一 Playwright 服务与数据库连续执行 2 次：首次完成审核，后续直接验证终态、原因码与说明 | 本地稳定性门禁通过；远端 CI `31302927800` 五个作业通过 |
