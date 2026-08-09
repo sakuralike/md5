@@ -55,15 +55,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for column in (
-        "created_at",
-        "rule_version",
-        "reason_code",
-        "reference_id",
-        "event_type",
-        "user_id",
-    ):
-        op.drop_index(f"ix_reputation_events_{column}", table_name="reputation_events")
+    # Dropping the table removes its indexes together with the user foreign key,
+    # which is required for MySQL downgrade compatibility.
     op.drop_table("reputation_events")
     op.execute(sa.text("UPDATE users SET reputation_score = 0"))
     with op.batch_alter_table("users") as batch_op:

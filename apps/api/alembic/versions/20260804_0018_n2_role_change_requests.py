@@ -8,6 +8,7 @@ Create Date: 2026-08-04
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "20260804_0018"
@@ -36,20 +37,23 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_role_change_requests_status", "role_change_requests", ["status"])
-    op.create_index("ix_role_change_requests_requested_by", "role_change_requests", ["requested_by"])
-    op.create_index("ix_role_change_requests_target_user_id", "role_change_requests", ["target_user_id"])
+    op.create_index(
+        "ix_role_change_requests_requested_by", "role_change_requests", ["requested_by"]
+    )
+    op.create_index(
+        "ix_role_change_requests_target_user_id", "role_change_requests", ["target_user_id"]
+    )
     op.create_index(
         "ix_role_change_requests_status_created", "role_change_requests", ["status", "created_at"]
     )
     op.create_index(
-        "ix_role_change_requests_target_status", "role_change_requests", ["target_user_id", "status"]
+        "ix_role_change_requests_target_status",
+        "role_change_requests",
+        ["target_user_id", "status"],
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_role_change_requests_target_status", table_name="role_change_requests")
-    op.drop_index("ix_role_change_requests_status_created", table_name="role_change_requests")
-    op.drop_index("ix_role_change_requests_target_user_id", table_name="role_change_requests")
-    op.drop_index("ix_role_change_requests_requested_by", table_name="role_change_requests")
-    op.drop_index("ix_role_change_requests_status", table_name="role_change_requests")
+    # Drop the table atomically so MySQL retains all foreign-key support indexes
+    # until the constraints themselves are removed.
     op.drop_table("role_change_requests")
