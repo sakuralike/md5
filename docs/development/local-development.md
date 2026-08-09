@@ -201,6 +201,14 @@ pnpm security:audit
 
 证据默认写入 `.local/security/`。也可以通过 `./scripts/check.ps1 -SkipInstall -IncludeSecurity` 将安全门禁并入统一检查。远端 CI 额外生成仓库级 CycloneDX SBOM，并以提交 SHA 命名上传证据。详细规则见[安全与供应链门禁](../security/supply-chain-gates.md)。
 
+动态 API 基线使用隔离数据库和非默认端口，不会操作当前开发服务：
+
+```powershell
+pnpm security:dast
+```
+
+报告默认写入 `.local/security-dast/dast-report.json`。`check.ps1 -IncludeSecurity` 会同时运行静态门禁和动态门禁；远端 `dast-security` 作业上传提交级报告与 API 日志。规则、检查项和未覆盖边界见 [API 动态安全基线](../security/dast-baseline.md)。
+
 ## 统一检查
 
 ```powershell
@@ -243,8 +251,9 @@ pnpm security:release-policy
 
 1. `.env` 不进入版本库。
 2. 测试账号、邮箱和候选密码必须是合成数据。
-3. 不在日志中记录请求体、密码、Authorization、Cookie、TOTP 秘钥或一次性令牌。
+3. 不在日志中记录请求体、密码、Authorization、Cookie、TOTP 秘钥或一次性令牌；动态探针只能使用合成标记。
 4. 本地 SQLite 不复制到集成或生产环境。
 5. 不用内存限流器替代集成/生产 Redis 验收。
 6. 候选秘密不得进入浏览器持久存储、日志、审计详情或异常文本；揭示响应不得被缓存。
 7. 桌面制品目录和安装包不得提交 Git；生产下载必须使用 HTTPS，且只有发布流水线可以把签名状态标记为 `verified`。
+8. JSON 请求体默认上限为 1 MiB；如需调整 `MAX_JSON_BODY_BYTES`，必须保留字段级限制和资源消耗测试，二进制桌面制品继续使用独立流式上限。

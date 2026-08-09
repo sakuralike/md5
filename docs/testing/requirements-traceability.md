@@ -235,3 +235,14 @@
 | 风险接受双人批准 | `owner`、`approved_by` 字段 | 同一主体负责与批准的合成测试失败 | 静态规则完成，正式审批流和电子签字未接入 |
 | 镜像基础层维护 | `api.Dockerfile`、`frontend.Dockerfile` | 明确 Python/Node/Nginx 与 Alpine 版本并执行系统包安全更新 | 首批高危/严重项清零；后续由每次 CI 持续复扫 |
 | 安全证据可复核 | `release-security-summary.json`、`RELEASE_SHA256SUMS` | 提交级制品下载后二次执行校验器 | `finding_count=0`、`accepted_count=0`、`blocking_count=0` |
+
+## 2026-08-09 WP4 第 3 次迭代补充：API 动态安全与负向门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| API 安全响应头一致 | `core/http_security.py`、`main.py` | `test_wp4_dast_security.py` 覆盖 200/401/405；DAST 响应头检查 | 自动门禁完成；上游网关/Nginx 目标环境复核待执行 |
+| JSON 请求体资源限制 | `MAX_JSON_BODY_BYTES`、请求体缓冲上限 | `Content-Length` 与分块绕过负向测试；DAST 超大请求返回 413 | 默认 1 MiB，可配置 1 KiB～16 MiB；二进制制品保持独立流式限制 |
+| 匿名对象与管理边界 | `/me`、隐私导出、管理员用户和审计接口 | API 定向测试与 DAST 均要求 401/标准错误码 | 匿名边界完成；已认证跨用户 BOLA 动态矩阵待补 |
+| CORS 与方法滥用 | CORS 白名单、路由方法约束 | 可信预检 200、非信任预检 400、非法方法 405 且无 traceback | 首版完成；浏览器 Cookie CSRF/SameSite 待专项验证 |
+| XSS/凭据不反射 | 合成查询、密码和令牌标记 | API 测试与 8 项 DAST 报告 | 响应最小披露完成；DOM XSS、集中日志和人工渗透待验证 |
+| DAST 可重复与可追溯 | `pnpm security:dast`、`dast-security`、提交级制品 | 本地 8/8；GitHub Actions `31340260242` 九作业通过，远端报告 `failed=0` | 匿名 API 动态基线完成；不等同完整认证扫描或生产评估 |

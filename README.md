@@ -68,9 +68,11 @@ docker compose up --build
 pnpm e2e:install
 ./scripts/check.ps1 -IncludeE2E
 
-# 生产依赖审计、API SAST 与首版 SBOM
+# 生产依赖审计、API SAST 与 SBOM
 pnpm security:audit
-# 或并入统一检查
+# 隔离 API 动态安全基线
+pnpm security:dast
+# 或将静态与动态安全门禁并入统一检查
 ./scripts/check.ps1 -SkipInstall -IncludeSecurity
 ```
 
@@ -81,6 +83,8 @@ pnpm security:audit
 - [阶段状态](./docs/development/phase-status.md)
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
 - [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
+- [API 动态安全基线](./docs/security/dast-baseline.md)
+- [WP4 第 3 次迭代记录](./docs/development/2026-08-09-wp4-iteration-3.md)
 - [WP4 第 2 次迭代记录](./docs/development/2026-08-09-wp4-iteration-2.md)
 - [WP4 第 1 次迭代记录](./docs/development/2026-08-09-wp4-iteration-1.md)
 - [WP3 第 11 次迭代记录](./docs/development/2026-08-09-wp3-iteration-11.md)
