@@ -22,7 +22,7 @@
 
 ## 远端验证
 
-- 待功能提交推送后由 GitHub Actions 验证 API、Frontend、Desktop、E2E 和 Container Images 作业。
+- GitHub Actions `31301934873`：API、Frontend、Desktop、E2E、Container Images 五个作业全部通过。
 
 ## 未关闭
 
