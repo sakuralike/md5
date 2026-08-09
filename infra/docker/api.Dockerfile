@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS runtime
+FROM python:3.12.13-alpine3.23 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=120
 
 WORKDIR /app
-RUN addgroup --system app && adduser --system --ingroup app app && \
+RUN apk upgrade --no-cache && \
+    addgroup -S app && adduser -S -G app app && \
     mkdir -p /var/lib/password-detective/desktop-updates && \
     chown -R app:app /var/lib/password-detective
 COPY apps/api/pyproject.toml ./

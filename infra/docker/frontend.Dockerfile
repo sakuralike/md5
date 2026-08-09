@@ -1,4 +1,4 @@
-FROM node:22-alpine AS dependencies
+FROM node:22.23.1-alpine3.23 AS dependencies
 ENV COREPACK_HOME=/corepack
 WORKDIR /workspace
 RUN corepack enable
@@ -23,7 +23,8 @@ ENV VITE_MAX_ARCHIVE_SIZE_BYTES=${VITE_MAX_ARCHIVE_SIZE_BYTES}
 RUN pnpm --filter ${TARGET_FILTER} build
 RUN mkdir -p /output && cp -R ${TARGET_DIR}/dist/. /output/
 
-FROM nginx:1.27-alpine
+FROM nginx:1.30.4-alpine3.24
+RUN apk upgrade --no-cache
 COPY infra/nginx/spa.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /output /usr/share/nginx/html
 EXPOSE 80
