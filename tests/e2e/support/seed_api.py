@@ -14,9 +14,18 @@ sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 from password_detective.core.candidate_secrets import CandidateSecretVault
 from password_detective.core.config import Settings
 from password_detective.core.ids import new_id
-from password_detective.core.security import encrypt_secret, hash_account_password
+from password_detective.core.security import (
+    encrypt_secret,
+    hash_account_password,
+    hash_opaque_token,
+    hash_refresh_token,
+)
 from password_detective.core.time import utc_now
 from password_detective.db.database import Database
+from password_detective.db.models.account_action_token import (
+    AccountActionToken,
+    AccountTokenKind,
+)
 from password_detective.db.models.archive import Archive
 from password_detective.db.models.archive_fingerprint import (
     ArchiveFingerprint,
@@ -59,6 +68,7 @@ def ensure_user(
     role: UserRole = UserRole.USER,
     totp_secret: str | None = None,
     app_secret_key: str | None = None,
+    email_verified: bool = True,
 ) -> User:
     existing = db.scalar(select(User).where(User.username == username))
     if existing is not None:
@@ -67,7 +77,7 @@ def ensure_user(
     user = User(
         username=username,
         email=email,
-        email_verified_at=utc_now(),
+        email_verified_at=utc_now() if email_verified else None,
         account_password_hash=hash_account_password(password),
         role=role,
         status=UserStatus.ACTIVE,
@@ -81,6 +91,55 @@ def ensure_user(
         user.totp_enabled_at = utc_now()
     db.add(user)
     return user
+
+
+def ensure_email_verification_token(
+    db: Session,
+    *,
+    token_id: str,
+    user_id: str,
+    raw_token: str,
+) -> AccountActionToken:
+    existing = db.get(AccountActionToken, token_id)
+    if existing is not None:
+        return existing
+
+    token = AccountActionToken(
+        id=token_id,
+        user_id=user_id,
+        kind=AccountTokenKind.EMAIL_VERIFICATION,
+        token_hash=hash_opaque_token(raw_token),
+        expires_at=utc_now() + timedelta(hours=1),
+    )
+    db.add(token)
+    return token
+
+
+def ensure_refresh_session(
+    db: Session,
+    *,
+    user_id: str,
+    family_id: str,
+    raw_token: str,
+    user_agent: str,
+) -> UserSession:
+    existing = db.scalar(select(UserSession).where(UserSession.family_id == family_id))
+    if existing is not None:
+        return existing
+
+    now = utc_now()
+    session = UserSession(
+        user_id=user_id,
+        family_id=family_id,
+        refresh_token_hash=hash_refresh_token(raw_token),
+        user_agent=user_agent,
+        ip_prefix="127.0.0.0/24",
+        expires_at=now + timedelta(days=7),
+        created_at=now,
+        last_used_at=now,
+    )
+    db.add(session)
+    return session
 
 
 def ensure_candidate(
@@ -258,6 +317,16 @@ def main() -> None:
     privacy_username = os.environ["E2E_WEB_PRIVACY_USERNAME"]
     privacy_email = os.environ["E2E_WEB_PRIVACY_EMAIL"]
     privacy_password = os.environ["E2E_WEB_PRIVACY_PASSWORD"]
+    email_verify_user_id = os.environ["E2E_WEB_EMAIL_VERIFY_USER_ID"]
+    email_verify_username = os.environ["E2E_WEB_EMAIL_VERIFY_USERNAME"]
+    email_verify_email = os.environ["E2E_WEB_EMAIL_VERIFY_EMAIL"]
+    email_verify_password = os.environ["E2E_WEB_EMAIL_VERIFY_PASSWORD"]
+    email_verify_token_id = os.environ["E2E_WEB_EMAIL_VERIFY_TOKEN_ID"]
+    email_verify_token = os.environ["E2E_WEB_EMAIL_VERIFY_TOKEN"]
+    email_verify_refresh_family_id = os.environ["E2E_WEB_EMAIL_VERIFY_REFRESH_FAMILY_ID"]
+    email_verify_refresh_token = os.environ["E2E_WEB_EMAIL_VERIFY_REFRESH_TOKEN"]
+    web_refresh_family_id = os.environ["E2E_WEB_REFRESH_FAMILY_ID"]
+    web_refresh_token = os.environ["E2E_WEB_REFRESH_TOKEN"]
     verified_sha256 = os.environ["E2E_VERIFIED_SHA256"]
     verified_md5 = os.environ["E2E_VERIFIED_MD5"]
     verified_password = os.environ["E2E_VERIFIED_PASSWORD"]
@@ -352,6 +421,35 @@ def main() -> None:
             username=privacy_username,
             email=privacy_email,
             password=privacy_password,
+        )
+        email_verify_user = ensure_user(
+            db,
+            user_id=email_verify_user_id,
+            username=email_verify_username,
+            email=email_verify_email,
+            password=email_verify_password,
+            email_verified=False,
+        )
+        db.flush()
+        ensure_email_verification_token(
+            db,
+            token_id=email_verify_token_id,
+            user_id=email_verify_user.id,
+            raw_token=email_verify_token,
+        )
+        ensure_refresh_session(
+            db,
+            user_id=email_verify_user.id,
+            family_id=email_verify_refresh_family_id,
+            raw_token=email_verify_refresh_token,
+            user_agent="Synthetic email verification browser",
+        )
+        ensure_refresh_session(
+            db,
+            user_id=web_user.id,
+            family_id=web_refresh_family_id,
+            raw_token=web_refresh_token,
+            user_agent="Synthetic refresh replay browser",
         )
         db.flush()
         for user, family_id, refresh_hash, user_agent in (

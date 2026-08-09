@@ -162,3 +162,12 @@
 | 风险告警指派、核查与解决 | `RiskAlertsPage.vue`、`modules/risk_alerts/service.py`、风险告警事件与通知投影 | 隔离合成候选/证据/告警；指派 MFA 管理员、开始核查、确认处置并检查不可变时间线 | Chromium 本地闭环完成；失败通知重放浏览器组合、批量告警和目标环境未验收 |
 | Admin 写操作成功反馈 | `SystemSettingsPage.vue`、`RiskAlertsPage.vue` | 浏览器断言草稿/发布/回滚、指派/核查/解决成功提示在详情刷新后仍可见 | 已修复并完成 Chromium 回归 |
 | 配置与告警敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/候选/证据/告警，候选密码加密写入，关闭截图和 Trace；完整 16 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31299937196` 五个作业通过，目标环境待验收 |
+
+## 2026-08-09 WP3 第 7 次迭代补充：Web 身份与移动端键盘门禁
+
+| 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| Web 邮箱一次性验证与状态刷新 | `VerifyEmailPage.vue`、`SecurityPage.vue`、`modules/auth/account_tokens.py`、隔离未验证用户/凭证种子 | `web-identity-journeys.spec.ts`：待验证状态、凭证消费、地址栏清理、重复消费拒绝、已验证状态 | Chromium 本地闭环完成；真实邮件链接、过期凭证和目标环境未验收 |
+| Web 刷新令牌轮换与重放处置 | `modules/auth/service.py::rotate_refresh_token`、`core/browser_session.py`、隔离刷新会话种子 | HttpOnly Cookie 轮换、旧令牌重放返回 `auth.refresh_token_reused`、新访问令牌返回 `auth.session_revoked`、轮换后刷新令牌同族失效 | Chromium/APIRequest 浏览器上下文闭环完成；缺失 Cookie、自然过期和多标签页竞争组合待补充 |
+| 邮箱验证页移动端与键盘操作 | `VerifyEmailPage.vue`、Shadcn-Vue `Button`/`Alert`/`Card` | 390 × 844 视口无横向溢出；返回登录链接可聚焦并由 Enter 激活 | 首个移动端/键盘门禁完成；其他 Web/Admin 核心页面、焦点顺序和错误提示可访问性待扩展 |
+| 身份旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成一次性凭证仅以 SHA-256 摘要落库，合成刷新令牌仅保存摘要，关闭截图/Trace；不放宽生产每分钟 10 次登录限流；完整 19 项 Chromium 旅程 | `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI 待本轮提交后补记，目标环境待验收 |
