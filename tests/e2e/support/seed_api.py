@@ -33,6 +33,30 @@ from password_detective.db.models.trust_case import (
     TrustCaseSubjectType,
 )
 from password_detective.db.models.user import User, UserRole, UserStatus
+from password_detective.db.models.user_session import UserSession
+
+
+def ensure_user(
+    db: Session,
+    *,
+    username: str,
+    email: str,
+    password: str,
+) -> User:
+    existing = db.scalar(select(User).where(User.username == username))
+    if existing is not None:
+        return existing
+
+    user = User(
+        username=username,
+        email=email,
+        email_verified_at=utc_now(),
+        account_password_hash=hash_account_password(password),
+        role=UserRole.USER,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    return user
 
 
 def ensure_candidate(
@@ -103,6 +127,17 @@ def main() -> None:
     web_username = os.environ["E2E_WEB_USERNAME"]
     web_password = os.environ["E2E_WEB_PASSWORD"]
     web_email = os.environ["E2E_WEB_EMAIL"]
+    security_username = os.environ["E2E_WEB_SECURITY_USERNAME"]
+    security_email = os.environ["E2E_WEB_SECURITY_EMAIL"]
+    security_password = os.environ["E2E_WEB_SECURITY_PASSWORD"]
+    security_session_id = os.environ["E2E_WEB_SECURITY_SESSION_ID"]
+    security_second_session_id = os.environ["E2E_WEB_SECURITY_SECOND_SESSION_ID"]
+    totp_username = os.environ["E2E_WEB_TOTP_USERNAME"]
+    totp_email = os.environ["E2E_WEB_TOTP_EMAIL"]
+    totp_password = os.environ["E2E_WEB_TOTP_PASSWORD"]
+    privacy_username = os.environ["E2E_WEB_PRIVACY_USERNAME"]
+    privacy_email = os.environ["E2E_WEB_PRIVACY_EMAIL"]
+    privacy_password = os.environ["E2E_WEB_PRIVACY_PASSWORD"]
     verified_sha256 = os.environ["E2E_VERIFIED_SHA256"]
     verified_md5 = os.environ["E2E_VERIFIED_MD5"]
     verified_password = os.environ["E2E_VERIFIED_PASSWORD"]
@@ -145,18 +180,49 @@ def main() -> None:
             )
             db.add(workflow_admin)
 
-        web_user = db.scalar(select(User).where(User.username == web_username))
-        if web_user is None:
-            web_user = User(
-                username=web_username,
-                email=web_email,
-                email_verified_at=utc_now(),
-                account_password_hash=hash_account_password(web_password),
-                role=UserRole.USER,
-                status=UserStatus.ACTIVE,
-            )
-            db.add(web_user)
+        web_user = ensure_user(
+            db,
+            username=web_username,
+            email=web_email,
+            password=web_password,
+        )
+        security_user = ensure_user(
+            db,
+            username=security_username,
+            email=security_email,
+            password=security_password,
+        )
+        ensure_user(
+            db,
+            username=totp_username,
+            email=totp_email,
+            password=totp_password,
+        )
+        ensure_user(
+            db,
+            username=privacy_username,
+            email=privacy_email,
+            password=privacy_password,
+        )
         db.flush()
+        for family_id, refresh_hash, user_agent in (
+            (security_session_id, "1" * 64, "Synthetic security device A"),
+            (security_second_session_id, "2" * 64, "Synthetic security device B"),
+        ):
+            if db.scalar(select(UserSession).where(UserSession.family_id == family_id)) is None:
+                now = utc_now()
+                db.add(
+                    UserSession(
+                        user_id=security_user.id,
+                        family_id=family_id,
+                        refresh_token_hash=refresh_hash,
+                        user_agent=user_agent,
+                        ip_prefix="127.0.0.0/24",
+                        expires_at=now + timedelta(days=7),
+                        created_at=now,
+                        last_used_at=now,
+                    )
+                )
 
         ensure_candidate(
             db,
