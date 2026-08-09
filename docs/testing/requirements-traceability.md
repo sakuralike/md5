@@ -118,3 +118,12 @@
 | Admin 认证与 TOTP | `tests/e2e/admin-auth.spec.ts`、`admin-guest.spec.ts`、`TotpSetupPage.vue` | 游客门禁、首次 TOTP 绑定、动态码确认、MFA 二次登录 | Chromium 本地闭环完成；跨账号双人审批旅程待后续 |
 | E2E 敏感制品控制 | 认证测试关闭截图/Trace、TOTP 读取后遮蔽、`.local/playwright` Git 忽略 | ESLint、E2E typecheck、Playwright 失败策略 | 本地策略完成；CI 失败制品仍需首轮远端运行复核 |
 | CI 浏览器门禁 | `.github/workflows/ci.yml::e2e` | 安装 API/Chromium、`pnpm e2e`、失败证据上传 | 配置已实现；远端执行结果以本轮推送后 CI 为准 |
+
+## WP3 第 2 次开发迭代追踪增量（2026-08-09）
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web 已验证查询、揭示、配额与页面清除 | `apps/web/src/pages/HomePage.vue`、`tests/e2e/support/seed_api.py` | `tests/e2e/web-core-journeys.spec.ts`：已验证查询、揭示最高可信候选、剩余配额和页面清除 | Chromium 本地闭环完成；复制、过期会话和目标环境未验收 |
+| Web 授权贡献与待验证结果刷新 | `apps/web/src/pages/HomePage.vue`、`createContribution` | `tests/e2e/web-core-journeys.spec.ts`：未匹配指纹、授权声明、贡献提交、待验证候选刷新 | Chromium 本地闭环完成；重复贡献、本人贡献历史和目标环境未验收 |
+| Web 候选举报与本人案件时间线 | `apps/web/src/pages/HomePage.vue`、`apps/web/src/pages/TrustCasesPage.vue`、`createTrustCaseReport` | `tests/e2e/web-core-journeys.spec.ts`：候选跳转、举报提交、待处理案件时间线 | Chromium 本地闭环完成；候选申诉、账号申诉、Admin 处置和通知送达未验收 |
+| Web 核心旅程敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`tests/e2e/web-core-journeys.spec.ts` | E2E typecheck、ESLint、浏览器错误断言；种子候选密码加密写入 | 本地策略完成；推送后的 CI 失败制品和目标环境仍需复核 |

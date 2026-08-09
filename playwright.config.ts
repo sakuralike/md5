@@ -7,7 +7,13 @@ const adminPort = 15174;
 process.env.E2E_ADMIN_USERNAME ??= "synthetic_e2e_admin";
 process.env.E2E_ADMIN_EMAIL ??= "synthetic-e2e-admin@example.com";
 process.env.E2E_ADMIN_PASSWORD ??= "Synthetic-E2E-Admin-2026";
+process.env.E2E_WEB_USERNAME ??= "synthetic_e2e_journey";
+process.env.E2E_WEB_EMAIL ??= "synthetic-e2e-journey@example.com";
 process.env.E2E_WEB_PASSWORD ??= "Synthetic-E2E-Web-2026";
+process.env.E2E_VERIFIED_SHA256 ??= "c".repeat(64);
+process.env.E2E_VERIFIED_MD5 ??= "d".repeat(32);
+process.env.E2E_VERIFIED_PASSWORD ??= "Synthetic-Verified-Password-2026!";
+process.env.E2E_UNMATCHED_SHA256 ??= "e".repeat(64);
 
 export default defineConfig({
   testDir: "./tests/e2e",
