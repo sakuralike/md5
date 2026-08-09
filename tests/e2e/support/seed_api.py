@@ -42,6 +42,10 @@ def ensure_user(
     username: str,
     email: str,
     password: str,
+    user_id: str | None = None,
+    role: UserRole = UserRole.USER,
+    totp_secret: str | None = None,
+    app_secret_key: str | None = None,
 ) -> User:
     existing = db.scalar(select(User).where(User.username == username))
     if existing is not None:
@@ -52,9 +56,16 @@ def ensure_user(
         email=email,
         email_verified_at=utc_now(),
         account_password_hash=hash_account_password(password),
-        role=UserRole.USER,
+        role=role,
         status=UserStatus.ACTIVE,
     )
+    if user_id is not None:
+        user.id = user_id
+    if totp_secret is not None:
+        if app_secret_key is None:
+            raise ValueError("TOTP seed requires app_secret_key")
+        user.totp_secret_ciphertext = encrypt_secret(totp_secret, app_secret_key)
+        user.totp_enabled_at = utc_now()
     db.add(user)
     return user
 
@@ -124,6 +135,21 @@ def main() -> None:
     workflow_admin_password = os.environ["E2E_ADMIN_WORKFLOW_PASSWORD"]
     workflow_admin_email = os.environ["E2E_ADMIN_WORKFLOW_EMAIL"]
     workflow_admin_totp_secret = os.environ["E2E_ADMIN_WORKFLOW_TOTP_SECRET"]
+    reviewer_id = os.environ["E2E_ADMIN_REVIEWER_ID"]
+    reviewer_username = os.environ["E2E_ADMIN_REVIEWER_USERNAME"]
+    reviewer_password = os.environ["E2E_ADMIN_REVIEWER_PASSWORD"]
+    reviewer_email = os.environ["E2E_ADMIN_REVIEWER_EMAIL"]
+    reviewer_totp_secret = os.environ["E2E_ADMIN_REVIEWER_TOTP_SECRET"]
+    governance_user_id = os.environ["E2E_ADMIN_GOVERNANCE_USER_ID"]
+    governance_username = os.environ["E2E_ADMIN_GOVERNANCE_USERNAME"]
+    governance_email = os.environ["E2E_ADMIN_GOVERNANCE_EMAIL"]
+    governance_password = os.environ["E2E_ADMIN_GOVERNANCE_PASSWORD"]
+    governance_session_id = os.environ["E2E_ADMIN_GOVERNANCE_SESSION_ID"]
+    role_target_id = os.environ["E2E_ADMIN_ROLE_TARGET_ID"]
+    role_target_username = os.environ["E2E_ADMIN_ROLE_TARGET_USERNAME"]
+    role_target_email = os.environ["E2E_ADMIN_ROLE_TARGET_EMAIL"]
+    role_target_password = os.environ["E2E_ADMIN_ROLE_TARGET_PASSWORD"]
+    role_target_session_id = os.environ["E2E_ADMIN_ROLE_TARGET_SESSION_ID"]
     web_username = os.environ["E2E_WEB_USERNAME"]
     web_password = os.environ["E2E_WEB_PASSWORD"]
     web_email = os.environ["E2E_WEB_EMAIL"]
@@ -186,6 +212,30 @@ def main() -> None:
             email=web_email,
             password=web_password,
         )
+        ensure_user(
+            db,
+            user_id=reviewer_id,
+            username=reviewer_username,
+            email=reviewer_email,
+            password=reviewer_password,
+            role=UserRole.ADMIN,
+            totp_secret=reviewer_totp_secret,
+            app_secret_key=settings.app_secret_key,
+        )
+        governance_user = ensure_user(
+            db,
+            user_id=governance_user_id,
+            username=governance_username,
+            email=governance_email,
+            password=governance_password,
+        )
+        role_target = ensure_user(
+            db,
+            user_id=role_target_id,
+            username=role_target_username,
+            email=role_target_email,
+            password=role_target_password,
+        )
         security_user = ensure_user(
             db,
             username=security_username,
@@ -205,15 +255,17 @@ def main() -> None:
             password=privacy_password,
         )
         db.flush()
-        for family_id, refresh_hash, user_agent in (
-            (security_session_id, "1" * 64, "Synthetic security device A"),
-            (security_second_session_id, "2" * 64, "Synthetic security device B"),
+        for user, family_id, refresh_hash, user_agent in (
+            (security_user, security_session_id, "1" * 64, "Synthetic security device A"),
+            (security_user, security_second_session_id, "2" * 64, "Synthetic security device B"),
+            (governance_user, governance_session_id, "3" * 64, "Synthetic governance device"),
+            (role_target, role_target_session_id, "4" * 64, "Synthetic role target device"),
         ):
             if db.scalar(select(UserSession).where(UserSession.family_id == family_id)) is None:
                 now = utc_now()
                 db.add(
                     UserSession(
-                        user_id=security_user.id,
+                        user_id=user.id,
                         family_id=family_id,
                         refresh_token_hash=refresh_hash,
                         user_agent=user_agent,

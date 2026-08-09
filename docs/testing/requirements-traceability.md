@@ -145,3 +145,11 @@
 | Web TOTP 启停与登录门禁 | `AccountSecurityPage.vue`、TOTP 生成/确认/停用与登录 API | 绑定确认、无动态码登录拒绝、带动态码登录成功、再认证后停用 | Chromium 本地闭环完成；真实时钟漂移、恢复码和目标环境未验收 |
 | Web 隐私授权、导出与删除撤销 | `apps/web/src/pages/AccountPrivacyPage.vue`、`modules/account_privacy` | 用途确认、个人数据一次性 JSON 下载、删除请求创建与撤销 | Chromium 本地闭环完成；真实 Worker 到期去标识化、合规参数和目标环境未验收 |
 | Web 安全旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 三个隔离合成账号、两个不可登录刷新哈希、关闭截图/Trace、ESLint、E2E typecheck、Ruff、12 项 Chromium 旅程 | 本地定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31296867172` 五个作业通过，目标环境待验收 |
+
+## WP3 第 5 次开发迭代追踪增量（2026-08-09）
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Admin 用户停用、恢复与会话撤销 | `UserGovernancePage.vue`、`modules/admin/users.py`、隔离用户/会话种子 | `admin-governance-journeys.spec.ts`：一次性再认证、TOTP、结构化原因、停用并撤销 1 个会话、恢复账号 | Chromium 本地闭环完成；批量治理、紧急撤权和目标环境未验收 |
+| 普通角色双人申请与批准 | `RoleChangesPage.vue`、`modules/admin/role_changes.py`、`role_change_requests` | 不同合成管理员创建/批准普通用户到可信贡献者请求，确认目标会话撤销和角色更新 | Chromium 本地闭环完成；拒绝组合、独立角色事件时间线和目标环境未验收 |
+| Admin 治理敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/用户/会话，关闭截图和 Trace；完整 14 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI 待本轮推送验证 |
