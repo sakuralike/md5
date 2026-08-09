@@ -113,22 +113,28 @@ export default defineConfig({
     video: "off",
   },
   projects: [
-    {
-      name: "web-chromium",
-      testMatch: /web-.*\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: `http://127.0.0.1:${webPort}`,
+    ...[
+      { name: "chromium", device: devices["Desktop Chrome"] },
+      { name: "firefox", device: devices["Desktop Firefox"] },
+      { name: "webkit", device: devices["Desktop Safari"] },
+    ].flatMap(({ name, device }) => [
+      {
+        name: `web-${name}`,
+        testMatch: /web-.*\.spec\.ts/,
+        use: {
+          ...device,
+          baseURL: `http://127.0.0.1:${webPort}`,
+        },
       },
-    },
-    {
-      name: "admin-chromium",
-      testMatch: /admin-.*\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: `http://127.0.0.1:${adminPort}`,
+      {
+        name: `admin-${name}`,
+        testMatch: /admin-.*\.spec\.ts/,
+        use: {
+          ...device,
+          baseURL: `http://127.0.0.1:${adminPort}`,
+        },
       },
-    },
+    ]),
   ],
   webServer: [
     {

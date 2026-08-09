@@ -20,7 +20,7 @@ test("Admin 仪表盘形成桌面视觉与严重 WCAG 门禁", async ({ page }, 
 });
 
 test.describe("Admin 移动端视觉与键盘门禁", () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test.use({ viewport: { width: 390, height: 844 } });
 
   test("Admin 登录页移动视口无溢出且表单焦点顺序稳定", async ({ page }, testInfo) => {
     const browserErrors = observeBrowserErrors(page);

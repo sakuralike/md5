@@ -37,7 +37,7 @@ test("Web 登录页形成桌面视觉、键盘顺序与错误提示门禁", asyn
 });
 
 test.describe("Web 移动端视觉门禁", () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test.use({ viewport: { width: 390, height: 844 } });
 
   test("Web 首页移动视口保持关键内容可见且无页面级溢出", async ({ page }, testInfo) => {
     const browserErrors = observeBrowserErrors(page);

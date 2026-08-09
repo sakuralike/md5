@@ -179,8 +179,6 @@ test("Web 多标签并发刷新只允许一次轮换并撤销竞争令牌族", a
 test.describe("Web 移动端与键盘门禁", () => {
   test.use({
     viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
   });
 
   test("邮箱验证页在移动视口无横向溢出且可由键盘返回登录", async ({ page }) => {

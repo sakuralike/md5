@@ -1,4 +1,4 @@
-param([switch]$SkipInstall, [switch]$IncludeE2E)
+param([switch]$SkipInstall, [switch]$IncludeE2E, [switch]$IncludeCrossBrowserE2E)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -64,7 +64,9 @@ try {
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test
     Invoke-Checked $Pnpm build
-    if ($IncludeE2E) {
+    if ($IncludeCrossBrowserE2E) {
+        Invoke-Checked $Pnpm e2e:cross-browser
+    } elseif ($IncludeE2E) {
         Invoke-Checked $Pnpm e2e
     }
     Invoke-Checked dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release

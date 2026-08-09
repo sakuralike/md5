@@ -9,10 +9,13 @@
     "typecheck": "pnpm -r typecheck && pnpm exec tsc -p tsconfig.e2e.json --noEmit",
     "test": "pnpm -r test",
     "lint": "pnpm -r --if-present lint && pnpm exec eslint playwright.config.ts tests/e2e scripts/e2e && node ./scripts/check-frontend-policy.mjs",
-    "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed",
+    "e2e": "playwright test --project=web-chromium --project=admin-chromium",
+    "e2e:firefox": "playwright test --project=web-firefox --project=admin-firefox",
+    "e2e:webkit": "playwright test --project=web-webkit --project=admin-webkit",
+    "e2e:cross-browser": "pnpm e2e && pnpm e2e:firefox && pnpm e2e:webkit",
+    "e2e:headed": "playwright test --project=web-chromium --project=admin-chromium --headed",
     "e2e:report": "playwright show-report .local/playwright/report",
-    "e2e:install": "playwright install chromium"
+    "e2e:install": "playwright install chromium firefox webkit"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
