@@ -144,4 +144,4 @@
 | Web 密码修改与会话收口 | `apps/web/src/pages/AccountSecurityPage.vue`、`modules/auth`、`tests/e2e/support/seed_api.py` | `tests/e2e/web-account-security-journeys.spec.ts`：展示/撤销其他会话，修改密码后确认剩余非当前会话全部撤销 | Chromium 本地闭环完成；复制、过期会话组合和目标环境未验收 |
 | Web TOTP 启停与登录门禁 | `AccountSecurityPage.vue`、TOTP 生成/确认/停用与登录 API | 绑定确认、无动态码登录拒绝、带动态码登录成功、再认证后停用 | Chromium 本地闭环完成；真实时钟漂移、恢复码和目标环境未验收 |
 | Web 隐私授权、导出与删除撤销 | `apps/web/src/pages/AccountPrivacyPage.vue`、`modules/account_privacy` | 用途确认、个人数据一次性 JSON 下载、删除请求创建与撤销 | Chromium 本地闭环完成；真实 Worker 到期去标识化、合规参数和目标环境未验收 |
-| Web 安全旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 三个隔离合成账号、两个不可登录刷新哈希、关闭截图/Trace、ESLint、E2E typecheck、Ruff、12 项 Chromium 旅程 | 本地定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI 待本轮推送验证 |
+| Web 安全旅程敏感数据与限流控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 三个隔离合成账号、两个不可登录刷新哈希、关闭截图/Trace、ESLint、E2E typecheck、Ruff、12 项 Chromium 旅程 | 本地定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31296867172` 五个作业通过，目标环境待验收 |

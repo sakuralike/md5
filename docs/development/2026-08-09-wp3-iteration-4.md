@@ -26,7 +26,7 @@
 
 ## 远端验证
 
-- 待本轮代码推送后记录 GitHub Actions 运行号和 API、Frontend、Desktop、E2E、Container Images 作业结果。
+- GitHub Actions `31296867172`：API、Frontend、Desktop、E2E、Container Images 五个作业全部通过。
 
 ## 未关闭
 
