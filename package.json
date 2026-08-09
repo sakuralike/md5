@@ -16,7 +16,8 @@
     "e2e:headed": "playwright test --project=web-chromium --project=admin-chromium --headed",
     "e2e:report": "playwright show-report .local/playwright/report",
     "e2e:install": "playwright install chromium firefox webkit",
-    "security:audit": "pwsh ./scripts/security-gate.ps1"
+    "security:audit": "pwsh ./scripts/security-gate.ps1",
+    "security:release-policy": "python ./scripts/verify_release_security.py --policy-only --write-checksums"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

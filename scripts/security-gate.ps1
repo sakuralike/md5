@@ -41,8 +41,9 @@ $PreviousPythonUtf8 = $env:PYTHONUTF8
 $env:PYTHONUTF8 = "1"
 Push-Location $Root
 try {
-    Invoke-Checked -Command $PythonCommand -Arguments @("-m", "ruff", "check", "scripts/verify_security_artifacts.py", "scripts/tests/test_verify_security_artifacts.py")
+    Invoke-Checked -Command $PythonCommand -Arguments @("-m", "ruff", "check", "scripts/verify_security_artifacts.py", "scripts/verify_release_security.py", "scripts/tests/test_verify_security_artifacts.py", "scripts/tests/test_verify_release_security.py")
     Invoke-Checked -Command $PythonCommand -Arguments @("-m", "unittest", "discover", "-s", "scripts/tests")
+    Invoke-Checked -Command $PythonCommand -Arguments @("scripts/verify_release_security.py", "--directory", (Join-Path $OutputDirectory "release-policy"), "--risk-acceptances", "security/risk-acceptances.json", "--policy-only", "--write-checksums")
     Invoke-Checked -Command $PythonCommand -Arguments @("-m", "bandit", "-r", "apps/api/src", "-ll", "-ii", "-f", "json", "-o", (Join-Path $OutputDirectory "bandit-report.json"))
     Invoke-Checked -Command $PythonCommand -Arguments @("-m", "pip_audit", "--strict", "--format", "json", "--output", (Join-Path $OutputDirectory "api-dependency-audit.json"), $Api)
     Invoke-Checked -Command $PythonCommand -Arguments @("-m", "pip_audit", "--strict", "--format", "cyclonedx-json", "--output", (Join-Path $OutputDirectory "api-sbom.cdx.json"), $Api)

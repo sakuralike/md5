@@ -185,6 +185,7 @@ jobs:
           file: infra/docker/api.Dockerfile
           push: false
           tags: password-detective-api:ci
+          load: true
       - name: Build Web image
         uses: docker/build-push-action@v6
         with:
@@ -192,6 +193,7 @@ jobs:
           file: infra/docker/frontend.Dockerfile
           push: false
           tags: password-detective-web:ci
+          load: true
           build-args: |
             TARGET_FILTER=@password-detective/web
             TARGET_DIR=apps/web
@@ -202,6 +204,69 @@ jobs:
           file: infra/docker/frontend.Dockerfile
           push: false
           tags: password-detective-admin:ci
+          load: true
           build-args: |
             TARGET_FILTER=@password-detective/admin
             TARGET_DIR=apps/admin
+      - name: Prepare release security evidence directory
+        run: mkdir -p .local/security-release
+      - name: Scan API image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: password-detective-api:ci
+          format: json
+          output: .local/security-release/trivy-api-image.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          version: v0.73.0
+      - name: Scan Web image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: password-detective-web:ci
+          format: json
+          output: .local/security-release/trivy-web-image.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          version: v0.73.0
+      - name: Scan Admin image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: password-detective-admin:ci
+          format: json
+          output: .local/security-release/trivy-admin-image.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          version: v0.73.0
+      - name: Scan repository for committed secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          input: .
+          scanners: secret
+          format: json
+          output: .local/security-release/trivy-repository-secrets.json
+          severity: HIGH,CRITICAL
+          skip-dirs: .git,node_modules,apps/api/.venv,.local
+          exit-code: "0"
+          version: v0.73.0
+      - name: Enforce release security findings and expiring acceptances
+        run: >-
+          python scripts/verify_release_security.py
+          --directory .local/security-release
+          --risk-acceptances security/risk-acceptances.json
+          --write-checksums
+      - name: Upload release security evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-security-evidence-${{ github.sha }}
+          path: .local/security-release
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
