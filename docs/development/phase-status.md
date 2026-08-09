@@ -10,7 +10,7 @@
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
-> 2026-08-09 WP3 第 8 次迭代新增 Web 登录/首页、Admin 仪表盘/登录页首批结构化视觉快照、页面级无溢出、布局边界、键盘焦点和 Axe 严重/关键 WCAG 门禁，并修正首批 Web 低对比度文本。刷新令牌覆盖缺失 Cookie、自然过期和多标签并发竞争，服务端通过条件更新原子认领会话，确保仅一次轮换成功且竞争触发令牌族撤销。完整 25 项 Chromium 旅程已通过；跨平台像素差异批准、更多核心页面、屏幕阅读器、目标环境和生产验收仍未关闭。
+> 2026-08-09 WP3 第 8 次迭代新增 Web 登录/首页、Admin 仪表盘/登录页首批结构化视觉快照、页面级无溢出、布局边界、键盘焦点和 Axe 严重/关键 WCAG 门禁，并修正首批 Web 低对比度文本。刷新令牌覆盖缺失 Cookie、自然过期和多标签并发竞争，服务端通过条件更新原子认领会话，确保仅一次轮换成功且竞争触发令牌族撤销。完整 25 项 Chromium 旅程与统一本地门禁通过；远端 GitHub Actions `31305403414` 的 API、Frontend、Desktop、E2E 和 Container Images 五个作业全部通过。跨平台像素差异批准、更多核心页面、屏幕阅读器、目标环境和生产验收仍未关闭。
 
 ## 总体完成度快照
 
@@ -347,4 +347,4 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Web/Admin 首批结构化视觉基线 | `tests/e2e/support/visual_assertions.ts`、Web/Admin 响应式布局 | Web 登录/首页、Admin 仪表盘/登录页全页 PNG 报告附件、关键区域边界和页面级无溢出断言 | 首批 4 个页面完成；跨平台像素差异批准与更多核心页面待补充 |
 | 键盘、错误提示与严重 WCAG 门禁 | Admin 导航/登录页焦点环和实时错误区、Web 登录错误实时区、Web 语义前景色对比度修正 | 登录表单焦点顺序、错误 `role=alert`/`aria-live`、Axe WCAG 2 A/AA 与 2.1 A/AA 严重/关键违规扫描 | 首批页面通过；屏幕阅读器、全部复杂页面和目标浏览器矩阵未验收 |
 | 刷新令牌缺失、过期与多标签竞争 | `rotate_refresh_token` 条件更新原子认领、隔离过期/并发刷新会话 | 缺失 Cookie、自然过期、并发仅一次成功、竞争重放拒绝、访问令牌和轮换令牌同族撤销 | SQLite 真实 API 闭环完成；MySQL 目标环境并发验证待执行 |
-| WP3 本地统一回归 | `playwright.config.ts`、`tests/e2e/*.spec.ts` | API 身份 11 项、Admin 52 项、完整 25 项 Chromium 旅程及静态检查 | `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁通过；远端 CI 待推送后关闭 |
+| WP3 本地统一回归 | `playwright.config.ts`、`tests/e2e/*.spec.ts` | API 身份 11 项、Admin 52 项、完整 25 项 Chromium 旅程及静态检查 | `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁通过；远端 CI `31305403414` 五个作业通过 |

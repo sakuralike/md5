@@ -181,4 +181,4 @@
 | 键盘与错误提示可访问性 | `apps/admin/src/App.vue`、`apps/admin/src/pages/LoginPage.vue`、`apps/web/src/pages/LoginPage.vue` | 登录字段焦点顺序、可见焦点环、错误 `role=alert` 与 `aria-live=assertive` | 首批登录入口完成；复杂工作台键盘操作和屏幕阅读器实测待补充 |
 | WCAG 自动扫描 | `@axe-core/playwright`、`expectNoSeriousAccessibilityViolations`、Web 对比度语义色修正 | WCAG 2 A/AA、2.1 A/AA 严重和关键违规为零 | Web 登录/首页、Admin 仪表盘/登录页通过；中等违规与全页面矩阵待评估 |
 | 刷新令牌异常与竞争安全 | `modules/auth/service.py::rotate_refresh_token`、过期/并发会话种子 | 缺失 Cookie、自然过期、并发仅一次成功、竞争重放、访问与刷新令牌同族撤销 | SQLite 真实 API 闭环完成；MySQL 并发和高负载目标环境待验收 |
-| WP3 第 8 轮回归 | Playwright 25 项 Chromium 旅程、API 身份回归、Admin SSR/Vitest | `pnpm e2e` 25/25；`test_auth.py` 11/11；Admin 52/52；ESLint/TypeScript/Ruff 与统一门禁通过 | 本地回归完成；远端 CI 待推送后关闭 |
+| WP3 第 8 轮回归 | Playwright 25 项 Chromium 旅程、API 身份回归、Admin SSR/Vitest | `pnpm e2e` 25/25；`test_auth.py` 11/11；Admin 52/52；ESLint/TypeScript/Ruff 与统一门禁通过 | 本地回归完成；远端 CI `31305403414` 五个作业通过 |
