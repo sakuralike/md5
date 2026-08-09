@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "20260808_0019"
@@ -78,15 +79,16 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(sa.text("DELETE FROM trust_cases WHERE subject_type <> 'CANDIDATE'"))
     with op.batch_alter_table("trust_cases") as batch_op:
-        batch_op.drop_index("ix_trust_cases_requested_action")
-        batch_op.drop_index("ix_trust_cases_risk_alert_id")
-        batch_op.drop_index("ix_trust_cases_target_user_id")
-        batch_op.drop_index("ix_trust_cases_subject_type")
-        batch_op.drop_constraint("ck_trust_cases_single_subject", type_="check")
+        # MySQL keeps foreign keys dependent on their supporting indexes.
         batch_op.drop_constraint(
             "fk_trust_cases_risk_alert_id_risk_alerts", type_="foreignkey"
         )
         batch_op.drop_constraint("fk_trust_cases_target_user_id_users", type_="foreignkey")
+        batch_op.drop_constraint("ck_trust_cases_single_subject", type_="check")
+        batch_op.drop_index("ix_trust_cases_requested_action")
+        batch_op.drop_index("ix_trust_cases_risk_alert_id")
+        batch_op.drop_index("ix_trust_cases_target_user_id")
+        batch_op.drop_index("ix_trust_cases_subject_type")
         batch_op.alter_column(
             "candidate_id",
             existing_type=sa.String(length=36),

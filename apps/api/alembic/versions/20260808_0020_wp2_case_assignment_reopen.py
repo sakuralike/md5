@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "20260808_0020"
@@ -52,14 +53,15 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("trust_case_events") as batch_op:
-        batch_op.drop_index("ix_trust_case_events_next_assignee_id")
-        batch_op.drop_index("ix_trust_case_events_previous_assignee_id")
+        # Remove foreign keys before their supporting indexes for MySQL.
         batch_op.drop_constraint(
             "fk_trust_case_events_next_assignee_id_users", type_="foreignkey"
         )
         batch_op.drop_constraint(
             "fk_trust_case_events_previous_assignee_id_users", type_="foreignkey"
         )
+        batch_op.drop_index("ix_trust_case_events_next_assignee_id")
+        batch_op.drop_index("ix_trust_case_events_previous_assignee_id")
         batch_op.drop_column("next_assignee_id")
         batch_op.drop_column("previous_assignee_id")
 

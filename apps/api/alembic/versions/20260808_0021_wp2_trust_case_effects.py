@@ -75,9 +75,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_trust_case_effects_created_at"), table_name="trust_case_effects")
-    op.drop_index(op.f("ix_trust_case_effects_reference_id"), table_name="trust_case_effects")
-    op.drop_index(op.f("ix_trust_case_effects_target_id"), table_name="trust_case_effects")
-    op.drop_index(op.f("ix_trust_case_effects_effect_type"), table_name="trust_case_effects")
-    op.drop_index(op.f("ix_trust_case_effects_case_id"), table_name="trust_case_effects")
+    # Drop the table atomically so MySQL never observes a foreign key without
+    # its required case_id index.
     op.drop_table("trust_case_effects")
