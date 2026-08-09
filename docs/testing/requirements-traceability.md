@@ -161,4 +161,4 @@
 | 系统配置草稿、发布与不可变回滚 | `SystemSettingsPage.vue`、`modules/admin/settings.py`、`system_setting_versions` | `admin-operations-journeys.spec.ts`：创建/发布两个版本、选择历史版本、MFA 再认证、创建并发布回滚版本 | Chromium 本地闭环完成；并发冲突浏览器组合和目标环境未验收 |
 | 风险告警指派、核查与解决 | `RiskAlertsPage.vue`、`modules/risk_alerts/service.py`、风险告警事件与通知投影 | 隔离合成候选/证据/告警；指派 MFA 管理员、开始核查、确认处置并检查不可变时间线 | Chromium 本地闭环完成；失败通知重放浏览器组合、批量告警和目标环境未验收 |
 | Admin 写操作成功反馈 | `SystemSettingsPage.vue`、`RiskAlertsPage.vue` | 浏览器断言草稿/发布/回滚、指派/核查/解决成功提示在详情刷新后仍可见 | 已修复并完成 Chromium 回归 |
-| 配置与告警敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/候选/证据/告警，候选密码加密写入，关闭截图和 Trace；完整 16 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI 待本轮推送验证 |
+| 配置与告警敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py` | 合成管理员/TOTP/候选/证据/告警，候选密码加密写入，关闭截图和 Trace；完整 16 项 Chromium 旅程 | 定向检查及 `scripts/check.ps1 -SkipInstall -IncludeE2E` 统一门禁完成；远端 CI `31299937196` 五个作业通过，目标环境待验收 |
