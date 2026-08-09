@@ -7,13 +7,24 @@ const adminPort = 15174;
 process.env.E2E_ADMIN_USERNAME ??= "synthetic_e2e_admin";
 process.env.E2E_ADMIN_EMAIL ??= "synthetic-e2e-admin@example.com";
 process.env.E2E_ADMIN_PASSWORD ??= "Synthetic-E2E-Admin-2026";
+process.env.E2E_ADMIN_WORKFLOW_ID ??= "10000000-0000-4000-8000-000000000001";
+process.env.E2E_ADMIN_WORKFLOW_USERNAME ??= "synthetic_e2e_workflow_admin";
+process.env.E2E_ADMIN_WORKFLOW_EMAIL ??= "synthetic-e2e-workflow-admin@example.com";
+process.env.E2E_ADMIN_WORKFLOW_PASSWORD ??= "Synthetic-E2E-Workflow-Admin-2026";
+process.env.E2E_ADMIN_WORKFLOW_TOTP_SECRET ??= "JBSWY3DPEHPK3PXP";
 process.env.E2E_WEB_USERNAME ??= "synthetic_e2e_journey";
 process.env.E2E_WEB_EMAIL ??= "synthetic-e2e-journey@example.com";
 process.env.E2E_WEB_PASSWORD ??= "Synthetic-E2E-Web-2026";
 process.env.E2E_VERIFIED_SHA256 ??= "c".repeat(64);
 process.env.E2E_VERIFIED_MD5 ??= "d".repeat(32);
 process.env.E2E_VERIFIED_PASSWORD ??= "Synthetic-Verified-Password-2026!";
+process.env.E2E_VERIFIED_CANDIDATE_ID ??= "20000000-0000-4000-8000-000000000000";
 process.env.E2E_UNMATCHED_SHA256 ??= "e".repeat(64);
+process.env.E2E_ADMIN_PENDING_CANDIDATE_ID ??= "20000000-0000-4000-8000-000000000001";
+process.env.E2E_ADMIN_PENDING_SHA256 ??= "f".repeat(64);
+process.env.E2E_ADMIN_CASE_CANDIDATE_ID ??= "20000000-0000-4000-8000-000000000002";
+process.env.E2E_ADMIN_CASE_SHA256 ??= "b".repeat(64);
+process.env.E2E_ADMIN_CASE_ID ??= "30000000-0000-4000-8000-000000000001";
 
 export default defineConfig({
   testDir: "./tests/e2e",

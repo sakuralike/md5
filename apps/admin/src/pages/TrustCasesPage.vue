@@ -162,9 +162,11 @@ async function loadCases(selectFirst = false): Promise<void> {
   }
 }
 
-async function openCase(caseId: string): Promise<void> {
-  error.value = "";
-  message.value = "";
+async function openCase(caseId: string, preserveFeedback = false): Promise<void> {
+  if (!preserveFeedback) {
+    error.value = "";
+    message.value = "";
+  }
   try {
     selected.value = await getTrustCase(caseId, token());
     assigneeId.value = selected.value.assigned_to_id ?? "";
@@ -194,7 +196,7 @@ async function assignSelectedCase(): Promise<void> {
     resolutionNote.value = "";
     message.value = "已更新案件负责人，指派事件已写入不可变时间线。";
     await loadCases();
-    await openCase(caseId);
+    await openCase(caseId, true);
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -222,7 +224,7 @@ async function reopenSelectedCase(): Promise<void> {
     resolutionNote.value = "";
     message.value = "已重新开启案件，重开事件已写入不可变时间线。";
     await loadCases();
-    await openCase(caseId);
+    await openCase(caseId, true);
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -270,7 +272,7 @@ async function applyAction(action: (typeof actions.value)[number]): Promise<void
     resolutionNote.value = "";
     message.value = `已完成“${action.label}”，处理事件和副作用已原子写入。`;
     await loadCases();
-    await openCase(caseId);
+    await openCase(caseId, true);
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -292,7 +294,7 @@ async function replayNotification(notification: TrustCaseNotification): Promise<
       createTrustCaseNotificationReplayKey(),
     );
     message.value = "通知已重新进入发送队列。";
-    await openCase(caseId);
+    await openCase(caseId, true);
   } catch (value) {
     error.value = describeError(value);
   } finally {

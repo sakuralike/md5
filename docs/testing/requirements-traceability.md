@@ -1,6 +1,6 @@
 # 需求—模块—测试追踪矩阵
 
-- 更新日期：2026-08-08
+- 更新日期：2026-08-09
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
@@ -127,3 +127,12 @@
 | Web 授权贡献与待验证结果刷新 | `apps/web/src/pages/HomePage.vue`、`createContribution` | `tests/e2e/web-core-journeys.spec.ts`：未匹配指纹、授权声明、贡献提交、待验证候选刷新 | Chromium 本地闭环完成；重复贡献、本人贡献历史和目标环境未验收 |
 | Web 候选举报与本人案件时间线 | `apps/web/src/pages/HomePage.vue`、`apps/web/src/pages/TrustCasesPage.vue`、`createTrustCaseReport` | `tests/e2e/web-core-journeys.spec.ts`：候选跳转、举报提交、待处理案件时间线 | Chromium 本地闭环完成；候选申诉、账号申诉、Admin 处置和通知送达未验收 |
 | Web 核心旅程敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`tests/e2e/web-core-journeys.spec.ts` | E2E typecheck、ESLint、浏览器错误断言；种子候选密码加密写入 | 本地策略完成；远端 CI `31292352350` 通过，目标环境仍需复核 |
+## WP3 第 3 次开发迭代追踪增量（2026-08-09）
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Admin 候选人工审核与状态时间线 | `apps/admin/src/pages/CandidateModerationPage.vue`、`tests/e2e/support/seed_api.py` | `tests/e2e/admin-moderation-journeys.spec.ts`：SHA-256 筛选、审核说明、待验证到已验证和原因时间线 | Chromium 本地闭环完成；拒绝/隔离/恢复组合旅程和目标环境未验收 |
+| Admin 举报案件指派、处理与解决 | `apps/admin/src/pages/TrustCasesPage.vue`、案件指派/转换/解决 API | `tests/e2e/admin-moderation-journeys.spec.ts`：案件筛选、负责人指派、开始处理、`admin.action_taken` 解决和不可变时间线 | Chromium 本地闭环完成；申诉/账号申诉、重开、通知重放组合旅程待后续 |
+| 案件解决与关联候选原子副作用 | `modules/trust_cases`、`modules/moderation`、`TrustCasesPage.vue` | 解决举报后从候选审核页确认关联候选 `verified → quarantined` | 本地浏览器闭环完成；事务回滚已有 API 覆盖，目标 Compose 未验收 |
+| Admin 案件操作反馈稳定性 | `TrustCasesPage.vue::openCase(preserveFeedback)` | 定向 Admin E2E 断言指派和解决成功状态；Admin 51 项测试通过 | 本地修复完成；视觉/屏幕阅读器反馈仍待可访问性轮次 |
+| Admin 工作流种子敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/admin_session.ts`、`tests/e2e/support/seed_api.py` | 固定合成管理员/TOTP/案件/指纹；候选密码加密写入；旅程关闭截图/Trace | 本地策略和 9 项 Chromium 统一门禁完成；远端 CI 与目标环境待回填 |

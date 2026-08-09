@@ -82,7 +82,8 @@ test("Web 从候选结果进入举报并显示本人案件时间线", async ({ p
   await page.locator("form button[type=submit]").click();
 
   await expect(page.getByText("举报已提交，感谢你帮助维护内容质量。", { exact: true })).toBeVisible();
-  await expect(page.getByRole("article").getByText("候选内容不准确", { exact: true })).toBeVisible();
-  await expect(page.getByText("待处理", { exact: true })).toBeVisible();
+  const submittedCase = page.getByRole("article").filter({ hasText: "候选内容不准确" });
+  await expect(submittedCase.getByText("候选内容不准确", { exact: true })).toBeVisible();
+  await expect(submittedCase.getByText("待处理", { exact: true })).toBeVisible();
   expectNoBrowserErrors(browserErrors);
 });
