@@ -71,6 +71,7 @@ try {
     Invoke-Checked $Pnpm build
     if ($IncludeSecurity) {
         Invoke-Checked pwsh ./scripts/security-gate.ps1 -PythonCommand $Python
+        Invoke-Checked pwsh ./scripts/dast-security-gate.ps1 -PythonCommand $Python
     }
     if ($IncludeCrossBrowserE2E) {
         Invoke-Checked $Pnpm e2e:cross-browser

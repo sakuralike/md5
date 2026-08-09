@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from password_detective.core.config import Settings, get_settings
 from password_detective.core.errors import AppError, app_error_handler, validation_error_handler
+from password_detective.core.http_security import HttpSecurityMiddleware
 from password_detective.core.logging import configure_logging
 from password_detective.core.notifications import (
     NotificationGateway,
@@ -84,6 +85,10 @@ def create_app(
     app.state.notification_gateway = notifications
     app.dependency_overrides[get_settings] = lambda: resolved_settings
 
+    app.add_middleware(
+        HttpSecurityMiddleware,
+        max_json_body_bytes=resolved_settings.max_json_body_bytes,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origin_list,

@@ -17,6 +17,7 @@
     "e2e:report": "playwright show-report .local/playwright/report",
     "e2e:install": "playwright install chromium firefox webkit",
     "security:audit": "pwsh ./scripts/security-gate.ps1",
+    "security:dast": "pwsh ./scripts/dast-security-gate.ps1",
     "security:release-policy": "python ./scripts/verify_release_security.py --policy-only --write-checksums"
   },
   "devDependencies": {

@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     notification_smtp_sender_name: str = Field(default="密码侦探社", max_length=128)
     notification_smtp_timeout_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
     browser_cookie_secure: bool = False
+    max_json_body_bytes: int = Field(default=1_048_576, ge=1_024, le=16_777_216)
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     auto_create_tables: bool = True
     log_level: str = "INFO"
