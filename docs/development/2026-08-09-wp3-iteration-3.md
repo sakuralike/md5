@@ -23,7 +23,7 @@
 - `pnpm exec tsc -p tsconfig.e2e.json --noEmit`：通过。
 - `.\apps\api\.venv\Scripts\ruff.exe check tests/e2e/support/seed_api.py`：通过。
 - `.\scripts\check.ps1 -SkipInstall -IncludeE2E`：通过；覆盖 Ruff、API 测试与覆盖率、SQLite 全量迁移往返、前端规范/类型/单测/构建、9 项 Playwright Chromium 旅程和桌面端 Release 构建/测试。
-- 远端 GitHub Actions：待本轮推送后回填。
+- 远端 GitHub Actions `31294494635`：API、Frontend、Desktop、E2E 和 Container Images 5 个作业全部通过。
 
 ## 未关闭
 

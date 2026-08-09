@@ -135,4 +135,4 @@
 | Admin 举报案件指派、处理与解决 | `apps/admin/src/pages/TrustCasesPage.vue`、案件指派/转换/解决 API | `tests/e2e/admin-moderation-journeys.spec.ts`：案件筛选、负责人指派、开始处理、`admin.action_taken` 解决和不可变时间线 | Chromium 本地闭环完成；申诉/账号申诉、重开、通知重放组合旅程待后续 |
 | 案件解决与关联候选原子副作用 | `modules/trust_cases`、`modules/moderation`、`TrustCasesPage.vue` | 解决举报后从候选审核页确认关联候选 `verified → quarantined` | 本地浏览器闭环完成；事务回滚已有 API 覆盖，目标 Compose 未验收 |
 | Admin 案件操作反馈稳定性 | `TrustCasesPage.vue::openCase(preserveFeedback)` | 定向 Admin E2E 断言指派和解决成功状态；Admin 51 项测试通过 | 本地修复完成；视觉/屏幕阅读器反馈仍待可访问性轮次 |
-| Admin 工作流种子敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/admin_session.ts`、`tests/e2e/support/seed_api.py` | 固定合成管理员/TOTP/案件/指纹；候选密码加密写入；旅程关闭截图/Trace | 本地策略和 9 项 Chromium 统一门禁完成；远端 CI 与目标环境待回填 |
+| Admin 工作流种子敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/admin_session.ts`、`tests/e2e/support/seed_api.py` | 固定合成管理员/TOTP/案件/指纹；候选密码加密写入；旅程关闭截图/Trace | 本地策略和 9 项 Chromium 统一门禁完成；远端 CI `31294494635` 通过，目标环境待验收 |
