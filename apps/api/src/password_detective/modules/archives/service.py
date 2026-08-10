@@ -9,7 +9,7 @@ from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from password_detective.core.candidate_secrets import CandidateSecretVault
+from password_detective.core.candidate_secrets import build_candidate_secret_vault
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
 from password_detective.core.operational_settings import get_operational_setting
@@ -320,10 +320,7 @@ def create_submission(
                 )
             )
 
-    vault = CandidateSecretVault(
-        settings.app_secret_key,
-        key_version=settings.candidate_secret_key_version,
-    )
+    vault = build_candidate_secret_vault(settings)
     dedup_tag = vault.dedup_tag(payload.password)
     candidate = db.scalar(
         select(PasswordCandidate).where(
@@ -466,10 +463,7 @@ def reveal_best_candidate(
             details={"daily_quota": daily_reveal_quota},
         )
 
-    vault = CandidateSecretVault(
-        settings.app_secret_key,
-        key_version=settings.candidate_secret_key_version,
-    )
+    vault = build_candidate_secret_vault(settings)
     password = vault.decrypt(
         ciphertext=candidate.secret_ciphertext,
         nonce=candidate.secret_nonce,

@@ -247,6 +247,31 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  candidate-secret-rotation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install API dependencies
+        run: python -m pip install --disable-pip-version-check -e './apps/api[dev]'
+      - name: Run candidate secret key rotation and rollback drill
+        run: python scripts/candidate-secret-rotation-drill.py
+      - name: Verify candidate secret key rotation evidence
+        run: >-
+          python scripts/verify_candidate_secret_rotation_evidence.py
+          --report .local/candidate-secret-rotation-wp4-iteration-10/rotation-report.json
+          --write-checksums
+      - name: Upload candidate secret key rotation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-secret-rotation-evidence-${{ github.sha }}
+          path: .local/candidate-secret-rotation-wp4-iteration-10
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+
   monitoring:
     runs-on: ubuntu-latest
     steps:

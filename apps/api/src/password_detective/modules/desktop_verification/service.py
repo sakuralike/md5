@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from password_detective.core.candidate_secrets import CandidateSecretVault
+from password_detective.core.candidate_secrets import build_candidate_secret_vault
 from password_detective.core.config import Settings
 from password_detective.core.errors import AppError
 from password_detective.core.operational_settings import get_operational_setting
@@ -474,10 +474,7 @@ def _verify_signature(public_key_der: bytes, message: bytes, encoded_signature: 
 
 
 def _candidate_digest(settings: Settings, candidate: PasswordCandidate) -> str:
-    secret = CandidateSecretVault(
-        settings.app_secret_key,
-        key_version=settings.candidate_secret_key_version,
-    ).decrypt(
+    secret = build_candidate_secret_vault(settings).decrypt(
         ciphertext=candidate.secret_ciphertext,
         nonce=candidate.secret_nonce,
         key_version=candidate.secret_key_version,

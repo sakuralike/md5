@@ -1,6 +1,9 @@
 import logging
 
+import pytest
+
 from password_detective.core.candidate_secrets import CandidateSecretVault
+from password_detective.core.errors import AppError
 from password_detective.core.logging import SensitiveDataFilter, redact_mapping
 from password_detective.core.security import (
     create_access_token,
@@ -74,3 +77,31 @@ def test_sensitive_log_fields_are_recursively_redacted():
     )
     assert SensitiveDataFilter().filter(record) is True
     assert record.msg == {"archive_password": "[REDACTED]"}
+
+
+def test_candidate_secret_vault_reads_fallback_key_and_preserves_dedup_tag() -> None:
+    legacy = CandidateSecretVault("legacy-key", key_version="v1", dedup_secret="stable-dedup")
+    encrypted = legacy.encrypt("synthetic-password")
+    current = CandidateSecretVault(
+        "current-key",
+        key_version="v2",
+        decryption_secrets={"v1": "legacy-key"},
+        dedup_secret="stable-dedup",
+    )
+
+    assert current.decrypt(
+        ciphertext=encrypted.ciphertext,
+        nonce=encrypted.nonce,
+        key_version=encrypted.key_version,
+    ) == "synthetic-password"
+    assert current.dedup_tag("synthetic-password") == encrypted.dedup_tag
+    assert current.encrypt("synthetic-password").key_version == "v2"
+
+
+def test_candidate_secret_vault_rejects_unknown_key_version() -> None:
+    vault = CandidateSecretVault("current-key", key_version="v2")
+
+    with pytest.raises(AppError) as exc_info:
+        vault.decrypt(ciphertext="bad", nonce="bad", key_version="v1")
+
+    assert exc_info.value.code == "archive.secret_unavailable"

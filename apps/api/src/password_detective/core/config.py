@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from email.utils import parseaddr
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +28,8 @@ class Settings(BaseSettings):
     account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
     reauthentication_ttl_minutes: int = Field(default=5, ge=1, le=15)
     candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)
+    candidate_secret_keyring: SecretStr = SecretStr("")
+    candidate_secret_dedup_key: SecretStr = SecretStr("")
     daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
     authorization_declaration_version: str = Field(
         default="authorization-v1", min_length=1, max_length=32
@@ -85,6 +89,30 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def validate_candidate_secret_keys(self) -> Settings:
+        version_pattern = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+        if not version_pattern.fullmatch(self.candidate_secret_key_version):
+            raise ValueError("候选秘密密钥版本只能包含字母、数字、点、下划线和连字符")
+        keyring = self.candidate_secret_key_map
+        if keyring and self.candidate_secret_key_version not in keyring:
+            raise ValueError("CANDIDATE_SECRET_KEYRING 必须包含当前密钥版本")
+        if len(keyring) > 8:
+            raise ValueError("CANDIDATE_SECRET_KEYRING 最多允许 8 个版本")
+        for version, secret in keyring.items():
+            if not version_pattern.fullmatch(version):
+                raise ValueError(f"候选秘密密钥版本无效: {version}")
+            if not secret:
+                raise ValueError(f"候选秘密密钥不能为空: {version}")
+            if self.app_env not in {"local", "test"} and len(secret) < 32:
+                raise ValueError(f"非本地环境的候选秘密密钥至少需要 32 个字符: {version}")
+        dedup_key = self.candidate_secret_dedup_key.get_secret_value()
+        if keyring and not dedup_key:
+            raise ValueError("配置 CANDIDATE_SECRET_KEYRING 时必须提供稳定去重密钥")
+        if self.app_env not in {"local", "test"} and dedup_key and len(dedup_key) < 32:
+            raise ValueError("非本地环境的候选秘密去重密钥至少需要 32 个字符")
+        return self
+
+    @model_validator(mode="after")
     def validate_notification_backend(self) -> Settings:
         if self.notification_backend == "webhook":
             if not self.notification_webhook_url.startswith("https://"):
@@ -120,6 +148,31 @@ class Settings(BaseSettings):
             if self.app_env not in {"local", "test"} and self.notification_smtp_security == "none":
                 raise ValueError("非本地环境的 SMTP 通知后端必须启用 STARTTLS 或 SSL")
         return self
+
+    @property
+    def candidate_secret_key_map(self) -> dict[str, str]:
+        raw = self.candidate_secret_keyring.get_secret_value().strip()
+        if not raw:
+            return {}
+
+        def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"CANDIDATE_SECRET_KEYRING 存在重复版本: {key}")
+                result[key] = value
+            return result
+
+        try:
+            parsed = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError("CANDIDATE_SECRET_KEYRING 必须是无重复键的 JSON 对象") from exc
+        if not isinstance(parsed, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in parsed.items()
+        ):
+            raise ValueError("CANDIDATE_SECRET_KEYRING 必须是字符串到字符串的 JSON 对象")
+        return parsed
 
     @property
     def cors_origin_list(self) -> list[str]:

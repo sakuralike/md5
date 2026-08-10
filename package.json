@@ -20,6 +20,7 @@
     "security:dast": "pwsh ./scripts/dast-security-gate.ps1",
     "security:release-policy": "python ./scripts/verify_release_security.py --policy-only --write-checksums",
     "recovery:drill": "pwsh ./scripts/recovery-drill.ps1",
+    "candidate-secrets:drill": "python ./scripts/candidate-secret-rotation-drill.py && python ./scripts/verify_candidate_secret_rotation_evidence.py --report .local/candidate-secret-rotation-wp4-iteration-10/rotation-report.json --write-checksums",
     "performance:baseline": "pwsh ./scripts/performance-baseline.ps1",
     "monitoring:config": "python ./scripts/verify_monitoring_config.py --write-checksums",
     "worker:backlog-drill": "pwsh ./scripts/worker-backlog-drill.ps1",

@@ -5,7 +5,8 @@ param(
     [switch]$IncludeSecurity,
     [switch]$IncludeRecovery,
     [switch]$IncludePerformance,
-    [switch]$IncludeMonitoring
+    [switch]$IncludeMonitoring,
+    [switch]$IncludeKeyRotation
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,6 +83,10 @@ try {
     }
     if ($IncludePerformance) {
         Invoke-Checked pwsh ./scripts/performance-baseline.ps1 -PythonCommand $Python
+    }
+    if ($IncludeKeyRotation) {
+        Invoke-Checked $Python ./scripts/candidate-secret-rotation-drill.py
+        Invoke-Checked $Python ./scripts/verify_candidate_secret_rotation_evidence.py --report ./.local/candidate-secret-rotation-wp4-iteration-10/rotation-report.json --write-checksums
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

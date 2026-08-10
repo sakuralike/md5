@@ -5,12 +5,20 @@ import binascii
 import hashlib
 import hmac
 import os
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from password_detective.core.errors import AppError
+
+if TYPE_CHECKING:
+    from password_detective.core.config import Settings
+
+_KEY_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 
 
 @dataclass(frozen=True)
@@ -22,20 +30,37 @@ class EncryptedCandidateSecret:
 
 
 class CandidateSecretVault:
-    """Encrypt archive passwords and derive a separate keyed deduplication tag."""
+    """Encrypt candidate secrets with an active key and versioned read fallbacks."""
 
-    def __init__(self, master_secret: str, *, key_version: str = "v1") -> None:
-        if not master_secret:
-            raise ValueError("candidate secret master key is required")
-        if not key_version or len(key_version) > 32:
-            raise ValueError("candidate secret key version is invalid")
-        self._master_secret = master_secret.encode("utf-8")
+    def __init__(
+        self,
+        master_secret: str,
+        *,
+        key_version: str = "v1",
+        decryption_secrets: Mapping[str, str] | None = None,
+        dedup_secret: str | None = None,
+    ) -> None:
+        _validate_key_version(key_version)
+        secrets = dict(decryption_secrets or {})
+        secrets[key_version] = master_secret
+        if not master_secret or any(not secret for secret in secrets.values()):
+            raise ValueError("candidate secret master keys are required")
+        for version in secrets:
+            _validate_key_version(version)
+        self._master_secrets = {
+            version: secret.encode("utf-8") for version, secret in secrets.items()
+        }
+        self._dedup_secret = (dedup_secret or master_secret).encode("utf-8")
         self.key_version = key_version
+
+    @property
+    def available_key_versions(self) -> tuple[str, ...]:
+        return tuple(sorted(self._master_secrets))
 
     def encrypt(self, secret: str) -> EncryptedCandidateSecret:
         raw = _validate_secret(secret)
         nonce = os.urandom(12)
-        ciphertext = AESGCM(self._encryption_key()).encrypt(
+        ciphertext = AESGCM(self._encryption_key(self.key_version)).encrypt(
             nonce,
             raw,
             self.key_version.encode("utf-8"),
@@ -55,7 +80,7 @@ class CandidateSecretVault:
                 key_version.encode("utf-8"),
             )
             return plaintext.decode("utf-8")
-        except (binascii.Error, InvalidTag, ValueError, UnicodeDecodeError) as exc:
+        except (binascii.Error, InvalidTag, KeyError, ValueError, UnicodeDecodeError) as exc:
             raise AppError(
                 "archive.secret_unavailable",
                 "候选密码暂时无法读取",
@@ -66,20 +91,38 @@ class CandidateSecretVault:
         raw = _validate_secret(secret)
         return hmac.new(self._dedup_key(), raw, hashlib.sha256).hexdigest()
 
-    def _encryption_key(self, key_version: str | None = None) -> bytes:
-        version = (key_version or self.key_version).encode("utf-8")
+    def _encryption_key(self, key_version: str) -> bytes:
+        _validate_key_version(key_version)
+        master_secret = self._master_secrets[key_version]
         return hmac.new(
-            self._master_secret,
-            b"password-detective:candidate-encryption:" + version,
+            master_secret,
+            b"password-detective:candidate-encryption:" + key_version.encode("utf-8"),
             hashlib.sha256,
         ).digest()
 
     def _dedup_key(self) -> bytes:
         return hmac.new(
-            self._master_secret,
+            self._dedup_secret,
             b"password-detective:candidate-dedup:v1",
             hashlib.sha256,
         ).digest()
+
+
+def build_candidate_secret_vault(settings: Settings) -> CandidateSecretVault:
+    keyring = settings.candidate_secret_key_map
+    active_secret = keyring.get(settings.candidate_secret_key_version, settings.app_secret_key)
+    dedup_secret = settings.candidate_secret_dedup_key.get_secret_value() or settings.app_secret_key
+    return CandidateSecretVault(
+        active_secret,
+        key_version=settings.candidate_secret_key_version,
+        decryption_secrets=keyring,
+        dedup_secret=dedup_secret,
+    )
+
+
+def _validate_key_version(key_version: str) -> None:
+    if not _KEY_VERSION_PATTERN.fullmatch(key_version):
+        raise ValueError("candidate secret key version is invalid")
 
 
 def _validate_secret(secret: str) -> bytes:
