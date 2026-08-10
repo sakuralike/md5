@@ -47,6 +47,7 @@
 - 新增通知网关脱敏和 Alertmanager 配置测试。
 - `scripts/check.ps1 -SkipInstall -IncludeMonitoring` 依次执行配置检查、Alertmanager 演练、证据检查和 Worker 积压演练。
 - GitHub Actions `monitoring` 作业上传监控配置、Alertmanager 演练和 Worker 积压三组证据。
+- 首次远端演练发现 Alpine BusyBox `wget` 对 `localhost` 优先使用 IPv6，而合成接收器仅监听 IPv4；健康检查已固定使用 `127.0.0.1`，避免伪不健康。
 
 ## 3. 安全边界
 

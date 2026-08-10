@@ -14,7 +14,7 @@ services:
     ports:
       - "${ALERT_RECEIVER_PORT:-18081}:18081"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:18081/health"]
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:18081/health"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -34,7 +34,7 @@ services:
       alert-receiver:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:9093/-/ready"]
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:9093/-/ready"]
       interval: 5s
       timeout: 3s
       retries: 12
