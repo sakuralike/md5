@@ -227,3 +227,33 @@ pnpm staging:platform-export-contract
 ```
 
 该命令生成的制品必须保持 `evidence_kind=contract-fixture`、`execution_status=not-run`，不可提交给 Go/No-Go 审批充当目标环境证据。
+
+## 12. 证据包封存与审批交接
+
+完成目标环境的资源趋势和 MySQL/Redis HA 报告后，必须先在受控工作目录执行封存重验，再把单一证据包交给四角色审批。入口为：
+
+```powershell
+./scripts/staging-evidence-archive.ps1 `
+  -EvidenceDirectory .local/staging-target-execution-wp4-iteration-16 `
+  -OutputDirectory .local/staging-evidence-archive-wp4-iteration-16 `
+  -CandidateCommit <approved-commit-sha>
+```
+
+封存器会重新验证六个主证据文件、`checksums.sha256`、`source-checksums.sha256`、执行组、执行标识、profile 摘要、来源摘要和目标执行适配器边界，并生成：
+
+- `staging-evidence-archive-manifest.json`；
+- `staging-evidence-archive-manifest.sha256`；
+- `staging-evidence-archive.zip`；
+- `staging-evidence-archive.zip.sha256`。
+
+目标执行必须提供 40 或 64 位候选提交 SHA；`contract-fixture` 不得携带候选提交，也不得进入审批。归档 ZIP 只包含脱敏证据、来源 checksum 摘要和封存清单，不包含原始平台导出、端点、凭据、密码、令牌或逐条业务数据。
+
+只有 `target-execution` 且 `handoff_status=ready-for-approvals` 的封存包才能交接；四个角色仍必须分别完成 `technical_owner`、`security_owner`、`operations_owner`、`business_owner` 签字，机器封存门禁不会自动产生 Go/No-Go 结论。
+
+本地/CI 合同入口：
+
+```powershell
+pnpm staging:evidence-archive-contract
+```
+
+该入口必须保持 `contract-sealed / blocked-by-contract-fixture / not-run / pending-evidence`，不能作为真实 staging 或 HA 验收证据。

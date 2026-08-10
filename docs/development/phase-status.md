@@ -22,6 +22,15 @@
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
+## 2026-08-10 WP4 第 16 次迭代补充
+
+- 新增 `staging-evidence-archive-manifest-v1`，封存前重验主证据文件、`checksums.sha256`、`source-checksums.sha256`、执行组、执行标识和 profile 摘要。
+- 新增确定性证据 ZIP、封存清单 detached SHA-256 和 ZIP detached SHA-256；原始平台导出不进入审批交接包。
+- 真实 `target-execution` 必须绑定候选提交 SHA，并拒绝 fixture/synthetic/test/mock 适配器；合同夹具保持 `contract-sealed / blocked-by-contract-fixture / not-run / pending-evidence`。
+- 新增 `staging-evidence-archive.ps1`、`staging-evidence-archive-contract.ps1`、10 项测试、`check.ps1 -IncludeStagingArchive` 和独立 CI 合同作业。
+- 专项 Ruff、10 项 pytest、`pnpm staging:evidence-archive-contract` 和 `check.ps1 -SkipInstall -IncludeStagingAdapters -IncludeStagingArchive` 统一门禁已通过；真实 4 小时 staging、HA 切换、`target-execution` 和四角色审批仍未完成，本轮不提高生产就绪度。
+- 下一阶段仍是在已批准 staging 上执行真实长时会话，封存证据后再进入四角色审批。
+
 ## 2026-08-10 WP4 第 15 次迭代补充
 
 - 新增 Prometheus `query_range` 规范导入合同，要求 10 个资源/连接/队列序列完全对齐、使用整秒 UTC 时间戳，并匹配 profile 的 15 秒采样周期。

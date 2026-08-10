@@ -29,7 +29,8 @@
     "staging:evidence-contract": "pwsh ./scripts/staging-evidence-contract.ps1",
     "staging:target-adapter-contract": "pwsh ./scripts/staging-target-adapter-contract.ps1",
     "staging:platform-export-contract": "pwsh ./scripts/staging-platform-export-contract.ps1",
-    "alertmanager:drill": "pwsh ./scripts/alertmanager-drill.ps1"
+    "alertmanager:drill": "pwsh ./scripts/alertmanager-drill.ps1",
+    "staging:evidence-archive-contract": "pwsh ./scripts/staging-evidence-archive-contract.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

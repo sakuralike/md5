@@ -17,6 +17,7 @@
 ## 开发实施记录
 
 - [下一步开发方案（2026-08-08）](./密码侦探社下一步开发方案-2026-08-08.md)
+- [WP4 第 16 次开发迭代：证据包封存与审批交接完整性门禁](../docs/development/2026-08-10-wp4-iteration-16.md)
 - [WP4 第 15 次开发迭代：Prometheus 与 HA 平台导出接入](../docs/development/2026-08-10-wp4-iteration-15.md)
 - [WP4 第 14 次开发迭代：目标环境采集与 HA 事件适配器](../docs/development/2026-08-10-wp4-iteration-14.md)
 - [WP4 第 13 次开发迭代：资源趋势与 HA 执行证据合同](../docs/development/2026-08-10-wp4-iteration-13.md)

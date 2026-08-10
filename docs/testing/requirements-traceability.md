@@ -334,3 +334,12 @@
 | 脱敏与来源完整性 | 递归敏感字段拒绝、source SHA-256、执行组和采集器 provenance | 敏感键、凭据型值、跨执行组、合成适配器冒充 target 的拒绝测试 | 自动化完成 |
 | 人工长时门禁入口 | `staging-target-execution.ps1` | readiness plan → 物化 → 最终校验 → checksum 一次完成 | 可人工触发；当前没有 target evidence |
 | 状态边界 | `staging-target-adapter-contract.ps1` | 合同 fixture 强制断言 `contract-fixture / not-run` | 未宣称 staging、HA 或审批完成 |
+
+## 2026-08-10 WP4 第 16 次迭代补充：证据包封存与审批交接完整性
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 封存前完整性重验 | `scripts/seal_staging_evidence_archive.py`、`staging-evidence-archive-manifest-v1` | 六个主文件、主 checksum、来源 checksum、执行组、执行标识、profile 摘要和状态边界校验 | 工程合同完成；真实目标证据待生成 |
+| 来源与目标提交绑定 | 封存清单 `source_files`、`candidate_commit`、`evidence_set_sha256` | 目标执行要求 40/64 位候选提交 SHA；fixture/synthetic/test/mock 适配器拒绝 | 目标候选交接规则完成；未绑定真实批准提交 |
+| 确定性证据归档 | `staging-evidence-archive.zip`、manifest/ZIP detached SHA-256 | 固定 ZIP 时间戳、精确文件集合、嵌入清单和篡改检测测试 | 本地合同归档通过；不替代目标环境证据 |
+| 审批状态边界 | `staging-evidence-archive.ps1`、`docs/templates/wp4-staging-go-no-go.md` | `contract-fixture` 固定为 `blocked-by-contract-fixture`；target 最高为 `ready-for-approvals` / `pending-approvals` | 四角色签字和最终 Go/No-Go 仍待完成 |
