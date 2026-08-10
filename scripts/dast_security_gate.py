@@ -6,11 +6,13 @@ import re
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 REQUEST_ID_PATTERN = re.compile(r"^req_[0-9a-f]{32}$")
 SECURITY_HEADERS = {
@@ -65,6 +67,21 @@ def request(
             headers={key.lower(): value for key, value in exc.headers.items()},
             body=exc.read().decode("utf-8", errors="replace"),
         )
+
+
+def parse_set_cookie(set_cookie: str) -> tuple[str, dict[str, str | bool]]:
+    cookie = SimpleCookie()
+    cookie.load(set_cookie)
+    if not cookie:
+        return "", {}
+    morsel = next(iter(cookie.values()))
+    attributes: dict[str, str | bool] = {"name": morsel.key}
+    for key in ("httponly", "secure"):
+        attributes[key] = bool(morsel[key])
+    for key in ("path", "samesite"):
+        if morsel[key]:
+            attributes[key] = morsel[key]
+    return morsel.value, attributes
 
 
 def run_checks(base_url: str) -> list[CheckResult]:
@@ -217,6 +234,155 @@ def run_checks(base_url: str) -> list[CheckResult]:
         )
     )
 
+    suffix = uuid4().hex[:12]
+    user_a = {
+        "username": f"dast_owner_{suffix}",
+        "email": f"dast-owner-{suffix}@example.com",
+        "password": "SyntheticDastPass123!",
+    }
+    user_b = {
+        "username": f"dast_other_{suffix}",
+        "email": f"dast-other-{suffix}@example.com",
+        "password": "SyntheticDastPass123!",
+    }
+    registration_failures: list[str] = []
+    for label, payload in (("owner", user_a), ("other", user_b)):
+        registered = request(
+            base_url,
+            "POST",
+            "/api/v1/auth/register",
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(payload).encode(),
+        )
+        if registered.status != 201:
+            registration_failures.append(f"{label} registration -> {registered.status}")
+    tokens: dict[str, str] = {}
+    for label, payload in (("owner", user_a), ("other", user_b)):
+        logged_in = request(
+            base_url,
+            "POST",
+            "/api/v1/auth/login",
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(
+                {"login": payload["username"], "password": payload["password"]}
+            ).encode(),
+        )
+        logged_payload = _parse_json(logged_in.body)
+        if logged_in.status != 200 or not logged_payload.get("access_token"):
+            registration_failures.append(f"{label} login -> {logged_in.status}")
+        else:
+            tokens[label] = str(logged_payload["access_token"])
+
+    object_failures = list(registration_failures)
+    if len(tokens) == 2:
+        owner_headers = {"Authorization": f"Bearer {tokens['owner']}"}
+        other_headers = {"Authorization": f"Bearer {tokens['other']}"}
+        export = request(
+            base_url,
+            "POST",
+            "/api/v1/me/privacy/exports",
+            headers={**owner_headers, "Idempotency-Key": f"dast-export-{suffix}"},
+            body=b"{}",
+        )
+        export_payload = _parse_json(export.body)
+        export_id = export_payload.get("id")
+        if export.status not in (200, 202) or not export_id:
+            object_failures.append(f"owner export -> {export.status}")
+        else:
+            other_export = request(
+                base_url,
+                "GET",
+                f"/api/v1/me/privacy/exports/{export_id}",
+                headers=other_headers,
+            )
+            if other_export.status != 404 or _parse_json(other_export.body).get(
+                "code"
+            ) != "privacy.export_not_found":
+                object_failures.append(f"cross-user export read -> {other_export.status}")
+
+        owner_sessions = request(
+            base_url,
+            "GET",
+            "/api/v1/me/security/sessions",
+            headers=owner_headers,
+        )
+        sessions_payload = _parse_json_list(owner_sessions.body)
+        sessions = sessions_payload
+        family_id = sessions[0].get("id") if sessions else None
+        if not family_id:
+            object_failures.append(f"owner sessions -> {owner_sessions.status}")
+        else:
+            cross_revoke = request(
+                base_url,
+                "DELETE",
+                f"/api/v1/me/security/sessions/{family_id}",
+                headers=other_headers,
+            )
+            if cross_revoke.status != 404 or _parse_json(cross_revoke.body).get(
+                "code"
+            ) != "auth.session_not_found":
+                object_failures.append(f"cross-user session revoke -> {cross_revoke.status}")
+    checks.append(
+        CheckResult(
+            "authenticated_object_boundaries",
+            not object_failures,
+            None,
+            "cross-user export read and session revoke denied"
+            if not object_failures
+            else "; ".join(object_failures),
+        )
+    )
+
+    browser_login = request(
+        base_url,
+        "POST",
+        "/api/v1/web/auth/login",
+        headers={"Origin": "http://localhost:5173", "Content-Type": "application/json"},
+        body=json.dumps(
+            {"login": user_a["username"], "password": user_a["password"]}
+        ).encode(),
+    )
+    set_cookie = browser_login.headers.get("set-cookie", "")
+    cookie_value, cookie_attributes = parse_set_cookie(set_cookie)
+    browser_csrf = request(
+        base_url,
+        "POST",
+        "/api/v1/web/auth/refresh",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Cookie": f"pd_web_refresh={cookie_value}",
+        },
+    )
+    browser_refresh = request(
+        base_url,
+        "POST",
+        "/api/v1/web/auth/refresh",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Cookie": f"pd_web_refresh={cookie_value}",
+        },
+    )
+    cookie_ok = (
+        browser_login.status == 200
+        and cookie_attributes.get("name") == "pd_web_refresh"
+        and cookie_attributes.get("httponly") is True
+        and cookie_attributes.get("path") == "/api/v1/web/auth"
+        and str(cookie_attributes.get("samesite", "")).lower() == "lax"
+        and browser_csrf.status == 403
+        and _parse_json(browser_csrf.body).get("code") == "request.invalid_origin"
+        and browser_refresh.status == 200
+    )
+    checks.append(
+        CheckResult(
+            "browser_cookie_csrf_samesite",
+            cookie_ok,
+            browser_csrf.status if browser_csrf.status != 200 else browser_login.status,
+            "refresh cookie is HttpOnly/Lax/path-scoped and cross-site refresh is denied"
+            if cookie_ok
+            else f"login={browser_login.status}, csrf={browser_csrf.status}, refresh={browser_refresh.status}",
+        )
+    )
+
     return checks
 
 
@@ -243,6 +409,16 @@ def _parse_json(body: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _parse_json_list(body: str) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
 
 
 def main() -> int:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -118,3 +119,71 @@ def test_anonymous_principal_cannot_cross_user_or_admin_boundaries(client: TestC
         response = client.request(method, path)
         assert response.status_code == 401
         assert response.json()["code"] == "auth.authentication_required"
+
+
+def test_authenticated_object_boundaries_and_browser_cookie_csrf(
+    client: TestClient,
+) -> None:
+    suffix = uuid4().hex[:10]
+    users = [
+        {
+            "username": f"wp4_owner_{suffix}",
+            "email": f"wp4-owner-{suffix}@example.com",
+            "password": "SyntheticDastPass123!",
+        },
+        {
+            "username": f"wp4_other_{suffix}",
+            "email": f"wp4-other-{suffix}@example.com",
+            "password": "SyntheticDastPass123!",
+        },
+    ]
+    tokens: list[str] = []
+    for user in users:
+        assert client.post("/api/v1/auth/register", json=user).status_code == 201
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"login": user["username"], "password": user["password"]},
+        )
+        assert login.status_code == 200
+        tokens.append(login.json()["access_token"])
+
+    owner_headers = {"Authorization": f"Bearer {tokens[0]}"}
+    other_headers = {"Authorization": f"Bearer {tokens[1]}"}
+    export = client.post(
+        "/api/v1/me/privacy/exports",
+        headers={**owner_headers, "Idempotency-Key": f"wp4-export-{suffix}"},
+    )
+    assert export.status_code == 202
+    export_id = export.json()["id"]
+
+    foreign_export = client.get(
+        f"/api/v1/me/privacy/exports/{export_id}", headers=other_headers
+    )
+    assert foreign_export.status_code == 404
+    assert foreign_export.json()["code"] == "privacy.export_not_found"
+
+    owner_sessions = client.get("/api/v1/me/security/sessions", headers=owner_headers)
+    assert owner_sessions.status_code == 200
+    family_id = owner_sessions.json()[0]["id"]
+    foreign_revoke = client.delete(
+        f"/api/v1/me/security/sessions/{family_id}", headers=other_headers
+    )
+    assert foreign_revoke.status_code == 404
+    assert foreign_revoke.json()["code"] == "auth.session_not_found"
+
+    browser_login = client.post(
+        "/api/v1/web/auth/login",
+        json={"login": users[0]["username"], "password": users[0]["password"]},
+        headers={"Origin": "http://testserver"},
+    )
+    assert browser_login.status_code == 200
+    cookie = browser_login.headers["set-cookie"]
+    assert "HttpOnly" in cookie
+    assert "samesite=lax" in cookie.lower()
+    assert "Path=/api/v1/web/auth" in cookie
+
+    rejected = client.post(
+        "/api/v1/web/auth/refresh", headers={"Origin": "https://untrusted.example"}
+    )
+    assert rejected.status_code == 403
+    assert rejected.json()["code"] == "request.invalid_origin"
