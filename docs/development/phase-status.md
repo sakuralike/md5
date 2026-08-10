@@ -2,7 +2,8 @@
 
 - 更新日期：2026-08-10
 - 当前里程碑：WP4 M5 安全、恢复、性能与可观测性准入
-- 最近迭代：[WP4 第 6 次开发迭代：MySQL、Redis 与 Worker 恢复演练](./2026-08-10-wp4-iteration-6.md)
+- 最近迭代：[WP4 第 8 次开发迭代：告警、仪表盘与 Worker 队列积压演练](./2026-08-10-wp4-iteration-8.md)
+- 前次迭代：[WP4 第 7 次开发迭代：性能基线与可观测性出口](./2026-08-10-wp4-iteration-7.md)
 - 前次迭代：[WP4 第 5 次开发迭代：管理员 MFA、再认证与幂等滥用门禁](./2026-08-10-wp4-iteration-5.md)
 - 前次迭代：[WP4 第 4 次开发迭代：认证对象边界与浏览器 Cookie 安全门禁](./2026-08-10-wp4-iteration-4.md)
 - 前次迭代：[WP4 第 3 次开发迭代：API 动态安全与负向门禁](./2026-08-09-wp4-iteration-3.md)
@@ -445,6 +446,17 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | XSS 与凭据最小披露 | 动态合成标记 | 查询标记、密码和令牌不反射；方法错误无 traceback | API 响应基线完成；浏览器 DOM XSS、日志汇聚和人工测试未关闭 |
 | 提交级 DAST 证据 | `dast-security` CI 作业 | 运行 `31340260242` 九作业通过；报告 8/8 | 首版完成；完整认证爬虫、ZAP/同类工具和预生产扫描待后续 |
 
+
+## 2026-08-10 WP4 第 8 次迭代补充：告警、仪表盘与队列积压演练
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| Prometheus 抓取与规则 | `infra/monitoring/prometheus/`、7 条低基数规则 | 静态校验器、官方 `promtool check config` | 配置和规则基线完成；Alertmanager 通知、值班确认和恢复演练待实施 |
+| Grafana 最小仪表盘 | 固定 datasource UID、6 个面板和 provisioning | 监控 Compose smoke：Prometheus ready、target up、Grafana dashboard 自动加载 | 展示基线完成；生产认证、权限、持久化和多实例聚合待目标环境验收 |
+| Worker 队列积压 | `observability.noop` 合成任务、`worker-backlog-drill.ps1` | 队列深度 `24 -> 0`，Worker ready，证据校验与 SHA-256 通过 | 单实例短时演练完成；长时混合负载、重试/失败容量和多 Worker 稳定性待实施 |
+| 监控统一门禁 | `check.ps1 -IncludeMonitoring`、CI `monitoring` job | 配置、规则、演练和 artifact 上传均纳入门禁 | 当前为工程准入，不代表生产告警通知闭环 |
+
+当前估算：本地 MVP 约 98%，生产就绪约 72%。该估算不替代 Alertmanager、长期混合压测、密钥轮换、预生产和业务/UAT 签字。
 
 ## 2026-08-10 WP4 第 7 次迭代补充：性能基线与可观测性出口
 

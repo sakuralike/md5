@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: Password Detective
+    orgId: 1
+    folder: Password Detective
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

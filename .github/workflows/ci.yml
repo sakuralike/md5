@@ -247,6 +247,57 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install monitoring validation dependency
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate Prometheus and Grafana artifacts
+        run: >-
+          python scripts/verify_monitoring_config.py
+          --report .local/monitoring-wp4-iteration-8/monitoring-report.json
+          --write-checksums
+      - name: Validate Prometheus syntax and alert rules
+        run: >-
+          docker run --rm --entrypoint promtool
+          -v "${{ github.workspace }}/infra/monitoring/prometheus:/etc/prometheus:ro"
+          prom/prometheus:v2.55.1
+          check config /etc/prometheus/prometheus.yml
+      - name: Run worker queue backlog drill
+        shell: pwsh
+        run: >-
+          ./scripts/worker-backlog-drill.ps1
+          -OutputDirectory .local/worker-backlog-wp4-iteration-8
+          -ApiPort 18140
+          -MySqlPort 13317
+          -RedisPort 16380
+      - name: Verify worker backlog evidence
+        run: >-
+          python scripts/verify_worker_backlog_evidence.py
+          --report .local/worker-backlog-wp4-iteration-8/worker-backlog-report.json
+          --write-checksums
+      - name: Upload monitoring evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-evidence-${{ github.sha }}
+          path: .local/monitoring-wp4-iteration-8
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Upload worker backlog evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-backlog-evidence-${{ github.sha }}
+          path: .local/worker-backlog-wp4-iteration-8
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+
   container-images:
     runs-on: ubuntu-latest
     needs: [api, frontend]

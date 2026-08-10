@@ -4,7 +4,8 @@ param(
     [switch]$IncludeCrossBrowserE2E,
     [switch]$IncludeSecurity,
     [switch]$IncludeRecovery,
-    [switch]$IncludePerformance
+    [switch]$IncludePerformance,
+    [switch]$IncludeMonitoring
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,6 +82,11 @@ try {
     }
     if ($IncludePerformance) {
         Invoke-Checked pwsh ./scripts/performance-baseline.ps1 -PythonCommand $Python
+    }
+    if ($IncludeMonitoring) {
+        Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums
+        Invoke-Checked pwsh ./scripts/worker-backlog-drill.ps1
+        Invoke-Checked $Python ./scripts/verify_worker_backlog_evidence.py --report ./.local/worker-backlog-wp4-iteration-8/worker-backlog-report.json --write-checksums
     }
     if ($IncludeCrossBrowserE2E) {
         Invoke-Checked $Pnpm e2e:cross-browser

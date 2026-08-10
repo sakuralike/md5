@@ -92,6 +92,11 @@ def on_worker_shutdown(**_: object) -> None:
 def ping() -> dict[str, str]:
     return {"status": "ok"}
 
+@celery_app.task(name="observability.noop")
+def observability_noop(marker: str) -> str:
+    """Drain-only synthetic task used by the WP4 queue backlog drill."""
+    return marker
+
 
 @celery_app.task(name="risk_alerts.queue_sla_notifications")
 def queue_risk_alert_sla_notifications() -> dict[str, int]:
