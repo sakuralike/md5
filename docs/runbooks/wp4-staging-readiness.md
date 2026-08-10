@@ -38,6 +38,28 @@ pnpm staging:readiness-plan
 
 `status=contract-valid` 仅说明参数、容量预算、HA 声明、证据路径和审批角色完整；`execution_status=not-run` 与 `go_no_go_status=pending-evidence` 必须保持到真实执行完成。
 
+生成并校验资源趋势与 HA 执行证据合同：
+
+```powershell
+pnpm staging:evidence-contract
+./scripts/check.ps1 -SkipInstall -IncludeStagingEvidence
+```
+
+输出目录为：
+
+```text
+.local/staging-evidence-contract-wp4-iteration-13/
+├── readiness-profile.json
+├── staging-readiness-plan.json
+├── resource-trend-report.json
+├── mysql-ha-failover-report.json
+├── redis-ha-failover-report.json
+├── staging-execution-evidence-summary.json
+└── checksums.sha256
+```
+
+入口默认复制 `infra/staging/*example.json` 的合成夹具，因此结果必须是 `evidence_kind=contract-fixture`、`execution_status=not-run` 和 `go_no_go_status=pending-evidence`。目标环境采集器生成的报告必须把 `evidence_kind` 改为 `target-execution`，并提供真实但脱敏的时间线、采样覆盖、资源峰值、切换检查和校验和；校验通过只会进入 `pending-approvals`，仍不能替代四角色签字。
+
 ## 3. 默认容量预算
 
 默认 profile 明确固定 Worker 并发为 2，避免 Celery 根据宿主机 CPU 自动扩大进程数。容量计算公式为：

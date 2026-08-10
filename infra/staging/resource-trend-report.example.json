@@ -1,0 +1,38 @@
+{
+  "schema": "staging-resource-trend-report-v1",
+  "evidence_kind": "contract-fixture",
+  "status": "passed",
+  "environment": "staging",
+  "synthetic_data_only": true,
+  "profile_sha256": "89e2c5fd7b3b59d6192e4247b3b62891c72f59147ac8c9410d14b1a60584749d",
+  "started_at": "2026-08-10T00:00:00Z",
+  "finished_at": "2026-08-10T04:00:00Z",
+  "duration_seconds": 14400,
+  "sample_interval_seconds": 15,
+  "sample_count": 961,
+  "coverage_percent": 100,
+  "single_worker_loss": true,
+  "error_rate_percent": 0,
+  "max_consecutive_errors": 0,
+  "operations": {
+    "api": {"count": 10000, "p95_ms": 184.2},
+    "mysql": {"count": 10000, "p95_ms": 92.4},
+    "redis": {"count": 10000, "p95_ms": 18.6},
+    "celery": {"count": 10000, "p95_ms": 612.5}
+  },
+  "resources": {
+    "api": {"cpu_percent": {"p95": 48, "max": 66}, "memory_mebibytes": {"p95": 512, "max": 694}},
+    "worker": {"cpu_percent": {"p95": 52, "max": 72}, "memory_mebibytes": {"p95": 566, "max": 782}},
+    "mysql": {"cpu_percent": {"p95": 43, "max": 61}, "memory_mebibytes": {"p95": 1280, "max": 1640}},
+    "redis": {"cpu_percent": {"p95": 31, "max": 48}, "memory_mebibytes": {"p95": 512, "max": 736}}
+  },
+  "database_connections": {
+    "peak": 94,
+    "allowed": 136,
+    "remaining_at_peak": 106
+  },
+  "celery_queue": {
+    "peak_depth": 38,
+    "final_depth": 0
+  }
+}

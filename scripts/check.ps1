@@ -8,7 +8,8 @@ param(
     [switch]$IncludeMonitoring,
     [switch]$IncludeKeyRotation,
     [switch]$IncludeStability,
-    [switch]$IncludeStagingReadiness
+    [switch]$IncludeStagingReadiness,
+    [switch]$IncludeStagingEvidence
 )
 
 $ErrorActionPreference = "Stop"
@@ -100,6 +101,11 @@ try {
         Invoke-Checked $Python -m ruff check ./scripts/verify_staging_readiness_profile.py ./scripts/tests/test_verify_staging_readiness_profile.py
         Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_staging_readiness_profile.py
         Invoke-Checked pwsh ./scripts/staging-readiness-plan.ps1 -PythonCommand $Python
+    }
+    if ($IncludeStagingEvidence) {
+        Invoke-Checked $Python -m ruff check ./scripts/verify_staging_execution_evidence.py ./scripts/tests/test_verify_staging_execution_evidence.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_staging_execution_evidence.py
+        Invoke-Checked pwsh ./scripts/staging-evidence-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

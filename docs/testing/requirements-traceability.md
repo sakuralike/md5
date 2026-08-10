@@ -311,3 +311,14 @@
 | 四方 Go/No-Go 审批 | `docs/templates/wp4-staging-go-no-go.md` | 精确要求 technical/security/operations/business 四个角色，缺失角色负向测试 | 模板与角色门禁完成；签字待目标环境证据 |
 | 敏感证据拒绝 | `verify_staging_readiness_profile.py` | 递归拒绝 password/token/secret/key/credential 等敏感键和值 | 自动化完成 |
 | 准入状态边界 | 生成计划 `contract-valid` / `not-run` / `pending-evidence` | 计划快照和 SHA-256 清单 | 合同验证完成，不等同于 4 小时运行或生产放行 |
+
+## 2026-08-10 WP4 第 13 次迭代补充：资源趋势与 HA 执行证据合同
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 资源趋势 schema | `infra/staging/resource-trend-report.example.json`、`verify_staging_execution_evidence.py` | 4 小时窗口、采样覆盖、四类操作量/P95/错误率、CPU/内存峰值和队列清零校验 | 合成合同夹具通过；目标环境采集待验收 |
+| MySQL 连接预算 | `readiness-profile.example.json`、资源趋势校验器 | 峰值连接、允许连接和剩余余量精确匹配；超预算负向测试 | 机器校验完成；目标 MySQL 上限待实测 |
+| MySQL HA 切换证据 | `mysql-ha-failover-report.example.json` | 主节点变化、读写恢复、数据一致性、幂等、RTO 42 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
+| Redis HA 切换证据 | `redis-ha-failover-report.example.json` | 主节点变化、限流/Worker 恢复、队列清零、RTO 28 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
+| 证据包完整性 | `staging-evidence-contract.ps1`、`staging-execution-evidence-summary.json` | 10 项校验器测试、profile SHA-256、6 文件 checksum、敏感字段拒绝 | 本地合成证据包 `contract-valid` |
+| 执行状态边界 | `staging-execution-evidence-bundle-v1` | fixture 固定为 `not-run/pending-evidence`；target execution 最高进入 `pending-approvals` | 未宣称 staging/HA 已完成 |

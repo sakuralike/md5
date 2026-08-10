@@ -1,0 +1,27 @@
+{
+  "schema": "staging-ha-failover-report-v1",
+  "evidence_kind": "contract-fixture",
+  "status": "passed",
+  "environment": "staging",
+  "synthetic_data_only": true,
+  "profile_sha256": "89e2c5fd7b3b59d6192e4247b3b62891c72f59147ac8c9410d14b1a60584749d",
+  "dependency": "redis",
+  "mode": "sentinel-or-managed-ha",
+  "started_at": "2026-08-10T04:20:00Z",
+  "failover_triggered_at": "2026-08-10T04:21:00Z",
+  "recovered_at": "2026-08-10T04:21:28Z",
+  "finished_at": "2026-08-10T04:23:00Z",
+  "rto_seconds": 28,
+  "rpo_seconds": 0,
+  "lost_records": 0,
+  "checks": {
+    "preflight_health": {"status": "passed"},
+    "failover_observed": {"status": "passed"},
+    "primary_changed": {"status": "passed"},
+    "application_readiness_recovered": {"status": "passed"},
+    "rate_limit_recovered": {"status": "passed"},
+    "celery_recovered": {"status": "passed"},
+    "queue_drained": {"status": "passed"},
+    "rollback_ready": {"status": "passed"}
+  }
+}

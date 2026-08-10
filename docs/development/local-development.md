@@ -318,3 +318,12 @@ pnpm staging:readiness-plan
 默认拓扑显式固定 API `2 × 2` 进程、Worker `3 × 2` 并发、单 Scheduler，连接池需求为 `11 × (5 + 5) = 110`，在 MySQL `200` 连接、预留 `30`、预算利用率 `80%` 时允许 `136`，余量 `26`。任何目标环境副本数、Worker 并发或连接池参数变化都必须重新生成计划。
 
 计划状态 `contract-valid` 只表示参数、容量预算、证据清单和审批角色通过静态校验；`execution_status=not-run` 与 `go_no_go_status=pending-evidence` 表示尚未在 staging 实际运行，不能据此宣称已完成 4 小时稳定性、HA 切换或发布签字。执行顺序与失败处理见 [WP4 Staging 准入运行手册](../runbooks/wp4-staging-readiness.md)，审批记录使用 [WP4 Staging Go/No-Go 模板](../templates/wp4-staging-go-no-go.md)。
+
+### WP4 资源趋势与 HA 执行证据合同
+
+```powershell
+pnpm staging:evidence-contract
+./scripts/check.ps1 -SkipInstall -IncludeStagingEvidence
+```
+
+该入口使用合成夹具验证资源趋势、MySQL/Redis HA 报告、profile SHA-256、连接预算和敏感字段边界，输出 `.local/staging-evidence-contract-wp4-iteration-13/`。`contract-fixture` 只代表合同可验证，绝不代表 staging 已运行；只有目标环境真实采集并标记为 `target-execution`，且摘要状态为 `evidence-valid` / `pending-approvals` 后，才可进入四角色 Go/No-Go 审批。

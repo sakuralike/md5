@@ -26,6 +26,7 @@
     "worker:backlog-drill": "pwsh ./scripts/worker-backlog-drill.ps1",
     "stability:multi-instance": "pwsh ./scripts/multi-instance-stability-drill.ps1",
     "staging:readiness-plan": "pwsh ./scripts/staging-readiness-plan.ps1",
+    "staging:evidence-contract": "pwsh ./scripts/staging-evidence-contract.ps1",
     "alertmanager:drill": "pwsh ./scripts/alertmanager-drill.ps1"
   },
   "devDependencies": {
