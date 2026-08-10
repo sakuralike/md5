@@ -76,6 +76,8 @@ pnpm security:dast
 ./scripts/check.ps1 -SkipInstall -IncludeSecurity
 ```
 
+当前 WP4 动态安全基线已扩展到 13 项，覆盖匿名/普通用户对象边界、浏览器 Cookie CSRF、管理员 MFA/再认证、幂等 replay/conflict、一次性授权重放和限流退避；这仍不等同于人工渗透、恢复演练或生产环境放行。
+
 ## 开发基线
 
 - [项目规格说明书](./项目文档/密码侦探社项目规格说明书-v3.0.md)
@@ -84,6 +86,7 @@ pnpm security:dast
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
 - [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
 - [API 动态安全基线](./docs/security/dast-baseline.md)
+- [WP4 第 5 次迭代记录](./docs/development/2026-08-10-wp4-iteration-5.md)
 - [WP4 第 4 次迭代记录](./docs/development/2026-08-10-wp4-iteration-4.md)
 - [WP4 第 3 次迭代记录](./docs/development/2026-08-09-wp4-iteration-3.md)
 - [WP4 第 2 次迭代记录](./docs/development/2026-08-09-wp4-iteration-2.md)

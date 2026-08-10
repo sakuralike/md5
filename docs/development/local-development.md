@@ -207,7 +207,7 @@ pnpm security:audit
 pnpm security:dast
 ```
 
-报告默认写入 `.local/security-dast/dast-report.json`。当前 DAST 固定执行 10 项检查，其中包含每次运行创建的两个合成普通用户、跨用户隐私导出/会话撤销边界和浏览器刷新 Cookie 的 HttpOnly/SameSite/路径/Origin 校验；报告不保存密码、令牌或 Cookie 值。`check.ps1 -IncludeSecurity` 会同时运行静态门禁和动态门禁；远端 `dast-security` 作业上传提交级报告与 API 日志。规则、检查项和未覆盖边界见 [API 动态安全基线](../security/dast-baseline.md)。
+报告默认写入 `.local/security-dast/dast-report.json`。当前 DAST 固定执行 13 项检查，除匿名与普通用户对象边界、浏览器刷新 Cookie 安全外，还包含隔离数据库内唯一合成管理员的 MFA/再认证、幂等精确重放/冲突、一次性授权重放拒绝和限流 `Retry-After` 校验；管理员角色通过白盒测试 fixture 授予，不新增生产 bootstrap 接口。报告不保存密码、TOTP、令牌或 Cookie 值。`check.ps1 -IncludeSecurity` 会同时运行静态门禁和动态门禁；远端 `dast-security` 作业上传提交级报告与 API 日志。规则、检查项和未覆盖边界见 [API 动态安全基线](../security/dast-baseline.md)。
 
 ## 统一检查
 

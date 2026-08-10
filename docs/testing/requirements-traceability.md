@@ -256,3 +256,14 @@
 | 浏览器刷新 Cookie 安全属性 | `core/browser_session.py` 既有 Cookie 策略由动态探针复核 | DAST `browser_cookie_csrf_samesite` | `HttpOnly`、`SameSite=Lax`、`Path=/api/v1/web/auth` 通过 |
 | 浏览器 Cookie CSRF 来源校验 | 可信/不可信 Origin 的 refresh 请求 | API 定向测试与 DAST | 不可信来源 `403 request.invalid_origin`，可信来源刷新成功 |
 | DAST 可重复与敏感材料隔离 | 唯一合成用户、Cookie 解析器仅在请求链中使用值 | 13 项脚本测试；本地 DAST `10/10`；CI `31349411600` | 报告不写入密码、令牌或 Cookie 值；管理员 MFA/重放/资源消耗仍未覆盖 |
+
+
+## 2026-08-10 WP4 第 5 次迭代补充：管理员 MFA、再认证与幂等滥用门禁
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 管理员 MFA 与高权限再认证 | 管理员路由、认证/TOTP 核心及 `test_wp4_dast_security.py` | DAST `admin_mfa_reauthentication`；错误当前密码拒绝、可信 Origin 登录和 `Cache-Control: no-store` | 动态门禁完成；更完整管理员对象矩阵和目标环境验收待补 |
+| 再认证授权一次性消费 | 管理员状态变更授权存储与高权限入口 | `idempotency_replay_conflict` 验证已消费 token 再用于其他目标返回 `401 auth.invalid_reauthentication_token` | 一次性重放门禁完成；浏览器多标签竞争待补 |
+| 管理员状态变更幂等 | 管理员状态变更与幂等核心 | 相同 `Idempotency-Key` 精确重放返回相同响应；请求内容变化返回 `409 request.idempotency_conflict` | 动态门禁完成；长时间并发/资源消耗待补 |
+| 再认证失败限流与客户端退避 | `core/errors.py`、限流核心 | `admin_reauthentication_rate_limit` 与 `test_m1_security_gates.py` 验证 `429 rate_limit.exceeded` 和 `Retry-After` | 标准响应头完成；真实 Redis 恢复与跨实例一致性待补 |
+| DAST 敏感材料隔离 | `dast_security_gate.py` 报告摘要结构 | 本地 `.local/security-dast-wp4-iteration-5b/dast-report.json` Secret 扫描通过；CI `31352246919` DAST 作业通过 | 本轮证据完成；认证爬虫、ZAP、人工渗透和生产评估不在本门禁范围 |
