@@ -59,7 +59,9 @@ CI 使用提交 SHA 命名并保留 30 天的 `recovery-evidence-*` 制品。报
 
 ## 失败处理
 
-1. 查看 `recovery-report.json` 的 `error_code` 和脱敏错误摘要。
+恢复脚本会先检查 API、MySQL 和 Redis 的宿主机端口是否已占用，避免请求误连到其他本地服务。API 容器在启动时最多执行 5 次 Alembic 升级尝试，每次失败间隔 5 秒；全部失败后仍然退出并阻断门禁，不会跳过迁移。失败报告的 `diagnostics` 会写入脱敏后的 `compose ps`、API 日志和 Worker 日志，并在部分容器已经创建时执行统一清理。
+
+1. 查看 `recovery-report.json` 的 `error_code`、脱敏错误摘要和 `diagnostics`。
 2. 调试时使用 `-KeepEnvironment`，执行 `docker compose --project-name password-detective-recovery ps` 与 `logs`。
 3. 调试完成后执行：
 
