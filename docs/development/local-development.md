@@ -209,6 +209,25 @@ pnpm security:dast
 
 报告默认写入 `.local/security-dast/dast-report.json`。当前 DAST 固定执行 13 项检查，除匿名与普通用户对象边界、浏览器刷新 Cookie 安全外，还包含隔离数据库内唯一合成管理员的 MFA/再认证、幂等精确重放/冲突、一次性授权重放拒绝和限流 `Retry-After` 校验；管理员角色通过白盒测试 fixture 授予，不新增生产 bootstrap 接口。报告不保存密码、TOTP、令牌或 Cookie 值。`check.ps1 -IncludeSecurity` 会同时运行静态门禁和动态门禁；远端 `dast-security` 作业上传提交级报告与 API 日志。规则、检查项和未覆盖边界见 [API 动态安全基线](../security/dast-baseline.md)。
 
+## 恢复演练
+
+恢复门禁使用独立 Compose 项目和 `18120/13316/16379` 端口，不会占用默认的本地 API、MySQL 和 Redis 端口，但会清理该专用项目的数据卷：
+
+```powershell
+pnpm recovery:drill
+python ./scripts/verify_recovery_evidence.py `
+  --report ./.local/recovery-wp4-iteration-6/recovery-report.json `
+  --write-checksums
+```
+
+也可显式并入统一门禁：
+
+```powershell
+./scripts/check.ps1 -SkipInstall -IncludeRecovery
+```
+
+脚本验证 MySQL 备份/清空/恢复、Redis 故障期间 liveness/readiness 和限流 fail-closed、Worker 中断重启与隐私导出任务幂等。默认结束后销毁专用环境；详细参数、RPO/RTO 阈值和失败处理见[WP4 恢复演练运行手册](../runbooks/wp4-recovery-drill.md)。
+
 ## 统一检查
 
 ```powershell
@@ -221,7 +240,7 @@ pnpm security:dast
 ./scripts/check.ps1 -SkipInstall
 ```
 
-脚本执行 Ruff、pytest 覆盖率、SQLite Alembic 往返、TypeScript、Vitest、生产构建、WPF Release 构建和桌面安全测试。托管 CI 还会启动 MySQL 8.4，执行一次完整的 Alembic `upgrade → downgrade base → upgrade` 往返，避免 SQLite 无法暴露的数据库方言兼容问题。
+脚本默认执行 Ruff、pytest 覆盖率、SQLite Alembic 往返、TypeScript、Vitest、生产构建、WPF Release 构建和桌面安全测试；`-IncludeSecurity` 和 `-IncludeRecovery` 分别显式增加安全与恢复门禁。托管 CI 还会启动 MySQL 8.4，执行一次完整的 Alembic `upgrade → downgrade base → upgrade` 往返，避免 SQLite 无法暴露的数据库方言兼容问题。
 
 ## Docker 空环境门禁
 

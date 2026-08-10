@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：WP2/WP3 主要业务与跨浏览器预检已形成自动化基线；WP4 第 4 轮已补齐已认证普通用户对象级边界和浏览器 Cookie CSRF/SameSite 动态门禁。管理员 MFA/再认证滥用、幂等重放、资源消耗、恢复、性能、可观测性和目标环境验收仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：WP2/WP3 主要业务与跨浏览器预检已形成自动化基线；WP4 已完成供应链/镜像/Secret/DAST 门禁，并在第 6 轮建立 MySQL、Redis 与 Worker 的真实故障恢复演练。完整 BOLA、资源消耗、密钥轮换、性能、可观测性和目标环境验收仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -74,9 +74,13 @@ pnpm security:audit
 pnpm security:dast
 # 或将静态与动态安全门禁并入统一检查
 ./scripts/check.ps1 -SkipInstall -IncludeSecurity
+
+# 隔离 Compose 恢复演练（会清理专用测试数据卷）
+pnpm recovery:drill
+./scripts/check.ps1 -SkipInstall -IncludeRecovery
 ```
 
-当前 WP4 动态安全基线已扩展到 13 项，覆盖匿名/普通用户对象边界、浏览器 Cookie CSRF、管理员 MFA/再认证、幂等 replay/conflict、一次性授权重放和限流退避；这仍不等同于人工渗透、恢复演练或生产环境放行。
+当前 WP4 动态安全基线已扩展到 13 项；恢复门禁另行覆盖 MySQL 备份清空恢复、Redis fail-closed/恢复和 Worker 中断重启/任务幂等。两者仍不等同于人工渗透、跨区域灾备、性能验收或生产环境放行。
 
 ## 开发基线
 
@@ -86,6 +90,8 @@ pnpm security:dast
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
 - [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
 - [API 动态安全基线](./docs/security/dast-baseline.md)
+- [WP4 第 6 次迭代记录](./docs/development/2026-08-10-wp4-iteration-6.md)
+- [WP4 恢复演练运行手册](./docs/runbooks/wp4-recovery-drill.md)
 - [WP4 第 5 次迭代记录](./docs/development/2026-08-10-wp4-iteration-5.md)
 - [WP4 第 4 次迭代记录](./docs/development/2026-08-10-wp4-iteration-4.md)
 - [WP4 第 3 次迭代记录](./docs/development/2026-08-09-wp4-iteration-3.md)

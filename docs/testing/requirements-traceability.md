@@ -267,3 +267,13 @@
 | 管理员状态变更幂等 | 管理员状态变更与幂等核心 | 相同 `Idempotency-Key` 精确重放返回相同响应；请求内容变化返回 `409 request.idempotency_conflict` | 动态门禁完成；长时间并发/资源消耗待补 |
 | 再认证失败限流与客户端退避 | `core/errors.py`、限流核心 | `admin_reauthentication_rate_limit` 与 `test_m1_security_gates.py` 验证 `429 rate_limit.exceeded` 和 `Retry-After` | 标准响应头完成；真实 Redis 恢复与跨实例一致性待补 |
 | DAST 敏感材料隔离 | `dast_security_gate.py` 报告摘要结构 | 本地 `.local/security-dast-wp4-iteration-5b/dast-report.json` Secret 扫描通过；CI `31352246919` DAST 作业通过 | 本轮证据完成；认证爬虫、ZAP、人工渗透和生产评估不在本门禁范围 |
+
+
+## 2026-08-10 WP4 第 6 次迭代补充：MySQL、Redis 与 Worker 恢复演练
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| MySQL 备份、清空与恢复 | `scripts/recovery-drill.ps1`、可配置 Compose 主机端口 | 真实 `mysqldump`、清空后表数 0、恢复后原合成账号登录；RPO 0.648 秒、RTO 17.648 秒 | 单节点 Compose 自动门禁完成；跨区域、保留策略和对象存储恢复待验收 |
+| Redis 丢失降级与恢复 | `/health/live`、`/health/ready`、Redis 限流 fail-closed | outage 期间 liveness 200、readiness 503、认证限流 503；恢复后 readiness 200，RTO 8.908 秒 | 单实例故障门禁完成；集群切换和长故障待验收 |
+| Worker 中断、重启与任务幂等 | Celery `privacy.build_export`、Worker Compose 存储卷和 `/tmp` Beat schedule | Worker 停止时任务 pending，重启后 ready；重复投递后 `privacy.export.ready` 仅 1 条，RTO 31.183 秒 | 隐私导出任务自动门禁完成；堆积、超时、死信和多 Worker 竞争待验收 |
+| 恢复证据可机器复核 | `verify_recovery_evidence.py`、`recovery-drill-v1`、`recovery` CI 作业 | 3 项校验器测试；脚本测试全集 16 项；报告阈值、汇总和敏感字段拒绝 | 本地真实演练通过；CI 保存 30 天提交级制品 |
