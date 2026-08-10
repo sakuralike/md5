@@ -33,7 +33,15 @@ def error_payload(request: Request, error: AppError) -> dict[str, Any]:
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content=error_payload(request, exc))
+    headers: dict[str, str] = {}
+    retry_after = exc.details.get("retry_after_seconds")
+    if exc.code == "rate_limit.exceeded" and isinstance(retry_after, int) and retry_after > 0:
+        headers["Retry-After"] = str(retry_after)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_payload(request, exc),
+        headers=headers,
+    )
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -3,8 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from uuid import uuid4
 
+import pyotp
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from password_detective.db.models.user import User, UserRole
 
 EXPECTED_SECURITY_HEADERS = {
     "x-content-type-options": "nosniff",
@@ -156,9 +160,7 @@ def test_authenticated_object_boundaries_and_browser_cookie_csrf(
     assert export.status_code == 202
     export_id = export.json()["id"]
 
-    foreign_export = client.get(
-        f"/api/v1/me/privacy/exports/{export_id}", headers=other_headers
-    )
+    foreign_export = client.get(f"/api/v1/me/privacy/exports/{export_id}", headers=other_headers)
     assert foreign_export.status_code == 404
     assert foreign_export.json()["code"] == "privacy.export_not_found"
 
@@ -187,3 +189,145 @@ def test_authenticated_object_boundaries_and_browser_cookie_csrf(
     )
     assert rejected.status_code == 403
     assert rejected.json()["code"] == "request.invalid_origin"
+
+
+def test_admin_mfa_reauthentication_and_idempotency_negative_probes(
+    client: TestClient,
+) -> None:
+    suffix = uuid4().hex[:10]
+    password = "SyntheticWp4AdminPass123!"
+    admin = {
+        "username": f"wp4_admin_{suffix}",
+        "email": f"wp4-admin-{suffix}@example.com",
+        "password": password,
+    }
+    target = {
+        "username": f"wp4_target_{suffix}",
+        "email": f"wp4-target-{suffix}@example.com",
+        "password": "SyntheticWp4TargetPass123!",
+    }
+    replay_target = {
+        "username": f"wp4_replay_target_{suffix}",
+        "email": f"wp4-replay-target-{suffix}@example.com",
+        "password": "SyntheticWp4ReplayTargetPass123!",
+    }
+    assert client.post("/api/v1/auth/register", json=admin).status_code == 201
+    initial_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": admin["username"], "password": password},
+    )
+    assert initial_login.status_code == 200
+    initial_headers = {"Authorization": f"Bearer {initial_login.json()['access_token']}"}
+    with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == admin["username"]))
+        assert user is not None
+        user.role = UserRole.ADMIN
+        db.commit()
+
+    setup = client.post("/api/v1/admin/totp/setup", headers=initial_headers)
+    assert setup.status_code == 200
+    secret = setup.json()["secret"]
+    code = pyotp.TOTP(secret).now()
+    assert (
+        client.post(
+            "/api/v1/admin/totp/confirm", headers=initial_headers, json={"code": code}
+        ).status_code
+        == 200
+    )
+
+    mfa_required = client.get("/api/v1/admin/access-check", headers=initial_headers)
+    assert mfa_required.status_code == 403
+    assert mfa_required.json()["code"] == "auth.totp_required"
+
+    admin_login = client.post(
+        "/api/v1/admin/auth/login",
+        headers={"Origin": "http://testserver"},
+        json={
+            "login": admin["username"],
+            "password": password,
+            "totp_code": pyotp.TOTP(secret).now(),
+        },
+    )
+    assert admin_login.status_code == 200
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    assert client.get("/api/v1/admin/access-check", headers=admin_headers).status_code == 200
+
+    wrong_reauth = client.post(
+        "/api/v1/admin/auth/reauthenticate",
+        headers=admin_headers,
+        json={
+            "current_password": "SyntheticWrongPass123!",
+            "totp_code": pyotp.TOTP(secret).now(),
+        },
+    )
+    assert wrong_reauth.status_code == 400
+    assert wrong_reauth.json()["code"] == "auth.invalid_current_password"
+
+    reauth = client.post(
+        "/api/v1/admin/auth/reauthenticate",
+        headers=admin_headers,
+        json={"current_password": password, "totp_code": pyotp.TOTP(secret).now()},
+    )
+    assert reauth.status_code == 200
+    assert reauth.headers["cache-control"] == "no-store"
+    reauth_token = reauth.json()["reauth_token"]
+
+    assert client.post("/api/v1/auth/register", json=target).status_code == 201
+    assert client.post("/api/v1/auth/register", json=replay_target).status_code == 201
+    target_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": target["username"], "password": target["password"]},
+    )
+    assert target_login.status_code == 200
+    target_token = target_login.json()["access_token"]
+    profile = client.get("/api/v1/me/profile", headers={"Authorization": f"Bearer {target_token}"})
+    assert profile.status_code == 200
+    target_id = profile.json()["id"]
+    replay_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": replay_target["username"], "password": replay_target["password"]},
+    )
+    assert replay_login.status_code == 200
+    replay_profile = client.get(
+        "/api/v1/me/profile",
+        headers={"Authorization": f"Bearer {replay_login.json()['access_token']}"},
+    )
+    assert replay_profile.status_code == 200
+    replay_target_id = replay_profile.json()["id"]
+
+    action_key = f"wp4-status-{suffix}"
+    payload = {
+        "expected_status": "active",
+        "status": "disabled",
+        "reason_code": "security_risk",
+        "reauth_token": reauth_token,
+    }
+    action = client.patch(
+        f"/api/v1/admin/users/{target_id}/status",
+        headers={**admin_headers, "Idempotency-Key": action_key},
+        json=payload,
+    )
+    assert action.status_code == 200
+    replay = client.patch(
+        f"/api/v1/admin/users/{target_id}/status",
+        headers={**admin_headers, "Idempotency-Key": action_key},
+        json=payload,
+    )
+    assert replay.status_code == 200
+    assert replay.json() == action.json()
+
+    conflict = client.patch(
+        f"/api/v1/admin/users/{target_id}/status",
+        headers={**admin_headers, "Idempotency-Key": action_key},
+        json={**payload, "reason_code": "manual_review"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "request.idempotency_conflict"
+
+    consumed = client.patch(
+        f"/api/v1/admin/users/{replay_target_id}/status",
+        headers={**admin_headers, "Idempotency-Key": f"{action_key}-consumed"},
+        json=payload,
+    )
+    assert consumed.status_code == 401
+    assert consumed.json()["code"] == "auth.invalid_reauthentication_token"

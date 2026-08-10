@@ -66,6 +66,8 @@ def test_login_endpoint_uses_redis_rate_limit(client):
     )
     assert blocked.status_code == 429
     assert blocked.json()["code"] == "rate_limit.exceeded"
+    assert int(blocked.headers["retry-after"]) >= 1
+    assert blocked.json()["details"]["retry_after_seconds"] >= 1
 
 
 def test_browser_refresh_token_uses_httponly_cookie(client):

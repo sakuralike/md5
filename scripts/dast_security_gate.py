@@ -84,6 +84,25 @@ def parse_set_cookie(set_cookie: str) -> tuple[str, dict[str, str | bool]]:
     return morsel.value, attributes
 
 
+def _promote_dast_user_to_admin(username: str) -> None:
+    """Promote a synthetic DAST fixture without exposing an admin bootstrap API."""
+    from password_detective.core.config import Settings
+    from password_detective.db.database import Database
+    from password_detective.db.models.user import User, UserRole
+    from sqlalchemy import select
+
+    database = Database(Settings())
+    try:
+        with database.session_factory() as db:
+            user = db.scalar(select(User).where(User.username == username))
+            if user is None:
+                raise RuntimeError("DAST admin fixture registration was not persisted")
+            user.role = UserRole.ADMIN
+            db.commit()
+    finally:
+        database.dispose()
+
+
 def run_checks(base_url: str) -> list[CheckResult]:
     checks: list[CheckResult] = []
 
@@ -100,7 +119,9 @@ def run_checks(base_url: str) -> list[CheckResult]:
 
     live = request(base_url, "GET", "/api/v1/health/live")
     missing_headers = [
-        name for name, expected in SECURITY_HEADERS.items() if live.headers.get(name) != expected
+        name
+        for name, expected in SECURITY_HEADERS.items()
+        if live.headers.get(name) != expected
     ]
     csp = live.headers.get("content-security-policy", "")
     request_id = live.headers.get("x-request-id", "")
@@ -129,7 +150,10 @@ def run_checks(base_url: str) -> list[CheckResult]:
     ):
         result = request(base_url, method, path)
         payload = _parse_json(result.body)
-        if result.status != 401 or payload.get("code") != "auth.authentication_required":
+        if (
+            result.status != 401
+            or payload.get("code") != "auth.authentication_required"
+        ):
             protected_failures.append(f"{method} {path} -> {result.status}")
     checks.append(
         CheckResult(
@@ -162,7 +186,8 @@ def run_checks(base_url: str) -> list[CheckResult]:
         CheckResult(
             "cors_origin_policy",
             allowed.status == 200
-            and allowed.headers.get("access-control-allow-origin") == "http://localhost:5173"
+            and allowed.headers.get("access-control-allow-origin")
+            == "http://localhost:5173"
             and rejected.status == 400
             and "access-control-allow-origin" not in rejected.headers,
             None,
@@ -228,7 +253,8 @@ def run_checks(base_url: str) -> list[CheckResult]:
     checks.append(
         CheckResult(
             "oversized_json_body",
-            oversized.status == 413 and oversized_payload.get("code") == "request.body_too_large",
+            oversized.status == 413
+            and oversized_payload.get("code") == "request.body_too_large",
             oversized.status,
             "oversized JSON body rejected before endpoint handling",
         )
@@ -295,10 +321,14 @@ def run_checks(base_url: str) -> list[CheckResult]:
                 f"/api/v1/me/privacy/exports/{export_id}",
                 headers=other_headers,
             )
-            if other_export.status != 404 or _parse_json(other_export.body).get(
-                "code"
-            ) != "privacy.export_not_found":
-                object_failures.append(f"cross-user export read -> {other_export.status}")
+            if (
+                other_export.status != 404
+                or _parse_json(other_export.body).get("code")
+                != "privacy.export_not_found"
+            ):
+                object_failures.append(
+                    f"cross-user export read -> {other_export.status}"
+                )
 
         owner_sessions = request(
             base_url,
@@ -318,10 +348,14 @@ def run_checks(base_url: str) -> list[CheckResult]:
                 f"/api/v1/me/security/sessions/{family_id}",
                 headers=other_headers,
             )
-            if cross_revoke.status != 404 or _parse_json(cross_revoke.body).get(
-                "code"
-            ) != "auth.session_not_found":
-                object_failures.append(f"cross-user session revoke -> {cross_revoke.status}")
+            if (
+                cross_revoke.status != 404
+                or _parse_json(cross_revoke.body).get("code")
+                != "auth.session_not_found"
+            ):
+                object_failures.append(
+                    f"cross-user session revoke -> {cross_revoke.status}"
+                )
     checks.append(
         CheckResult(
             "authenticated_object_boundaries",
@@ -383,6 +417,320 @@ def run_checks(base_url: str) -> list[CheckResult]:
         )
     )
 
+    admin_password = "SyntheticDastAdminPass123!"
+    admin_username = f"dast_admin_{uuid4().hex[:12]}"
+    admin_email = f"{admin_username}@example.com"
+    admin_registration = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/register",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "username": admin_username,
+                "email": admin_email,
+                "password": admin_password,
+            }
+        ).encode(),
+    )
+    admin_registered = admin_registration.status == 201
+    if admin_registered:
+        _promote_dast_user_to_admin(admin_username)
+
+    initial_admin_login = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/login",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps({"login": admin_username, "password": admin_password}).encode(),
+    )
+    initial_admin_token = _parse_json(initial_admin_login.body).get("access_token", "")
+    initial_admin_headers = {"Authorization": f"Bearer {initial_admin_token}"}
+    setup = request(
+        base_url,
+        "POST",
+        "/api/v1/admin/totp/setup",
+        headers={**initial_admin_headers, "Content-Type": "application/json"},
+        body=b"{}",
+    )
+    setup_payload = _parse_json(setup.body)
+    admin_secret = setup_payload.get("secret", "")
+
+    import pyotp
+
+    confirm = request(
+        base_url,
+        "POST",
+        "/api/v1/admin/totp/confirm",
+        headers={**initial_admin_headers, "Content-Type": "application/json"},
+        body=json.dumps({"code": pyotp.TOTP(admin_secret).now()}).encode(),
+    )
+    mfa_required = request(
+        base_url, "GET", "/api/v1/admin/access-check", headers=initial_admin_headers
+    )
+    admin_login = request(
+        base_url,
+        "POST",
+        "/api/v1/admin/auth/login",
+        headers={"Origin": "http://localhost:5173", "Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "login": admin_username,
+                "password": admin_password,
+                "totp_code": pyotp.TOTP(admin_secret).now(),
+            }
+        ).encode(),
+    )
+    admin_login_payload = _parse_json(admin_login.body)
+    admin_token = admin_login_payload.get("access_token", "")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    access_check = request(
+        base_url, "GET", "/api/v1/admin/access-check", headers=admin_headers
+    )
+
+    wrong_reauth = request(
+        base_url,
+        "POST",
+        "/api/v1/admin/auth/reauthenticate",
+        headers={**admin_headers, "Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "current_password": "SyntheticWrongPass123!",
+                "totp_code": pyotp.TOTP(admin_secret).now(),
+            }
+        ).encode(),
+    )
+    reauth = request(
+        base_url,
+        "POST",
+        "/api/v1/admin/auth/reauthenticate",
+        headers={**admin_headers, "Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "current_password": admin_password,
+                "totp_code": pyotp.TOTP(admin_secret).now(),
+            }
+        ).encode(),
+    )
+    reauth_payload = _parse_json(reauth.body)
+    reauth_token = reauth_payload.get("reauth_token", "")
+    admin_security_ok = (
+        admin_registered
+        and initial_admin_login.status == 200
+        and setup.status == 200
+        and bool(admin_secret)
+        and confirm.status == 200
+        and mfa_required.status == 403
+        and _parse_json(mfa_required.body).get("code") == "auth.totp_required"
+        and admin_login.status == 200
+        and access_check.status == 200
+        and access_check.headers.get("cache-control") == "no-store"
+        and wrong_reauth.status == 400
+        and _parse_json(wrong_reauth.body).get("code")
+        == "auth.invalid_current_password"
+        and reauth.status == 200
+        and bool(reauth_token)
+        and reauth.headers.get("cache-control") == "no-store"
+    )
+    checks.append(
+        CheckResult(
+            "admin_mfa_reauthentication",
+            admin_security_ok,
+            reauth.status,
+            "admin MFA setup, MFA-gated access, wrong-credential rejection, and no-store reauthentication passed"
+            if admin_security_ok
+            else f"register={admin_registration.status}, setup={setup.status}, mfa={mfa_required.status}, login={admin_login.status}, reauth={reauth.status}",
+        )
+    )
+
+    target_username = f"dast_target_{uuid4().hex[:12]}"
+    target_password = "SyntheticDastTargetPass123!"
+    target_registration = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/register",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "username": target_username,
+                "email": f"{target_username}@example.com",
+                "password": target_password,
+            }
+        ).encode(),
+    )
+    target_login = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/login",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {"login": target_username, "password": target_password}
+        ).encode(),
+    )
+    target_login_payload = _parse_json(target_login.body)
+    target_token = target_login_payload.get("access_token", "")
+    target_user_id = ""
+    if target_token:
+        profile = request(
+            base_url,
+            "GET",
+            "/api/v1/me/profile",
+            headers={"Authorization": f"Bearer {target_token}"},
+        )
+        target_user_id = _parse_json(profile.body).get("id", "")
+
+    replay_target_username = f"dast_replay_target_{uuid4().hex[:12]}"
+    replay_target_password = "SyntheticDastReplayTargetPass123!"
+    replay_registration = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/register",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "username": replay_target_username,
+                "email": f"{replay_target_username}@example.com",
+                "password": replay_target_password,
+            }
+        ).encode(),
+    )
+    replay_login = request(
+        base_url,
+        "POST",
+        "/api/v1/auth/login",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {"login": replay_target_username, "password": replay_target_password}
+        ).encode(),
+    )
+    replay_target_id = ""
+    replay_token = _parse_json(replay_login.body).get("access_token", "")
+    if replay_token:
+        replay_profile = request(
+            base_url,
+            "GET",
+            "/api/v1/me/profile",
+            headers={"Authorization": f"Bearer {replay_token}"},
+        )
+        replay_target_id = _parse_json(replay_profile.body).get("id", "")
+
+    action_key = f"wp4-dast-status-{uuid4().hex}"
+    action_payload = {
+        "expected_status": "active",
+        "status": "disabled",
+        "reason_code": "security_risk",
+        "reauth_token": reauth_token,
+    }
+    action = request(
+        base_url,
+        "PATCH",
+        f"/api/v1/admin/users/{target_user_id}/status",
+        headers={
+            **admin_headers,
+            "Content-Type": "application/json",
+            "Idempotency-Key": action_key,
+        },
+        body=json.dumps(action_payload).encode(),
+    )
+    replay = request(
+        base_url,
+        "PATCH",
+        f"/api/v1/admin/users/{target_user_id}/status",
+        headers={
+            **admin_headers,
+            "Content-Type": "application/json",
+            "Idempotency-Key": action_key,
+        },
+        body=json.dumps(action_payload).encode(),
+    )
+    conflict_payload = {**action_payload, "reason_code": "manual_review"}
+    conflict = request(
+        base_url,
+        "PATCH",
+        f"/api/v1/admin/users/{target_user_id}/status",
+        headers={
+            **admin_headers,
+            "Content-Type": "application/json",
+            "Idempotency-Key": action_key,
+        },
+        body=json.dumps(conflict_payload).encode(),
+    )
+    consumed = request(
+        base_url,
+        "PATCH",
+        f"/api/v1/admin/users/{replay_target_id}/status",
+        headers={
+            **admin_headers,
+            "Content-Type": "application/json",
+            "Idempotency-Key": f"{action_key}-consumed",
+        },
+        body=json.dumps(action_payload).encode(),
+    )
+    action_body = _parse_json(action.body)
+    replay_body = _parse_json(replay.body)
+    idempotency_ok = (
+        target_registration.status == 201
+        and target_login.status == 200
+        and replay_registration.status == 201
+        and replay_login.status == 200
+        and bool(target_user_id)
+        and bool(replay_target_id)
+        and action.status == 200
+        and action_body.get("current_status") == "disabled"
+        and replay.status == 200
+        and replay_body == action_body
+        and conflict.status == 409
+        and _parse_json(conflict.body).get("code") == "request.idempotency_conflict"
+        and consumed.status == 401
+        and _parse_json(consumed.body).get("code")
+        == "auth.invalid_reauthentication_token"
+    )
+    checks.append(
+        CheckResult(
+            "idempotency_replay_conflict",
+            idempotency_ok,
+            conflict.status,
+            "admin status mutation replayed safely, rejected payload conflict, and consumed reauth grant once"
+            if idempotency_ok
+            else f"action={action.status}, replay={replay.status}, conflict={conflict.status}, consumed={consumed.status}",
+        )
+    )
+
+    limit_results: list[HttpResult] = []
+    for _ in range(12):
+        limit_results.append(
+            request(
+                base_url,
+                "POST",
+                "/api/v1/admin/auth/reauthenticate",
+                headers={**admin_headers, "Content-Type": "application/json"},
+                body=json.dumps(
+                    {
+                        "current_password": "SyntheticWrongPass123!",
+                        "totp_code": pyotp.TOTP(admin_secret).now(),
+                    }
+                ).encode(),
+            )
+        )
+    first_limited = next(
+        (result for result in limit_results if result.status == 429), None
+    )
+    rate_limit_ok = (
+        first_limited is not None
+        and _parse_json(first_limited.body).get("code") == "rate_limit.exceeded"
+        and bool(first_limited.headers.get("retry-after"))
+    )
+    checks.append(
+        CheckResult(
+            "admin_reauthentication_rate_limit",
+            rate_limit_ok,
+            first_limited.status if first_limited else limit_results[-1].status,
+            "repeated privileged reauthentication attempts reached a 429 gate with Retry-After"
+            if rate_limit_ok
+            else f"statuses={[result.status for result in limit_results]}",
+        )
+    )
+
     return checks
 
 
@@ -400,7 +748,9 @@ def write_report(output: Path, base_url: str, checks: list[CheckResult]) -> None
         "checks": [asdict(check) for check in checks],
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _parse_json(body: str) -> dict[str, Any]:
@@ -422,9 +772,13 @@ def _parse_json_list(body: str) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run deterministic API dynamic security probes.")
+    parser = argparse.ArgumentParser(
+        description="Run deterministic API dynamic security probes."
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8011")
-    parser.add_argument("--output", type=Path, default=Path(".local/security-dast/dast-report.json"))
+    parser.add_argument(
+        "--output", type=Path, default=Path(".local/security-dast/dast-report.json")
+    )
     args = parser.parse_args()
 
     try:
