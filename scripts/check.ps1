@@ -109,9 +109,10 @@ try {
         Invoke-Checked pwsh ./scripts/staging-evidence-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeStagingAdapters) {
-        Invoke-Checked $Python -m ruff check ./scripts/materialize_staging_execution_evidence.py ./scripts/tests/test_materialize_staging_execution_evidence.py
-        Invoke-Checked $Python -m pytest ./scripts/tests/test_materialize_staging_execution_evidence.py
+        Invoke-Checked $Python -m ruff check ./scripts/materialize_staging_execution_evidence.py ./scripts/adapt_staging_platform_exports.py ./scripts/tests/test_materialize_staging_execution_evidence.py ./scripts/tests/test_adapt_staging_platform_exports.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_materialize_staging_execution_evidence.py ./scripts/tests/test_adapt_staging_platform_exports.py
         Invoke-Checked pwsh ./scripts/staging-target-adapter-contract.ps1 -PythonCommand $Python
+        Invoke-Checked pwsh ./scripts/staging-platform-export-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

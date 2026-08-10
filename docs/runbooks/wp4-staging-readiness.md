@@ -198,3 +198,32 @@ pnpm staging:target-adapter-contract
 - MySQL/Redis 切换超过阈值：执行回滚并判定 `NO-GO`；
 - 证据含敏感字段：销毁该证据，修复采集器后重新完整执行；
 - SHA-256 不匹配：证据视为无效，不允许人工覆盖结论。
+
+## 11. Prometheus 与 HA 平台导出接入
+
+目标环境不得把监控端点、PromQL 查询中的内部标签、认证头、连接串或原始平台事件 ID 写入仓库。平台侧先完成聚合和脱敏，再按以下合同导出：
+
+- 资源文件使用 `staging-prometheus-range-export-v1`，包含 API、Worker、MySQL、Redis 的 CPU/内存，以及数据库连接数和 Celery 队列深度共 10 个规范化序列；
+- 每个序列保留 Prometheus HTTP API `matrix` 响应形状，但必须预聚合为单序列，并使用与 profile 相同的 15 秒采样周期；
+- MySQL/Redis 文件使用 `staging-ha-platform-export-v1`，原始平台事件只能以 SHA-256 摘要关联；
+- 三个文件必须共享同一 `execution_group_id`、`evidence_kind` 和受控 UTC 时钟基线。
+
+人工执行命令：
+
+```powershell
+./scripts/staging-platform-export-execution.ps1 `
+  -ResourceExport <prometheus-resource-export.json> `
+  -MysqlExport <mysql-ha-platform-export.json> `
+  -RedisExport <redis-ha-platform-export.json> `
+  -OutputDirectory .local/staging-target-execution-wp4-iteration-15
+```
+
+执行链会先运行字段白名单、敏感信息、时间轴、采样周期、整数指标、HA 模式和执行组校验，再调用通用源物化器和最终证据校验器。任何一步失败都不得手工修改最终摘要绕过；应修复平台导出并重新完整执行。
+
+本地/CI 合同只能使用：
+
+```powershell
+pnpm staging:platform-export-contract
+```
+
+该命令生成的制品必须保持 `evidence_kind=contract-fixture`、`execution_status=not-run`，不可提交给 Go/No-Go 审批充当目标环境证据。

@@ -22,6 +22,14 @@
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
+## 2026-08-10 WP4 第 15 次迭代补充
+
+- 新增 Prometheus `query_range` 规范导入合同，要求 10 个资源/连接/队列序列完全对齐、使用整秒 UTC 时间戳，并匹配 profile 的 15 秒采样周期。
+- 新增 MySQL/Redis HA 平台事件导入合同，只允许脱敏生命周期、durability 和原始事件 SHA-256；原始平台事件 ID、端点、凭据和未批准字段被拒绝。
+- 新增人工 `staging-platform-export-execution.ps1`、`staging:platform-export-contract`、14 项正负向测试、统一门禁和独立 CI 作业。
+- 本地 4 小时形状合同链和 `check.ps1 -SkipInstall -IncludeStagingAdapters` 统一门禁已通过，并保持 `contract-fixture / not-run`；本地 MVP 与生产就绪百分比不因适配合同完成而上调。
+- 下一阶段仍是在已批准 staging 上执行真实 4 小时会话和 MySQL/Redis HA 切换，生成 `target-execution` 并完成四角色审批。
+
 ## 2026-08-10 WP4 第 14 次迭代补充
 
 - 新增资源采样与 MySQL/Redis HA 事件源合同，将 UTC 时钟偏差、采样覆盖、Worker 故障、切换生命周期和回滚路径固化为机器输入。
