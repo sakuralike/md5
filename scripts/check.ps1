@@ -85,6 +85,8 @@ try {
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums
+        Invoke-Checked pwsh ./scripts/alertmanager-drill.ps1
+        Invoke-Checked $Python ./scripts/verify_alertmanager_evidence.py --report ./.local/alertmanager-wp4-iteration-9/alertmanager-report.json --write-checksums
         Invoke-Checked pwsh ./scripts/worker-backlog-drill.ps1
         Invoke-Checked $Python ./scripts/verify_worker_backlog_evidence.py --report ./.local/worker-backlog-wp4-iteration-8/worker-backlog-report.json --write-checksums
     }

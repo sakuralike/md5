@@ -2,7 +2,8 @@
 
 - 更新日期：2026-08-10
 - 当前里程碑：WP4 M5 安全、恢复、性能与可观测性准入
-- 最近迭代：[WP4 第 8 次开发迭代：告警、仪表盘与 Worker 队列积压演练](./2026-08-10-wp4-iteration-8.md)
+- 最近迭代：[WP4 第 9 次开发迭代：Alertmanager 通知闭环与安全演练](./2026-08-10-wp4-iteration-9.md)
+- 前次迭代：[WP4 第 8 次开发迭代：告警、仪表盘与 Worker 队列积压演练](./2026-08-10-wp4-iteration-8.md)
 - 前次迭代：[WP4 第 7 次开发迭代：性能基线与可观测性出口](./2026-08-10-wp4-iteration-7.md)
 - 前次迭代：[WP4 第 5 次开发迭代：管理员 MFA、再认证与幂等滥用门禁](./2026-08-10-wp4-iteration-5.md)
 - 前次迭代：[WP4 第 4 次开发迭代：认证对象边界与浏览器 Cookie 安全门禁](./2026-08-10-wp4-iteration-4.md)
@@ -445,6 +446,18 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 匿名授权与 CORS | `test_wp4_dast_security.py`、`dast_security_gate.py` | 本人/隐私/管理资源 401；可信来源 200、非信任来源预检 400 | 匿名边界完成；两个已认证用户间 BOLA 尚未形成动态矩阵 |
 | XSS 与凭据最小披露 | 动态合成标记 | 查询标记、密码和令牌不反射；方法错误无 traceback | API 响应基线完成；浏览器 DOM XSS、日志汇聚和人工测试未关闭 |
 | 提交级 DAST 证据 | `dast-security` CI 作业 | 运行 `31340260242` 九作业通过；报告 8/8 | 首版完成；完整认证爬虫、ZAP/同类工具和预生产扫描待后续 |
+
+
+## 2026-08-10 WP4 第 9 次迭代补充：Alertmanager 通知闭环与安全演练
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| Alertmanager 路由与恢复通知 | `infra/monitoring/alertmanager/alertmanager.yml`、Prometheus `alerting` 配置 | `amtool check-config`、Alertmanager firing/resolved 演练 | 工程路由完成；正式值班渠道认证、TLS、回执和升级策略待目标环境验收 |
+| 重复通知抑制 | `group_by`、`group_interval`、`repeat_interval` | 两次相同 firing 仅交付一次的证据校验 | 合成单实例完成；跨 Alertmanager HA、静默和抑制矩阵待实施 |
+| 通知敏感字段治理 | `scripts/alertmanager_receiver.py` 的字段白名单式脱敏 | 合成秘密标记未进入报告，`[REDACTED]` 存在，SHA-256 通过 | 仅证明内部证据持久化脱敏；第三方提供商传输/保留策略待签字 |
+| 监控统一门禁 | `check.ps1 -IncludeMonitoring`、CI `monitoring` job | 配置、amtool、通知演练、证据校验和 Worker 积压均纳入门禁 | M5 工程准入增强；生产告警闭环尚未放行 |
+
+当前估算：本地 MVP 约 99%，生产就绪约 75%。该估算不替代正式值班渠道、密钥轮换、多实例长时压测、预生产和业务/UAT 签字。
 
 
 ## 2026-08-10 WP4 第 8 次迭代补充：告警、仪表盘与队列积压演练

@@ -62,6 +62,8 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         / "infra/monitoring/grafana/dashboards/password-detective-overview.json"
     )
     compose_path = repo_root / "infra/monitoring/docker-compose.monitoring.yml"
+    alertmanager_path = repo_root / "infra/monitoring/alertmanager/alertmanager.yml"
+    receiver_path = repo_root / "scripts/alertmanager_receiver.py"
     paths = [
         prometheus_path,
         rules_path,
@@ -69,10 +71,12 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         dashboards_path,
         dashboard_path,
         compose_path,
+        alertmanager_path,
+        receiver_path,
     ]
     _assert(
         all(path.is_file() for path in paths),
-        "all WP4 iteration 8 monitoring files must exist",
+        "all WP4 iteration 9 monitoring files must exist",
     )
 
     prometheus = _load_yaml(prometheus_path)
@@ -93,6 +97,11 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
     targets = scrape.get("static_configs", [{}])[0].get("targets", [])
     _assert(targets == ["api:8000"], "monitoring must scrape the Compose API service")
     rule_files = prometheus.get("rule_files", [])
+    alertmanagers = prometheus.get("alerting", {}).get("alertmanagers", [])
+    _assert(
+        alertmanagers == [{"static_configs": [{"targets": ["alertmanager:9093"]}]}],
+        "Prometheus must forward alerts to the Compose Alertmanager service",
+    )
     _assert(
         rule_files == ["/etc/prometheus/alerts/*.yml"],
         "rule file glob must be mounted alert directory",
@@ -171,14 +180,41 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         == "/var/lib/grafana/dashboards",
         "Grafana dashboard provisioning path drifted",
     )
+    alertmanager = _load_yaml(alertmanager_path)
+    route = alertmanager.get("route", {})
+    _assert(
+        route.get("receiver") == "password-detective-notification-gateway",
+        "Alertmanager must route to the notification gateway",
+    )
+    _assert(
+        route.get("group_by") == ["alertname", "service", "severity", "environment"],
+        "Alertmanager group_by must stay low-cardinality",
+    )
+    _assert(route.get("group_wait") == "2s", "Alertmanager drill group_wait must be two seconds")
+    _assert(route.get("group_interval") == "5s", "Alertmanager drill group_interval must be five seconds")
+    receivers = alertmanager.get("receivers", [])
+    _assert(
+        any(
+            receiver.get("name") == "password-detective-notification-gateway"
+            and receiver.get("webhook_configs", [{}])[0].get("send_resolved") is True
+            and receiver.get("webhook_configs", [{}])[0].get("url") == "http://alert-receiver:18081/alerts"
+            for receiver in receivers
+        ),
+        "Alertmanager must expose a resolved-capable internal webhook receiver",
+    )
+    alertmanager_text = alertmanager_path.read_text(encoding="utf-8-sig")
+    _assert(not FORBIDDEN.search(alertmanager_text), "Alertmanager config contains a sensitive/high-cardinality field")
+    receiver_text = receiver_path.read_text(encoding="utf-8-sig")
+    for marker in ("normalize_alertmanager_payload", "FORBIDDEN_KEY", "REDACTED", "/events"):
+        _assert(marker in receiver_text, f"notification gateway is missing {marker}")
     compose_text = compose_path.read_text(encoding="utf-8-sig")
-    for service in ("prometheus:", "grafana:", 'profiles: ["monitoring"]'):
+    for service in ("prometheus:", "grafana:", "alertmanager:", "alert-receiver:", 'profiles: ["monitoring"]'):
         _assert(
             service in compose_text, f"monitoring Compose overlay missing {service}"
         )
 
     return {
-        "schema": "monitoring-config-v1",
+        "schema": "monitoring-config-v2",
         "status": "passed",
         "rule_count": len(REQUIRED_RULES),
         "dashboard_panel_count": len(panels),
@@ -218,7 +254,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".local/monitoring-wp4-iteration-8/monitoring-report.json"),
+        default=Path(".local/monitoring-wp4-iteration-9/monitoring-report.json"),
     )
     parser.add_argument("--write-checksums", action="store_true")
     args = parser.parse_args()

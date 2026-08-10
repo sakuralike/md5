@@ -258,7 +258,7 @@ jobs:
       - name: Validate Prometheus and Grafana artifacts
         run: >-
           python scripts/verify_monitoring_config.py
-          --report .local/monitoring-wp4-iteration-8/monitoring-report.json
+          --report .local/monitoring-wp4-iteration-9/monitoring-report.json
           --write-checksums
       - name: Validate Prometheus syntax and alert rules
         run: >-
@@ -266,6 +266,24 @@ jobs:
           -v "${{ github.workspace }}/infra/monitoring/prometheus:/etc/prometheus:ro"
           prom/prometheus:v2.55.1
           check config /etc/prometheus/prometheus.yml
+      - name: Validate Alertmanager syntax
+        run: >-
+          docker run --rm --entrypoint amtool
+          -v "${{ github.workspace }}/infra/monitoring/alertmanager:/etc/alertmanager:ro"
+          prom/alertmanager:v0.27.0
+          check-config /etc/alertmanager/alertmanager.yml
+      - name: Run Alertmanager notification drill
+        shell: pwsh
+        run: >-
+          ./scripts/alertmanager-drill.ps1
+          -OutputDirectory .local/alertmanager-wp4-iteration-9
+          -AlertmanagerPort 19093
+          -ReceiverPort 18091
+      - name: Verify Alertmanager evidence
+        run: >-
+          python scripts/verify_alertmanager_evidence.py
+          --report .local/alertmanager-wp4-iteration-9/alertmanager-report.json
+          --write-checksums
       - name: Run worker queue backlog drill
         shell: pwsh
         run: >-
@@ -284,7 +302,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: monitoring-evidence-${{ github.sha }}
-          path: .local/monitoring-wp4-iteration-8
+          path: .local/monitoring-wp4-iteration-9
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Upload Alertmanager evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alertmanager-evidence-${{ github.sha }}
+          path: .local/alertmanager-wp4-iteration-9
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: warn

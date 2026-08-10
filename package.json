@@ -22,7 +22,8 @@
     "recovery:drill": "pwsh ./scripts/recovery-drill.ps1",
     "performance:baseline": "pwsh ./scripts/performance-baseline.ps1",
     "monitoring:config": "python ./scripts/verify_monitoring_config.py --write-checksums",
-    "worker:backlog-drill": "pwsh ./scripts/worker-backlog-drill.ps1"
+    "worker:backlog-drill": "pwsh ./scripts/worker-backlog-drill.ps1",
+    "alertmanager:drill": "pwsh ./scripts/alertmanager-drill.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
