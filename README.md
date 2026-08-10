@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：WP2 账号申诉、案件编排、原子处置、结果通知和 SLA 本地闭环已经完成；WP3 第 1 轮已建立 Playwright 隔离运行环境，并覆盖 Web 注册/登录/退出以及 Admin 首次 TOTP 绑定/二次登录。查询、贡献、案件处置、视觉、移动端和目标环境 E2E 仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：WP2/WP3 主要业务与跨浏览器预检已形成自动化基线；WP4 第 4 轮已补齐已认证普通用户对象级边界和浏览器 Cookie CSRF/SameSite 动态门禁。管理员 MFA/再认证滥用、幂等重放、资源消耗、恢复、性能、可观测性和目标环境验收仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -84,6 +84,7 @@ pnpm security:dast
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
 - [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
 - [API 动态安全基线](./docs/security/dast-baseline.md)
+- [WP4 第 4 次迭代记录](./docs/development/2026-08-10-wp4-iteration-4.md)
 - [WP4 第 3 次迭代记录](./docs/development/2026-08-09-wp4-iteration-3.md)
 - [WP4 第 2 次迭代记录](./docs/development/2026-08-09-wp4-iteration-2.md)
 - [WP4 第 1 次迭代记录](./docs/development/2026-08-09-wp4-iteration-1.md)

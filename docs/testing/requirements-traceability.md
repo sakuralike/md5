@@ -246,3 +246,13 @@
 | CORS 与方法滥用 | CORS 白名单、路由方法约束 | 可信预检 200、非信任预检 400、非法方法 405 且无 traceback | 首版完成；浏览器 Cookie CSRF/SameSite 待专项验证 |
 | XSS/凭据不反射 | 合成查询、密码和令牌标记 | API 测试与 8 项 DAST 报告 | 响应最小披露完成；DOM XSS、集中日志和人工渗透待验证 |
 | DAST 可重复与可追溯 | `pnpm security:dast`、`dast-security`、提交级制品 | 本地 8/8；GitHub Actions `31340260242` 九作业通过，远端报告 `failed=0` | 匿名 API 动态基线完成；不等同完整认证扫描或生产评估 |
+
+## 2026-08-10 WP4 第 4 次迭代补充：认证对象边界与浏览器 Cookie 安全
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 普通用户隐私导出对象隔离 | DAST 为用户 A 创建隐私导出，用户 B 读取同一 ID | `test_authenticated_object_boundaries_and_browser_cookie_csrf`、DAST `authenticated_object_boundaries` | 跨用户读取返回 `404 privacy.export_not_found`；更完整对象矩阵仍待补 |
+| 普通用户会话撤销对象隔离 | 用户 A 会话族与用户 B 撤销请求 | 同一 API 测试、DAST `authenticated_object_boundaries` | 跨用户撤销返回 `404 auth.session_not_found`；管理员对象边界仍待补 |
+| 浏览器刷新 Cookie 安全属性 | `core/browser_session.py` 既有 Cookie 策略由动态探针复核 | DAST `browser_cookie_csrf_samesite` | `HttpOnly`、`SameSite=Lax`、`Path=/api/v1/web/auth` 通过 |
+| 浏览器 Cookie CSRF 来源校验 | 可信/不可信 Origin 的 refresh 请求 | API 定向测试与 DAST | 不可信来源 `403 request.invalid_origin`，可信来源刷新成功 |
+| DAST 可重复与敏感材料隔离 | 唯一合成用户、Cookie 解析器仅在请求链中使用值 | 13 项脚本测试；本地 DAST `10/10`；CI `31349411600` | 报告不写入密码、令牌或 Cookie 值；管理员 MFA/重放/资源消耗仍未覆盖 |
