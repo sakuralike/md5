@@ -147,6 +147,15 @@ function Write-Report {
     [IO.File]::WriteAllText($ReportPath, ($Report | ConvertTo-Json -Depth 20), $encoding)
 }
 
+function Assert-HostPortAvailable {
+    param(
+        [Parameter(Mandatory)][int]$Port,
+        [Parameter(Mandatory)][string]$Service
+    )
+    $listeners = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+    if ($listeners.Port -contains $Port) { throw "$Service host port $Port is already in use" }
+}
+
 Initialize-ComposeRoot
 Push-Location $ComposeRoot
 $LocationPushed = $true
@@ -162,11 +171,14 @@ $Report = @{
 }
 $ComposeStarted = $false
 try {
+    Assert-HostPortAvailable -Port $ApiPort -Service "API"
+    Assert-HostPortAvailable -Port $MySqlPort -Service "MySQL"
+    Assert-HostPortAvailable -Port $RedisPort -Service "Redis"
     if (-not $SkipBuild) { Invoke-ComposeChecked @("down", "--volumes", "--remove-orphans") | Out-Null }
     $upArgs = @("up", "--detach", "--wait", "--wait-timeout", "900", "mysql", "redis", "api", "worker")
     if (-not $SkipBuild) { $upArgs = @("up", "--build", "--detach", "--wait", "--wait-timeout", "900", "mysql", "redis", "api", "worker") }
-    Invoke-ComposeChecked $upArgs | Out-Null
     $ComposeStarted = $true
+    Invoke-ComposeChecked $upArgs | Out-Null
 
     $register = Invoke-ApiRequest -Method POST -Path "/auth/register" -Body @{ username = $SyntheticUsername; email = $SyntheticEmail; password = $SyntheticPassword }
     if ($register.Status -notin @(200, 201)) { throw "synthetic registration failed: HTTP $($register.Status) $(Get-ErrorCode $register)" }
@@ -252,6 +264,16 @@ try {
 } catch {
     $Report.error_code = "recovery_drill_failed"
     $Report.error_message = $_.Exception.Message -replace "(?i)(password|secret|token|authorization)\s*[:=]\s*[^\s]+", '$1=[redacted]'
+    if ($ComposeStarted -or (Test-Path (Join-Path $OutputPath "recovery-drill.log"))) {
+        $composePs = Invoke-ComposeBestEffort @("ps", "-a")
+        $apiLogs = Invoke-ComposeBestEffort @("logs", "--no-color", "api")
+        $workerLogs = Invoke-ComposeBestEffort @("logs", "--no-color", "worker")
+        $Report.diagnostics = @{
+            compose_ps = (($composePs.Output -join "`n") -replace "(?i)(password|secret|token|authorization)\s*[:=]\s*[^\s]+", '$1=[redacted]')
+            api_logs = (($apiLogs.Output -join "`n") -replace "(?i)(password|secret|token|authorization)\s*[:=]\s*[^\s]+", '$1=[redacted]')
+            worker_logs = (($workerLogs.Output -join "`n") -replace "(?i)(password|secret|token|authorization)\s*[:=]\s*[^\s]+", '$1=[redacted]')
+        }
+    }
     $Report.finished_at = [DateTime]::UtcNow.ToString("o")
     Write-Report $Report
     Write-Error $_
