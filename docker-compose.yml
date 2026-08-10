@@ -37,6 +37,10 @@ services:
       APP_DEBUG: "false"
       APP_SECRET_KEY: ${APP_SECRET_KEY:?请在 .env 中设置 APP_SECRET_KEY}
       DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-20}
+      DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-30}
+      DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
       REDIS_URL: redis://redis:6379/0
       RATE_LIMIT_BACKEND: redis
       RATE_LIMIT_NAMESPACE: password-detective-integration
@@ -85,6 +89,10 @@ services:
       APP_ENV: integration
       APP_SECRET_KEY: ${APP_SECRET_KEY:?请在 .env 中设置 APP_SECRET_KEY}
       DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-20}
+      DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-30}
+      DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
       REDIS_URL: redis://redis:6379/0
       RATE_LIMIT_BACKEND: redis
       RATE_LIMIT_NAMESPACE: password-detective-integration
@@ -113,7 +121,50 @@ services:
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
     volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
-    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
+    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      APP_ENV: integration
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?请在 .env 中设置 APP_SECRET_KEY}
+      DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-20}
+      DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-30}
+      DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_BACKEND: redis
+      RATE_LIMIT_NAMESPACE: password-detective-integration
+      NOTIFICATION_BACKEND: ${NOTIFICATION_BACKEND:-log}
+      NOTIFICATION_WEBHOOK_URL: ${NOTIFICATION_WEBHOOK_URL:-}
+      NOTIFICATION_WEBHOOK_SECRET: ${NOTIFICATION_WEBHOOK_SECRET:-}
+      NOTIFICATION_WEBHOOK_TIMEOUT_SECONDS: ${NOTIFICATION_WEBHOOK_TIMEOUT_SECONDS:-10}
+      NOTIFICATION_SMTP_HOST: ${NOTIFICATION_SMTP_HOST:-}
+      NOTIFICATION_SMTP_PORT: ${NOTIFICATION_SMTP_PORT:-587}
+      NOTIFICATION_SMTP_SECURITY: ${NOTIFICATION_SMTP_SECURITY:-starttls}
+      NOTIFICATION_SMTP_USERNAME: ${NOTIFICATION_SMTP_USERNAME:-}
+      NOTIFICATION_SMTP_PASSWORD: ${NOTIFICATION_SMTP_PASSWORD:-}
+      NOTIFICATION_SMTP_SENDER_EMAIL: ${NOTIFICATION_SMTP_SENDER_EMAIL:-}
+      NOTIFICATION_SMTP_SENDER_NAME: ${NOTIFICATION_SMTP_SENDER_NAME:-密码侦探社}
+      NOTIFICATION_SMTP_TIMEOUT_SECONDS: ${NOTIFICATION_SMTP_TIMEOUT_SECONDS:-10}
+      CANDIDATE_SECRET_KEY_VERSION: ${CANDIDATE_SECRET_KEY_VERSION:-v1}
+      CANDIDATE_SECRET_KEYRING: ${CANDIDATE_SECRET_KEYRING:-}
+      CANDIDATE_SECRET_DEDUP_KEY: ${CANDIDATE_SECRET_DEDUP_KEY:-}
+      REAUTHENTICATION_TTL_MINUTES: ${REAUTHENTICATION_TTL_MINUTES:-5}
+      DAILY_REVEAL_QUOTA: ${DAILY_REVEAL_QUOTA:-5}
+      AUTHORIZATION_DECLARATION_VERSION: ${AUTHORIZATION_DECLARATION_VERSION:-authorization-v1}
+      PRIVACY_EXPORT_TTL_MINUTES: ${PRIVACY_EXPORT_TTL_MINUTES:-15}
+      PRIVACY_DELETION_GRACE_HOURS: ${PRIVACY_DELETION_GRACE_HOURS:-168}
+      PRIVACY_JOB_BACKEND: ${PRIVACY_JOB_BACKEND:-celery}
+      SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
+      AUTO_CREATE_TABLES: "false"
+      DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
+    command: ["celery", "-A", "password_detective.worker.celery_app", "beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
 

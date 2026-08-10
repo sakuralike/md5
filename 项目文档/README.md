@@ -17,6 +17,7 @@
 ## 开发实施记录
 
 - [下一步开发方案（2026-08-08）](./密码侦探社下一步开发方案-2026-08-08.md)
+- [WP4 第 11 次开发迭代：多实例稳定性与单 Worker 故障收口](../docs/development/2026-08-10-wp4-iteration-11.md)
 - [N2 第 12 次开发迭代：WP1 前端规范债务清零与总体验收](../docs/development/2026-08-08-n2-iteration-12.md)
 - [N2 第 11 次开发迭代：WP1 Admin 信任案件与风险告警页面整改](../docs/development/2026-08-08-n2-iteration-11.md)
 - [N2 第 10 次开发迭代：WP1 Admin 登录与 TOTP 页面整改](../docs/development/2026-08-08-n2-iteration-10.md)

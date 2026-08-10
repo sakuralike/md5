@@ -287,3 +287,19 @@ pnpm performance:baseline
 ```
 
 默认在 `18130` 启动隔离 API，证据写入 `.local/performance-wp4-iteration-7/`。运行中的 API 可通过 `GET /api/v1/metrics` 查看 Prometheus 文本指标。生产环境必须额外限制指标抓取网络来源；详细阈值与故障处理见 [WP4 性能与可观测性运行手册](../runbooks/wp4-performance-observability.md)。
+
+
+## WP4 多实例稳定性门禁
+
+```powershell
+pnpm stability:multi-instance
+python ./scripts/verify_multi_instance_stability_evidence.py `
+  --report ./.local/multi-instance-stability-wp4-iteration-11/multi-instance-stability-report.json `
+  --write-checksums
+# 或纳入统一门禁
+./scripts/check.ps1 -SkipInstall -IncludeStability
+```
+
+脚本使用独立 Compose 项目和 `18150/13318/16381` 端口，启动单 Beat 与 3 个 Worker；持续并发探测 API、MySQL、Redis 和 Celery，并主动停止、补回一个 Worker。默认结束后销毁专用环境。详细验收阈值、连接池预算和 staging 扩展见 [WP4 多实例稳定性运行手册](../runbooks/wp4-multi-instance-stability.md)。
+
+Compose 中 `worker` 不再携带 `--beat`，周期任务统一由 `scheduler` 服务调度。`DATABASE_POOL_SIZE`、`DATABASE_MAX_OVERFLOW`、`DATABASE_POOL_TIMEOUT_SECONDS` 和 `DATABASE_POOL_RECYCLE_SECONDS` 需要按目标实例数与 MySQL 连接上限共同核算。

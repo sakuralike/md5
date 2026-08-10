@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import socket
+
 from celery import Celery
 from celery.signals import heartbeat_sent, worker_ready, worker_shutdown
 from redis.exceptions import RedisError
@@ -25,6 +27,7 @@ from password_detective.modules.trust_cases.notifications import (
 from password_detective.modules.trust_cases.sla import escalate_overdue_cases
 
 settings = get_settings()
+worker_instance_id = socket.gethostname()
 celery_app = Celery(
     "password_detective",
     broker=settings.redis_url,
@@ -65,7 +68,7 @@ celery_app.conf.update(
 
 def _publish_heartbeat() -> None:
     try:
-        publish_worker_heartbeat(settings.redis_url)
+        publish_worker_heartbeat(settings.redis_url, worker_instance_id)
     except RedisError:
         return
 
@@ -83,7 +86,7 @@ def on_worker_heartbeat(**_: object) -> None:
 @worker_shutdown.connect
 def on_worker_shutdown(**_: object) -> None:
     try:
-        clear_worker_heartbeat(settings.redis_url)
+        clear_worker_heartbeat(settings.redis_url, worker_instance_id)
     except RedisError:
         return
 
@@ -91,6 +94,7 @@ def on_worker_shutdown(**_: object) -> None:
 @celery_app.task(name="system.ping")
 def ping() -> dict[str, str]:
     return {"status": "ok"}
+
 
 @celery_app.task(name="observability.noop")
 def observability_noop(marker: str) -> str:

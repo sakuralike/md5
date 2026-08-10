@@ -6,7 +6,8 @@ param(
     [switch]$IncludeRecovery,
     [switch]$IncludePerformance,
     [switch]$IncludeMonitoring,
-    [switch]$IncludeKeyRotation
+    [switch]$IncludeKeyRotation,
+    [switch]$IncludeStability
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,6 +88,12 @@ try {
     if ($IncludeKeyRotation) {
         Invoke-Checked $Python ./scripts/candidate-secret-rotation-drill.py
         Invoke-Checked $Python ./scripts/verify_candidate_secret_rotation_evidence.py --report ./.local/candidate-secret-rotation-wp4-iteration-10/rotation-report.json --write-checksums
+    }
+    if ($IncludeStability) {
+        Invoke-Checked $Python -m ruff check ./scripts/multi_instance_stability_probe.py ./scripts/verify_multi_instance_stability_evidence.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_multi_instance_stability_evidence.py
+        Invoke-Checked pwsh ./scripts/multi-instance-stability-drill.ps1 -PythonCommand $Python
+        Invoke-Checked $Python ./scripts/verify_multi_instance_stability_evidence.py --report ./.local/multi-instance-stability-wp4-iteration-11/multi-instance-stability-report.json --write-checksums
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from collections import defaultdict
@@ -16,6 +17,7 @@ from starlette.responses import Response
 from password_detective.core.request_context import get_request_id
 
 WORKER_HEARTBEAT_KEY: Final[str] = "password-detective:worker:heartbeat"
+WORKER_HEARTBEAT_KEY_PREFIX: Final[str] = f"{WORKER_HEARTBEAT_KEY}:"
 WORKER_HEARTBEAT_TTL_SECONDS: Final[int] = 90
 
 _HISTOGRAM_BUCKETS: Final[tuple[float, ...]] = (
@@ -64,6 +66,7 @@ class MetricsRegistry:
         self._active_requests = 0
         self._health = {"database": 0, "redis": 0, "worker": 0}
         self._queue_depth = 0
+        self._worker_instances = 0
         self._started_at = time.time()
 
     def observe_request(self, observation: RequestObservation) -> None:
@@ -93,6 +96,7 @@ class MetricsRegistry:
         redis: bool | None = None,
         worker: bool | None = None,
         queue_depth: int | None = None,
+        worker_instances: int | None = None,
     ) -> None:
         with self._lock:
             updates = (("database", database), ("redis", redis), ("worker", worker))
@@ -101,6 +105,8 @@ class MetricsRegistry:
                     self._health[name] = int(value)
             if queue_depth is not None:
                 self._queue_depth = max(0, int(queue_depth))
+            if worker_instances is not None:
+                self._worker_instances = max(0, int(worker_instances))
 
     def render(self) -> str:
         lines = [
@@ -115,6 +121,7 @@ class MetricsRegistry:
             active = self._active_requests
             health = dict(self._health)
             queue_depth = self._queue_depth
+            worker_instances = self._worker_instances
             uptime = max(0.0, time.time() - self._started_at)
         for (method, route, status_code), value in sorted(requests.items()):
             labels = _labels(
@@ -177,6 +184,10 @@ class MetricsRegistry:
                 "# HELP password_detective_worker_queue_depth Celery default queue depth.",
                 "# TYPE password_detective_worker_queue_depth gauge",
                 f"password_detective_worker_queue_depth {queue_depth}",
+                "# HELP password_detective_worker_instances_ready "
+                "Worker instances with a live heartbeat.",
+                "# TYPE password_detective_worker_instances_ready gauge",
+                f"password_detective_worker_instances_ready {worker_instances}",
                 "# HELP password_detective_process_uptime_seconds Process uptime in seconds.",
                 "# TYPE password_detective_process_uptime_seconds gauge",
                 f"password_detective_process_uptime_seconds {uptime:.3f}",
@@ -189,7 +200,13 @@ class MetricsRegistry:
 metrics = MetricsRegistry()
 
 
-def publish_worker_heartbeat(redis_url: str) -> None:
+def _worker_heartbeat_key(worker_instance_id: str) -> str:
+    normalized = worker_instance_id.strip() or "unknown"
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    return f"{WORKER_HEARTBEAT_KEY_PREFIX}{digest}"
+
+
+def publish_worker_heartbeat(redis_url: str, worker_instance_id: str) -> None:
     client = Redis.from_url(
         redis_url,
         decode_responses=True,
@@ -197,12 +214,16 @@ def publish_worker_heartbeat(redis_url: str) -> None:
         socket_timeout=1,
     )
     try:
-        client.set(WORKER_HEARTBEAT_KEY, str(int(time.time())), ex=WORKER_HEARTBEAT_TTL_SECONDS)
+        client.set(
+            _worker_heartbeat_key(worker_instance_id),
+            str(int(time.time())),
+            ex=WORKER_HEARTBEAT_TTL_SECONDS,
+        )
     finally:
         client.close()
 
 
-def clear_worker_heartbeat(redis_url: str) -> None:
+def clear_worker_heartbeat(redis_url: str, worker_instance_id: str) -> None:
     client = Redis.from_url(
         redis_url,
         decode_responses=True,
@@ -210,9 +231,15 @@ def clear_worker_heartbeat(redis_url: str) -> None:
         socket_timeout=1,
     )
     try:
-        client.delete(WORKER_HEARTBEAT_KEY)
+        client.delete(_worker_heartbeat_key(worker_instance_id))
     finally:
         client.close()
+
+
+def _count_worker_heartbeats(client: Redis) -> int:
+    instance_count = sum(1 for _ in client.scan_iter(match=f"{WORKER_HEARTBEAT_KEY_PREFIX}*"))
+    legacy_count = int(bool(client.exists(WORKER_HEARTBEAT_KEY)))
+    return instance_count + legacy_count
 
 
 def refresh_runtime_metrics(redis_url: str) -> None:
@@ -224,15 +251,18 @@ def refresh_runtime_metrics(redis_url: str) -> None:
     )
     try:
         redis_up = bool(client.ping())
-        worker_up = bool(client.exists(WORKER_HEARTBEAT_KEY))
+        worker_instances = _count_worker_heartbeats(client)
         queue_depth = int(client.llen("celery"))
         metrics.set_health(
             redis=redis_up,
-            worker=worker_up,
+            worker=worker_instances > 0,
             queue_depth=queue_depth,
+            worker_instances=worker_instances,
         )
     except RedisError:
-        metrics.set_health(redis=False, worker=False, queue_depth=0)
+        metrics.set_health(
+            redis=False, worker=False, queue_depth=0, worker_instances=0
+        )
     finally:
         client.close()
 

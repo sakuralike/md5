@@ -3,12 +3,20 @@ from __future__ import annotations
 import json
 import logging
 
+import fakeredis
 from fastapi.testclient import TestClient
 
 from password_detective.core.config import Settings
 from password_detective.core.logging import JsonFormatter
 from password_detective.core.notifications import MemoryNotificationGateway
-from password_detective.core.observability import MetricsRegistry, RequestObservation
+from password_detective.core.observability import (
+    MetricsRegistry,
+    RequestObservation,
+    clear_worker_heartbeat,
+    metrics,
+    publish_worker_heartbeat,
+    refresh_runtime_metrics,
+)
 from password_detective.main import create_app
 
 
@@ -93,3 +101,63 @@ def test_structured_logging_redacts_sensitive_fields():
     assert payload["request_id"] == "synthetic-log-request-id"
     assert payload["password"] == "[REDACTED]"
     assert "synthetic-secret-value" not in json.dumps(payload)
+
+
+def test_worker_heartbeats_are_isolated_per_instance(monkeypatch):
+    server = fakeredis.FakeServer()
+
+    def fake_from_url(*_args, **_kwargs):
+        return fakeredis.FakeRedis(server=server, decode_responses=True)
+
+    monkeypatch.setattr(
+        "password_detective.core.observability.Redis.from_url", fake_from_url
+    )
+
+    publish_worker_heartbeat("redis://synthetic", "worker-a")
+    publish_worker_heartbeat("redis://synthetic", "worker-b")
+    refresh_runtime_metrics("redis://synthetic")
+    body = metrics.render()
+    assert "password_detective_worker_instances_ready 2" in body
+    assert 'dependency="worker"} 1' in body
+
+    clear_worker_heartbeat("redis://synthetic", "worker-a")
+    refresh_runtime_metrics("redis://synthetic")
+    body = metrics.render()
+    assert "password_detective_worker_instances_ready 1" in body
+    assert 'dependency="worker"} 1' in body
+
+
+def test_database_pool_settings_are_applied_to_non_sqlite_engine(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_engine(url: str, **kwargs: object):
+        captured["url"] = url
+        captured.update(kwargs)
+
+        class SyntheticEngine:
+            def dispose(self) -> None:
+                return None
+
+        return SyntheticEngine()
+
+    monkeypatch.setattr(
+        "password_detective.db.database.create_engine", fake_create_engine
+    )
+    from password_detective.db.database import Database
+
+    settings = Settings(
+        app_env="test",
+        app_secret_key="synthetic-database-pool-secret",
+        database_url="mysql+pymysql://synthetic:synthetic@localhost/synthetic",
+        database_pool_size=7,
+        database_max_overflow=11,
+        database_pool_timeout_seconds=19,
+        database_pool_recycle_seconds=901,
+    )
+    Database(settings)
+
+    assert captured["pool_pre_ping"] is True
+    assert captured["pool_size"] == 7
+    assert captured["max_overflow"] == 11
+    assert captured["pool_timeout"] == 19
+    assert captured["pool_recycle"] == 901

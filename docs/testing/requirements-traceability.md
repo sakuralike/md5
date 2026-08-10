@@ -1,6 +1,6 @@
 # 需求—模块—测试追踪矩阵
 
-- 更新日期：2026-08-09
+- 更新日期：2026-08-10
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
@@ -288,3 +288,14 @@
 | HTTP/依赖/Worker 指标 | `core/observability.py`、`GET /api/v1/metrics` | 指标端点测试、性能报告可观测性检查 | 六类首版指标完成 |
 | 低基数与敏感数据约束 | 规范化路由、`__unmatched__`、证据校验器 | 请求号/完整合成指纹不导出，敏感字段拒绝 | 本地自动化完成 |
 | 请求关联 | `ContextVar`、`X-Request-ID`、JSON 完成日志 | 请求号回显和结构化脱敏测试 | API 单请求链路完成；分布式 Trace 待实施 |
+
+
+## 2026-08-10 WP4 第 11 次迭代补充：多实例稳定性
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 多 Worker 存活隔离 | `core/observability.py`、`worker.py` | FakeRedis 单测：2 个实例、清理 1 个后聚合仍可用 | 应用级心跳收口；目标监控平台实例发现待验收 |
+| 单 Beat、多 Worker | `docker-compose.yml` 的 `scheduler` / `worker` 分离 | Compose 3 Worker 启动与实例数指标 | 本地隔离环境完成；编排平台副本策略待落地 |
+| MySQL 连接池可配置 | `Settings`、`db/database.py`、`.env.example` | 非 SQLite 引擎参数传递单测、混合 MySQL 事务探针 | 应用配置完成；目标环境连接预算与慢查询待批准 |
+| 单 Worker 故障不中断 | `multi-instance-stability-drill.ps1` | 3 → 2 时 `worker` 依赖仍为 1，补回后恢复 3 | 60 秒统一门禁通过；滚动发布和长时趋势待验收 |
+| 混合稳定性证据 | `multi_instance_stability_probe.py`、证据校验器 | API 268、MySQL 272、Redis 279、Celery 270 次，合计 1089 次，零错误且队列清零 | 单机 Compose 门禁完成；MySQL/Redis HA 与生产容量不在本证据范围 |

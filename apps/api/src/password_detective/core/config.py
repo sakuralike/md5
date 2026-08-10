@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         default=86_400, ge=60, le=31_536_000
     )
     database_url: str = "sqlite:///./.local/password-detective.db"
+    database_pool_size: int = Field(default=10, ge=1, le=100)
+    database_max_overflow: int = Field(default=20, ge=0, le=200)
+    database_pool_timeout_seconds: int = Field(default=30, ge=1, le=120)
+    database_pool_recycle_seconds: int = Field(default=1800, ge=30, le=86400)
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     rate_limit_namespace: str = "password-detective"
