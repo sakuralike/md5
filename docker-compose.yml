@@ -9,7 +9,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password_detective_local}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_change_me}
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
-    ports: ["3306:3306"]
+    ports: ["${MYSQL_PORT:-3306}:3306"]
     volumes: ["mysql-data:/var/lib/mysql"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_local_change_me}"]
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    ports: ["6379:6379"]
+    ports: ["${REDIS_PORT:-6379}:6379"]
     volumes: ["redis-data:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -65,7 +65,7 @@ services:
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
     volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
     command: ["sh", "-c", "alembic upgrade head && uvicorn password_detective.main:app --host 0.0.0.0 --port 8000"]
-    ports: ["8000:8000"]
+    ports: ["${API_PORT:-8000}:8000"]
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -107,7 +107,9 @@ services:
       PRIVACY_JOB_BACKEND: ${PRIVACY_JOB_BACKEND:-celery}
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       AUTO_CREATE_TABLES: "false"
-    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--beat", "--loglevel=INFO"]
+      DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
+    volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
+    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
 
@@ -119,7 +121,7 @@ services:
         TARGET_FILTER: "@password-detective/web"
         TARGET_DIR: "apps/web"
         VITE_MAX_ARCHIVE_SIZE_BYTES: ${VITE_MAX_ARCHIVE_SIZE_BYTES:-21474836480}
-    ports: ["5173:80"]
+    ports: ["${WEB_PORT:-5173}:80"]
     depends_on:
       api: { condition: service_healthy }
 
@@ -130,7 +132,7 @@ services:
       args:
         TARGET_FILTER: "@password-detective/admin"
         TARGET_DIR: "apps/admin"
-    ports: ["5174:80"]
+    ports: ["${ADMIN_PORT:-5174}:80"]
     depends_on:
       api: { condition: service_healthy }
 

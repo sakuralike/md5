@@ -194,6 +194,35 @@ jobs:
       - run: dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
       - run: dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
 
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Run isolated MySQL, Redis and worker recovery drill
+        shell: pwsh
+        run: >-
+          ./scripts/recovery-drill.ps1
+          -OutputDirectory .local/recovery-wp4-iteration-6
+          -ApiPort 18120
+          -MySqlPort 13316
+          -RedisPort 16379
+      - name: Verify recovery evidence
+        run: >-
+          python scripts/verify_recovery_evidence.py
+          --report .local/recovery-wp4-iteration-6/recovery-report.json
+          --write-checksums
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-evidence-${{ github.sha }}
+          path: .local/recovery-wp4-iteration-6
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: warn
+
   container-images:
     runs-on: ubuntu-latest
     needs: [api, frontend]

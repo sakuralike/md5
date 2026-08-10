@@ -2,7 +2,8 @@ param(
     [switch]$SkipInstall,
     [switch]$IncludeE2E,
     [switch]$IncludeCrossBrowserE2E,
-    [switch]$IncludeSecurity
+    [switch]$IncludeSecurity,
+    [switch]$IncludeRecovery
 )
 
 $ErrorActionPreference = "Stop"
@@ -72,6 +73,10 @@ try {
     if ($IncludeSecurity) {
         Invoke-Checked pwsh ./scripts/security-gate.ps1 -PythonCommand $Python
         Invoke-Checked pwsh ./scripts/dast-security-gate.ps1 -PythonCommand $Python
+    }
+    if ($IncludeRecovery) {
+        Invoke-Checked pwsh ./scripts/recovery-drill.ps1
+        Invoke-Checked $Python ./scripts/verify_recovery_evidence.py --report ./.local/recovery-wp4-iteration-6/recovery-report.json --write-checksums
     }
     if ($IncludeCrossBrowserE2E) {
         Invoke-Checked $Pnpm e2e:cross-browser

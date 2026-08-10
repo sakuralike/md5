@@ -1,0 +1,15 @@
+.git
+.github
+.local
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+node_modules
+**/node_modules
+playwright-report
+test-results
+apps/desktop-windows/bin
+apps/desktop-windows/obj
+apps/desktop-windows.tests/bin
+apps/desktop-windows.tests/obj

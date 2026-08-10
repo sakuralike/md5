@@ -18,7 +18,8 @@
     "e2e:install": "playwright install chromium firefox webkit",
     "security:audit": "pwsh ./scripts/security-gate.ps1",
     "security:dast": "pwsh ./scripts/dast-security-gate.ps1",
-    "security:release-policy": "python ./scripts/verify_release_security.py --policy-only --write-checksums"
+    "security:release-policy": "python ./scripts/verify_release_security.py --policy-only --write-checksums",
+    "recovery:drill": "pwsh ./scripts/recovery-drill.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
