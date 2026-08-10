@@ -27,7 +27,7 @@
 - 新增 Prometheus `query_range` 规范导入合同，要求 10 个资源/连接/队列序列完全对齐、使用整秒 UTC 时间戳，并匹配 profile 的 15 秒采样周期。
 - 新增 MySQL/Redis HA 平台事件导入合同，只允许脱敏生命周期、durability 和原始事件 SHA-256；原始平台事件 ID、端点、凭据和未批准字段被拒绝。
 - 新增人工 `staging-platform-export-execution.ps1`、`staging:platform-export-contract`、14 项正负向测试、统一门禁和独立 CI 作业。
-- 本地 4 小时形状合同链和 `check.ps1 -SkipInstall -IncludeStagingAdapters` 统一门禁已通过，并保持 `contract-fixture / not-run`；本地 MVP 与生产就绪百分比不因适配合同完成而上调。
+- 本地 4 小时形状合同链和 `check.ps1 -SkipInstall -IncludeStagingAdapters` 统一门禁已通过，并保持 `contract-fixture / not-run`；远端 CI `31429066132` 因 GitHub 未分配 runner 而无步骤失败，不能作为代码失败判定；本地 MVP 与生产就绪百分比不因适配合同完成而上调。
 - 下一阶段仍是在已批准 staging 上执行真实 4 小时会话和 MySQL/Redis HA 切换，生成 `target-execution` 并完成四角色审批。
 
 ## 2026-08-10 WP4 第 14 次迭代补充
