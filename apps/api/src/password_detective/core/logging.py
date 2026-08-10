@@ -42,9 +42,13 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": message,
         }
-        if hasattr(record, "request_id"):
-            payload["request_id"] = record.request_id
-        return json.dumps(payload, ensure_ascii=False)
+        if isinstance(record.msg, dict):
+            payload.pop("message", None)
+            payload.update(redact_value(record.msg))
+        for field in ("request_id", "method", "route", "status_code", "duration_ms"):
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
+        return json.dumps(redact_value(payload), ensure_ascii=False)
 
 
 def configure_logging(level: str) -> None:

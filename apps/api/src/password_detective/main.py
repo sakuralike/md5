@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from password_detective.core.config import Settings, get_settings
 from password_detective.core.errors import AppError, app_error_handler, validation_error_handler
@@ -14,6 +16,11 @@ from password_detective.core.logging import configure_logging
 from password_detective.core.notifications import (
     NotificationGateway,
     build_notification_gateway,
+)
+from password_detective.core.observability import (
+    ObservabilityMiddleware,
+    metrics,
+    refresh_runtime_metrics,
 )
 from password_detective.core.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from password_detective.core.request_context import RequestContextMiddleware
@@ -83,6 +90,7 @@ def create_app(
     app.state.database = database
     app.state.rate_limiter = rate_limiter
     app.state.notification_gateway = notifications
+    app.state.logger = logging.getLogger("password_detective.http")
     app.dependency_overrides[get_settings] = lambda: resolved_settings
 
     app.add_middleware(
@@ -97,9 +105,24 @@ def create_app(
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
         expose_headers=["X-Request-ID", "Content-Disposition", "X-Exported-Rows"],
     )
+    app.add_middleware(ObservabilityMiddleware)
     app.add_middleware(RequestContextMiddleware)
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+
+    @app.get("/api/v1/metrics", include_in_schema=False)
+    def prometheus_metrics() -> Response:
+        if not resolved_settings.observability_metrics_enabled:
+            return Response(status_code=404)
+        metrics.set_health(redis=rate_limiter.ping())
+        if resolved_settings.rate_limit_backend == "redis" and redis_client is None:
+            refresh_runtime_metrics(resolved_settings.redis_url)
+        else:
+            metrics.set_health(worker=False, queue_depth=0)
+        return Response(
+            content=metrics.render(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     privacy_export_ttl_minutes: int = Field(default=15, ge=5, le=1440)
     privacy_deletion_grace_hours: int = Field(default=168, ge=1, le=720)
     privacy_job_backend: Literal["inline", "celery"] = "inline"
+    observability_metrics_enabled: bool = True
     submission_pending_points: int = Field(default=1, ge=0, le=1000)
     verification_reward_points: int = Field(default=1, ge=0, le=1000)
     desktop_challenge_ttl_seconds: int = Field(default=300, ge=60, le=900)

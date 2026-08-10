@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import heartbeat_sent, worker_ready, worker_shutdown
+from redis.exceptions import RedisError
 
 from password_detective.core.config import get_settings
 from password_detective.core.notifications import build_notification_gateway
+from password_detective.core.observability import (
+    clear_worker_heartbeat,
+    publish_worker_heartbeat,
+)
 from password_detective.db.database import Database
 from password_detective.modules.account_privacy.service import (
     build_privacy_export,
@@ -55,6 +61,31 @@ celery_app.conf.update(
         },
     },
 )
+
+
+def _publish_heartbeat() -> None:
+    try:
+        publish_worker_heartbeat(settings.redis_url)
+    except RedisError:
+        return
+
+
+@worker_ready.connect
+def on_worker_ready(**_: object) -> None:
+    _publish_heartbeat()
+
+
+@heartbeat_sent.connect
+def on_worker_heartbeat(**_: object) -> None:
+    _publish_heartbeat()
+
+
+@worker_shutdown.connect
+def on_worker_shutdown(**_: object) -> None:
+    try:
+        clear_worker_heartbeat(settings.redis_url)
+    except RedisError:
+        return
 
 
 @celery_app.task(name="system.ping")
