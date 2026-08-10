@@ -277,3 +277,14 @@
 | Redis 丢失降级与恢复 | `/health/live`、`/health/ready`、Redis 限流 fail-closed | outage 期间 liveness 200、readiness 503、认证限流 503；恢复后 readiness 200，RTO 8.908 秒 | 单实例故障门禁完成；集群切换和长故障待验收 |
 | Worker 中断、重启与任务幂等 | Celery `privacy.build_export`、Worker Compose 存储卷和 `/tmp` Beat schedule | Worker 停止时任务 pending，重启后 ready；重复投递后 `privacy.export.ready` 仅 1 条，RTO 31.183 秒 | 隐私导出任务自动门禁完成；堆积、超时、死信和多 Worker 竞争待验收 |
 | 恢复证据可机器复核 | `verify_recovery_evidence.py`、`recovery-drill-v1`、`recovery` CI 作业 | 3 项校验器测试；脚本测试全集 16 项；报告阈值、汇总和敏感字段拒绝 | 本地真实演练通过；CI 保存 30 天提交级制品 |
+
+
+## 2026-08-10 WP4 第 7 次迭代补充：性能与可观测性
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 精确查询 P95 ≤ 500 ms | `scripts/performance_probe.py` | 40 请求、10.043 QPS、P95 96.998 ms、0% 错误 | 本地隔离基线通过；目标 MySQL 环境待验收 |
+| 短时 100 QPS | `scripts/performance-baseline.ps1` | 300 请求、99.808 QPS、P95 37.308 ms、0% 错误 | liveness 代码级基线通过；非业务容量结论 |
+| HTTP/依赖/Worker 指标 | `core/observability.py`、`GET /api/v1/metrics` | 指标端点测试、性能报告可观测性检查 | 六类首版指标完成 |
+| 低基数与敏感数据约束 | 规范化路由、`__unmatched__`、证据校验器 | 请求号/完整合成指纹不导出，敏感字段拒绝 | 本地自动化完成 |
+| 请求关联 | `ContextVar`、`X-Request-ID`、JSON 完成日志 | 请求号回显和结构化脱敏测试 | API 单请求链路完成；分布式 Trace 待实施 |

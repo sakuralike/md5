@@ -2,7 +2,7 @@
 
 密码侦探社是一个以压缩包文件指纹为检索键、以本地解压验证证据维护候选密码可信度的系统。本仓库按照模块化单体方式组织 API，并包含用户 Web、管理端和 Windows 桌面端。
 
-> 当前阶段：WP2/WP3 主要业务与跨浏览器预检已形成自动化基线；WP4 已完成供应链/镜像/Secret/DAST 门禁，并在第 6 轮建立 MySQL、Redis 与 Worker 的真实故障恢复演练。完整 BOLA、资源消耗、密钥轮换、性能、可观测性和目标环境验收仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
+> 当前阶段：WP2/WP3 主要业务与跨浏览器预检已形成自动化基线；WP4 已完成供应链/镜像/Secret/DAST 门禁、MySQL/Redis/Worker 恢复演练，并在第 7 轮建立短时 100 QPS、精确查询 P95、Prometheus 指标和请求关联基线。完整 BOLA、长时混合压测、密钥轮换、告警闭环和目标环境验收仍待后续轮次。项目只使用合成测试数据，禁止提交真实密码、访问令牌或生产密钥。
 
 ## 仓库结构
 
@@ -78,9 +78,13 @@ pnpm security:dast
 # 隔离 Compose 恢复演练（会清理专用测试数据卷）
 pnpm recovery:drill
 ./scripts/check.ps1 -SkipInstall -IncludeRecovery
+
+# 隔离性能与可观测性基线
+pnpm performance:baseline
+./scripts/check.ps1 -SkipInstall -IncludePerformance
 ```
 
-当前 WP4 动态安全基线已扩展到 13 项；恢复门禁另行覆盖 MySQL 备份清空恢复、Redis fail-closed/恢复和 Worker 中断重启/任务幂等。两者仍不等同于人工渗透、跨区域灾备、性能验收或生产环境放行。
+当前 WP4 动态安全基线已扩展到 13 项；恢复门禁另行覆盖 MySQL 备份清空恢复、Redis fail-closed/恢复和 Worker 中断重启/任务幂等。性能门禁另行覆盖短时 100 QPS、精确查询 P95、指标最小披露和请求关联。上述门禁仍不等同于人工渗透、跨区域灾备、长时间混合压测或生产环境放行。
 
 ## 开发基线
 
@@ -90,6 +94,8 @@ pnpm recovery:drill
 - [安全与供应链门禁](./docs/security/supply-chain-gates.md)
 - [发布镜像、Secret 与风险接受门禁](./docs/security/release-security-gates.md)
 - [API 动态安全基线](./docs/security/dast-baseline.md)
+- [WP4 第 7 次迭代记录](./docs/development/2026-08-10-wp4-iteration-7.md)
+- [WP4 性能与可观测性运行手册](./docs/runbooks/wp4-performance-observability.md)
 - [WP4 第 6 次迭代记录](./docs/development/2026-08-10-wp4-iteration-6.md)
 - [WP4 恢复演练运行手册](./docs/runbooks/wp4-recovery-drill.md)
 - [WP4 第 5 次迭代记录](./docs/development/2026-08-10-wp4-iteration-5.md)

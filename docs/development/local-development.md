@@ -276,3 +276,14 @@ pnpm security:release-policy
 6. 候选秘密不得进入浏览器持久存储、日志、审计详情或异常文本；揭示响应不得被缓存。
 7. 桌面制品目录和安装包不得提交 Git；生产下载必须使用 HTTPS，且只有发布流水线可以把签名状态标记为 `verified`。
 8. JSON 请求体默认上限为 1 MiB；如需调整 `MAX_JSON_BODY_BYTES`，必须保留字段级限制和资源消耗测试，二进制桌面制品继续使用独立流式上限。
+
+
+## WP4 性能与可观测性基线
+
+```powershell
+pnpm performance:baseline
+# 或纳入统一门禁
+./scripts/check.ps1 -SkipInstall -IncludePerformance
+```
+
+默认在 `18130` 启动隔离 API，证据写入 `.local/performance-wp4-iteration-7/`。运行中的 API 可通过 `GET /api/v1/metrics` 查看 Prometheus 文本指标。生产环境必须额外限制指标抓取网络来源；详细阈值与故障处理见 [WP4 性能与可观测性运行手册](../runbooks/wp4-performance-observability.md)。

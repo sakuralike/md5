@@ -293,3 +293,8 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 当前允许 `user`、`trusted_contributor`、`moderator` 之间的固定转换；管理员、服务账号、申请人自身、非正常账号和批量处置不允许进入该入口。请求响应不得包含密码、TOTP、再认证令牌或完整邮箱。
 
 Admin `/role-changes` 工作台提供状态筛选、分页、加载/空/错误态、详情、创建和双人批准/拒绝。密码、TOTP 和再认证令牌只允许在页面内存与单次请求体中短时存在；切换选中项、筛选、分页或任一敏感操作结束时必须清理，不得写入浏览器持久化存储、URL、日志或错误详情。
+
+
+## 可观测性指标接口
+
+`GET /metrics` 返回 Prometheus 文本格式，生产环境由网络策略限制抓取来源。HTTP 指标标签只允许方法、规范化路由模板和状态码；未匹配路径统一使用 `__unmatched__`。指标不得包含请求号、完整指纹、用户或对象标识、密码、令牌、Cookie、异常正文和自由文本。Worker 可用性通过 Redis 中 90 秒 TTL 的心跳存在性判断，队列积压只导出默认 Celery 队列长度。

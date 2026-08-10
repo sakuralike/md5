@@ -444,3 +444,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 匿名授权与 CORS | `test_wp4_dast_security.py`、`dast_security_gate.py` | 本人/隐私/管理资源 401；可信来源 200、非信任来源预检 400 | 匿名边界完成；两个已认证用户间 BOLA 尚未形成动态矩阵 |
 | XSS 与凭据最小披露 | 动态合成标记 | 查询标记、密码和令牌不反射；方法错误无 traceback | API 响应基线完成；浏览器 DOM XSS、日志汇聚和人工测试未关闭 |
 | 提交级 DAST 证据 | `dast-security` CI 作业 | 运行 `31340260242` 九作业通过；报告 8/8 | 首版完成；完整认证爬虫、ZAP/同类工具和预生产扫描待后续 |
+
+
+## 2026-08-10 WP4 第 7 次迭代补充：性能基线与可观测性出口
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 精确查询 P95 | `performance-baseline.ps1`、`performance_probe.py` | 40 次正常负载查询，10.043 QPS，P95 96.998 ms，错误率 0% | 本地隔离 SQLite 基线满足 500 ms；MySQL/Redis/多实例混合压测待实施 |
+| 短时 100 QPS | liveness 300 请求 | 99.808 QPS，P95 37.308 ms，错误率 0% | 建立代码级吞吐回归线，不代表业务容量 |
+| Prometheus 指标 | `core/observability.py`、`GET /api/v1/metrics` | 六类指标、低基数路由、未匹配路径收敛和敏感值拒绝测试 | HTTP/DB/Redis/Worker/队列首版出口完成；抓取部署、仪表盘和告警待实施 |
+| 请求关联与结构化日志 | `request_context.py`、`logging.py` | 合法请求号回显、JSON 完成日志、敏感字段脱敏 | 单 API 请求链路完成；跨 Worker/OpenTelemetry Trace 待实施 |
+| 提交级性能证据 | `verify_performance_evidence.py`、CI `performance` 作业 | 固定结构、阈值、吞吐比例、最小披露和 SHA-256 校验 | 本地完成；远端运行结果在本轮提交后补充 |
+
+当前估算：本地 MVP 约 98%，生产就绪约 70%。该估算不替代预生产、长期压测、告警通知、人工安全测试和业务/UAT 签字。
