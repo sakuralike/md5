@@ -299,3 +299,15 @@
 | MySQL 连接池可配置 | `Settings`、`db/database.py`、`.env.example` | 非 SQLite 引擎参数传递单测、混合 MySQL 事务探针 | 应用配置完成；目标环境连接预算与慢查询待批准 |
 | 单 Worker 故障不中断 | `multi-instance-stability-drill.ps1` | 3 → 2 时 `worker` 依赖仍为 1，补回后恢复 3 | 60 秒统一门禁通过；滚动发布和长时趋势待验收 |
 | 混合稳定性证据 | `multi_instance_stability_probe.py`、证据校验器 | API 268、MySQL 272、Redis 279、Celery 270 次，合计 1089 次，零错误且队列清零 | 单机 Compose 门禁完成；MySQL/Redis HA 与生产容量不在本证据范围 |
+
+
+## 2026-08-10 WP4 第 12 次迭代补充：Staging 长时稳定性准入合同
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 至少 4 小时混合负载合同 | `infra/staging/readiness-profile.example.json`、`staging-readiness-plan.ps1` | 校验持续时长、采样周期、四类操作下限、P95/错误阈值与单 Worker 故障要求 | 参数合同完成；staging 实际执行待验收 |
+| 显式 Worker 并发与连接池预算 | `.env.example`、`docker-compose.yml`、容量预算算法 | 默认 API `2 × 2`、Worker `3 × 2`、单 Scheduler；请求 `110` ≤ 允许 `136`，余量 `26`；超预算负向测试 | 静态预算完成；目标 MySQL 上限与慢查询趋势待实测 |
+| MySQL/Redis 高可用证据声明 | `docs/runbooks/wp4-staging-readiness.md`、准入配置 HA 字段 | 拒绝 standalone/single 模式，要求 RTO/RPO、JSON 证据文件名和 Markdown 运行手册 | 证据合同完成；真实切换演练待执行 |
+| 四方 Go/No-Go 审批 | `docs/templates/wp4-staging-go-no-go.md` | 精确要求 technical/security/operations/business 四个角色，缺失角色负向测试 | 模板与角色门禁完成；签字待目标环境证据 |
+| 敏感证据拒绝 | `verify_staging_readiness_profile.py` | 递归拒绝 password/token/secret/key/credential 等敏感键和值 | 自动化完成 |
+| 准入状态边界 | 生成计划 `contract-valid` / `not-run` / `pending-evidence` | 计划快照和 SHA-256 清单 | 合同验证完成，不等同于 4 小时运行或生产放行 |

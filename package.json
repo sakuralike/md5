@@ -25,6 +25,7 @@
     "monitoring:config": "python ./scripts/verify_monitoring_config.py --write-checksums",
     "worker:backlog-drill": "pwsh ./scripts/worker-backlog-drill.ps1",
     "stability:multi-instance": "pwsh ./scripts/multi-instance-stability-drill.ps1",
+    "staging:readiness-plan": "pwsh ./scripts/staging-readiness-plan.ps1",
     "alertmanager:drill": "pwsh ./scripts/alertmanager-drill.ps1"
   },
   "devDependencies": {

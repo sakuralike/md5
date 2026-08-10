@@ -121,7 +121,7 @@ services:
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
     volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
-    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO"]
+    command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}"]
     depends_on:
       api: { condition: service_healthy }
 

@@ -7,7 +7,8 @@ param(
     [switch]$IncludePerformance,
     [switch]$IncludeMonitoring,
     [switch]$IncludeKeyRotation,
-    [switch]$IncludeStability
+    [switch]$IncludeStability,
+    [switch]$IncludeStagingReadiness
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,6 +95,11 @@ try {
         Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_multi_instance_stability_evidence.py
         Invoke-Checked pwsh ./scripts/multi-instance-stability-drill.ps1 -PythonCommand $Python
         Invoke-Checked $Python ./scripts/verify_multi_instance_stability_evidence.py --report ./.local/multi-instance-stability-wp4-iteration-11/multi-instance-stability-report.json --write-checksums
+    }
+    if ($IncludeStagingReadiness) {
+        Invoke-Checked $Python -m ruff check ./scripts/verify_staging_readiness_profile.py ./scripts/tests/test_verify_staging_readiness_profile.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_staging_readiness_profile.py
+        Invoke-Checked pwsh ./scripts/staging-readiness-plan.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

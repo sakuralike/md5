@@ -303,3 +303,18 @@ python ./scripts/verify_multi_instance_stability_evidence.py `
 脚本使用独立 Compose 项目和 `18150/13318/16381` 端口，启动单 Beat 与 3 个 Worker；持续并发探测 API、MySQL、Redis 和 Celery，并主动停止、补回一个 Worker。默认结束后销毁专用环境。详细验收阈值、连接池预算和 staging 扩展见 [WP4 多实例稳定性运行手册](../runbooks/wp4-multi-instance-stability.md)。
 
 Compose 中 `worker` 不再携带 `--beat`，周期任务统一由 `scheduler` 服务调度。`DATABASE_POOL_SIZE`、`DATABASE_MAX_OVERFLOW`、`DATABASE_POOL_TIMEOUT_SECONDS` 和 `DATABASE_POOL_RECYCLE_SECONDS` 需要按目标实例数与 MySQL 连接上限共同核算。
+
+
+## WP4 Staging 长时稳定性准入合同
+
+```powershell
+pnpm staging:readiness-plan
+# 或纳入统一门禁
+./scripts/check.ps1 -SkipInstall -IncludeStagingReadiness
+```
+
+命令校验 `infra/staging/readiness-profile.example.json`，并在 `.local/staging-readiness-wp4-iteration-12/` 生成带 SHA-256 清单的机器可读执行计划。默认合同要求至少 4 小时持续混合负载、API/MySQL/Redis/Celery 各不少于 10,000 次操作、15 秒资源采样、单 Worker 故障、MySQL/Redis 高可用切换证据，以及技术、安全、运维、业务四方 Go/No-Go 审批。
+
+默认拓扑显式固定 API `2 × 2` 进程、Worker `3 × 2` 并发、单 Scheduler，连接池需求为 `11 × (5 + 5) = 110`，在 MySQL `200` 连接、预留 `30`、预算利用率 `80%` 时允许 `136`，余量 `26`。任何目标环境副本数、Worker 并发或连接池参数变化都必须重新生成计划。
+
+计划状态 `contract-valid` 只表示参数、容量预算、证据清单和审批角色通过静态校验；`execution_status=not-run` 与 `go_no_go_status=pending-evidence` 表示尚未在 staging 实际运行，不能据此宣称已完成 4 小时稳定性、HA 切换或发布签字。执行顺序与失败处理见 [WP4 Staging 准入运行手册](../runbooks/wp4-staging-readiness.md)，审批记录使用 [WP4 Staging Go/No-Go 模板](../templates/wp4-staging-go-no-go.md)。

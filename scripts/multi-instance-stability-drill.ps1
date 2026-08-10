@@ -120,6 +120,7 @@ try {
         MYSQL_PORT = "$MySqlPort"
         REDIS_PORT = "$RedisPort"
         PRIVACY_JOB_BACKEND = "celery"
+        CELERY_WORKER_CONCURRENCY = "2"
         DATABASE_POOL_SIZE = "10"
         DATABASE_MAX_OVERFLOW = "20"
         DATABASE_POOL_TIMEOUT_SECONDS = "30"
