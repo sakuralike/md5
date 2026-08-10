@@ -176,8 +176,10 @@ try {
         worker_dependency_up = $degraded.WorkerUp
     }
 
+    & docker rm $workerIds[0] | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "failed to remove the stopped worker container" }
     $replacementStart = [DateTime]::UtcNow
-    Invoke-ComposeChecked -Arguments @("up", "--detach", "--scale", "worker=$WorkerCount", "worker") | Out-Null
+    Invoke-ComposeChecked -Arguments @("up", "--detach", "--no-deps", "--no-recreate", "--scale", "worker=$WorkerCount", "worker") | Out-Null
     $recovered = Wait-Until -Description "replacement worker heartbeat" -TimeoutSeconds 90 -Probe { Get-RuntimeMetrics } -Condition { param($value) $value.Instances -ge $WorkerCount -and $value.WorkerUp -eq 1 }
     $Report.checks.worker_replacement = @{ status = "passed"; requested = $WorkerCount; observed = $recovered.Instances }
     $Report.timings.worker_replacement_seconds = [math]::Round(([DateTime]::UtcNow - $replacementStart).TotalSeconds, 3)
