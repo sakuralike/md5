@@ -327,3 +327,23 @@ pnpm staging:evidence-contract
 ```
 
 该入口使用合成夹具验证资源趋势、MySQL/Redis HA 报告、profile SHA-256、连接预算和敏感字段边界，输出 `.local/staging-evidence-contract-wp4-iteration-13/`。`contract-fixture` 只代表合同可验证，绝不代表 staging 已运行；只有目标环境真实采集并标记为 `target-execution`，且摘要状态为 `evidence-valid` / `pending-approvals` 后，才可进入四角色 Go/No-Go 审批。
+
+### WP4 目标环境采集与 HA 适配器
+
+```powershell
+pnpm staging:target-adapter-contract
+./scripts/check.ps1 -SkipInstall -IncludeStagingAdapters
+```
+
+该合同生成 4 小时形状的资源、探针和 MySQL/Redis HA 合成源文件，完整验证 UTC 时钟、961 条资源采样、四类各 10,000 次操作、Worker 故障、HA 生命周期、回滚和源 SHA-256；最终状态被强制保持为 `contract-fixture / not-run`。
+
+真实 staging 由运维人员提供三个脱敏源文件后运行：
+
+```powershell
+./scripts/staging-target-execution.ps1 `
+  -ResourceSource <resource-source.json> `
+  -MysqlSource <mysql-ha-source.json> `
+  -RedisSource <redis-ha-source.json>
+```
+
+脚本只物化聚合报告，不把逐条原始采样或目标端点复制进最终证据包。三个源文件必须共享执行组并使用 UTC 时间线；只有真实适配器可声明 `target-execution`。

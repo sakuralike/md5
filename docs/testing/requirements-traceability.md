@@ -322,3 +322,15 @@
 | Redis HA 切换证据 | `redis-ha-failover-report.example.json` | 主节点变化、限流/Worker 恢复、队列清零、RTO 28 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
 | 证据包完整性 | `staging-evidence-contract.ps1`、`staging-execution-evidence-summary.json` | 10 项校验器测试、profile SHA-256、6 文件 checksum、敏感字段拒绝 | 本地合成证据包 `contract-valid` |
 | 执行状态边界 | `staging-execution-evidence-bundle-v1` | fixture 固定为 `not-run/pending-evidence`；target execution 最高进入 `pending-approvals` | 未宣称 staging/HA 已完成 |
+
+
+## 2026-08-10 WP4 第 14 次迭代补充：目标环境采集与 HA 事件适配器
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 目标执行源合同 | `materialize_staging_execution_evidence.py` 的资源/HA v1 schema | 严格执行组、UTC 时钟、采样和事件字段校验 | 工程入口完成；真实采集待执行 |
+| 资源采样覆盖 | 资源样本、探针窗口、Worker 丢失/恢复事件 | 推导 4 小时持续时长、961 样本、覆盖率、最大间隔、四类操作和资源趋势 | 合成适配器合同通过；目标趋势待验收 |
+| HA 生命周期与回滚 | MySQL/Redis 依赖专属事件集合 | 切换触发、观测、主节点变化、应用恢复、数据/队列检查、回滚就绪的缺失/乱序负向测试 | 适配合同完成；真实 HA 待执行 |
+| 脱敏与来源完整性 | 递归敏感字段拒绝、source SHA-256、执行组和采集器 provenance | 敏感键、凭据型值、跨执行组、合成适配器冒充 target 的拒绝测试 | 自动化完成 |
+| 人工长时门禁入口 | `staging-target-execution.ps1` | readiness plan → 物化 → 最终校验 → checksum 一次完成 | 可人工触发；当前没有 target evidence |
+| 状态边界 | `staging-target-adapter-contract.ps1` | 合同 fixture 强制断言 `contract-fixture / not-run` | 未宣称 staging、HA 或审批完成 |

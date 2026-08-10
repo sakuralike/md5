@@ -60,6 +60,37 @@ pnpm staging:evidence-contract
 
 入口默认复制 `infra/staging/*example.json` 的合成夹具，因此结果必须是 `evidence_kind=contract-fixture`、`execution_status=not-run` 和 `go_no_go_status=pending-evidence`。目标环境采集器生成的报告必须把 `evidence_kind` 改为 `target-execution`，并提供真实但脱敏的时间线、采样覆盖、资源峰值、切换检查和校验和；校验通过只会进入 `pending-approvals`，仍不能替代四角色签字。
 
+### 2.1 目标环境采集与 HA 事件适配器
+
+先在目标环境将监控与 HA 平台事件导出为三个版本化源文件：
+
+- `staging-resource-samples-v1`：资源样本、四类探针窗口、Worker 丢失/恢复事件；
+- `staging-ha-events-v1`（MySQL）：预检、切换、主节点变化、读写/一致性/幂等与回滚事件；
+- `staging-ha-events-v1`（Redis）：预检、切换、主节点变化、限流/Celery/队列与回滚事件。
+
+三个源文件必须共享 `execution_group_id`，标记相同 `evidence_kind`，使用 UTC `Z` 时间戳，并声明采集器名称、版本和观测时钟偏差。不得包含密码、令牌、密钥、Cookie、Authorization、带凭据连接值、真实个人信息或业务原文。
+
+先运行合成合同，确认当前代码能安全处理 4 小时形状的源数据：
+
+```powershell
+pnpm staging:target-adapter-contract
+./scripts/check.ps1 -SkipInstall -IncludeStagingAdapters
+```
+
+该入口输出 `.local/staging-target-adapter-contract-wp4-iteration-14/`，并强制断言摘要仍是 `contract-fixture / not-run`。它不能作为目标环境证据。
+
+目标环境人工执行：
+
+```powershell
+./scripts/staging-target-execution.ps1 `
+  -ResourceSource <resource-source.json> `
+  -MysqlSource <mysql-ha-source.json> `
+  -RedisSource <redis-ha-source.json> `
+  -OutputDirectory .local/staging-target-execution-wp4-iteration-14
+```
+
+物化器根据真实时间戳推导持续时长、采样覆盖、最大采样间隔和 RTO/RPO，并在最终报告中保存源 SHA-256，而不保存逐条原始采样或目标端点。若适配器名称包含 fixture、synthetic、test 或 mock，则 `target-execution` 直接拒绝。
+
 ## 3. 默认容量预算
 
 默认 profile 明确固定 Worker 并发为 2，避免 Celery 根据宿主机 CPU 自动扩大进程数。容量计算公式为：
