@@ -257,3 +257,15 @@ pnpm staging:evidence-archive-contract
 ```
 
 该入口必须保持 `contract-sealed / blocked-by-contract-fixture / not-run / pending-evidence`，不能作为真实 staging 或 HA 验收证据。
+
+## 13. 部署后 Staging 冒烟
+
+部署完成后可使用统一入口验证直接 HTTP Staging，不要求域名或 HTTPS：
+
+```powershell
+pnpm staging:smoke -BaseUrl http://<staging-ip>:8000 -WebUrl http://<staging-ip>:5173 -AdminUrl http://<staging-ip>:5174
+```
+
+该入口检查 API liveness/readiness、数据库和 rate-limit 就绪、Web/Admin 页面标题、两端 `/api/` 代理，以及唯一合成账号的注册、登录和个人资料读取。它只代表部署后 smoke 通过，不会生成 `target-execution`，也不会替代 4 小时资源趋势、MySQL/Redis HA 切换或四角色 Go/No-Go 审批。
+
+若只检查页面和服务，不创建合成账号，可追加 `-SkipAuth`。
