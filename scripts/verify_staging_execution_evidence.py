@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from verify_staging_readiness_profile import validate_profile
+from verify_staging_readiness_profile import normalized_file_sha256, validate_profile
 
 RESOURCE_SCHEMA = "staging-resource-trend-report-v1"
 HA_SCHEMA = "staging-ha-failover-report-v1"
@@ -101,10 +101,6 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{path} root must be an object")
     return value
-
-
-def _profile_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def validate_resource_report(
@@ -302,7 +298,7 @@ def validate_bundle(
     profile = _load_json(profile_path)
     validate_profile(profile, profile_path.resolve().parents[2])
     plan = _load_json(plan_path)
-    profile_sha256 = _profile_sha256(profile_path)
+    profile_sha256 = normalized_file_sha256(profile_path)
     if plan.get("schema") != "staging-readiness-plan-v1" or plan.get("status") != "contract-valid":
         raise ValueError("readiness plan is not contract-valid")
     if plan.get("profile_sha256") != profile_sha256:

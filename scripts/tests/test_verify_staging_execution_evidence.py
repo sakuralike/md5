@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -16,11 +15,11 @@ from verify_staging_execution_evidence import (
     validate_ha_report,
     validate_resource_report,
 )
-from verify_staging_readiness_profile import validate_profile
+from verify_staging_readiness_profile import normalized_file_sha256, validate_profile
 
 PROFILE_PATH = ROOT / "infra/staging/readiness-profile.example.json"
 PROFILE = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
-PROFILE_SHA = hashlib.sha256(PROFILE_PATH.read_bytes()).hexdigest()
+PROFILE_SHA = normalized_file_sha256(PROFILE_PATH)
 
 
 def load_fixture(name: str) -> dict:

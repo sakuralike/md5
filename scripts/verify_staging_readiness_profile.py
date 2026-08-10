@@ -25,6 +25,11 @@ SECRET_KEY_RE = re.compile(
 )
 
 
+def normalized_file_sha256(path: Path) -> str:
+    """Hash a text contract without making the digest depend on checkout EOLs."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def _require_object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{name} must be an object")
@@ -269,7 +274,7 @@ def build_plan(profile: dict[str, Any], repository_root: Path, profile_path: Pat
         "execution_status": "not-run",
         "go_no_go_status": "pending-evidence",
         "environment": "staging",
-        "profile_sha256": hashlib.sha256(profile_path.read_bytes()).hexdigest(),
+        "profile_sha256": normalized_file_sha256(profile_path),
         "synthetic_data_only": True,
         **validated,
         "required_evidence": [
