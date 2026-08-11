@@ -1,0 +1,5 @@
+# Keep executable and deployment configuration files portable across Windows and Linux.
+*.sh text eol=lf
+Dockerfile* text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

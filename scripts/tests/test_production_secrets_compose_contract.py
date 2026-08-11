@@ -46,6 +46,7 @@ def test_api_image_copies_root_only_secret_mounts_then_drops_privileges() -> Non
     entrypoint = (ROOT / "infra/docker/api-entrypoint.sh").read_text(encoding="utf-8")
     assert "su-exec" in dockerfile
     assert 'ENTRYPOINT ["password-detective-api-entrypoint"]' in dockerfile
+    assert "sed -i 's/\\r$//' /usr/local/bin/password-detective-api-entrypoint" in dockerfile
     assert "RUNTIME_SECRET_DIR=/run/password-detective-secrets" in entrypoint
     assert 'chmod 0400 "$destination"' in entrypoint
     assert 'exec su-exec app "$@"' in entrypoint
