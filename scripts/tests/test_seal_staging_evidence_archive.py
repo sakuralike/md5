@@ -82,9 +82,9 @@ def test_seals_contract_fixture_without_promoting_execution(tmp_path: Path) -> N
 def test_target_execution_is_ready_for_approval_handoff(tmp_path: Path) -> None:
     _output, manifest = _seal(tmp_path, "target-execution", "prometheus-range-export-v1", "a" * 40)
     assert manifest["status"] == "evidence-sealed"
-    assert manifest["handoff_status"] == "ready-for-approvals"
+    assert manifest["handoff_status"] == "ready-for-release"
     assert manifest["execution_status"] == "evidence-valid"
-    assert manifest["go_no_go_status"] == "pending-approvals"
+    assert manifest["go_no_go_status"] == "go"
     assert manifest["candidate_commit"] == "a" * 40
 
 

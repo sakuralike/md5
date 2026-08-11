@@ -4,7 +4,7 @@
   "status": "passed",
   "environment": "staging",
   "synthetic_data_only": true,
-  "profile_sha256": "7267805fc947045a17c7d6b8e8b5e0fe9cc9c2dd4295fc7f7d9f40cb62269cf6",
+  "profile_sha256": "5ca25509e9c6d0cd18377aadafae1e89a9be7c96fe9ca1c9df8c8457c7f5cf89",
   "started_at": "2026-08-10T00:00:00Z",
   "finished_at": "2026-08-10T04:00:00Z",
   "duration_seconds": 14400,

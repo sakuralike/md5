@@ -199,11 +199,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
             _updateDownloadUrl = downloadUri.AbsoluteUri;
             var requirement = update.Mandatory ? "必须升级" : "可升级";
-            var signature = update.CodeSignatureStatus == "verified"
-                ? "发布记录标记签名已验证"
-                : "请在下载后核验安装包签名";
+            var integrity = update.ArtifactIntegrity == "sha256-verified"
+                && update.DistributionAuthorized is true
+                ? "SHA-256 完整性和分发授权已登记"
+                : "请核对制品完整性与来源";
             UpdateStatus =
-                $"发现 {update.LatestVersion}（{requirement}，{signature}）。{update.ReleaseNotes}";
+                $"发现 {update.LatestVersion}（{requirement}，{integrity}）。{update.ReleaseNotes}";
         }
         OnPropertyChanged(nameof(HasUpdate));
         NotifyCommands();
@@ -220,7 +221,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             _externalUriLauncher.Open(uri);
-            Status = "已在系统浏览器中打开后端升级下载入口；安装前请核验签名。";
+            Status = "已在系统浏览器中打开后端升级下载入口；安装前请核对下载页展示的 SHA-256。";
         }
         catch (Exception)
         {

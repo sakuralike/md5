@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type {
-  DesktopCodeSignatureStatus,
   DesktopRelease,
   DesktopReleaseChannel,
   DesktopArchitecture,
@@ -49,9 +48,8 @@ const draft = reactive({
   mandatory: false,
   releaseNotes: "",
   artifactSha256: "",
-  codeSignatureStatus: "unsigned" as DesktopCodeSignatureStatus,
-  signerSubject: "",
-  signerThumbprint: "",
+  distributionAuthorized: false,
+  legalDeclaration: "",
 });
 
 const draftReleases = computed(() => releases.value.filter((release) => release.status === "draft"));
@@ -91,9 +89,8 @@ function resetDraft(): void {
   draft.mandatory = false;
   draft.releaseNotes = "";
   draft.artifactSha256 = "";
-  draft.codeSignatureStatus = "unsigned";
-  draft.signerSubject = "";
-  draft.signerThumbprint = "";
+  draft.distributionAuthorized = false;
+  draft.legalDeclaration = "";
   artifact.value = null;
   artifactInputKey.value += 1;
 }
@@ -177,10 +174,6 @@ function statusLabel(status: DesktopRelease["status"]): string {
   return { draft: "草稿", published: "已发布", withdrawn: "已撤回" }[status];
 }
 
-function signatureLabel(status: DesktopCodeSignatureStatus): string {
-  return { unsigned: "未签名", test_signed: "测试签名", verified: "签名记录已验证" }[status];
-}
-
 function releaseStatusVariant(
   status: DesktopRelease["status"],
 ): "default" | "secondary" | "destructive" | "outline" {
@@ -207,13 +200,13 @@ onMounted(() => refreshReleases());
         <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">M3 · 受控发布</p>
         <h1 class="text-2xl font-semibold tracking-tight">桌面版本发布</h1>
         <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-          创建不可变版本元数据、上传制品，并在复核摘要和签名记录后发布到稳定或测试通道。
+          创建不可变版本元数据、上传制品，并在复核 SHA-256、大小和合法分发声明后发布到稳定或测试通道。
         </p>
       </div>
       <aside class="max-w-md space-y-2 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
         <strong class="text-destructive">安全边界</strong>
         <p class="leading-6 text-muted-foreground">
-          页面不会替代 Authenticode 验签。SHA-256 和签名者信息必须来自受控发布流水线。
+          桌面端不要求代码签名证书；后端会在上传和发布前复算 SHA-256 与大小，并要求保留可审计的合法分发声明。
         </p>
       </aside>
     </header>
@@ -333,39 +326,28 @@ onMounted(() => refreshReleases());
           </small>
         </Label>
 
-        <Label class="grid gap-2">
-          代码签名记录
-          <Select v-model="draft.codeSignatureStatus">
-            <SelectTrigger id="signature-status"><SelectValue placeholder="选择签名状态" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unsigned">unsigned · 未签名</SelectItem>
-              <SelectItem value="test_signed">test_signed · 测试签名</SelectItem>
-              <SelectItem value="verified">verified · 发布流水线已验签</SelectItem>
-            </SelectContent>
-          </Select>
+        <Label class="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <Checkbox v-model="draft.distributionAuthorized" class="mt-0.5" />
+          <span class="grid gap-1">
+            <strong>确认合法分发授权</strong>
+            <small class="leading-5 text-muted-foreground">
+              确认该制品由本项目构建或已获得明确分发授权，不包含未授权第三方内容。
+            </small>
+          </span>
         </Label>
 
-        <div
-          v-if="draft.codeSignatureStatus === 'verified'"
-          class="grid gap-4 rounded-lg border border-primary/20 bg-primary/5 p-4 sm:grid-cols-2"
-        >
-          <Label class="grid gap-2">
-            签名者 Subject
-            <Input id="signer-subject" v-model="draft.signerSubject" maxlength="255" required />
-          </Label>
-          <Label class="grid gap-2">
-            证书指纹
-            <Input
-              id="signer-thumbprint"
-              v-model="draft.signerThumbprint"
-              class="font-mono"
-              maxlength="128"
-              autocomplete="off"
-              spellcheck="false"
-              required
-            />
-          </Label>
-        </div>
+        <Label class="grid gap-2">
+          合法性声明
+          <Textarea
+            id="legal-declaration"
+            v-model="draft.legalDeclaration"
+            rows="4"
+            minlength="20"
+            maxlength="2000"
+            required
+            placeholder="说明制品来源、分发授权依据和内容合规边界，不填写密钥或个人信息。"
+          />
+        </Label>
 
         <Button type="submit" :disabled="Boolean(activeAction)">
           {{ activeAction === "create" ? "创建并上传中…" : "创建草稿并上传" }}
@@ -449,7 +431,7 @@ onMounted(() => refreshReleases());
             <div class="min-w-0 space-y-1"><dt class="text-xs font-semibold text-muted-foreground">制品</dt><dd class="break-all text-sm">{{ release.artifact_filename }} · {{ formatArtifactSize(release.artifact_size_bytes) }}</dd></div>
             <div class="min-w-0 space-y-1"><dt class="text-xs font-semibold text-muted-foreground">SHA-256</dt><dd><code class="break-all text-xs">{{ release.artifact_sha256 }}</code></dd></div>
             <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">最低版本</dt><dd>{{ release.minimum_supported_version }}</dd></div>
-            <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">签名记录</dt><dd>{{ signatureLabel(release.code_signature_status) }}</dd></div>
+            <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">分发授权</dt><dd>{{ release.distribution_authorized ? "已确认" : "未确认" }}</dd></div>
             <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">制品状态</dt><dd>{{ release.artifact_uploaded ? "已上传" : "未上传" }}</dd></div>
             <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">下载次数</dt><dd>{{ release.download_count }}</dd></div>
             <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">创建时间</dt><dd>{{ formatTime(release.created_at) }}</dd></div>

@@ -15,9 +15,8 @@ const baseInput = {
   mandatory: false,
   releaseNotes: "合成发布说明",
   artifactSha256: "A".repeat(64),
-  codeSignatureStatus: "test_signed" as const,
-  signerSubject: "",
-  signerThumbprint: "",
+  distributionAuthorized: true,
+  legalDeclaration: "该合成制品由项目构建，具备合法分发授权。",
 };
 
 const artifact = {
@@ -42,9 +41,8 @@ function release(overrides: Partial<DesktopRelease> = {}): DesktopRelease {
     artifact_size_bytes: artifact.size,
     content_type: artifact.type,
     artifact_uploaded: false,
-    code_signature_status: "test_signed",
-    signer_subject: null,
-    signer_thumbprint: null,
+    distribution_authorized: true,
+    legal_declaration: "该合成制品由项目构建，具备合法分发授权。",
     download_count: 0,
     created_at: "2026-08-02T00:00:00Z",
     updated_at: "2026-08-02T00:00:00Z",
@@ -70,8 +68,8 @@ describe("desktop release administration", () => {
       artifact_filename: artifact.name,
       artifact_size_bytes: artifact.size,
       artifact_sha256: "a".repeat(64),
-      signer_subject: null,
-      signer_thumbprint: null,
+      distribution_authorized: true,
+      legal_declaration: "该合成制品由项目构建，具备合法分发授权。",
     });
   });
 
@@ -87,10 +85,16 @@ describe("desktop release administration", () => {
     ).toThrow("SHA-256");
     expect(() =>
       buildDesktopReleasePayload(
-        { ...baseInput, codeSignatureStatus: "verified" },
+        { ...baseInput, distributionAuthorized: false },
         artifact,
       ),
-    ).toThrow("已验证签名");
+    ).toThrow("合法分发授权");
+    expect(() =>
+      buildDesktopReleasePayload(
+        { ...baseInput, legalDeclaration: "太短" },
+        artifact,
+      ),
+    ).toThrow("合法性声明");
     expect(() =>
       buildDesktopReleasePayload(baseInput, { ...artifact, name: "archive.zip" }),
     ).toThrow(".msix");

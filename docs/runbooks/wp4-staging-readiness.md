@@ -2,9 +2,9 @@
 
 ## 1. 目的与边界
 
-本手册定义 WP4 目标环境准入合同、连接池容量预算、长时混合负载、高可用切换证据和 Go/No-Go 审批规则。
+本手册定义 WP4 目标环境准入合同、连接池容量预算、长时混合负载、高可用切换证据和自动 Go/No-Go 决策规则。
 
-当前仓库提供的是**可执行合同和证据模板**，不是已经完成的 staging 验收。只有目标环境实际执行不少于 4 小时、完成 MySQL/Redis 高可用切换并取得全部角色签字后，才能形成生产放行结论。
+当前仓库提供的是**可执行合同和证据模板**，不是已经完成的 staging 验收。只有目标环境实际执行不少于 4 小时、完成 MySQL/Redis 高可用切换并通过全部自动证据校验后，才能形成生产放行结论。
 
 所有演练只能使用合成数据。证据不得记录密码、令牌、连接串、私钥、Cookie、真实用户数据或个人信息。
 
@@ -58,7 +58,7 @@ pnpm staging:evidence-contract
 └── checksums.sha256
 ```
 
-入口默认复制 `infra/staging/*example.json` 的合成夹具，因此结果必须是 `evidence_kind=contract-fixture`、`execution_status=not-run` 和 `go_no_go_status=pending-evidence`。目标环境采集器生成的报告必须把 `evidence_kind` 改为 `target-execution`，并提供真实但脱敏的时间线、采样覆盖、资源峰值、切换检查和校验和；校验通过只会进入 `pending-approvals`，仍不能替代四角色签字。
+入口默认复制 `infra/staging/*example.json` 的合成夹具，因此结果必须是 `evidence_kind=contract-fixture`、`execution_status=not-run` 和 `go_no_go_status=pending-evidence`。目标环境采集器生成的报告必须把 `evidence_kind` 改为 `target-execution`，并提供真实但脱敏的时间线、采样覆盖、资源峰值、切换检查和校验和；校验通过会输出 `go`，但仍不能替代未执行的目标环境证据。
 
 ### 2.1 目标环境采集与 HA 事件适配器
 
@@ -158,14 +158,14 @@ pnpm staging:target-adapter-contract
 执行前必须记录主节点和复制健康摘要，但不得记录连接串或凭据。
 
 1. 保持合成读写探针运行；
-2. 触发批准的主节点切换；
+2. 触发受控的主节点切换；
 3. 记录最后一次成功写入、首次失败、首次恢复和复制追平时间；
 4. 校验切换前后合成记录连续性和唯一性；
 5. 验证 API、Worker、Scheduler 自动恢复连接；
 6. 执行回切或确认新的稳定主节点；
 7. 生成 `mysql-ha-failover-report.json`。
 
-默认阈值为 RTO 120 秒、RPO 30 秒。目标环境可收紧，不能无审批放宽。
+默认阈值为 RTO 120 秒、RPO 30 秒。目标环境可收紧；放宽必须修改版本化 profile 并重新执行完整证据链。
 
 ## 8. Redis 高可用切换
 
@@ -176,20 +176,13 @@ pnpm staging:target-adapter-contract
 5. 确认最终队列归零且没有重复业务副作用；
 6. 生成 `redis-ha-failover-report.json`。
 
-默认阈值为 RTO 60 秒、RPO 5 秒。目标环境可收紧，不能无审批放宽。
+默认阈值为 RTO 60 秒、RPO 5 秒。目标环境可收紧；放宽必须修改版本化 profile 并重新执行完整证据链。
 
-## 9. Go/No-Go
+## 9. 自动 Go/No-Go 决策
 
-复制 [WP4 Staging Go/No-Go 审批记录模板](../templates/wp4-staging-go-no-go.md) 形成当次候选版本的审批记录。
+复制 [WP4 Staging 自动发布决策记录模板](../templates/wp4-staging-release-decision.md) 形成当次候选版本的脱敏决策记录。
 
-以下四个角色必须分别签字：
-
-- `technical_owner`
-- `security_owner`
-- `operations_owner`
-- `business_owner`
-
-任一必需证据缺失、预算超限、HA 切换失败、存在未接受 P0/P1 风险或任一角色未签字时，最终结论必须为 `NO-GO`。
+决策模式固定为 `automated-evidence-gate`，不要求任何人员签字。任一必需证据缺失、预算超限、HA 切换失败、存在未接受 P0/P1 风险、回滚未验证或校验和不匹配时，最终结论必须为 `NO-GO`；只有全部自动校验通过时输出 `GO`。
 
 ## 10. 故障处理
 
@@ -226,11 +219,11 @@ pnpm staging:target-adapter-contract
 pnpm staging:platform-export-contract
 ```
 
-该命令生成的制品必须保持 `evidence_kind=contract-fixture`、`execution_status=not-run`，不可提交给 Go/No-Go 审批充当目标环境证据。
+该命令生成的制品必须保持 `evidence_kind=contract-fixture`、`execution_status=not-run`，不可作为自动 Go/No-Go 决策的目标环境证据。
 
-## 12. 证据包封存与审批交接
+## 12. 证据包封存与自动决策
 
-完成目标环境的资源趋势和 MySQL/Redis HA 报告后，必须先在受控工作目录执行封存重验，再把单一证据包交给四角色审批。入口为：
+完成目标环境的资源趋势和 MySQL/Redis HA 报告后，必须先在受控工作目录执行封存重验，再由单一证据包驱动自动决策。入口为：
 
 ```powershell
 ./scripts/staging-evidence-archive.ps1 `
@@ -246,9 +239,9 @@ pnpm staging:platform-export-contract
 - `staging-evidence-archive.zip`；
 - `staging-evidence-archive.zip.sha256`。
 
-目标执行必须提供 40 或 64 位候选提交 SHA；`contract-fixture` 不得携带候选提交，也不得进入审批。归档 ZIP 只包含脱敏证据、来源 checksum 摘要和封存清单，不包含原始平台导出、端点、凭据、密码、令牌或逐条业务数据。
+目标执行必须提供 40 或 64 位候选提交 SHA；`contract-fixture` 不得携带候选提交，也不得进入自动发布决策。归档 ZIP 只包含脱敏证据、来源 checksum 摘要和封存清单，不包含原始平台导出、端点、凭据、密码、令牌或逐条业务数据。
 
-只有 `target-execution` 且 `handoff_status=ready-for-approvals` 的封存包才能交接；四个角色仍必须分别完成 `technical_owner`、`security_owner`、`operations_owner`、`business_owner` 签字，机器封存门禁不会自动产生 Go/No-Go 结论。
+只有 `target-execution` 且 `handoff_status=ready-for-release` 的封存包才能进入自动决策；封存器与证据校验器在所有资格条件满足时输出 `go`，无需人员签字。
 
 本地/CI 合同入口：
 
@@ -266,7 +259,7 @@ pnpm staging:evidence-archive-contract
 pnpm staging:smoke -BaseUrl http://<staging-ip>:8000 -WebUrl http://<staging-ip>:5173 -AdminUrl http://<staging-ip>:5174
 ```
 
-该入口检查 API liveness/readiness、数据库和 rate-limit 就绪、Web/Admin 页面标题、两端 `/api/` 代理，以及唯一合成账号的注册、登录和个人资料读取。它只代表部署后 smoke 通过，不会生成 `target-execution`，也不会替代 4 小时资源趋势、MySQL/Redis HA 切换或四角色 Go/No-Go 审批。
+该入口检查 API liveness/readiness、数据库和 rate-limit 就绪、Web/Admin 页面标题、两端 `/api/` 代理，以及唯一合成账号的注册、登录和个人资料读取。它只代表部署后 smoke 通过，不会生成 `target-execution`，也不会替代 4 小时资源趋势、MySQL/Redis HA 切换或自动 Go/No-Go 决策。
 
 若只检查页面和服务，不创建合成账号，可追加 `-SkipAuth`。
 

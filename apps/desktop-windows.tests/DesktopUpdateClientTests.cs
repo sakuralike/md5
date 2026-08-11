@@ -28,9 +28,8 @@ public sealed class DesktopUpdateClientTests
               "artifact_filename": "password-detective-0.2.0-x64.msix",
               "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "artifact_size_bytes": 4096,
-              "code_signature_status": "verified",
-              "signer_subject": "CN=Synthetic Desktop Publisher",
-              "signer_thumbprint": "SYNTHETIC-THUMBPRINT"
+              "artifact_integrity": "sha256-verified",
+              "distribution_authorized": true
             }
             """);
         using var httpClient = new HttpClient(handler);
@@ -45,7 +44,8 @@ public sealed class DesktopUpdateClientTests
 
         Assert.True(update.UpdateAvailable);
         Assert.Equal("0.2.0", update.LatestVersion);
-        Assert.Equal("verified", update.CodeSignatureStatus);
+        Assert.Equal("sha256-verified", update.ArtifactIntegrity);
+        Assert.True(update.DistributionAuthorized);
         Assert.NotNull(handler.LastRequestUri);
         Assert.Equal("/api/v1/desktop/updates/check", handler.LastRequestUri!.AbsolutePath);
         Assert.Contains("current_version=0.1.0", handler.LastRequestUri.Query);

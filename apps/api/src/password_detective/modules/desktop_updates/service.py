@@ -91,12 +91,16 @@ def _validate_release_payload(payload: DesktopReleaseCreateRequest, settings: Se
             status_code=413,
             details={"max_bytes": settings.desktop_update_max_artifact_bytes},
         )
-    if payload.code_signature_status == CodeSignatureStatus.VERIFIED and (
-        not payload.signer_subject or not payload.signer_thumbprint
-    ):
+    if not payload.distribution_authorized:
         raise AppError(
-            "desktop.update.signer_metadata_required",
-            "已验证签名的制品必须提供签名者与证书指纹",
+            "desktop.update.distribution_authorization_required",
+            "发布升级制品前必须确认拥有合法分发授权",
+            status_code=422,
+        )
+    if len(payload.legal_declaration.strip()) < 20:
+        raise AppError(
+            "desktop.update.legal_declaration_required",
+            "发布升级制品前必须提供不少于 20 个字符的合法性声明",
             status_code=422,
         )
 
@@ -117,9 +121,8 @@ def _to_response(release: DesktopRelease) -> DesktopReleaseResponse:
         artifact_size_bytes=release.artifact_size_bytes,
         content_type=release.content_type,
         artifact_uploaded=release.artifact_storage_key is not None,
-        code_signature_status=release.code_signature_status,
-        signer_subject=release.signer_subject,
-        signer_thumbprint=release.signer_thumbprint,
+        distribution_authorized=release.distribution_authorized,
+        legal_declaration=release.legal_declaration,
         download_count=release.download_count,
         created_at=release.created_at,
         updated_at=release.updated_at,
@@ -150,9 +153,11 @@ def create_release(
         artifact_sha256=payload.artifact_sha256,
         artifact_size_bytes=payload.artifact_size_bytes,
         content_type=payload.content_type.strip().lower(),
-        code_signature_status=payload.code_signature_status,
-        signer_subject=payload.signer_subject,
-        signer_thumbprint=payload.signer_thumbprint,
+        distribution_authorized=payload.distribution_authorized,
+        legal_declaration=payload.legal_declaration.strip(),
+        code_signature_status=CodeSignatureStatus.UNSIGNED,
+        signer_subject=None,
+        signer_thumbprint=None,
         created_by=principal.user.id,
     )
     db.add(release)
@@ -335,13 +340,10 @@ def publish_release(
     if release.status != DesktopReleaseStatus.DRAFT:
         raise AppError("desktop.update.release_not_publishable", "仅草稿可以发布", status_code=409)
     _verify_stored_artifact(release, settings)
-    if (
-        settings.app_env == "production"
-        and release.code_signature_status != CodeSignatureStatus.VERIFIED
-    ):
+    if not release.distribution_authorized or len(release.legal_declaration.strip()) < 20:
         raise AppError(
-            "desktop.update.verified_signature_required",
-            "生产环境只能发布已验证代码签名的升级制品",
+            "desktop.update.distribution_authorization_required",
+            "发布升级制品前必须保留完整的合法分发授权声明",
             status_code=409,
         )
     release.status = DesktopReleaseStatus.PUBLISHED
@@ -360,7 +362,11 @@ def publish_release(
             "channel": release.channel.value,
             "architecture": release.architecture.value,
             "version": release.version,
-            "signature_status": release.code_signature_status.value,
+            "artifact_sha256": release.artifact_sha256,
+            "distribution_authorized": release.distribution_authorized,
+            "legal_declaration_sha256": hashlib.sha256(
+                release.legal_declaration.encode("utf-8")
+            ).hexdigest(),
         },
     )
     db.commit()
@@ -418,6 +424,8 @@ def check_for_update(
             DesktopRelease.platform == platform,
             DesktopRelease.architecture == architecture,
             DesktopRelease.artifact_storage_key.is_not(None),
+            DesktopRelease.distribution_authorized.is_(True),
+            DesktopRelease.legal_declaration != "",
         )
     ).all()
     latest = max(releases, key=lambda item: parse_version(item.version), default=None)
@@ -438,9 +446,8 @@ def check_for_update(
             artifact_filename=None,
             artifact_sha256=None,
             artifact_size_bytes=None,
-            code_signature_status=None,
-            signer_subject=None,
-            signer_thumbprint=None,
+            artifact_integrity=None,
+            distribution_authorized=None,
         )
     update_available = current < parse_version(latest.version)
     mandatory = update_available and (
@@ -462,9 +469,8 @@ def check_for_update(
         artifact_filename=latest.artifact_filename if update_available else None,
         artifact_sha256=latest.artifact_sha256 if update_available else None,
         artifact_size_bytes=latest.artifact_size_bytes if update_available else None,
-        code_signature_status=latest.code_signature_status if update_available else None,
-        signer_subject=latest.signer_subject if update_available else None,
-        signer_thumbprint=latest.signer_thumbprint if update_available else None,
+        artifact_integrity="sha256-verified" if update_available else None,
+        distribution_authorized=latest.distribution_authorized if update_available else None,
     )
 
 
@@ -475,7 +481,12 @@ def prepare_download(
     release_id: str,
 ) -> tuple[DesktopRelease, Path]:
     release = _require_release(db, release_id)
-    if release.status != DesktopReleaseStatus.PUBLISHED or release.artifact_storage_key is None:
+    if (
+        release.status != DesktopReleaseStatus.PUBLISHED
+        or release.artifact_storage_key is None
+        or not release.distribution_authorized
+        or not release.legal_declaration.strip()
+    ):
         raise AppError(
             "desktop.update.download_unavailable",
             "该升级制品当前不可下载",

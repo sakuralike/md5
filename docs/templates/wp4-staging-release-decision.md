@@ -1,4 +1,4 @@
-# WP4 Staging Go/No-Go 审批记录模板
+# WP4 Staging 自动发布决策记录模板
 
 > 本模板只允许填写合成或脱敏信息。不得粘贴密码、令牌、连接串、私钥、Cookie、真实用户数据或个人信息。
 
@@ -85,21 +85,19 @@
 
 1. 任一必需证据缺失、校验失败或 SHA-256 不匹配；
 2. 长时窗口少于 4 小时，或使用了非合成数据；
-3. 连接池计划超过批准预算，或实测连接数侵占保留连接；
-4. MySQL/Redis 高可用切换未完成，或 RTO/RPO 超过批准阈值；
+3. 连接池计划超过版本化容量预算，或实测连接数侵占保留连接；
+4. MySQL/Redis 高可用切换未完成，或 RTO/RPO 超过 profile 阈值；
 5. 错误率、连续错误、P95、资源水位或队列深度超过阈值；
 6. 存在未接受的 P0/P1 风险、未验证回滚或生产秘密管理未关闭；
-7. 任一必需审批角色未签字。
+7. 发布候选提交、证据归档或校验和缺失，或自动证据门禁未输出 `go`。
 
-## 8. 审批
+## 8. 自动决策
 
-| 审批角色 | 结论 | 签字标识 | 时间 | 备注 |
-|---|---|---|---|---|
-| technical_owner | `<GO/NO-GO>` | `<ROLE-ID>` | `<UTC-TIMESTAMP>` | `<COMMENT>` |
-| security_owner | `<GO/NO-GO>` | `<ROLE-ID>` | `<UTC-TIMESTAMP>` | `<COMMENT>` |
-| operations_owner | `<GO/NO-GO>` | `<ROLE-ID>` | `<UTC-TIMESTAMP>` | `<COMMENT>` |
-| business_owner | `<GO/NO-GO>` | `<ROLE-ID>` | `<UTC-TIMESTAMP>` | `<COMMENT>` |
+- 决策模式：`automated-evidence-gate`
+- 候选提交：`<COMMIT-SHA>`
+- 证据归档 SHA-256：`<ARCHIVE-SHA256>`
+- 自动校验结果：`<GO/NO-GO>`
+- 决策时间：`<UTC-TIMESTAMP>`
+- 决策说明：`<SUMMARY>`
 
-**最终决策：** `<GO/NO-GO>`
-
-**决策说明：** `<SUMMARY>`
+本项目不要求人员签字。只有所有必需证据、校验和、风险阈值和回滚检查均通过时，自动门禁才能输出 `GO`；任何缺失或失败均为 `NO-GO`。

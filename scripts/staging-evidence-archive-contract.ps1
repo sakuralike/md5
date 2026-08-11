@@ -34,4 +34,4 @@ if ($Manifest.execution_status -ne "not-run" -or $Manifest.go_no_go_status -ne "
 if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
     throw "staging evidence archive ZIP was not created"
 }
-Write-Host "Staging evidence archive contract is valid and remains blocked from approvals. Output: $Output"
+Write-Host "Staging evidence archive contract is valid and remains blocked until target evidence exists. Output: $Output"

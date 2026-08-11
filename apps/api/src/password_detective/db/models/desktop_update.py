@@ -79,6 +79,8 @@ class DesktopRelease(Base):
     artifact_sha256: Mapped[str] = mapped_column(String(64))
     artifact_size_bytes: Mapped[int] = mapped_column(BigInteger)
     content_type: Mapped[str] = mapped_column(String(128), default="application/octet-stream")
+    distribution_authorized: Mapped[bool] = mapped_column(Boolean, default=False)
+    legal_declaration: Mapped[str] = mapped_column(String(2_000), default="")
     code_signature_status: Mapped[CodeSignatureStatus] = mapped_column(
         Enum(CodeSignatureStatus, native_enum=False, length=24),
         default=CodeSignatureStatus.UNSIGNED,

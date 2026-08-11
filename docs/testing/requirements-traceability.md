@@ -1,6 +1,6 @@
 # 需求—模块—测试追踪矩阵
 
-- 更新日期：2026-08-10
+- 更新日期：2026-08-11
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
@@ -17,7 +17,7 @@
 | VERIFY-01～07 | `modules/verification`、`modules/moderation`、`modules/reputation` | `apps/api/tests/test_m2_verification.py`、`apps/api/tests/test_m4_candidate_moderation.py`、`apps/api/tests/test_m4_reward_compensation.py`、`apps/api/tests/test_m4_risk_alerts.py`、`apps/api/tests/test_m4_candidate_correlation.py`：单账号唯一有效反馈、不可变历史、关联键去重、候选内传递关联组、成功/失败维度动态限权、双成功验证、三失败隔离、verified 降级、自动/人工状态事件、人工首次验证结算、奖励撤销/恢复、15 分钟失败激增告警、规则版本、幂等和 rejected 普通反馈锁定 | M2 自动状态、M3 桌面签名回执及 M4 人工审核/奖励补偿/失败激增告警/候选内关联降权/通知 SLA 完成；跨候选图谱和动态处罚待实现 |
 | 积分与信誉、用户中心 | `modules/reputation`、`modules/verification`、`apps/web` | `apps/api/tests/test_m4_reputation_center.py`、`apps/api/tests/test_m4_reward_compensation.py`、`apps/api/tests/test_m2_verification.py`、`apps/web/src/services/reputation.test.ts`：初始 50 分、积分状态投影、首次有效贡献/验证结算、引用幂等、0～100 边界、多轮撤销/恢复、原始事件不可变、本人私有读取和 Web 鉴权加载 | M4 积分/信誉中心与状态驱动补偿完成；管理员用户处置和动态信誉权重待实现 |
 | DESK-01～08 | `apps/desktop-windows`、`modules/desktop_verification` | `apps/desktop-windows.tests/DesktopSecurityTests.cs`、`apps/desktop-windows.tests/ArchiveVerificationMatrixTests.cs`、`apps/api/tests/test_m3_desktop_verification.py`：DPAPI 身份持久化/重建、ECDSA DER 签名、规范载荷、加密 ZIP/7z 正确与错误密码、损坏/不支持格式、受控内容读取、资源限制、取消、路径穿越、最低版本详情、签名篡改、过期/重放、账号切换、撤销、时钟偏差和双独立回执 | M3 自动化核心与恢复 UX 完成；8 GiB 物理样本和 Windows 10/11 实机 E2E 待外部验收 |
-| DESK-09～13 | `modules/desktop_updates`、`apps/admin`、`apps/desktop-windows` | `apps/api/tests/test_m3_desktop_updates.py`、`apps/admin/src/services/desktopReleases.test.ts`、`apps/desktop-windows.tests/DesktopUpdateClientTests.cs`：版本/目标选择、声明大小与摘要、原始制品上传、发布/撤回、生产签名元数据门禁、管理端元数据规范化与上传恢复、匿名检查、下载完整性、客户端查询参数和清单解析 | M3 后端发布通道、管理端发布闭环与显式升级入口完成；正式 Authenticode 流水线、分批发布和静默安装留后续 |
+| DESK-09～13 | `modules/desktop_updates`、`apps/admin`、`apps/desktop-windows` | `apps/api/tests/test_m3_desktop_updates.py`、`apps/admin/src/services/desktopReleases.test.ts`、`apps/desktop-windows.tests/DesktopUpdateClientTests.cs`：版本/目标选择、声明大小与摘要、原始制品上传、发布/撤回、合法分发确认/声明门禁、管理端元数据规范化与上传恢复、匿名检查、下载完整性、客户端查询参数和清单解析 | M3 后端发布通道、管理端发布闭环、SHA-256/大小完整性和合法分发声明完成；分批发布和静默安装留后续 |
 | 举报与申诉 | `modules/trust_cases`、`apps/web`、`apps/admin` | `apps/api/tests/test_m4_trust_cases.py`、`apps/web/src/services/trustCases.test.ts`、`apps/admin/src/services/trustCases.test.ts`：举报/申诉幂等创建、仅本人案件、贡献者和候选状态授权、关联目标约束、MFA 队列、受控状态/结果码、不可变事件和审计脱敏 | M4 统一候选举报与贡献者申诉首版完成；结果通知、SLA、账号申诉和候选状态联动待实现 |
 | 风险告警 | `modules/risk_alerts`、`modules/verification`、`modules/correlation`、`core/notifications`、`apps/admin` | `apps/api/tests/test_m4_risk_alerts.py`、`apps/api/tests/test_m4_candidate_correlation.py`、`apps/api/tests/test_notification_webhook.py`、`apps/api/tests/test_notification_smtp.py`、`apps/admin/src/services/riskAlerts.test.ts`、`apps/admin/src/services/candidateModeration.test.ts`：三独立失败触发、活跃告警去重、候选内关联组与动态限权、SLA/指派、事务 Outbox、三次失败终态、投递指标/过滤、签名 Webhook、SMTP STARTTLS/SSL/认证/Message-ID、提供商回执、普通用户拒绝、MFA、持久化幂等重放、不可变事件、聚合最小披露与审计脱敏 | M4 失败激增、候选内关联降权、`risk-alert-sla-v1`、MFA 值班指派、`notification-webhook-v1`、SMTP 邮件和死信重放已完成；真实 SMTP 服务商/发件域名、最终送达回调、排班升级链、指标导出、跨候选图谱、动态规则和自动处罚待实现 |
 | 管理端需求 | `modules/admin`、`modules/archives`、`modules/moderation`、`modules/trust_cases`、`modules/risk_alerts`、`modules/correlation`、`modules/desktop_updates`、`apps/admin` | `apps/api/tests/test_auth.py`、`apps/api/tests/test_m1_security_gates.py`、`apps/api/tests/test_n2_admin_dashboard.py`、`apps/api/tests/test_n2_admin_audit_logs.py`、`apps/api/tests/test_m4_candidate_moderation.py`、`apps/api/tests/test_m4_reward_compensation.py`、`apps/api/tests/test_m4_trust_cases.py`、`apps/api/tests/test_m4_risk_alerts.py`、`apps/admin/src/services/dashboard.test.ts`、`apps/admin/src/services/auditLogs.test.ts`、`apps/admin/src/pages/AuditPage.test.ts`、`apps/admin/src/pages/UserGovernancePage.test.ts`、`apps/admin/src/services/candidateModeration.test.ts`、`apps/admin/src/services/trustCases.test.ts`、`apps/admin/src/services/riskAlerts.test.ts`、`apps/admin/src/services/desktopReleases.test.ts`、`apps/admin/src/services/users.test.ts`：RBAC、普通用户拒绝、TOTP/MFA、真实仪表盘聚合、管理员专属用户治理列表/详情/统计、脱敏邮箱与最小披露、审计分页/筛选/详情/CSV 上限与公式注入防护、导出行为审计、时间窗口校验、最小披露审核详情、关联组与动态限权聚合、人工处置幂等/审计、奖励校正、风险投递指标/重放和桌面发布 | M1 安全入口、M3 桌面发布、M4 管理闭环和 N2 真实仪表盘/审计中心/用户治理只读总览三个切片完成；危险动作近期再认证、用户处置、系统配置和对象级批量接口待实现 |
@@ -343,3 +343,13 @@
 | 来源与目标提交绑定 | 封存清单 `source_files`、`candidate_commit`、`evidence_set_sha256` | 目标执行要求 40/64 位候选提交 SHA；fixture/synthetic/test/mock 适配器拒绝 | 目标候选交接规则完成；未绑定真实批准提交 |
 | 确定性证据归档 | `staging-evidence-archive.zip`、manifest/ZIP detached SHA-256 | 固定 ZIP 时间戳、精确文件集合、嵌入清单和篡改检测测试 | 本地合同归档通过；不替代目标环境证据 |
 | 审批状态边界 | `staging-evidence-archive.ps1`、`docs/templates/wp4-staging-go-no-go.md` | `contract-fixture` 固定为 `blocked-by-contract-fixture`；target 最高为 `ready-for-approvals` / `pending-approvals` | 四角色签字和最终 Go/No-Go 仍待完成 |
+
+
+## 2026-08-11 WP4 第 22 次迭代补充：自动发布治理与桌面制品合法性
+
+| 需求 | 模块 | 自动化证据 | 状态 |
+|---|---|---|---|
+| 发布无需人员签字 | `infra/staging/readiness-profile.example.json`、`scripts/verify_staging_readiness_profile.py`、`scripts/verify_staging_execution_evidence.py`、`scripts/seal_staging_evidence_archive.py` | `scripts/tests/test_verify_staging_readiness_profile.py`、`scripts/tests/test_verify_staging_execution_evidence.py`、`scripts/tests/test_seal_staging_evidence_archive.py`：只接受 `automated-evidence-gate`；目标执行校验后输出 `go`，封存交接为 `ready-for-release` | 已实现本轮；仍需真实目标执行证据 |
+| 桌面制品完整性 | `modules/desktop_updates/service.py`、`desktop_releases` | `apps/api/tests/test_m3_desktop_updates.py`：上传和发布重新计算大小/SHA-256，错配拒绝；下载仅暴露已发布且完整制品 | 已实现本轮 |
+| 桌面制品合法分发声明 | `DesktopReleaseCreateRequest`、Admin `DesktopReleasesPage.vue`、迁移 `20260811_0024_desktop_release_legality.py` | API/Admin 服务测试：未确认分发或声明不足时拒绝；发布审计保存声明 SHA-256 | 已实现本轮；声明不等同于外部法律意见 |
+| N2 产品角色审批边界 | `modules/role_changes` | 既有 N2 专项测试 | 保持不变；本轮未移除产品权限治理的双人审批 |

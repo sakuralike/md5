@@ -74,13 +74,8 @@
       "evidence_file": "redis-ha-failover-report.json"
     }
   },
-  "approval": {
-    "go_no_go_template": "docs/templates/wp4-staging-go-no-go.md",
-    "required_roles": [
-      "technical_owner",
-      "security_owner",
-      "operations_owner",
-      "business_owner"
-    ]
+  "release_decision": {
+    "mode": "automated-evidence-gate",
+    "template": "docs/templates/wp4-staging-release-decision.md"
   }
 }

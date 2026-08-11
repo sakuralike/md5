@@ -50,7 +50,7 @@ def _admin_headers(client) -> dict[str, str]:
     return {"Authorization": f"Bearer {authenticated.json()['access_token']}"}
 
 
-def _release_payload(artifact: bytes, *, version: str = "0.2.0", signature: str = "test_signed"):
+def _release_payload(artifact: bytes, *, version: str = "0.2.0", authorized: bool = True):
     return {
         "channel": "stable",
         "platform": "windows",
@@ -63,7 +63,8 @@ def _release_payload(artifact: bytes, *, version: str = "0.2.0", signature: str 
         "artifact_sha256": hashlib.sha256(artifact).hexdigest(),
         "artifact_size_bytes": len(artifact),
         "content_type": "application/msix",
-        "code_signature_status": signature,
+        "distribution_authorized": authorized,
+        "legal_declaration": "该合成制品由项目构建，已确认具备合法分发授权。",
     }
 
 
@@ -159,7 +160,7 @@ def test_desktop_update_release_upload_publish_check_download_and_withdraw(clien
     assert client.get(f"/api/v1/desktop/updates/{release_id}/download").status_code == 404
 
 
-def test_update_channel_rejects_invalid_versions_and_unsigned_production_release(client):
+def test_update_channel_allows_unsigned_production_release_with_integrity_and_authorization(client):
     invalid = client.get(
         "/api/v1/desktop/updates/check",
         params={"current_version": "latest", "architecture": "x64"},
@@ -168,11 +169,11 @@ def test_update_channel_rejects_invalid_versions_and_unsigned_production_release
     assert invalid.json()["code"] == "desktop.update.invalid_version"
 
     admin_headers = _admin_headers(client)
-    artifact = b"synthetic-unsigned-production-artifact"
+    artifact = b"synthetic-authorized-production-artifact"
     created = client.post(
         "/api/v1/admin/desktop-releases",
         headers=admin_headers,
-        json=_release_payload(artifact, version="0.3.0", signature="unsigned"),
+        json=_release_payload(artifact, version="0.3.0"),
     )
     assert created.status_code == 201
     release_id = created.json()["id"]
@@ -193,10 +194,55 @@ def test_update_channel_rejects_invalid_versions_and_unsigned_production_release
         )
     finally:
         client.app.state.settings.app_env = "test"
-    assert publish.status_code == 409
-    assert publish.json()["code"] == "desktop.update.verified_signature_required"
+    assert publish.status_code == 200
+    assert publish.json()["status"] == "published"
+    assert publish.json()["distribution_authorized"] is True
+
+
+def test_update_channel_rejects_missing_distribution_authorization(client):
+    admin_headers = _admin_headers(client)
+    artifact = b"synthetic-unauthorized-artifact"
+    created = client.post(
+        "/api/v1/admin/desktop-releases",
+        headers=admin_headers,
+        json=_release_payload(artifact, version="0.4.0", authorized=False),
+    )
+    assert created.status_code == 422
+    assert created.json()["code"] == "desktop.update.distribution_authorization_required"
+
+
+
+def test_update_channel_hides_preexisting_published_release_without_legal_metadata(client):
+    admin_headers = _admin_headers(client)
+    artifact = b"synthetic-legacy-published-artifact"
+    created = client.post(
+        "/api/v1/admin/desktop-releases",
+        headers=admin_headers,
+        json=_release_payload(artifact, version="0.5.0"),
+    )
+    assert created.status_code == 201
+    release_id = created.json()["id"]
+    assert client.put(
+        f"/api/v1/admin/desktop-releases/{release_id}/artifact",
+        headers=admin_headers,
+        content=artifact,
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/admin/desktop-releases/{release_id}/publish",
+        headers=admin_headers,
+    ).status_code == 200
 
     with client.app.state.database.session_factory() as db:
         release = db.get(DesktopRelease, release_id)
         assert release is not None
-        assert release.status.value == "draft"
+        release.distribution_authorized = False
+        release.legal_declaration = ""
+        db.commit()
+
+    update = client.get(
+        "/api/v1/desktop/updates/check",
+        params={"current_version": "0.1.0", "architecture": "x64"},
+    )
+    assert update.status_code == 200
+    assert update.json()["update_available"] is False
+    assert client.get(f"/api/v1/desktop/updates/{release_id}/download").status_code == 404

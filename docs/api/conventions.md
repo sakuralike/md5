@@ -168,17 +168,19 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/desktop/updates/check?current_version=...&channel=stable&platform=windows&architecture=x64` | 匿名 | 仅选择相同目标的最高 `published` 版本；返回最低版本、强制升级、发布说明、SHA-256、大小、签名状态和后端下载地址 |
+| `GET` | `/desktop/updates/check?current_version=...&channel=stable&platform=windows&architecture=x64` | 匿名 | 仅选择相同目标的最高 `published` 版本；返回最低版本、强制升级、发布说明、SHA-256、大小、完整性结果、合法分发确认和后端下载地址 |
 | `GET` | `/desktop/updates/{release_id}/download` | 匿名 | 仅下载 `published` 且存储完整性仍匹配的制品；响应含不可变缓存、ETag、`Digest` 和 `nosniff` |
-| `POST` | `/admin/desktop-releases` | 管理员 + MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256 和代码签名元数据 |
+| `POST` | `/admin/desktop-releases` | 管理员 + MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256、合法分发确认和不少于 20 字符的合法性声明 |
 | `GET` | `/admin/desktop-releases` | 管理员 + MFA | 列出发布生命周期、上传状态和下载计数 |
 | `PUT` | `/admin/desktop-releases/{release_id}/artifact` | 管理员 + MFA | 请求体为安装包原始字节流；按声明大小和 SHA-256 流式校验，通过后原子替换 |
-| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + MFA | 重新核验存储制品；生产环境只允许发布记录标记为 `verified` 且包含签名者与证书指纹 |
+| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + MFA | 重新核验存储制品的大小与 SHA-256；仅当合法分发确认和合法性声明齐全时发布 |
 | `POST` | `/admin/desktop-releases/{release_id}/withdraw` | 管理员 + MFA | 将版本标记为 `withdrawn`，检查与下载入口立即停止提供该制品 |
 
 发布生命周期固定为 `draft → published → withdrawn`。同一通道、平台、架构和版本只能存在一条记录；已发布记录不可覆盖制品，修复必须使用新版本。`stable` 与 `beta` 通道严格隔离，当前桌面 UI 默认只查询 `stable/windows/x64|arm64`。
 
-服务端的 `code_signature_status=verified` 是受 MFA 保护的发布流程证明，不等价于客户端对 Authenticode 的本地密码学验证。首版桌面端只自动检查，不静默下载、不自动执行；用户点击后由系统浏览器打开同一后端返回的 HTTP(S) 下载入口，生产必须使用 HTTPS，并在安装前核验操作系统展示的签名者。
+迁移前已处于 `published`、但未保存合法分发确认或合法性声明的历史记录，不参与版本检查且下载入口返回不存在；管理员必须按当前契约创建新草稿、重新上传并发布。
+
+桌面发布不要求 Authenticode 或签名证书。服务端以原始字节流重新计算文件大小和 SHA-256，并在发布审计中记录制品摘要、合法分发确认及合法性声明摘要；这保证制品提交的完整性和可追溯性，但合法性声明不是外部法律意见。首版桌面端只自动检查，不静默下载、不自动执行；用户点击后由系统浏览器打开后端返回的下载入口。
 
 ## 管理端治理仪表盘
 

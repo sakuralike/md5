@@ -32,9 +32,8 @@ public sealed record DesktopUpdateCheckResponse(
     string? ArtifactFilename,
     string? ArtifactSha256,
     long? ArtifactSizeBytes,
-    string? CodeSignatureStatus,
-    string? SignerSubject,
-    string? SignerThumbprint);
+    string? ArtifactIntegrity,
+    bool? DistributionAuthorized);
 
 public sealed record InstallationRegistrationRequest(
     Guid InstallationId,

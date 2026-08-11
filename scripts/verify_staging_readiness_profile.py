@@ -12,12 +12,6 @@ from typing import Any
 PROFILE_SCHEMA = "staging-readiness-profile-v1"
 PLAN_SCHEMA = "staging-readiness-plan-v1"
 REQUIRED_PROBES = {"api", "mysql", "redis", "celery"}
-REQUIRED_APPROVAL_ROLES = {
-    "technical_owner",
-    "security_owner",
-    "operations_owner",
-    "business_owner",
-}
 REQUIRED_RESOURCES = {"api", "worker", "mysql", "redis"}
 SECRET_KEY_RE = re.compile(
     r"(password|passwd|secret|token|authorization|cookie|api[_-]?key|private[_-]?key)",
@@ -242,16 +236,12 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
             "evidence_file": evidence_file,
         }
 
-    approval = _require_object(profile.get("approval"), "approval")
+    release_decision = _require_object(profile.get("release_decision"), "release_decision")
+    if release_decision.get("mode") != "automated-evidence-gate":
+        raise ValueError("release_decision.mode must be automated-evidence-gate")
     template = _require_relative_markdown(
-        approval.get("go_no_go_template"), "approval.go_no_go_template", repository_root
+        release_decision.get("template"), "release_decision.template", repository_root
     )
-    raw_roles = approval.get("required_roles")
-    if not isinstance(raw_roles, list) or not all(isinstance(role, str) for role in raw_roles):
-        raise TypeError("approval.required_roles must be a string list")
-    roles = set(raw_roles)
-    if roles != REQUIRED_APPROVAL_ROLES or len(raw_roles) != len(roles):
-        raise ValueError("approval roles must contain each required owner exactly once")
 
     _walk_for_secrets(profile)
     return {
@@ -274,8 +264,8 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
         "resource_accounting": resource_accounting,
         "resource_limits": resource_limits,
         "high_availability": ha_evidence,
-        "approval_template": template,
-        "approval_roles": sorted(roles),
+        "release_decision_template": template,
+        "release_decision_mode": "automated-evidence-gate",
     }
 
 
@@ -296,7 +286,7 @@ def build_plan(profile: dict[str, Any], repository_root: Path, profile_path: Pat
             validated["high_availability"]["mysql"]["evidence_file"],
             validated["high_availability"]["redis"]["evidence_file"],
             "checksums.sha256",
-            validated["approval_template"],
+            validated["release_decision_template"],
         ],
     }
 

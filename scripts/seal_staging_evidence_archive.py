@@ -168,7 +168,7 @@ def _validate_metadata(evidence_directory: Path) -> dict[str, Any]:
         raise ValueError("summary profile_sha256 does not match readiness-profile.json")
     expected_status = {
         "contract-fixture": ("contract-valid", "not-run", "pending-evidence"),
-        "target-execution": ("evidence-valid", "evidence-valid", "pending-approvals"),
+        "target-execution": ("evidence-valid", "evidence-valid", "go"),
     }[expected_kind]
     if tuple(summary.get(key) for key in ("status", "execution_status", "go_no_go_status")) != expected_status:
         raise ValueError("summary status boundary is inconsistent with evidence_kind")
@@ -224,7 +224,7 @@ def _build_manifest(evidence_directory: Path, sealed_at: str, candidate_commit: 
     if metadata["evidence_kind"] == "target-execution":
         if not candidate_commit or not COMMIT_RE.fullmatch(candidate_commit):
             raise ValueError("target-execution archives require a 40- or 64-character lowercase commit SHA")
-        handoff_status = "ready-for-approvals"
+        handoff_status = "ready-for-release"
         archive_status = "evidence-sealed"
     else:
         if candidate_commit is not None:

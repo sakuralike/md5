@@ -6,7 +6,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.desktop_update import (
-    CodeSignatureStatus,
     DesktopArchitecture,
     DesktopReleaseChannel,
     DesktopReleaseStatus,
@@ -27,9 +26,8 @@ class DesktopReleaseCreateRequest(BaseModel):
     artifact_sha256: str = Field(min_length=64, max_length=64)
     artifact_size_bytes: int = Field(gt=0)
     content_type: str = Field(default="application/octet-stream", min_length=3, max_length=128)
-    code_signature_status: CodeSignatureStatus = CodeSignatureStatus.UNSIGNED
-    signer_subject: str | None = Field(default=None, max_length=255)
-    signer_thumbprint: str | None = Field(default=None, max_length=128)
+    distribution_authorized: bool
+    legal_declaration: str = Field(min_length=20, max_length=2_000)
 
     @field_validator("artifact_sha256")
     @classmethod
@@ -39,13 +37,10 @@ class DesktopReleaseCreateRequest(BaseModel):
             raise ValueError("artifact_sha256 必须是十六进制 SHA-256")
         return normalized
 
-    @field_validator("signer_subject", "signer_thumbprint")
+    @field_validator("legal_declaration")
     @classmethod
-    def normalize_optional_text(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
+    def normalize_legal_declaration(cls, value: str) -> str:
+        return value.strip()
 
 
 class DesktopReleaseResponse(BaseModel):
@@ -63,9 +58,8 @@ class DesktopReleaseResponse(BaseModel):
     artifact_size_bytes: int
     content_type: str
     artifact_uploaded: bool
-    code_signature_status: CodeSignatureStatus
-    signer_subject: str | None
-    signer_thumbprint: str | None
+    distribution_authorized: bool
+    legal_declaration: str
     download_count: int
     created_at: datetime
     updated_at: datetime
@@ -93,6 +87,5 @@ class DesktopUpdateCheckResponse(BaseModel):
     artifact_filename: str | None
     artifact_sha256: str | None
     artifact_size_bytes: int | None
-    code_signature_status: CodeSignatureStatus | None
-    signer_subject: str | None
-    signer_thumbprint: str | None
+    artifact_integrity: Literal["sha256-verified"] | None
+    distribution_authorized: bool | None

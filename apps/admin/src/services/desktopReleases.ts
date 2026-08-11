@@ -1,5 +1,4 @@
 import type {
-  DesktopCodeSignatureStatus,
   DesktopRelease,
   DesktopReleaseChannel,
   DesktopReleaseCreateRequest,
@@ -56,9 +55,8 @@ export interface DesktopReleaseDraftInput {
   mandatory: boolean;
   releaseNotes: string;
   artifactSha256: string;
-  codeSignatureStatus: DesktopCodeSignatureStatus;
-  signerSubject: string;
-  signerThumbprint: string;
+  distributionAuthorized: boolean;
+  legalDeclaration: string;
 }
 
 export interface ArtifactDescriptor {
@@ -74,8 +72,7 @@ export function buildDesktopReleasePayload(
   const version = input.version.trim();
   const minimumSupportedVersion = input.minimumSupportedVersion.trim();
   const artifactSha256 = input.artifactSha256.trim().toLowerCase();
-  const signerSubject = input.signerSubject.trim();
-  const signerThumbprint = input.signerThumbprint.trim();
+  const legalDeclaration = input.legalDeclaration.trim();
 
   const parsedVersion = parseVersion(version);
   const parsedMinimum = parseVersion(minimumSupportedVersion);
@@ -99,11 +96,11 @@ export function buildDesktopReleasePayload(
   if (!SHA256_PATTERN.test(artifactSha256)) {
     throw new Error("SHA-256 必须是 64 位十六进制摘要");
   }
-  if (
-    input.codeSignatureStatus === "verified" &&
-    (!signerSubject || !signerThumbprint)
-  ) {
-    throw new Error("已验证签名必须填写签名者和证书指纹");
+  if (!input.distributionAuthorized) {
+    throw new Error("必须确认拥有升级制品的合法分发授权");
+  }
+  if (legalDeclaration.length < 20) {
+    throw new Error("合法性声明至少需要 20 个字符");
   }
 
   return {
@@ -118,9 +115,8 @@ export function buildDesktopReleasePayload(
     artifact_sha256: artifactSha256,
     artifact_size_bytes: artifact.size,
     content_type: artifact.type || "application/octet-stream",
-    code_signature_status: input.codeSignatureStatus,
-    signer_subject: signerSubject || null,
-    signer_thumbprint: signerThumbprint || null,
+    distribution_authorized: input.distributionAuthorized,
+    legal_declaration: legalDeclaration,
   };
 }
 

@@ -14,7 +14,7 @@ from verify_staging_readiness_profile import build_plan, validate_profile
 
 def repository_root(tmp_path: Path) -> Path:
     runbook = tmp_path / "docs/runbooks/wp4-staging-readiness.md"
-    template = tmp_path / "docs/templates/wp4-staging-go-no-go.md"
+    template = tmp_path / "docs/templates/wp4-staging-release-decision.md"
     runbook.parent.mkdir(parents=True)
     template.parent.mkdir(parents=True)
     runbook.write_text("# Runbook\n", encoding="utf-8")
@@ -77,14 +77,9 @@ def valid_profile() -> dict:
                 "evidence_file": "redis-ha-failover-report.json",
             },
         },
-        "approval": {
-            "go_no_go_template": "docs/templates/wp4-staging-go-no-go.md",
-            "required_roles": [
-                "technical_owner",
-                "security_owner",
-                "operations_owner",
-                "business_owner",
-            ],
+        "release_decision": {
+            "mode": "automated-evidence-gate",
+            "template": "docs/templates/wp4-staging-release-decision.md",
         },
     }
 
@@ -140,11 +135,11 @@ def test_rejects_standalone_high_availability_dependency(tmp_path: Path) -> None
         validate_profile(profile, root)
 
 
-def test_rejects_incomplete_approval_roles(tmp_path: Path) -> None:
+def test_rejects_non_automated_release_decision_mode(tmp_path: Path) -> None:
     root = repository_root(tmp_path)
     profile = valid_profile()
-    profile["approval"]["required_roles"].remove("business_owner")
-    with pytest.raises(ValueError, match="each required owner"):
+    profile["release_decision"]["mode"] = "manual-approval"
+    with pytest.raises(ValueError, match="automated-evidence-gate"):
         validate_profile(profile, root)
 
 

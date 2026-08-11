@@ -327,7 +327,7 @@ def validate_bundle(
         status = "contract-valid"
     else:
         execution_status = "evidence-valid"
-        go_no_go_status = "pending-approvals"
+        go_no_go_status = "go"
         status = "evidence-valid"
     summary = {
         "schema": BUNDLE_SCHEMA,
