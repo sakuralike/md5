@@ -12,6 +12,12 @@ from password_detective.db.models.authorization_declaration import (
     AuthorizationDeclaration,
     AuthorizationSource,
 )
+from password_detective.db.models.community import (
+    CommunityBoardCode,
+    CommunityComment,
+    CommunityContentStatus,
+    CommunityPost,
+)
 from password_detective.db.models.desktop_update import (
     CodeSignatureStatus,
     DesktopArchitecture,
@@ -100,6 +106,10 @@ __all__ = [
     "CandidateFeedback",
     "CandidateStatus",
     "ClientInstallation",
+    "CommunityBoardCode",
+    "CommunityComment",
+    "CommunityContentStatus",
+    "CommunityPost",
     "CodeSignatureStatus",
     "FeedbackOutcome",
     "DesktopArchitecture",

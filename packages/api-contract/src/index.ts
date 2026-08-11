@@ -1383,3 +1383,78 @@ export interface SettingVersionMutationResponse {
   audit_id: string;
   request_id: string | null;
 }
+
+
+export type CommunityBoardCode = "general" | "recovery_guides" | "verification" | "security";
+export type CommunityContentStatus = "published" | "removed";
+
+export interface CommunityBoard {
+  code: CommunityBoardCode;
+  name: string;
+  description: string;
+  post_count: number;
+}
+
+export interface CommunityBoardListResponse {
+  items: CommunityBoard[];
+}
+
+export interface CommunityAuthor {
+  username: string;
+  role: UserRole;
+}
+
+export interface CommunityPostCreateRequest {
+  board_code: CommunityBoardCode;
+  title: string;
+  content: string;
+  rules_accepted: boolean;
+}
+
+export interface CommunityCommentCreateRequest {
+  content: string;
+  parent_id?: string | null;
+  rules_accepted: boolean;
+}
+
+export interface CommunityPostSummary {
+  id: string;
+  board_code: CommunityBoardCode;
+  title: string;
+  content_preview: string;
+  author: CommunityAuthor;
+  is_pinned: boolean;
+  is_locked: boolean;
+  reply_count: number;
+  last_activity_at: string;
+  created_at: string;
+}
+
+export interface CommunityPostListResponse {
+  items: CommunityPostSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface CommunityCommentResponse {
+  id: string;
+  parent_id: string | null;
+  content: string;
+  author: CommunityAuthor;
+  created_at: string;
+}
+
+export interface CommunityPostDetail {
+  id: string;
+  board_code: CommunityBoardCode;
+  title: string;
+  content: string;
+  author: CommunityAuthor;
+  is_pinned: boolean;
+  is_locked: boolean;
+  reply_count: number;
+  last_activity_at: string;
+  created_at: string;
+  comments: CommunityCommentResponse[];
+}

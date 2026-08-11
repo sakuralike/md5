@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AccountActivityPage from "../pages/AccountActivityPage.vue";
 import AccountPrivacyPage from "../pages/AccountPrivacyPage.vue";
+import CommunityPage from "../pages/CommunityPage.vue";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage.vue";
 import HomePage from "../pages/HomePage.vue";
 import LoginPage from "../pages/LoginPage.vue";
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: "/reset-password", component: ResetPasswordPage },
     { path: "/verify-email", component: VerifyEmailPage },
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
+    { path: "/community", component: CommunityPage },
     { path: "/account/profile", redirect: "/security" },
     { path: "/account/activity", component: AccountActivityPage, meta: { requiresAuth: true } },
     { path: "/account/privacy", component: AccountPrivacyPage, meta: { requiresAuth: true } },

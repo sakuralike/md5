@@ -111,6 +111,7 @@ onBeforeUnmount(releaseCustomBackground);
 
       <nav class="nav" aria-label="主导航">
         <RouterLink to="/">首页</RouterLink>
+        <RouterLink to="/community">社区</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/submissions">我的贡献</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/reputation">积分信誉</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/trust-cases">举报申诉</RouterLink>

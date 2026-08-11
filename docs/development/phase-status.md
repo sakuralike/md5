@@ -647,3 +647,13 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 认证加密备份和恢复 | `backup/restore` 子命令，Scrypt + Fernet | 明文不出现在备份、错误口令/篡改拒绝、恢复内容一致 | 已实现，目标服务器恢复演练待执行 |
 | 候选秘密定期轮换 | `rotate-candidate` 先备份、再新增版本并保留旧密钥 | 轮换后当前版本变化、旧版本保留、轮换前备份可恢复 | 已实现；真实数据 dry-run/apply 待目标环境执行 |
 | 外部 KMS 决策 | `项目文档/密码侦探社项目规格说明书-v3.0.md`、`docs/runbooks/production-secrets.md` | 文档与合同门禁固定当前生产基线 | 外部 KMS 非必选，未来按规模/审计重新评估 |
+## 2026-08-11 WP5 第 1 次迭代：社区论坛首轮迁移
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| Zibll 论坛模式重构 | `apps/api/src/password_detective/modules/community/`、`apps/web/src/pages/CommunityPage.vue` | `apps/api/tests/test_community.py`、`apps/web/src/pages/CommunityPage.test.ts` | 固定分区、主题、回复、锁定、公开阅读与验证后发言已实现；不复制专有主题源码 |
+| 社区数据持久化 | `community_posts`、`community_comments`、`20260811_0026_community_forum.py` | API 集成测试覆盖创建、详情、计数和回放 | 本地 SQLite 自动建表测试通过；目标 MySQL 迁移执行待部署验证 |
+| 安全写入边界 | `email_verified`、`rules_accepted`、纯文本校验、端点限流、`Idempotency-Key` | 未验证用户、未同意规则、锁定主题和幂等重放用例通过 | 版主审核、举报/移除、敏感词策略和通知尚未接入 |
+| Web 社区入口 | `/community`、`services/community.ts`、共享 API 契约 | Web typecheck、lint、Vitest 25 项通过 | 当前为公开社区 MVP；真实浏览器多端 E2E 与目标环境回归待执行 |
+
+本轮结论：社区论坛核心交流切片完成，不能等同于完整社区平台。后续按权限和运营边界补齐版主审核、举报、通知、社交关系和私信。

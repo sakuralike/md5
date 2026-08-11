@@ -1,6 +1,6 @@
 # 模块地图
 
-- 更新日期：2026-08-08
+- 更新日期：2026-08-11
 - 架构形态：单仓 + FastAPI 模块化单体 + 独立客户端
 
 ## 后端模块
@@ -13,6 +13,7 @@
 | Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v2` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP/MFA、真实仪表盘、审计中心、用户处置、受控角色变更双人复核，以及不可变配置草稿、差异预览、再认证发布、运行时投影和新版本回滚 | 角色层级配置化、紧急撤权、批量资源上限、审计保留/归档和大规模异步导出 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
+| Community | `apps/api/src/password_detective/modules/community/` | 固定分区、公开主题/回复、邮箱验证与规则确认、纯文本安全展示、主题锁定、限流和幂等写入 | 版主审核、举报/移除、标签、关注/点赞、通知和私信 |
 | Trust Cases | `apps/api/src/password_detective/modules/trust_cases/` | 登录用户举报、贡献者受限申诉、本人账号申诉、本人案件列表/详情、`candidate/account/risk_alert` 单一主体约束、MFA 统一队列/详情、受控状态矩阵、独立指派/重开、案件版本乐观并发、负责人前后事件快照、限流、幂等和审计脱敏 | 原子 `resolve`、结果通知 Outbox、SLA、候选/账号副作用、奖励/信誉补偿、自动分派和用户案件交互收口 |
 | Risk Alerts | `apps/api/src/password_detective/modules/risk_alerts/` | `risk-alert-v1` 检测、`risk-alert-sla-v1` 响应/解决时限、MFA 值班人员指派、负责人/超时筛选、不可变事件、事务通知 Outbox、SMTP/Webhook 投递、投递指标/失败队列、幂等人工重放和处置 | 排班与升级链、真实 SMTP 服务商/发件域名验收、最终送达回调、指标导出、动态规则和批量操作；关联分析由 Correlation 模块提供 |
 | Reputation | `apps/api/src/password_detective/modules/reputation/` | 本人积分投影、贡献/反馈统计、积分流水、不可变信誉事件、0～100 分投影、`reputation-v1` 幂等奖励和 `reward-compensation-v1` 撤销/恢复校正 | 管理员用户处置、危险操作再次确认和动态风险权重 |
@@ -27,11 +28,11 @@
 
 | 模块 | 路径 | 当前职责 | 下一步 |
 |---|---|---|---|
-| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈、个人贡献、举报/申诉，以及积分/信誉/反馈历史中心 | Web Worker 隔离、案件结果通知、超大文件性能与浏览器 E2E |
+| 用户 Web | `apps/web/` | 注册、登录、HttpOnly 刷新会话、本地分块哈希、精确查询、授权贡献、候选揭示、社区验证反馈、社区论坛主题/回复、个人贡献、举报/申诉，以及积分/信誉/反馈历史中心 | Web Worker 隔离、案件结果通知、超大文件性能与浏览器 E2E |
 | 管理端 | `apps/admin/` | 独立登录、角色检查、TOTP 登录/首次绑定、真实治理指标仪表盘、审计日志筛选/详情/CSV 导出、候选审核队列/详情/人工处置、用户停用/恢复/会话撤销、配置版本治理、普通角色变更双人审批、举报/申诉队列/详情、风险告警 SLA/负责人/投递指标/失败重放闭环、桌面发布工作台 | 角色事件时间线、紧急撤权、批量处置、案件与候选状态编排和真实通知环境验收 |
 | Windows 桌面端 | `apps/desktop-windows/` | ZIP/7z 本地验证、可注入资源限制、合成加密样本矩阵、SHA-256/MD5、DPAPI 安装密钥与令牌、身份重建/重新注册、最低版本提示、挑战和 ECDSA 签名回执、稳定通道自动检查与显式浏览器下载入口 | Windows 10/11 实机 E2E、物理超大样本、静默安装与正式发布签名 |
 | Web UI | `packages/web-ui/` | 两个 Vue 应用共享设计令牌、基础样式和 M2 状态样式 | 可访问组件与统一交互状态组件 |
-| API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、管理仪表盘/审计日志/用户治理、候选审核/状态事件/奖励校正、关联组/动态限权摘要、举报/申诉案件、风险告警 SLA/投递指标/失败重放、桌面安装/挑战/回执、发布记录和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
+| API Contract | `packages/api-contract/` | 共享认证、浏览器会话、档案查询、贡献、揭示、反馈、管理仪表盘/审计日志/用户治理、候选审核/状态事件/奖励校正、关联组/动态限权摘要、举报/申诉案件、风险告警 SLA/投递指标/失败重放、桌面安装/挑战/回执、社区论坛主题/回复、发布记录和证据快照类型 | 从 OpenAPI 自动生成并做契约差异检查 |
 
 ## 前端工程门禁
 
@@ -59,3 +60,9 @@
 - 契约：`packages/api-contract` 共享原因码、再认证、用户治理和配置版本响应类型。
 - 角色治理：`modules/admin/role_changes.py`、`apps/admin/src/services/roleChanges.ts`、`apps/admin/src/composables/useRoleChanges.ts` 与 `apps/admin/src/pages/RoleChangesPage.vue` 提供固定普通角色转换、双人复核、分页详情、再认证和凭据清理。
 - 下一边界：独立角色事件时间线、紧急撤权、批量资源上限和管理员/服务账号角色治理。
+
+### Community 论坛边界
+
+- 社区模块只承载授权场景下的安全协作文本，不接触候选密码秘密服务，不接收压缩包文件内容。
+- 公共 GET 不要求登录；POST 主题/回复通过 `get_current_principal`、邮箱验证、规则确认、Redis/内存限流和 `Idempotency-Key` 保护。
+- 本轮仅完成固定分区、主题、回复和锁定状态的产品切片；复杂版主管理、社交关系、私信和商业化能力保持在后续边界。
