@@ -29,6 +29,13 @@
 
 > 完成度百分比是基于当前规格、实施计划、代码、测试和环境门禁的工程估算，不是产品签字或生产放行结论。按照完成定义，目标环境验收、外部门禁或生产演练未完成的里程碑不能标记为完全完成。
 
+## 2026-08-11 WP4 第 24 次迭代补充
+
+- 新增正式 Staging 长时会话控制器，默认以 `14400` 秒、双 API、3 Worker、300 秒探针窗口和 15 秒资源采样启动 target-execution。
+- supervisor 脱离 SSH 会话运行，使用独占锁、PID 启动标记和原子状态文件防止重复执行、PID 复用误判和证据目录覆盖。
+- 状态文件不保存环境变量或秘密；完成时绑定验证报告 SHA-256，并摘要记录执行资格、持续时间、错误率、覆盖率和最终队列。
+- `pnpm staging:formal-session`、6 项单元测试和 `check.ps1 -IncludeStagingSession` 已覆盖本轮入口。
+- 正式 4 小时目标证据只有在真实窗口结束并确认 `eligible_for_target_execution=true` 后才算关闭；其后继续 MySQL/Redis HA 和证据封存。
 ## 2026-08-11 WP4 第 23 次迭代补充
 
 - 新增 Staging API HA overlay：API 移除宿主机端口发布，Nginx loopback 代理提供唯一入口，API/Worker/Scheduler 共用同一候选运行镜像。

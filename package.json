@@ -37,7 +37,8 @@
     "staging:api-ha-smoke": "pwsh ./scripts/staging-api-ha-smoke.ps1",
     "staging:resource-observation": "pwsh ./scripts/staging-resource-observation.ps1",
     "staging:topology-preflight": "pwsh ./scripts/staging-topology-preflight.ps1",
-    "staging:stability-session": "pwsh ./scripts/staging-stability-session.ps1"
+    "staging:stability-session": "pwsh ./scripts/staging-stability-session.ps1",
+    "staging:formal-session": "python ./scripts/control_staging_formal_session.py"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

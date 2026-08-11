@@ -452,3 +452,46 @@ pnpm staging:api-ha-smoke `
 5. 先执行 75 秒以上短时资源校准，API 每运行副本平均 CPU 不超过 profile 阈值，再启动不少于 4 小时的正式会话。
 
 若 SSH 报告主机身份变化，必须停止部署，通过可信渠道确认新主机密钥后再更新 `known_hosts`；禁止使用 `StrictHostKeyChecking=no` 或静默删除旧记录绕过验证。
+
+## 19. 正式长时会话后台控制
+
+目标 Staging 的正式稳定性会话必须使用持久控制器启动，避免 SSH 断开导致会话中止或人工重复启动：
+
+```bash
+python3 scripts/control_staging_formal_session.py start \
+  --source-revision <candidate-commit>
+```
+
+默认参数已固定为：
+
+- 持续时间 `14400` 秒；
+- 探针窗口 `300` 秒、资源采样间隔 `15` 秒；
+- `3` 个 Worker，在第 `3600` 秒缩容一个 Worker，`60` 秒后恢复；
+- 根 Compose、Staging override、API HA、监控、Staging 监控五层配置；
+- 请求 `target-execution`，输出目录按运行标识隔离。
+
+查询并收口最新状态：
+
+```bash
+python3 scripts/control_staging_formal_session.py status
+```
+
+状态语义：
+
+| 状态 | 含义 | 后续动作 |
+|---|---|---|
+| `idle` | 尚无正式会话 | 完成预检后启动 |
+| `launching` / `running` | supervisor 存活，会话执行中 | 禁止再次启动，持续观察 |
+| `completed` | runner 正常结束且验证报告可读取 | 继续检查 `eligible_for_target_execution` |
+| `failed` | runner 或验证失败 | 保留日志和证据，修复后生成新运行目录 |
+| `interrupted` | supervisor 消失且没有最终验证报告 | 视为无效执行，不得补写通过结论 |
+
+只有以下条件同时成立，才能进入 MySQL/Redis HA：
+
+1. `status=completed`；
+2. `verification.verification_status=passed`；
+3. `verification.eligible_for_target_execution=true`；
+4. 状态中的验证文件 SHA-256 与磁盘文件一致；
+5. 运行标识、候选提交和部署版本可追溯。
+
+控制状态和日志不得记录 `.env`、数据库连接串、密码、令牌、Secret 或真实业务数据。正式运行目录不可复用；失败后必须生成新的运行标识，不得覆盖或修改原始证据。
