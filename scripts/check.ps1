@@ -14,7 +14,8 @@ param(
     [switch]$IncludeStagingArchive,
     [switch]$IncludeStagingObservation,
     [switch]$IncludeStagingSession,
-    [switch]$IncludeStagingHaGate
+    [switch]$IncludeStagingHaGate,
+    [switch]$IncludeProductionSecrets
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +139,11 @@ try {
         Invoke-Checked $Python -m ruff check ./scripts/verify_staging_ha_target_capability.py ./scripts/control_staging_ha_execution.py ./scripts/tests/test_verify_staging_ha_target_capability.py ./scripts/tests/test_control_staging_ha_execution.py
         Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_staging_ha_target_capability.py ./scripts/tests/test_control_staging_ha_execution.py
         Invoke-Checked pwsh ./scripts/staging-ha-capability-contract.ps1 -PythonCommand $Python
+    }
+    if ($IncludeProductionSecrets) {
+        Invoke-Checked $Python -m ruff check ./scripts/manage_production_secrets.py ./scripts/tests/test_manage_production_secrets.py ./scripts/tests/test_production_secrets_compose_contract.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_manage_production_secrets.py ./scripts/tests/test_production_secrets_compose_contract.py
+        Invoke-Checked pwsh ./scripts/production-secrets-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

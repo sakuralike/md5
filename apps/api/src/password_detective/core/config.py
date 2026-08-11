@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from email.utils import parseaddr
 from functools import lru_cache
@@ -9,6 +10,39 @@ from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
+    "app_secret_key": "APP_SECRET_KEY",
+    "database_url": "DATABASE_URL",
+    "redis_url": "REDIS_URL",
+    "candidate_secret_key_version": "CANDIDATE_SECRET_KEY_VERSION",
+    "candidate_secret_keyring": "CANDIDATE_SECRET_KEYRING",
+    "candidate_secret_dedup_key": "CANDIDATE_SECRET_DEDUP_KEY",
+    "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
+    "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
+}
+MAX_SECRET_FILE_BYTES = 64 * 1024
+
+
+def _read_file_backed_setting(raw_path: str, environment_name: str) -> str:
+    path = Path(raw_path).expanduser()
+    if path.is_symlink():
+        raise ValueError(f"{environment_name}_FILE 必须指向普通文件")
+    try:
+        metadata = path.stat()
+    except OSError as exc:
+        raise ValueError(f"{environment_name}_FILE 指向的秘密文件不可读取") from exc
+    if not path.is_file():
+        raise ValueError(f"{environment_name}_FILE 必须指向普通文件")
+    if metadata.st_size > MAX_SECRET_FILE_BYTES:
+        raise ValueError(f"{environment_name}_FILE 超过允许的大小限制")
+    try:
+        value = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{environment_name}_FILE 必须是 UTF-8 文本文件") from exc
+    if "\x00" in value:
+        raise ValueError(f"{environment_name}_FILE 不能包含 NUL 字符")
+    return value.rstrip("\r\n")
 
 
 class Settings(BaseSettings):
@@ -76,6 +110,24 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     auto_create_tables: bool = True
     log_level: str = "INFO"
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_file_backed_settings(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        for field_name, environment_name in FILE_BACKED_SETTING_ENVIRONMENTS.items():
+            raw_path = os.environ.get(f"{environment_name}_FILE", "").strip()
+            if not raw_path:
+                continue
+            direct_value = values.get(field_name)
+            if direct_value not in (None, ""):
+                raise ValueError(
+                    f"{environment_name} 和 {environment_name}_FILE 不能同时配置"
+                )
+            values[field_name] = _read_file_backed_setting(raw_path, environment_name)
+        return values
 
     @field_validator("app_secret_key")
     @classmethod

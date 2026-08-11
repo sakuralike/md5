@@ -59,6 +59,16 @@ docker compose up --build
 ./scripts/smoke-compose.ps1
 ```
 
+生产服务器使用文件型 Docker Secrets，不将真实秘密写入 `.env`：
+
+```powershell
+# 生成合成秘密并验证 Compose 注入合同；不会连接或修改生产服务器
+pnpm production-secrets:contract
+./scripts/check.ps1 -SkipInstall -IncludeProductionSecrets
+```
+
+生产初始化、加密备份、恢复和密钥轮换步骤见 [`docs/runbooks/production-secrets.md`](docs/runbooks/production-secrets.md)。
+
 ## 质量检查
 
 ```powershell

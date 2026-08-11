@@ -370,3 +370,14 @@
 | 能力文件完整性与类型边界 | `checksums.sha256`、`mysql-ha-target-capability.json`、`redis-ha-target-capability.json` | 缺文件、checksum 集合不完整、`contract-fixture` 冒充目标观察均拒绝 | 已实现 |
 | 合同夹具不冒充正式验收 | `pnpm staging:evidence-archive-contract`、`pnpm staging:ha-capability-contract` | 合同归档继续输出 `contract-sealed / blocked-by-contract-fixture / not-run / pending-evidence`，且 `ha_target_capabilities` 为空 | 已实现 |
 | 自动发布交接 | `handoff_status=ready-for-release`、`go_no_go_status=go` | 仅完整 `target-execution` 可进入自动发布结论，无人员签字依赖 | 工程闭环完成；真实目标证据待取得 |
+
+
+## 2026-08-11 WP4 第 28 轮：生产秘密管理追踪
+
+| 需求 | 代码/配置 | 自动化 | 结论 |
+|---|---|---|---|
+| 真实秘密不进入环境明文 | `config.py` 文件源、`docker-compose.production-secrets.yml` | `test_file_backed_settings.py`、Compose 合同门禁 | 工程通过 |
+| 宿主机 root-only 文件可供非 root 应用读取 | `api-entrypoint.sh`、运行时 tmpfs、`su-exec` | 静态合同、Compose 渲染、本地 Docker 主进程降权烟测 | 本地运行通过，Linux 目标运行待验收 |
+| 独立生产秘密和密钥环合法性 | `manage_production_secrets.py init/verify` | 初始化、占位值拒绝、密钥环/连接地址一致性测试 | 通过 |
+| 加密备份完整性 | Scrypt + Fernet `.pdsb` | 明文缺失、错误口令拒绝、恢复字节一致 | 通过 |
+| 安全轮换 | `rotate-candidate` + `rotate_candidate_secrets.py` | 轮换前备份、保留旧版本、恢复旧状态 | 工程通过，真实数据库 apply 待执行 |

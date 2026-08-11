@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 RUN apk upgrade --no-cache && \
+    apk add --no-cache su-exec && \
     addgroup -S app && adduser -S -G app app && \
     mkdir -p /var/lib/password-detective/desktop-updates && \
     chown -R app:app /var/lib/password-detective
@@ -14,8 +15,10 @@ COPY apps/api/pyproject.toml ./
 COPY apps/api/src ./src
 COPY apps/api/alembic.ini ./
 COPY apps/api/alembic ./alembic
+COPY infra/docker/api-entrypoint.sh /usr/local/bin/password-detective-api-entrypoint
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --retries 10 .
-USER app
+    pip install --retries 10 . && \
+    chmod 0755 /usr/local/bin/password-detective-api-entrypoint
+ENTRYPOINT ["password-detective-api-entrypoint"]
 EXPOSE 8000
 CMD ["uvicorn", "password_detective.main:app", "--host", "0.0.0.0", "--port", "8000"]
