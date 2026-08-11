@@ -11,7 +11,8 @@ param(
     [switch]$IncludeStagingReadiness,
     [switch]$IncludeStagingEvidence,
     [switch]$IncludeStagingAdapters,
-    [switch]$IncludeStagingArchive
+    [switch]$IncludeStagingArchive,
+    [switch]$IncludeStagingObservation
 )
 
 $ErrorActionPreference = "Stop"
@@ -119,6 +120,11 @@ try {
         Invoke-Checked $Python -m ruff check ./scripts/seal_staging_evidence_archive.py ./scripts/tests/test_seal_staging_evidence_archive.py
         Invoke-Checked $Python -m pytest ./scripts/tests/test_seal_staging_evidence_archive.py
         Invoke-Checked pwsh ./scripts/staging-evidence-archive-contract.ps1 -PythonCommand $Python
+    }
+    if ($IncludeStagingObservation) {
+        Invoke-Checked $Python -m ruff check ./scripts/collect_staging_resource_observation.py ./scripts/verify_staging_resource_observation.py ./scripts/tests/test_staging_resource_observation.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_staging_resource_observation.py
+        Invoke-Checked $Python ./scripts/verify_staging_resource_observation.py --input ./infra/staging/resource-observation.example.json --output ./.local/staging-resource-observation-wp4-iteration-19/contract-verification.json --write-checksums
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

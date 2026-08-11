@@ -1,0 +1,76 @@
+{
+  "schema": "staging-resource-observation-v1",
+  "status": "passed",
+  "evidence_kind": "contract-fixture",
+  "execution_status": "observation-only",
+  "eligible_for_target_execution": false,
+  "environment": "staging",
+  "synthetic_data_only": true,
+  "collector_adapter": "contract-fixture-generator-v1",
+  "collector_version": "1.0.0",
+  "started_at": "2026-08-11T01:00:00Z",
+  "finished_at": "2026-08-11T01:00:15Z",
+  "requested_duration_seconds": 15,
+  "sample_interval_seconds": 15,
+  "sample_count": 2,
+  "service_container_counts": {
+    "api": 1,
+    "worker": 1,
+    "mysql": 1,
+    "redis": 1
+  },
+  "samples": [
+    {
+      "observed_at": "2026-08-11T01:00:00Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 12.5,
+          "memory_mebibytes": 96.25
+        },
+        "worker": {
+          "cpu_percent": 3.25,
+          "memory_mebibytes": 210.5
+        },
+        "mysql": {
+          "cpu_percent": 4.5,
+          "memory_mebibytes": 512.0
+        },
+        "redis": {
+          "cpu_percent": 0.75,
+          "memory_mebibytes": 16.5
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    },
+    {
+      "observed_at": "2026-08-11T01:00:15Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 14.0,
+          "memory_mebibytes": 96.25
+        },
+        "worker": {
+          "cpu_percent": 3.25,
+          "memory_mebibytes": 210.5
+        },
+        "mysql": {
+          "cpu_percent": 4.5,
+          "memory_mebibytes": 512.0
+        },
+        "redis": {
+          "cpu_percent": 0.75,
+          "memory_mebibytes": 16.5
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    }
+  ],
+  "limitations": [
+    "operation probe windows are not collected",
+    "single Worker loss and recovery are not executed",
+    "MySQL and Redis HA failover are not executed",
+    "this observation cannot be used as target-execution evidence"
+  ]
+}

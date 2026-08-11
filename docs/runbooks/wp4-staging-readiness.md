@@ -303,3 +303,33 @@ pnpm staging:monitoring-smoke `
 ```
 
 该 smoke 只验证监控组件可用、API target 为 `up` 且标签正确。它不证明 4 小时采样覆盖、资源阈值、HA 切换或审批完成。
+
+## 15. 目标主机资源观测
+
+在 Staging 部署目录内执行按需观测，不需要新增公网端口或 Docker socket sidecar：
+
+```bash
+python3 scripts/collect_staging_resource_observation.py \
+  --compose-file docker-compose.yml \
+  --compose-file docker-compose.staging.override.yml \
+  --duration-seconds 300 \
+  --sample-interval-seconds 15 \
+  --api-metrics-url http://127.0.0.1:8000/api/v1/metrics \
+  --output .local/staging-resource-observation/resource-observation.json
+
+python3 scripts/verify_staging_resource_observation.py \
+  --input .local/staging-resource-observation/resource-observation.json \
+  --output .local/staging-resource-observation/resource-observation-verification.json \
+  --write-checksums
+```
+
+Windows 或已安装 PowerShell 的执行环境可使用：
+
+```powershell
+pnpm staging:resource-observation `
+  -ComposeFiles docker-compose.yml,docker-compose.staging.override.yml `
+  -DurationSeconds 300 `
+  -SampleIntervalSeconds 15
+```
+
+如需资源趋势预采集，可把 `DurationSeconds` 提升到 `14400`。但该入口始终输出 `observation-only`，不会收集四类业务探针窗口、单 Worker 丢失/恢复或 HA 切换，因此不得改名或直接送入 `target-execution`。完整目标执行必须由下一轮长时会话编排器合并业务探针、资源样本和故障事件后生成。
