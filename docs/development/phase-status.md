@@ -35,7 +35,8 @@
 - 数据库迁移改为扩容前一次性执行，避免两个 API 副本并发执行 Alembic。
 - Prometheus 改用 DNS 服务发现两个 API 实例；HA smoke 同时校验代理 readiness、`2 API + 3 Worker + 1 Scheduler` 拓扑和两个健康 API target。
 - 本地隔离拓扑与 78 秒短时校准通过：四类操作各 70 次零错误，API 每副本平均 CPU 峰值 `73.335%`，Worker `3 -> 2 -> 3` 恢复耗时 `0.454` 秒。
-- 结果仍为 `target-observation / observation-only`，持续时间和操作量未达到正式门槛；目标服务器部署需先可信确认发生变化的 SSH 主机身份。
+- 目标 Staging 已完成归档校验、一次性迁移、双 API 扩容、双 target 监控与 78 秒校准；API 每副本平均 CPU 峰值 `49.24%`，四类操作各 70 次零错误。
+- 结果仍为 `target-observation / observation-only`，仅持续时间和操作量未达到正式 4 小时门槛；下一轮执行长时会话，再进入 MySQL/Redis HA。
 
 ## 2026-08-11 WP4 第 22 次迭代补充
 
