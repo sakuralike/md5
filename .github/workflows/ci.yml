@@ -516,8 +516,18 @@ jobs:
         run: python -m pip install -e "apps/api[dev]"
       - name: Lint and test staging HA execution gate
         run: |
-          python -m ruff check scripts/control_staging_ha_execution.py scripts/tests/test_control_staging_ha_execution.py
-          python -m pytest scripts/tests/test_control_staging_ha_execution.py
+          python -m ruff check scripts/verify_staging_ha_target_capability.py scripts/control_staging_ha_execution.py scripts/tests/test_verify_staging_ha_target_capability.py scripts/tests/test_control_staging_ha_execution.py
+          python -m pytest scripts/tests/test_verify_staging_ha_target_capability.py scripts/tests/test_control_staging_ha_execution.py
+      - name: Validate synthetic HA target capability contract
+        run: pwsh ./scripts/staging-ha-capability-contract.ps1 -PythonCommand python
+      - name: Upload HA target capability contract
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-ha-capability-contract-${{ github.sha }}
+          path: .local/staging-ha-capability-contract-wp4-iteration-26
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
 
   container-images:
     runs-on: ubuntu-latest

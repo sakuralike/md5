@@ -520,3 +520,32 @@ python3 scripts/control_staging_ha_execution.py \
 ```
 
 Redis 前置报告必须通过既有 `staging-ha-failover-report-v1` 校验且 `evidence_kind=target-execution`；合成 `contract-fixture`、失败报告或缺失报告均不得放行。门禁只负责执行资格和顺序，不触发实际平台故障。实际演练仍应按顺序执行 MySQL、生成并验证证据、再执行 Redis，且全程只使用合成业务数据。
+
+## 21. HA 目标能力证明
+
+正式稳定性通过只证明应用在当前拓扑下的稳定性，不证明 MySQL/Redis 已具备 profile 声明的 HA 能力。故障演练前必须提供脱敏 `staging-ha-target-capability-v1`：
+
+```bash
+python3 scripts/verify_staging_ha_target_capability.py \
+  --input /secure-export/mysql-ha-target-capability.json \
+  --dependency mysql
+```
+
+能力报告不得包含目标地址、主机名、连接串、密码、令牌或 Secret。MySQL `managed-ha` 必须证明托管服务、至少两个故障域、备用副本、自动切换、稳定应用地址、监控、备份和 PITR；Redis 必须证明托管 HA，或至少三个 Sentinel 的自管拓扑。两者的 RTO/RPO 能力不得高于 readiness profile。
+
+合同示例运行：
+
+```powershell
+pnpm staging:ha-capability-contract
+```
+
+示例固定为 `contract-fixture`，只能验证合同，不能放行故障执行。实际门禁必须同时传入正式会话状态和真实平台能力报告：
+
+```bash
+python3 scripts/control_staging_ha_execution.py \
+  --dependency mysql \
+  --capability-report /secure-export/mysql-ha-target-capability.json \
+  --require-ready
+```
+
+只有 `evidence_kind=target-observation`、来源适配器不是 fixture/mock/test、全部拓扑与运行检查通过时，能力门禁才成立。当前单 MySQL、单 Redis Compose 拓扑必须保持阻断，不得用合同夹具或手工改写提升为托管 HA。

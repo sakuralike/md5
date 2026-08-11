@@ -18,7 +18,9 @@ PROFILE = ROOT / "infra/staging/readiness-profile.example.json"
 
 def write_json(path: Path, value: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def make_completed_state(tmp_path: Path) -> Path:
@@ -47,7 +49,9 @@ def make_completed_state(tmp_path: Path) -> Path:
                 "eligible_for_target_execution": True,
                 "execution_status": "target-execution",
                 "duration_seconds": 14400,
-                "verification_sha256": hashlib.sha256(verification_path.read_bytes()).hexdigest(),
+                "verification_sha256": hashlib.sha256(
+                    verification_path.read_bytes()
+                ).hexdigest(),
             },
         },
     )
@@ -64,8 +68,32 @@ def make_mysql_report(tmp_path: Path, evidence_kind: str = "target-execution") -
     return path
 
 
-def test_mysql_ready_after_completed_digest_bound_formal_session(tmp_path: Path) -> None:
-    report = build_preflight(make_completed_state(tmp_path), PROFILE, ROOT, "mysql")
+def make_capability(
+    tmp_path: Path, dependency: str, evidence_kind: str = "target-observation"
+) -> Path:
+    source = ROOT / f"infra/staging/{dependency}-ha-target-capability.example.json"
+    report = json.loads(source.read_text(encoding="utf-8"))
+    report["evidence_kind"] = evidence_kind
+    report["source_adapter"] = (
+        "managed-platform-capability-export-v1"
+        if evidence_kind == "target-observation"
+        else "contract-fixture-generator-v1"
+    )
+    path = tmp_path / f"{dependency}-ha-target-capability.json"
+    write_json(path, report)
+    return path
+
+
+def test_mysql_ready_after_completed_digest_bound_formal_session(
+    tmp_path: Path,
+) -> None:
+    report = build_preflight(
+        make_completed_state(tmp_path),
+        PROFILE,
+        ROOT,
+        "mysql",
+        capability_path=make_capability(tmp_path, "mysql"),
+    )
 
     assert report["schema"] == SCHEMA
     assert report["status"] == "ready"
@@ -80,7 +108,13 @@ def test_running_formal_session_blocks_mysql(tmp_path: Path) -> None:
     state.pop("verification")
     write_json(state_path, state)
 
-    report = build_preflight(state_path, PROFILE, ROOT, "mysql")
+    report = build_preflight(
+        state_path,
+        PROFILE,
+        ROOT,
+        "mysql",
+        capability_path=make_capability(tmp_path, "mysql"),
+    )
 
     assert report["status"] == "blocked"
     assert report["checks"]["formal_completed"] is False
@@ -90,17 +124,34 @@ def test_running_formal_session_blocks_mysql(tmp_path: Path) -> None:
 def test_changed_verification_report_blocks_execution(tmp_path: Path) -> None:
     state_path = make_completed_state(tmp_path)
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    report_path = Path(str(state["output_directory"])) / "staging-resource-samples-verification.json"
-    report_path.write_text(report_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    report_path = (
+        Path(str(state["output_directory"]))
+        / "staging-resource-samples-verification.json"
+    )
+    report_path.write_text(
+        report_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
 
-    report = build_preflight(state_path, PROFILE, ROOT, "mysql")
+    report = build_preflight(
+        state_path,
+        PROFILE,
+        ROOT,
+        "mysql",
+        capability_path=make_capability(tmp_path, "mysql"),
+    )
 
     assert report["status"] == "blocked"
     assert report["checks"]["verification_digest"] is False
 
 
 def test_redis_requires_mysql_target_execution_evidence(tmp_path: Path) -> None:
-    report = build_preflight(make_completed_state(tmp_path), PROFILE, ROOT, "redis")
+    report = build_preflight(
+        make_completed_state(tmp_path),
+        PROFILE,
+        ROOT,
+        "redis",
+        capability_path=make_capability(tmp_path, "redis"),
+    )
 
     assert report["status"] == "blocked"
     assert report["checks"]["mysql_evidence_present"] is False
@@ -109,7 +160,12 @@ def test_redis_requires_mysql_target_execution_evidence(tmp_path: Path) -> None:
 
 def test_redis_rejects_mysql_contract_fixture(tmp_path: Path) -> None:
     report = build_preflight(
-        make_completed_state(tmp_path), PROFILE, ROOT, "redis", make_mysql_report(tmp_path, "contract-fixture")
+        make_completed_state(tmp_path),
+        PROFILE,
+        ROOT,
+        "redis",
+        make_mysql_report(tmp_path, "contract-fixture"),
+        make_capability(tmp_path, "redis"),
     )
 
     assert report["status"] == "blocked"
@@ -119,7 +175,12 @@ def test_redis_rejects_mysql_contract_fixture(tmp_path: Path) -> None:
 
 def test_redis_ready_after_mysql_target_execution(tmp_path: Path) -> None:
     report = build_preflight(
-        make_completed_state(tmp_path), PROFILE, ROOT, "redis", make_mysql_report(tmp_path)
+        make_completed_state(tmp_path),
+        PROFILE,
+        ROOT,
+        "redis",
+        make_mysql_report(tmp_path),
+        make_capability(tmp_path, "redis"),
     )
 
     assert report["status"] == "ready"
@@ -127,8 +188,37 @@ def test_redis_ready_after_mysql_target_execution(tmp_path: Path) -> None:
     assert len(report["prerequisite"]["report_sha256"]) == 64
 
 
+def test_mysql_requires_target_capability_evidence(tmp_path: Path) -> None:
+    report = build_preflight(make_completed_state(tmp_path), PROFILE, ROOT, "mysql")
+
+    assert report["status"] == "blocked"
+    assert report["checks"]["target_capability_present"] is False
+
+
+def test_mysql_rejects_capability_contract_fixture(tmp_path: Path) -> None:
+    report = build_preflight(
+        make_completed_state(tmp_path),
+        PROFILE,
+        ROOT,
+        "mysql",
+        capability_path=make_capability(tmp_path, "mysql", "contract-fixture"),
+    )
+
+    assert report["status"] == "blocked"
+    assert report["checks"]["target_capability_valid"] is True
+    assert report["checks"]["target_capability_observed"] is False
+
+
 def test_gate_output_does_not_include_secret_like_fields(tmp_path: Path) -> None:
-    serialized = json.dumps(build_preflight(make_completed_state(tmp_path), PROFILE, ROOT, "mysql")).lower()
+    serialized = json.dumps(
+        build_preflight(
+            make_completed_state(tmp_path),
+            PROFILE,
+            ROOT,
+            "mysql",
+            capability_path=make_capability(tmp_path, "mysql"),
+        )
+    ).lower()
 
     assert "password" not in serialized
     assert "token" not in serialized

@@ -39,7 +39,8 @@
     "staging:topology-preflight": "pwsh ./scripts/staging-topology-preflight.ps1",
     "staging:stability-session": "pwsh ./scripts/staging-stability-session.ps1",
     "staging:formal-session": "python ./scripts/control_staging_formal_session.py",
-    "staging:ha-preflight": "python ./scripts/control_staging_ha_execution.py"
+    "staging:ha-preflight": "python ./scripts/control_staging_ha_execution.py",
+    "staging:ha-capability-contract": "pwsh ./scripts/staging-ha-capability-contract.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

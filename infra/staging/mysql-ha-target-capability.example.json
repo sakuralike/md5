@@ -1,0 +1,32 @@
+{
+  "schema": "staging-ha-target-capability-v1",
+  "evidence_kind": "contract-fixture",
+  "environment": "staging",
+  "synthetic_data_only": true,
+  "dependency": "mysql",
+  "mode": "managed-ha",
+  "source_adapter": "contract-fixture-generator-v1",
+  "collected_at": "2026-08-11T12:20:00Z",
+  "topology": {
+    "deployment_model": "managed-service",
+    "failure_domains": 2,
+    "standby_replicas": 1,
+    "automatic_failover": true,
+    "stable_application_address": true,
+    "monitoring_enabled": true,
+    "backup_or_persistence_enabled": true,
+    "point_in_time_recovery_enabled": true
+  },
+  "limits": {
+    "rto_seconds": 90,
+    "rpo_seconds": 15
+  },
+  "checks": {
+    "control_plane_health": true,
+    "replication_health": true,
+    "failover_permission": true,
+    "rollback_ready": true,
+    "monitoring_ready": true,
+    "synthetic_workload_ready": true
+  }
+}

@@ -135,8 +135,9 @@ try {
         Invoke-Checked pwsh ./scripts/staging-api-ha-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeStagingHaGate) {
-        Invoke-Checked $Python -m ruff check ./scripts/control_staging_ha_execution.py ./scripts/tests/test_control_staging_ha_execution.py
-        Invoke-Checked $Python -m pytest ./scripts/tests/test_control_staging_ha_execution.py
+        Invoke-Checked $Python -m ruff check ./scripts/verify_staging_ha_target_capability.py ./scripts/control_staging_ha_execution.py ./scripts/tests/test_verify_staging_ha_target_capability.py ./scripts/tests/test_control_staging_ha_execution.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_verify_staging_ha_target_capability.py ./scripts/tests/test_control_staging_ha_execution.py
+        Invoke-Checked pwsh ./scripts/staging-ha-capability-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums
