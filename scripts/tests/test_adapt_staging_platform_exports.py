@@ -49,7 +49,13 @@ def test_adapts_contract_exports_and_materializes_evidence(tmp_path: Path) -> No
     resource = load_json(sources[0])
     mysql = load_json(sources[1])
     assert len(resource["samples"]) == 961
-    assert resource["samples"][0]["resources"]["api"]["cpu_percent"] == 42
+    assert resource["samples"][0]["resources"]["api"]["cpu_percent"] == 84
+    assert resource["samples"][0]["service_container_counts"] == {
+        "api": 2,
+        "worker": 3,
+        "mysql": 1,
+        "redis": 1,
+    }
     assert mysql["events"][0]["provider_event_sha256"]
     assert load_json(reports["resource"])["evidence_kind"] == "contract-fixture"
 
@@ -88,6 +94,24 @@ def test_rejects_missing_canonical_prometheus_metric(tmp_path: Path) -> None:
     del resource["series"]["redis_memory_mebibytes"]
 
     with pytest.raises(ValueError, match="canonical metrics"):
+        adapt_resource_export(resource, PROFILE)
+
+
+def test_rejects_missing_running_replica_metric(tmp_path: Path) -> None:
+    resource_path, _, _ = generated_exports(tmp_path)
+    resource = load_json(resource_path)
+    del resource["series"]["worker_running_replicas"]
+
+    with pytest.raises(ValueError, match="canonical metrics"):
+        adapt_resource_export(resource, PROFILE)
+
+
+def test_rejects_zero_running_replica_metric(tmp_path: Path) -> None:
+    resource_path, _, _ = generated_exports(tmp_path)
+    resource = load_json(resource_path)
+    resource["series"]["api_running_replicas"]["data"]["result"][0]["values"][0][1] = "0"
+
+    with pytest.raises(ValueError, match="api_running_replicas must be at least 1"):
         adapt_resource_export(resource, PROFILE)
 
 

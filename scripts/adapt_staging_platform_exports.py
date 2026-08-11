@@ -30,7 +30,17 @@ RESOURCE_METRICS = {
     "redis_cpu_percent": ("redis", "cpu_percent"),
     "redis_memory_mebibytes": ("redis", "memory_mebibytes"),
 }
-INTEGER_METRICS = {"database_connections", "celery_queue_depth"}
+REPLICA_COUNT_METRICS = {
+    "api_running_replicas": "api",
+    "worker_running_replicas": "worker",
+    "mysql_running_replicas": "mysql",
+    "redis_running_replicas": "redis",
+}
+INTEGER_METRICS = {
+    "database_connections",
+    "celery_queue_depth",
+    *REPLICA_COUNT_METRICS,
+}
 REQUIRED_METRICS = set(RESOURCE_METRICS) | INTEGER_METRICS
 FIXTURE_ADAPTER_RE = re.compile(r"(fixture|synthetic|test|mock)", re.IGNORECASE)
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -312,6 +322,9 @@ def adapt_resource_export(export: dict[str, Any], profile: dict[str, Any]) -> di
     for name in INTEGER_METRICS:
         if any(not value.is_integer() for value in values_by_metric[name]):
             raise ValueError(f"series.{name} must contain whole-number values")
+    for name in REPLICA_COUNT_METRICS:
+        if any(value < 1 for value in values_by_metric[name]):
+            raise ValueError(f"series.{name} must be at least 1 for every sample")
 
     samples: list[dict[str, Any]] = []
     for index, observed_at in enumerate(canonical_times):
@@ -326,6 +339,10 @@ def adapt_resource_export(export: dict[str, Any], profile: dict[str, Any]) -> di
         samples.append(
             {
                 "observed_at": _format_utc(observed_at),
+                "service_container_counts": {
+                    resource: int(values_by_metric[metric_name][index])
+                    for metric_name, resource in REPLICA_COUNT_METRICS.items()
+                },
                 "resources": resources,
                 "database_connections": int(values_by_metric["database_connections"][index]),
                 "celery_queue_depth": int(values_by_metric["celery_queue_depth"][index]),
@@ -432,6 +449,11 @@ def generate_contract_exports(directory: Path, profile: dict[str, Any]) -> tuple
         resources = _require_object(sample["resources"], "resources")
         for metric_name, (resource, value_name) in RESOURCE_METRICS.items():
             metric_values[metric_name].append([timestamp, str(resources[resource][value_name])])
+        replica_counts = _require_object(
+            sample["service_container_counts"], "service_container_counts"
+        )
+        for metric_name, resource in REPLICA_COUNT_METRICS.items():
+            metric_values[metric_name].append([timestamp, str(replica_counts[resource])])
         metric_values["database_connections"].append(
             [timestamp, str(sample["database_connections"])]
         )

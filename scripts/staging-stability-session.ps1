@@ -12,7 +12,7 @@ param(
     [string[]]$ComposeFiles = @("docker-compose.yml"),
     [string]$ProjectDirectory = "",
     [string]$Profile = "infra/staging/readiness-profile.example.json",
-    [string]$OutputDirectory = ".local/staging-stability-session-wp4-iteration-20",
+    [string]$OutputDirectory = ".local/staging-stability-session-wp4-iteration-21",
     [switch]$RequestTargetExecution
 )
 

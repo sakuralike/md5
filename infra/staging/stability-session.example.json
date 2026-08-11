@@ -39,7 +39,13 @@
         }
       },
       "database_connections": 8,
-      "celery_queue_depth": 0
+      "celery_queue_depth": 0,
+      "service_container_counts": {
+        "api": 2,
+        "worker": 2,
+        "mysql": 1,
+        "redis": 1
+      }
     },
     {
       "observed_at": "2026-08-11T02:00:15Z",
@@ -62,7 +68,13 @@
         }
       },
       "database_connections": 8,
-      "celery_queue_depth": 0
+      "celery_queue_depth": 0,
+      "service_container_counts": {
+        "api": 2,
+        "worker": 2,
+        "mysql": 1,
+        "redis": 1
+      }
     },
     {
       "observed_at": "2026-08-11T02:00:30Z",
@@ -85,7 +97,13 @@
         }
       },
       "database_connections": 8,
-      "celery_queue_depth": 0
+      "celery_queue_depth": 0,
+      "service_container_counts": {
+        "api": 2,
+        "worker": 2,
+        "mysql": 1,
+        "redis": 1
+      }
     },
     {
       "observed_at": "2026-08-11T02:00:45Z",
@@ -108,7 +126,13 @@
         }
       },
       "database_connections": 8,
-      "celery_queue_depth": 0
+      "celery_queue_depth": 0,
+      "service_container_counts": {
+        "api": 2,
+        "worker": 2,
+        "mysql": 1,
+        "redis": 1
+      }
     },
     {
       "observed_at": "2026-08-11T02:01:00Z",
@@ -131,7 +155,13 @@
         }
       },
       "database_connections": 8,
-      "celery_queue_depth": 0
+      "celery_queue_depth": 0,
+      "service_container_counts": {
+        "api": 2,
+        "worker": 2,
+        "mysql": 1,
+        "redis": 1
+      }
     }
   ],
   "probe_windows": [
@@ -166,6 +196,48 @@
       }
     }
   ],
+  "topology_preflight": {
+    "schema": "staging-topology-capacity-preflight-v1",
+    "status": "blocked",
+    "environment": "staging",
+    "synthetic_data_only": true,
+    "observed_at": "2026-08-11T02:00:00Z",
+    "collector_version": "1.0.0",
+    "service_replicas": {
+      "api": 2,
+      "worker": 2,
+      "scheduler": 1,
+      "mysql": 1,
+      "redis": 1
+    },
+    "expected_replicas": {
+      "api": 2,
+      "worker": 3,
+      "scheduler": 1,
+      "mysql": 1,
+      "redis": 1
+    },
+    "capacity_budget": {
+      "client_processes": 11,
+      "connections_per_process": 10,
+      "requested_connections": 110,
+      "usable_connections": 170,
+      "allowed_connections": 136,
+      "remaining_connections": 26
+    },
+    "checks": {
+      "api_replicas": true,
+      "worker_replicas": false,
+      "scheduler_replicas": true,
+      "mysql_available": true,
+      "redis_available": true,
+      "database_pool_budget": true
+    },
+    "ready_for_target_execution": false,
+    "limitations": [
+      "worker_replicas"
+    ]
+  },
   "events": [
     {
       "type": "worker_lost",

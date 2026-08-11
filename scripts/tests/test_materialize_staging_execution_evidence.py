@@ -53,6 +53,8 @@ def test_materializes_sanitized_contract_reports(tmp_path: Path) -> None:
     assert resource["sample_count"] == 961
     assert resource["coverage_percent"] == 100
     assert resource["celery_queue"]["final_depth"] == 0
+    assert resource["resource_accounting"] == PROFILE["resource_accounting"]
+    assert resource["resources"]["worker"]["cpu_percent"]["max"] == 55.5
     assert "samples" not in resource
     assert resource["provenance"]["source_sha256"]
     assert mysql["rto_seconds"] == 42
@@ -165,3 +167,14 @@ def test_rejects_out_of_order_ha_events(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="strictly increasing"):
         materialize_ha_report(changed, PROFILE, PROFILE_SHA, "0" * 64, "mysql")
+
+
+def test_normalizes_service_cpu_by_running_replica_count(tmp_path: Path) -> None:
+    resource_source, _, _ = load_generated_sources(tmp_path)
+    source = load_json(resource_source)
+    source["samples"][0]["resources"]["worker"]["cpu_percent"] = 196.0
+    source["samples"][0]["service_container_counts"]["worker"] = 3
+
+    report = materialize_resource_report(source, PROFILE, PROFILE_SHA, "0" * 64)
+
+    assert report["resources"]["worker"]["cpu_percent"]["max"] == pytest.approx(65.3333333333)

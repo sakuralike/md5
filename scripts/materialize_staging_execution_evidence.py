@@ -190,6 +190,13 @@ def materialize_resource_report(
         source, RESOURCE_SOURCE_SCHEMA
     )
     stability = _require_object(profile.get("stability"), "profile.stability")
+    accounting = _require_object(
+        profile.get("resource_accounting"), "profile.resource_accounting"
+    )
+    if accounting.get("cpu_scope") != "per-running-replica-average":
+        raise ValueError("unsupported CPU resource accounting scope")
+    if accounting.get("memory_scope") != "service-aggregate":
+        raise ValueError("unsupported memory resource accounting scope")
     started = _parse_utc(source.get("started_at"), "started_at")
     finished = _parse_utc(source.get("finished_at"), "finished_at")
     duration = int((finished - started).total_seconds())
@@ -216,11 +223,31 @@ def materialize_resource_report(
         resources = _require_object(sample.get("resources"), f"samples[{index}].resources")
         if set(resources) != set(RESOURCE_NAMES):
             raise ValueError(f"samples[{index}] must cover API, Worker, MySQL and Redis")
+        replica_counts = _require_object(
+            sample.get("service_container_counts"),
+            f"samples[{index}].service_container_counts",
+        )
+        if set(replica_counts) != set(RESOURCE_NAMES):
+            raise ValueError(
+                f"samples[{index}].service_container_counts must cover all resources"
+            )
         for name in RESOURCE_NAMES:
             resource = _require_object(resources[name], f"samples[{index}].resources.{name}")
-            resource_values[name]["cpu"].append(
-                _require_number(resource.get("cpu_percent"), f"samples[{index}].resources.{name}.cpu_percent")
+            replica_count = int(
+                _require_number(
+                    replica_counts.get(name),
+                    f"samples[{index}].service_container_counts.{name}",
+                )
             )
+            if replica_count < 1:
+                raise ValueError(
+                    f"samples[{index}].service_container_counts.{name} must be at least one"
+                )
+            aggregate_cpu = _require_number(
+                resource.get("cpu_percent"),
+                f"samples[{index}].resources.{name}.cpu_percent",
+            )
+            resource_values[name]["cpu"].append(aggregate_cpu / replica_count)
             resource_values[name]["memory"].append(
                 _require_number(
                     resource.get("memory_mebibytes"),
@@ -353,6 +380,7 @@ def materialize_resource_report(
         "single_worker_loss": True,
         "error_rate_percent": error_rate,
         "max_consecutive_errors": max_consecutive_errors,
+        "resource_accounting": accounting,
         "operations": {
             name: {
                 "count": int(operation_totals[name]["count"]),
@@ -500,9 +528,15 @@ def generate_contract_sources(directory: Path, profile: dict[str, Any]) -> tuple
         samples.append(
             {
                 "observed_at": _format_utc(observed),
+                "service_container_counts": {
+                    "api": int(profile["topology"]["api_replicas"]),
+                    "worker": int(profile["topology"]["worker_replicas"]),
+                    "mysql": 1,
+                    "redis": 1,
+                },
                 "resources": {
-                    "api": {"cpu_percent": 42 + wave / 2, "memory_mebibytes": 480 + wave},
-                    "worker": {"cpu_percent": 46 + wave / 2, "memory_mebibytes": 540 + wave},
+                    "api": {"cpu_percent": (42 + wave / 2) * int(profile["topology"]["api_replicas"]), "memory_mebibytes": 480 + wave},
+                    "worker": {"cpu_percent": (46 + wave / 2) * int(profile["topology"]["worker_replicas"]), "memory_mebibytes": 540 + wave},
                     "mysql": {"cpu_percent": 38 + wave / 3, "memory_mebibytes": 1240 + wave * 2},
                     "redis": {"cpu_percent": 26 + wave / 4, "memory_mebibytes": 490 + wave},
                 },

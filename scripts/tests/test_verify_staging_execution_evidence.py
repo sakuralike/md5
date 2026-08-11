@@ -95,3 +95,10 @@ def test_rejects_secret_like_evidence() -> None:
     report["operator_token"] = "synthetic-marker"
     with pytest.raises(ValueError, match="secret-like field"):
         validate_ha_report(report, PROFILE, PROFILE_SHA, "mysql")
+
+
+def test_rejects_resource_accounting_drift() -> None:
+    report = load_fixture("resource-trend-report.example.json")
+    report["resource_accounting"]["cpu_scope"] = "service-aggregate"
+    with pytest.raises(ValueError, match="resource accounting"):
+        validate_resource_report(report, PROFILE, PROFILE_SHA)

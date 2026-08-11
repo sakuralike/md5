@@ -12,6 +12,11 @@ from typing import Any, Optional
 
 from assemble_staging_stability_session import assemble_session, load_json, write_json
 from collect_staging_resource_observation import compose_prefix
+from staging_topology_preflight import (
+    SubprocessRunner,
+    build_topology_preflight,
+    discover_service_counts,
+)
 from verify_staging_stability_session import validate_session
 
 EVENT_SCHEMA = "staging-worker-recovery-events-v1"
@@ -119,6 +124,7 @@ def main() -> int:
     resource_path = output_directory / "resource-observation.json"
     probe_path = output_directory / "operation-probe.json"
     event_path = output_directory / "worker-recovery-events.json"
+    preflight_path = output_directory / "topology-capacity-preflight.json"
     source_path = output_directory / "staging-resource-samples.json"
     verification_path = output_directory / "staging-resource-samples-verification.json"
     prefix = compose_prefix(args.compose_files, args.project_directory)
@@ -126,10 +132,21 @@ def main() -> int:
     resource_process: Optional[subprocess.Popen[bytes]] = None  # noqa: UP045 - target host Python 3.9
     probe_process: Optional[subprocess.Popen[bytes]] = None  # noqa: UP045 - target host Python 3.9
     try:
+        profile = load_json(args.profile)
+        required_workers = int(profile["topology"]["worker_replicas"])
+        if args.worker_count != required_workers:
+            raise ValueError(
+                f"worker-count must match profile topology ({required_workers})"
+            )
         original_worker_count = len(running_worker_names(prefix))
         if original_worker_count < 1:
             raise RuntimeError("Staging must have at least one running Worker before the session")
         scale_workers(prefix, args.worker_count)
+        service_counts, _ = discover_service_counts(
+            SubprocessRunner(), args.compose_files, args.project_directory
+        )
+        topology_preflight = build_topology_preflight(profile, service_counts)
+        write_json(preflight_path, topology_preflight)
 
         resource_command = [
             sys.executable,
@@ -228,11 +245,11 @@ def main() -> int:
             detail = resource_process.stderr.read().decode("utf-8", errors="replace") if resource_process.stderr is not None else ""
             raise RuntimeError(f"resource collector failed with exit code {resource_return}: {detail[:300]}")
 
-        profile = load_json(args.profile)
         source = assemble_session(
             load_json(resource_path),
             probe_report,
             worker_events,
+            topology_preflight,
             profile,
             request_target_execution=args.request_target_execution,
             observed_clock_skew_seconds=args.observed_clock_skew_seconds,

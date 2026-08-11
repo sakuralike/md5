@@ -195,6 +195,18 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
             f"requested {requested_connections}, allowed {allowed_connections}"
         )
 
+    resource_accounting = _require_object(
+        profile.get("resource_accounting"), "resource_accounting"
+    )
+    if resource_accounting.get("cpu_scope") != "per-running-replica-average":
+        raise ValueError(
+            "resource_accounting.cpu_scope must be per-running-replica-average"
+        )
+    if resource_accounting.get("memory_scope") != "service-aggregate":
+        raise ValueError("resource_accounting.memory_scope must be service-aggregate")
+    if set(resource_accounting) != {"cpu_scope", "memory_scope"}:
+        raise ValueError("resource_accounting contains unsupported fields")
+
     resource_limits = _require_object(profile.get("resource_limits"), "resource_limits")
     if set(resource_limits) != REQUIRED_RESOURCES:
         raise ValueError("resource limits must cover api, worker, mysql and redis")
@@ -259,6 +271,7 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
             "allowed_connections": allowed_connections,
             "remaining_connections": allowed_connections - requested_connections,
         },
+        "resource_accounting": resource_accounting,
         "resource_limits": resource_limits,
         "high_availability": ha_evidence,
         "approval_template": template,

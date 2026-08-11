@@ -15,6 +15,7 @@ ASSEMBLER_VERSION = "1.0.0"
 RESOURCE_SCHEMA = "staging-resource-observation-v1"
 PROBE_SCHEMA = "multi-instance-stability-probe-v2"
 EVENT_SCHEMA = "staging-worker-recovery-events-v1"
+TOPOLOGY_PREFLIGHT_SCHEMA = "staging-topology-capacity-preflight-v1"
 RESOURCE_NAMES = ("api", "worker", "mysql", "redis")
 OPERATION_NAMES = ("api", "mysql", "redis", "celery")
 EVIDENCE_KINDS = {"contract-fixture", "target-observation", "target-execution"}
@@ -236,11 +237,73 @@ def evaluate_eligibility(source: dict[str, Any], profile: dict[str, Any]) -> dic
     recovered_workers = int(event_summary.get("recovered_workers", 0)) if isinstance(event_summary, dict) else 0
     required_workers = int(topology["worker_replicas"])
 
+    preflight = source.get("topology_preflight")
+    if not isinstance(preflight, dict) or preflight.get("schema") != TOPOLOGY_PREFLIGHT_SCHEMA:
+        raise ValueError("topology_preflight must use the supported schema")
+    if preflight.get("environment") != "staging" or preflight.get("synthetic_data_only") is not True:
+        raise ValueError("topology_preflight must describe synthetic Staging evidence")
+    preflight_checks = preflight.get("checks")
+    if not isinstance(preflight_checks, dict) or not preflight_checks:
+        raise ValueError("topology_preflight.checks cannot be empty")
+    if not all(isinstance(value, bool) for value in preflight_checks.values()):
+        raise TypeError("topology_preflight checks must be boolean")
+    service_replicas = preflight.get("service_replicas")
+    if not isinstance(service_replicas, dict) or set(service_replicas) != {
+        "api", "worker", "scheduler", "mysql", "redis"
+    }:
+        raise ValueError("topology_preflight.service_replicas is incomplete")
+    topology_ok = (
+        int(service_replicas["api"]) == int(topology["api_replicas"])
+        and int(service_replicas["worker"]) == int(topology["worker_replicas"])
+        and int(service_replicas["scheduler"]) == int(topology["scheduler_replicas"])
+        and int(service_replicas["mysql"]) >= 1
+        and int(service_replicas["redis"]) >= 1
+    )
+    capacity_budget = preflight.get("capacity_budget")
+    if not isinstance(capacity_budget, dict):
+        raise TypeError("topology_preflight.capacity_budget is required")
+    topology_ok = topology_ok and int(capacity_budget.get("remaining_connections", -1)) >= 0
+
+    accounting = profile.get("resource_accounting")
+    if not isinstance(accounting, dict):
+        raise TypeError("staging profile is missing resource_accounting")
+    if accounting.get("cpu_scope") != "per-running-replica-average":
+        raise ValueError("unsupported CPU accounting scope")
+    if accounting.get("memory_scope") != "service-aggregate":
+        raise ValueError("unsupported memory accounting scope")
+    resource_peaks = {
+        name: {
+            "cpu_service_aggregate_percent": 0.0,
+            "cpu_per_running_replica_average_percent": 0.0,
+            "memory_service_aggregate_mebibytes": 0.0,
+        }
+        for name in RESOURCE_NAMES
+    }
     resource_ok = True
     for sample in source["samples"]:
+        sample_counts = sample.get("service_container_counts")
+        if not isinstance(sample_counts, dict):
+            raise TypeError("service_container_counts are required for resource accounting")
         for name in RESOURCE_NAMES:
-            resource_ok = resource_ok and float(sample["resources"][name]["cpu_percent"]) <= float(limits[name]["max_cpu_percent"])
-            resource_ok = resource_ok and float(sample["resources"][name]["memory_mebibytes"]) <= float(limits[name]["max_memory_mebibytes"])
+            aggregate_cpu = float(sample["resources"][name]["cpu_percent"])
+            replica_count = int(sample_counts[name])
+            normalized_cpu = aggregate_cpu / replica_count
+            aggregate_memory = float(sample["resources"][name]["memory_mebibytes"])
+            peaks = resource_peaks[name]
+            peaks["cpu_service_aggregate_percent"] = max(
+                peaks["cpu_service_aggregate_percent"], aggregate_cpu
+            )
+            peaks["cpu_per_running_replica_average_percent"] = max(
+                peaks["cpu_per_running_replica_average_percent"], normalized_cpu
+            )
+            peaks["memory_service_aggregate_mebibytes"] = max(
+                peaks["memory_service_aggregate_mebibytes"], aggregate_memory
+            )
+            resource_ok = resource_ok and normalized_cpu <= float(limits[name]["max_cpu_percent"])
+            resource_ok = resource_ok and aggregate_memory <= float(limits[name]["max_memory_mebibytes"])
+    for peaks in resource_peaks.values():
+        for metric, value in peaks.items():
+            peaks[metric] = round(value, 3)
     mysql_allowed = math.floor(
         (int(pool["mysql_max_connections"]) - int(pool["reserved_connections"]))
         * int(pool["max_budget_utilization_percent"])
@@ -257,6 +320,7 @@ def evaluate_eligibility(source: dict[str, Any], profile: dict[str, Any]) -> dic
         "max_consecutive_errors": max(value["max_consecutive_errors"] for value in totals.values()) <= int(stability["max_consecutive_errors"]),
         "operation_minimums": all(totals[name]["count"] >= int(stability["minimum_operations"][name]) for name in OPERATION_NAMES),
         "operation_p95": all(totals[name]["p95_ms"] <= float(stability["p95_limits_ms"][name]) for name in OPERATION_NAMES),
+        "topology_preflight": topology_ok,
         "worker_loss_recovery": initial_workers >= required_workers and degraded_workers == initial_workers - 1 and recovered_workers >= initial_workers,
         "resource_limits": resource_ok,
         "database_connections": connection_peak <= mysql_allowed,
@@ -270,6 +334,9 @@ def evaluate_eligibility(source: dict[str, Any], profile: dict[str, Any]) -> dic
         "maximum_sample_gap_seconds": maximum_gap,
         "error_rate_percent": error_rate,
         "operation_totals": totals,
+        "topology_preflight": preflight,
+        "resource_accounting": accounting,
+        "resource_peaks": resource_peaks,
         "database_connection_peak": connection_peak,
         "database_connection_allowed": mysql_allowed,
         "final_queue_depth": final_queue_depth,
@@ -280,6 +347,7 @@ def assemble_session(
     resource: dict[str, Any],
     probe: dict[str, Any],
     worker_events: dict[str, Any],
+    topology_preflight: dict[str, Any],
     profile: dict[str, Any],
     *,
     request_target_execution: bool,
@@ -293,6 +361,8 @@ def assemble_session(
         raise ValueError("operation probe must use multi-instance-stability-probe-v2")
     if worker_events.get("schema") != EVENT_SCHEMA or worker_events.get("status") != "passed":
         raise ValueError("Worker recovery event report did not pass")
+    if topology_preflight.get("schema") != TOPOLOGY_PREFLIGHT_SCHEMA:
+        raise ValueError("topology preflight uses an unsupported schema")
     started = parse_utc(resource.get("started_at"), "resource.started_at")
     finished = parse_utc(resource.get("finished_at"), "resource.finished_at")
     probe_started = parse_utc(probe.get("started_at"), "probe.started_at")
@@ -332,6 +402,7 @@ def assemble_session(
         "samples": resource["samples"],
         "probe_windows": probe["probe_windows"],
         "events": events,
+        "topology_preflight": topology_preflight,
         "worker_event_summary": {
             "initial_workers": int(summary.get("initial_workers", 0)),
             "degraded_workers": int(summary.get("degraded_workers", 0)),
@@ -382,6 +453,7 @@ def main() -> int:
     parser.add_argument("--resource-observation", type=Path, required=True)
     parser.add_argument("--probe-report", type=Path, required=True)
     parser.add_argument("--worker-events", type=Path, required=True)
+    parser.add_argument("--topology-preflight", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--request-target-execution", action="store_true")
@@ -394,6 +466,7 @@ def main() -> int:
             load_json(args.resource_observation),
             load_json(args.probe_report),
             load_json(args.worker_events),
+            load_json(args.topology_preflight),
             load_json(args.profile),
             request_target_execution=args.request_target_execution,
             execution_group_id=args.execution_group_id,

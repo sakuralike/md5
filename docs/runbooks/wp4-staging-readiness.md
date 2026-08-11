@@ -203,7 +203,7 @@ pnpm staging:target-adapter-contract
 
 目标环境不得把监控端点、PromQL 查询中的内部标签、认证头、连接串或原始平台事件 ID 写入仓库。平台侧先完成聚合和脱敏，再按以下合同导出：
 
-- 资源文件使用 `staging-prometheus-range-export-v1`，包含 API、Worker、MySQL、Redis 的 CPU/内存，以及数据库连接数和 Celery 队列深度共 10 个规范化序列；
+- 资源文件使用 `staging-prometheus-range-export-v1`，包含 API、Worker、MySQL、Redis 的 CPU/内存、对应运行副本数，以及数据库连接数和 Celery 队列深度共 14 个规范化序列；运行副本数序列必须为大于等于 1 的整数，并与资源序列使用同一时间轴；
 - 每个序列保留 Prometheus HTTP API `matrix` 响应形状，但必须预聚合为单序列，并使用与 profile 相同的 15 秒采样周期；
 - MySQL/Redis 文件使用 `staging-ha-platform-export-v1`，原始平台事件只能以 SHA-256 摘要关联；
 - 三个文件必须共享同一 `execution_group_id`、`evidence_kind` 和受控 UTC 时钟基线。
@@ -368,8 +368,40 @@ pnpm staging:stability-session `
   -RequestTargetExecution
 ```
 
-执行器会先记录原 Worker 数量，按要求扩容，在探针运行期间停止一个 Worker，再启动同一实例并确认恢复；`finally` 阶段恢复原数量。资源采集器会在每个采样点重新发现运行实例，因此 `3 -> 2 -> 3` 期间不会因已停止容器缺少 Docker stats 而中断。
+执行器会先记录原 Worker 数量，要求 `--worker-count` 与 profile 一致，完成扩容后立即生成拓扑容量预检；随后在探针运行期间停止一个 Worker，再启动同一实例并确认恢复。`finally` 阶段恢复原数量。资源采集器会在每个采样点重新发现运行实例，因此 `3 -> 2 -> 3` 期间不会因已停止容器缺少 Docker stats 而中断。
 
-`--request-target-execution` 不是强制放行开关。只有持续时间、采样覆盖、四类操作量/错误/P95、Worker 事件、资源阈值、连接预算和队列清零全部通过时，输出才会升级为 `target-execution`；否则必须保持 `target-observation / observation-only`。运行失败或资格未通过时禁止手工改写证据状态。
+`--request-target-execution` 不是强制放行开关。只有实际目标拓扑、数据库连接容量、持续时间、采样覆盖、四类操作量/错误/P95、Worker 事件、资源阈值和队列清零全部通过时，输出才会升级为 `target-execution`；否则必须保持 `target-observation / observation-only`。运行失败或资格未通过时禁止手工改写证据状态。
 
-短时预检建议至少 60 秒，且不得传递 `--request-target-execution`。2026-08-11 的 78 秒预检完成了 `3 -> 2 -> 3` 和四类零错误操作，但聚合 API/Worker CPU 峰值超过当前 profile，同时持续时间与操作量不足，因此只可用于验证编排链路。正式 4 小时执行前必须先确认资源阈值口径，不能为通过门禁而直接放宽阈值。
+CPU 阈值按每个样本的服务聚合 CPU 除以该样本实际运行副本数计算，口径为 `per-running-replica-average`；内存保留服务聚合值，口径为 `service-aggregate`。每个样本必须记录副本数。2026-08-11 的 77 秒校准确认三 Worker 聚合 CPU `196.35%` 应归一化为 `65.45%`，而单 API 的 `98.63%` 仍真实超限。该会话因时长、操作量、API 副本数和 API CPU 未通过而保持观测状态。
+
+
+## 17. 目标拓扑与容量预检
+
+正式会话前，在 Staging 部署目录执行：
+
+```bash
+python3 scripts/staging_topology_preflight.py \
+  --compose-file docker-compose.yml \
+  --compose-file docker-compose.staging.override.yml \
+  --profile infra/staging/readiness-profile.example.json \
+  --output .local/staging-topology-preflight/topology-preflight.json
+```
+
+Windows/PowerShell 入口：
+
+```powershell
+pnpm staging:topology-preflight `
+  -ComposeFiles docker-compose.yml,docker-compose.staging.override.yml `
+  -OutputPath .local/staging-topology-preflight/topology-preflight.json
+```
+
+预检必须确认：
+
+1. API、Worker、Scheduler 实际运行副本与 profile 精确一致；默认目标为 `2 / 3 / 1`。
+2. MySQL、Redis 至少各有一个运行实例。
+3. API、Worker、Scheduler 的全部客户端进程乘以 `pool_size + max_overflow` 后，不超过扣除保留连接并应用利用率上限后的允许预算。
+4. 输出不得包含容器名、容器 ID、连接串、端点或秘密值。
+
+2026-08-11 的 Staging 实测为 `1 API + 3 Worker + 1 Scheduler + 1 MySQL + 1 Redis`，请求连接 `110`、允许 `136`、剩余 `26`。容量通过，但 API 少一个副本，因此不得进入目标执行。
+
+当前根 Compose 将 API 固定发布到 `${API_PORT:-8000}:8000`，同一主机直接 `--scale api=2` 会产生宿主机端口冲突。正式执行前必须提供 Staging 专用多副本 overlay：API 副本仅暴露容器内部端口，由 loopback 反向代理或负载均衡提供唯一探针入口；Prometheus 也必须覆盖两个 API 实例。不得通过降低 profile 副本数或手工修改预检结果绕过该门禁。

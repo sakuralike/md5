@@ -53,6 +53,10 @@ def valid_profile() -> dict:
             "reserved_connections": 30,
             "max_budget_utilization_percent": 80,
         },
+        "resource_accounting": {
+            "cpu_scope": "per-running-replica-average",
+            "memory_scope": "service-aggregate",
+        },
         "resource_limits": {
             name: {"max_cpu_percent": 80, "max_memory_mebibytes": 1024}
             for name in ("api", "worker", "mysql", "redis")
@@ -149,4 +153,12 @@ def test_rejects_secret_like_profile_content(tmp_path: Path) -> None:
     profile = copy.deepcopy(valid_profile())
     profile["database_password"] = "synthetic"
     with pytest.raises(ValueError, match="secret-like field"):
+        validate_profile(profile, root)
+
+
+def test_rejects_aggregate_cpu_accounting_scope(tmp_path: Path) -> None:
+    root = repository_root(tmp_path)
+    profile = valid_profile()
+    profile["resource_accounting"]["cpu_scope"] = "service-aggregate"
+    with pytest.raises(ValueError, match="per-running-replica-average"):
         validate_profile(profile, root)

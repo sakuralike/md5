@@ -168,6 +168,13 @@ def validate_resource_report(
     if report.get("single_worker_loss") is not True:
         raise ValueError("resource trend report must include single Worker loss")
 
+    accounting = _require_object(report.get("resource_accounting"), "resource_accounting")
+    profile_accounting = _require_object(
+        profile.get("resource_accounting"), "profile.resource_accounting"
+    )
+    if accounting != profile_accounting:
+        raise ValueError("resource accounting does not match the staging profile")
+
     resources = _require_object(report.get("resources"), "resources")
     if set(resources) != RESOURCE_NAMES:
         raise ValueError("resource trend report must cover API, Worker, MySQL and Redis")
@@ -226,6 +233,7 @@ def validate_resource_report(
         "sample_count": sample_count,
         "coverage_percent": coverage,
         "operations": operation_summary,
+        "resource_accounting": accounting,
         "resources": resource_summary,
         "database_peak": peak_connections,
         "queue_peak_depth": int(queue["peak_depth"]),

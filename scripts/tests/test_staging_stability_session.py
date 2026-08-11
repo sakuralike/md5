@@ -46,7 +46,9 @@ def relaxed_profile() -> dict[str, Any]:
     return profile
 
 
-def assembler_inputs() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def assembler_inputs() -> tuple[
+    dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]
+]:
     fixture = load_fixture()
     resource = {
         "schema": "staging-resource-observation-v1",
@@ -79,7 +81,7 @@ def assembler_inputs() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         "events": fixture["events"],
         "summary": fixture["worker_event_summary"],
     }
-    return resource, probe, worker_events
+    return resource, probe, worker_events, fixture["topology_preflight"]
 
 
 def test_contract_fixture_validates_but_is_not_target_execution() -> None:
@@ -92,11 +94,12 @@ def test_contract_fixture_validates_but_is_not_target_execution() -> None:
 
 
 def test_assembler_keeps_short_target_run_observation_only() -> None:
-    resource, probe, events = assembler_inputs()
+    resource, probe, events, preflight = assembler_inputs()
     source = assemble_session(
         resource,
         probe,
         events,
+        preflight,
         load_profile(),
         request_target_execution=True,
         execution_group_id="wp4-short-observation",
@@ -109,11 +112,12 @@ def test_assembler_keeps_short_target_run_observation_only() -> None:
 
 
 def test_assembler_promotes_only_when_every_relaxed_gate_passes() -> None:
-    resource, probe, events = assembler_inputs()
+    resource, probe, events, preflight = assembler_inputs()
     source = assemble_session(
         resource,
         probe,
         events,
+        preflight,
         relaxed_profile(),
         request_target_execution=True,
         execution_group_id="wp4-eligible-session",
@@ -171,3 +175,51 @@ def test_probe_report_builds_fixed_windows_and_consecutive_error_counts() -> Non
     assert report["operations"]["api"]["count"] == 3
     assert report["operations"]["api"]["max_consecutive_errors"] == 2
     assert report["operations"]["api"]["p95_ms"] == 25.0
+
+
+def test_worker_cpu_is_normalized_by_running_replica_count() -> None:
+    source = copy.deepcopy(load_fixture())
+    profile = relaxed_profile()
+    for sample in source["samples"]:
+        sample["resources"]["worker"]["cpu_percent"] = 196.0
+        sample["service_container_counts"]["worker"] = 3
+    source["topology_preflight"]["service_replicas"]["worker"] = 2
+    evaluation = evaluate_eligibility(source, profile)
+
+    assert evaluation["resource_peaks"]["worker"] == {
+        "cpu_service_aggregate_percent": 196.0,
+        "cpu_per_running_replica_average_percent": 65.333,
+        "memory_service_aggregate_mebibytes": 210.0,
+    }
+    assert evaluation["checks"]["resource_limits"] is True
+
+
+def test_single_api_replica_cpu_still_uses_its_full_cpu_percent() -> None:
+    source = copy.deepcopy(load_fixture())
+    profile = relaxed_profile()
+    for sample in source["samples"]:
+        sample["resources"]["api"]["cpu_percent"] = 98.0
+        sample["service_container_counts"]["api"] = 1
+    evaluation = evaluate_eligibility(source, profile)
+
+    assert evaluation["resource_peaks"]["api"][
+        "cpu_per_running_replica_average_percent"
+    ] == 98.0
+    assert evaluation["checks"]["resource_limits"] is False
+
+
+def test_topology_mismatch_blocks_target_execution() -> None:
+    resource, probe, events, preflight = assembler_inputs()
+    preflight["service_replicas"]["api"] = 1
+    source = assemble_session(
+        resource,
+        probe,
+        events,
+        preflight,
+        relaxed_profile(),
+        request_target_execution=True,
+    )
+
+    assert source["evidence_kind"] == "target-observation"
+    assert source["eligibility"]["checks"]["topology_preflight"] is False
+    assert "topology_preflight" in source["limitations"]

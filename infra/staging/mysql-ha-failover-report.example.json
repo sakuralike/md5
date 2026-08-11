@@ -4,7 +4,7 @@
   "status": "passed",
   "environment": "staging",
   "synthetic_data_only": true,
-  "profile_sha256": "ff5831e834378e0d2abb9e16f38e0b1d8663c6f61fca5abfc665b327b564ed26",
+  "profile_sha256": "7267805fc947045a17c7d6b8e8b5e0fe9cc9c2dd4295fc7f7d9f40cb62269cf6",
   "dependency": "mysql",
   "mode": "managed-ha",
   "started_at": "2026-08-10T04:10:00Z",
@@ -15,13 +15,29 @@
   "rpo_seconds": 0,
   "lost_records": 0,
   "checks": {
-    "preflight_health": {"status": "passed"},
-    "failover_observed": {"status": "passed"},
-    "primary_changed": {"status": "passed"},
-    "application_readiness_recovered": {"status": "passed"},
-    "read_write_recovered": {"status": "passed"},
-    "data_consistency": {"status": "passed"},
-    "idempotency_preserved": {"status": "passed"},
-    "rollback_ready": {"status": "passed"}
+    "preflight_health": {
+      "status": "passed"
+    },
+    "failover_observed": {
+      "status": "passed"
+    },
+    "primary_changed": {
+      "status": "passed"
+    },
+    "application_readiness_recovered": {
+      "status": "passed"
+    },
+    "read_write_recovered": {
+      "status": "passed"
+    },
+    "data_consistency": {
+      "status": "passed"
+    },
+    "idempotency_preserved": {
+      "status": "passed"
+    },
+    "rollback_ready": {
+      "status": "passed"
+    }
   }
 }

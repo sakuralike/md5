@@ -36,6 +36,10 @@
     "reserved_connections": 30,
     "max_budget_utilization_percent": 80
   },
+  "resource_accounting": {
+    "cpu_scope": "per-running-replica-average",
+    "memory_scope": "service-aggregate"
+  },
   "resource_limits": {
     "api": {
       "max_cpu_percent": 80,
