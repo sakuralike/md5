@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from password_detective.db.models.setting_version import SettingVersionStatus
 
@@ -154,3 +155,31 @@ class SettingVersionMutationResponse(BaseModel):
     version: SettingVersionDetail
     audit_id: str
     request_id: str | None
+
+
+class EmailDeliverySettingsResponse(BaseModel):
+    backend: Literal["memory", "log", "webhook", "smtp"]
+    enabled: bool
+    smtp_configured: bool
+    sender_name: str
+    sender_email: str
+    subject_prefix: str
+    footer_text: str
+    content_format: Literal["plain_text"] = "plain_text"
+    smtp_host: str
+    smtp_port: int
+    smtp_security: Literal["starttls", "ssl", "none"]
+    smtp_username: str
+    smtp_auth_enabled: bool
+    smtp_password_configured: bool
+    smtp_timeout_seconds: float
+    configuration_source: Literal["deployment_environment"] = "deployment_environment"
+
+
+class EmailDeliveryTestRequest(BaseModel):
+    recipient: EmailStr
+
+
+class EmailDeliveryTestResponse(BaseModel):
+    message: str
+    provider_message_id: str

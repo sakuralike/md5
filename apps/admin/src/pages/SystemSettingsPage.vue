@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ApiError,
+  type EmailDeliverySettings,
   type OperationalSettingsSnapshot,
   type SettingChangeReasonCode,
   type SettingVersionDetail,
@@ -13,11 +14,15 @@ import {
   CheckCircle2,
   FileClock,
   History,
+  KeyRound,
+  MailCheck,
   Plus,
   RefreshCw,
   Rocket,
   RotateCcw,
   Save,
+  Send,
+  Server,
   Settings2,
   ShieldCheck,
   Trash2,
@@ -28,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -46,10 +52,12 @@ import {
 } from "@/components/ui/table";
 import {
   createSettingVersion,
+  getEmailDeliverySettings,
   getSettingVersion,
   listSettingVersions,
   publishSettingVersion,
   rollbackSettingVersion,
+  sendEmailDeliveryTest,
 } from "../services/settings";
 import { reauthenticateAdmin } from "../services/users";
 import { useAdminAuthStore } from "../stores/auth";
@@ -119,6 +127,12 @@ const reasonCode = ref<SettingChangeReasonCode>("product_policy");
 const currentPassword = ref("");
 const totpCode = ref("");
 const form = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
+const emailSettings = ref<EmailDeliverySettings | null>(null);
+const emailLoading = ref(false);
+const emailTestBusy = ref(false);
+const emailRecipient = ref("");
+const emailMessage = ref("");
+const emailError = ref("");
 
 const statusLabels: Record<SettingVersionStatus, string> = {
   draft: "草稿",
@@ -345,7 +359,44 @@ async function rollbackSelected(): Promise<void> {
   }
 }
 
-onMounted(() => void loadVersions());
+async function loadEmailSettings(): Promise<void> {
+  emailLoading.value = true;
+  emailError.value = "";
+  try {
+    emailSettings.value = await getEmailDeliverySettings(auth.accessToken);
+  } catch (value) {
+    emailError.value = describeError(value);
+  } finally {
+    emailLoading.value = false;
+  }
+}
+
+async function sendTestEmail(): Promise<void> {
+  if (!emailRecipient.value.trim()) {
+    emailError.value = "请输入用于接收测试邮件的邮箱地址";
+    return;
+  }
+  emailTestBusy.value = true;
+  emailError.value = "";
+  emailMessage.value = "";
+  try {
+    const response = await sendEmailDeliveryTest(emailRecipient.value.trim(), auth.accessToken);
+    emailMessage.value = `${response.message}，Message-ID：${response.provider_message_id}`;
+  } catch (value) {
+    emailError.value = describeError(value);
+  } finally {
+    emailTestBusy.value = false;
+  }
+}
+
+function refreshPage(): void {
+  void loadVersions();
+  void loadEmailSettings();
+}
+
+onMounted(() => {
+  refreshPage();
+});
 </script>
 
 <template>
@@ -362,8 +413,8 @@ onMounted(() => void loadVersions());
             通过不可变版本完成草稿、差异预览、发布与回滚；发布操作要求管理员 MFA 和一次性再认证，并记录最小披露审计事件。
           </p>
         </div>
-        <Button variant="outline" :disabled="loading" @click="loadVersions()">
-          <RefreshCw class="mr-2 size-4" :class="{ 'animate-spin': loading }" />刷新版本
+        <Button variant="outline" :disabled="loading || emailLoading" @click="refreshPage">
+          <RefreshCw class="mr-2 size-4" :class="{ 'animate-spin': loading || emailLoading }" />刷新版本
         </Button>
       </div>
     </header>
@@ -374,6 +425,92 @@ onMounted(() => void loadVersions());
     <div v-if="success" class="rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-700">
       {{ success }}
     </div>
+
+    <section class="glass-panel overflow-hidden p-6 sm:p-8" aria-labelledby="email-delivery-title">
+      <div class="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-start lg:justify-between">
+        <div class="max-w-3xl">
+          <div class="flex items-center gap-2 text-sm font-medium text-primary">
+            <MailCheck class="size-4" />邮件功能
+          </div>
+          <h2 id="email-delivery-title" class="mt-2 text-2xl font-semibold tracking-tight text-foreground">SMTP 邮件投递</h2>
+          <p class="mt-2 text-sm leading-6 text-muted-foreground">
+            参考邮件控制台布局展示发件人、邮件内容和 SMTP 连接参数。生产密码继续由 Docker Secrets 注入，页面不会读取或回显明文凭据。
+          </p>
+        </div>
+        <Badge :variant="emailSettings?.enabled ? 'default' : 'outline'">
+          {{ emailSettings?.enabled ? "SMTP 已启用" : "SMTP 未启用" }}
+        </Badge>
+      </div>
+
+      <div v-if="emailError" class="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        {{ emailError }}
+      </div>
+      <div v-if="emailMessage" class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-700">
+        {{ emailMessage }}
+      </div>
+
+      <div v-if="emailLoading && !emailSettings" class="py-10 text-center text-sm text-muted-foreground">正在读取邮件配置…</div>
+      <div v-else-if="emailSettings" class="mt-6 space-y-7">
+        <div class="grid gap-5 lg:grid-cols-2">
+          <div class="space-y-2">
+            <Label for="email-sender-name">自定义发件人</Label>
+            <Input id="email-sender-name" :model-value="emailSettings.sender_name || '未配置'" readonly />
+            <p class="text-xs leading-5 text-muted-foreground">收件人看到的发件人昵称，由部署配置提供。</p>
+          </div>
+          <div class="space-y-2">
+            <Label for="email-sender-address">发件邮箱账号</Label>
+            <Input id="email-sender-address" :model-value="emailSettings.sender_email || '未配置'" readonly />
+            <p class="text-xs leading-5 text-muted-foreground">必须与邮件服务商允许的发件地址一致。</p>
+          </div>
+          <div class="space-y-2">
+            <Label for="email-subject-prefix">自定义标题前缀</Label>
+            <Input id="email-subject-prefix" :model-value="emailSettings.subject_prefix" readonly />
+            <p class="text-xs leading-5 text-muted-foreground">系统验证、重置、案件和风险告警邮件统一使用该前缀。</p>
+          </div>
+          <div class="space-y-2">
+            <Label for="email-content-format">邮件内容格式</Label>
+            <Input id="email-content-format" model-value="UTF-8 纯文本" readonly />
+            <p class="text-xs leading-5 text-muted-foreground">不发送远程图片、追踪像素、附件或不受控 HTML。</p>
+          </div>
+          <div class="space-y-2 lg:col-span-2">
+            <Label for="email-footer">邮件底部额外内容</Label>
+            <Textarea id="email-footer" :model-value="emailSettings.footer_text" readonly rows="3" />
+            <p class="text-xs leading-5 text-muted-foreground">安全邮件不提供可注入的 HTML 链接；业务入口统一引导用户登录网站或管理端处理。</p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-border/70 bg-muted/30 p-5">
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="flex items-center gap-2 font-semibold text-foreground"><Server class="size-4 text-primary" />SMTP 服务器</h3>
+              <p class="mt-1 text-sm text-muted-foreground">连接参数仅展示非秘密字段，密码只显示是否已经配置。</p>
+            </div>
+            <Badge variant="outline">{{ emailSettings.configuration_source === "deployment_environment" ? "部署环境 / Docker Secrets" : emailSettings.configuration_source }}</Badge>
+          </div>
+          <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="space-y-2"><Label for="smtp-host">邮件服务器地址</Label><Input id="smtp-host" :model-value="emailSettings.smtp_host || '未配置'" readonly /></div>
+            <div class="space-y-2"><Label for="smtp-port">SMTP 服务器端口</Label><Input id="smtp-port" :model-value="String(emailSettings.smtp_port)" readonly /></div>
+            <div class="space-y-2"><Label for="smtp-security">加密方式</Label><Input id="smtp-security" :model-value="emailSettings.smtp_security.toUpperCase()" readonly /></div>
+            <div class="space-y-2"><Label for="smtp-user">SMTP 用户名</Label><Input id="smtp-user" :model-value="emailSettings.smtp_username || '未配置'" readonly /></div>
+            <div class="space-y-2"><Label for="smtp-auth">SMTPAuth 服务</Label><Input id="smtp-auth" :model-value="emailSettings.smtp_auth_enabled ? '已启用' : '未启用'" readonly /></div>
+            <div class="space-y-2"><Label for="smtp-password"><KeyRound class="mr-1 inline size-4" />SMTP 服务邮箱密码</Label><Input id="smtp-password" :model-value="emailSettings.smtp_password_configured ? '••••••••（已通过 Secret 配置）' : '未配置'" readonly /></div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-amber-200 bg-amber-50/75 p-5">
+          <div class="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div class="space-y-2">
+              <Label for="smtp-test-recipient">测试收件邮箱</Label>
+              <Input id="smtp-test-recipient" v-model="emailRecipient" type="email" autocomplete="email" placeholder="operator@example.com" />
+              <p class="text-xs leading-5 text-amber-800">测试邮件只验证 SMTP 会话已被服务器接受，不等同于最终送达、打开或点击回执。</p>
+            </div>
+            <Button :disabled="emailTestBusy || !emailSettings.smtp_configured" @click="sendTestEmail">
+              <Send class="mr-2 size-4" />{{ emailTestBusy ? "发送中…" : "发送测试邮件" }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
       <div class="space-y-6">

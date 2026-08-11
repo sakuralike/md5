@@ -214,3 +214,16 @@ def test_smtp_settings_enforce_sender_credentials_and_encryption():
     gateway = build_notification_gateway(settings)
     assert isinstance(gateway, SMTPNotificationGateway)
     assert str(settings.notification_smtp_password) == "**********"
+
+
+def test_smtp_gateway_sends_admin_test_email_without_secrets():
+    client = _FakeSMTPClient()
+    gateway = _gateway(client)
+
+    message_id = gateway.send_test_email(recipient="operator@synthetic.example.com")
+
+    assert client.sent_message is not None
+    assert str(client.sent_message["Subject"]) == "[密码侦探社] 邮件投递测试"
+    assert client.sent_message["X-Password-Detective-Notification-Type"] == "smtp_test"
+    assert "synthetic-app-password" not in client.sent_message.as_string()
+    assert message_id == str(client.sent_message["Message-ID"])

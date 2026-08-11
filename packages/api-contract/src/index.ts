@@ -1308,6 +1308,33 @@ export interface UserLevelDefinition {
   can_submit: boolean;
 }
 
+export type NotificationBackend = "memory" | "log" | "webhook" | "smtp";
+export type SmtpSecurityMode = "starttls" | "ssl" | "none";
+
+export interface EmailDeliverySettings {
+  backend: NotificationBackend;
+  enabled: boolean;
+  smtp_configured: boolean;
+  sender_name: string;
+  sender_email: string;
+  subject_prefix: string;
+  footer_text: string;
+  content_format: "plain_text";
+  smtp_host: string;
+  smtp_port: number;
+  smtp_security: SmtpSecurityMode;
+  smtp_username: string;
+  smtp_auth_enabled: boolean;
+  smtp_password_configured: boolean;
+  smtp_timeout_seconds: number;
+  configuration_source: "deployment_environment";
+}
+
+export interface EmailDeliveryTestResponse {
+  message: string;
+  provider_message_id: string;
+}
+
 export interface OperationalSettingsSnapshot {
   daily_reveal_quota: number;
   reauthentication_ttl_minutes: number;

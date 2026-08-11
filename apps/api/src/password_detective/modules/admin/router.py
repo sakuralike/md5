@@ -22,6 +22,7 @@ from password_detective.core.idempotency import (
     payload_digest,
     require_idempotency_key,
 )
+from password_detective.core.notifications import NotificationGateway
 from password_detective.core.rate_limit import rate_limit
 from password_detective.core.security import hash_refresh_token
 from password_detective.core.time import utc_now
@@ -43,6 +44,10 @@ from password_detective.modules.admin.audit_schemas import (
 )
 from password_detective.modules.admin.dashboard import get_dashboard_summary
 from password_detective.modules.admin.dashboard_schemas import AdminDashboardSummary
+from password_detective.modules.admin.email_delivery import (
+    describe_email_delivery,
+    send_email_delivery_test,
+)
 from password_detective.modules.admin.role_change_schemas import (
     RoleChangeCreateRequest,
     RoleChangeMutationResponse,
@@ -55,6 +60,9 @@ from password_detective.modules.admin.role_changes import (
     review_role_change_request,
 )
 from password_detective.modules.admin.setting_schemas import (
+    EmailDeliverySettingsResponse,
+    EmailDeliveryTestRequest,
+    EmailDeliveryTestResponse,
     SettingVersionCreateRequest,
     SettingVersionDetail,
     SettingVersionListResponse,
@@ -86,7 +94,7 @@ from password_detective.modules.admin.users import (
     list_admin_users,
     revoke_admin_user_sessions,
 )
-from password_detective.modules.auth.context import get_client_context
+from password_detective.modules.auth.context import get_client_context, get_notification_gateway
 from password_detective.modules.auth.dependencies import (
     Principal,
     require_admin_mfa,
@@ -537,6 +545,37 @@ def admin_role_change_request_reject(
         db=db,
         principal=principal,
         idempotency_key=idempotency_key,
+    )
+
+
+@router.get("/settings/email-delivery", response_model=EmailDeliverySettingsResponse)
+def admin_email_delivery_settings(
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmailDeliverySettingsResponse:
+    return describe_email_delivery(settings)
+
+
+@router.post(
+    "/settings/email-delivery/test",
+    response_model=EmailDeliveryTestResponse,
+    dependencies=[Depends(rate_limit("admin.email_delivery.test", limit=5, window_seconds=3600))],
+)
+def admin_email_delivery_test(
+    payload: EmailDeliveryTestRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    gateway: Annotated[NotificationGateway, Depends(get_notification_gateway)],
+) -> EmailDeliveryTestResponse:
+    return send_email_delivery_test(
+        db,
+        settings=settings,
+        gateway=gateway,
+        recipient=str(payload.recipient),
+        principal=principal,
+        context=get_client_context(request),
     )
 
 

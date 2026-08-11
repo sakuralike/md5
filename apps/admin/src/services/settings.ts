@@ -1,4 +1,6 @@
 import {
+  type EmailDeliverySettings,
+  type EmailDeliveryTestResponse,
   type OperationalSettingsSnapshot,
   type SettingChangeReasonCode,
   type SettingVersionDetail,
@@ -99,6 +101,25 @@ export function rollbackSettingVersion(
         reason_code: input.reasonCode,
         reauth_token: input.reauthToken,
       }),
+    },
+    token,
+  );
+}
+
+
+export function getEmailDeliverySettings(token: string): Promise<EmailDeliverySettings> {
+  return apiRequest<EmailDeliverySettings>("/admin/settings/email-delivery", {}, token);
+}
+
+export function sendEmailDeliveryTest(
+  recipient: string,
+  token: string,
+): Promise<EmailDeliveryTestResponse> {
+  return apiRequest<EmailDeliveryTestResponse>(
+    "/admin/settings/email-delivery/test",
+    {
+      method: "POST",
+      body: JSON.stringify({ recipient }),
     },
     token,
   );

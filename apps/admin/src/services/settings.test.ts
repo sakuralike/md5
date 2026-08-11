@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
 import {
   createSettingVersion,
+  getEmailDeliverySettings,
   listSettingVersions,
   publishSettingVersion,
   rollbackSettingVersion,
+  sendEmailDeliveryTest,
 } from "./settings";
 
 vi.mock("./api", () => ({
@@ -32,6 +34,27 @@ const snapshot = {
 
 describe("admin settings service", () => {
   beforeEach(() => mockedApiRequest.mockClear());
+
+  it("reads deployment-backed SMTP settings without exposing the password", async () => {
+    await getEmailDeliverySettings("synthetic-admin-token");
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      "/admin/settings/email-delivery",
+      {},
+      "synthetic-admin-token",
+    );
+  });
+
+  it("sends a test email through the protected admin endpoint", async () => {
+    await sendEmailDeliveryTest("operator@synthetic.example.com", "synthetic-admin-token");
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      "/admin/settings/email-delivery/test",
+      {
+        method: "POST",
+        body: JSON.stringify({ recipient: "operator@synthetic.example.com" }),
+      },
+      "synthetic-admin-token",
+    );
+  });
 
   it("lists immutable versions with pagination", async () => {
     await listSettingVersions("synthetic-admin-token", 2, 25);

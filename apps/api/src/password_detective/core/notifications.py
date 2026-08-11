@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+EMAIL_SUBJECT_PREFIX = "[密码侦探社]"
+EMAIL_FOOTER_TEXT = "此信为系统邮件，请不要直接回复。"
+
 
 @dataclass(frozen=True)
 class DeliveredNotification:
@@ -345,6 +348,21 @@ class SMTPNotificationGateway:
         )
         return self._send_message(message=message, recipient=recipient)
 
+    def send_test_email(self, *, recipient: str) -> str:
+        message = self._build_message(
+            recipient=recipient,
+            subject=f"{EMAIL_SUBJECT_PREFIX} 邮件投递测试",
+            content=(
+                "这是一封由密码侦探社管理端发起的 SMTP 测试邮件。\n\n"
+                "如果您收到此邮件，表示 SMTP 会话配置有效。\n"
+                "服务器地址、端口、加密方式、认证凭据和发件人配置均已通过。\n\n"
+                f"{EMAIL_FOOTER_TEXT}"
+            ),
+            notification_type="smtp_test",
+            message_key=f"smtp-test-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
+        )
+        return self._send_message(message=message, recipient=recipient)
+
     def send_risk_alert(
         self,
         *,
@@ -358,7 +376,7 @@ class SMTPNotificationGateway:
         due_at_text = _isoformat_utc(due_at) or "未设置"
         message = self._build_message(
             recipient=recipient,
-            subject=f"[密码侦探社] {severity.upper()} 风险告警",
+            subject=f"{EMAIL_SUBJECT_PREFIX} {severity.upper()} 风险告警",
             content=(
                 "检测到需要管理员处理的风险告警。\n\n"
                 f"告警编号：{alert_id}\n"
@@ -386,7 +404,7 @@ class SMTPNotificationGateway:
     ) -> str | None:
         message = self._build_message(
             recipient=recipient,
-            subject="[密码侦探社] 举报与申诉处理结果",
+            subject=f"{EMAIL_SUBJECT_PREFIX} 举报与申诉处理结果",
             content=(
                 "您的举报或申诉案件已有处理结果。\n\n"
                 f"案件编号：{case_id}\n"
@@ -476,13 +494,13 @@ def _close_smtp_client(client: Any) -> None:
 def _account_token_email(*, kind: str, token: str) -> tuple[str, str]:
     if kind == "email_verification":
         purpose = "验证邮箱"
-        subject = "[密码侦探社] 验证邮箱"
+        subject = f"{EMAIL_SUBJECT_PREFIX} 验证邮箱"
     elif kind == "password_reset":
         purpose = "重置账户密码"
-        subject = "[密码侦探社] 重置账户密码"
+        subject = f"{EMAIL_SUBJECT_PREFIX} 重置账户密码"
     else:
         purpose = "完成账户操作"
-        subject = "[密码侦探社] 账户安全通知"
+        subject = f"{EMAIL_SUBJECT_PREFIX} 账户安全通知"
     content = (
         f"请使用以下一次性令牌{purpose}：\n\n{token}\n\n"
         "令牌具有有效期且只能使用一次。若非本人操作，请忽略此邮件，不要将令牌转发给他人。"
