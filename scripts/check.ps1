@@ -13,7 +13,8 @@ param(
     [switch]$IncludeStagingAdapters,
     [switch]$IncludeStagingArchive,
     [switch]$IncludeStagingObservation,
-    [switch]$IncludeStagingSession
+    [switch]$IncludeStagingSession,
+    [switch]$IncludeStagingHaGate
 )
 
 $ErrorActionPreference = "Stop"
@@ -132,6 +133,10 @@ try {
         Invoke-Checked $Python -m pytest ./scripts/tests/test_staging_topology_preflight.py ./scripts/tests/test_staging_stability_session.py ./scripts/tests/test_control_staging_formal_session.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py ./scripts/tests/test_verify_staging_api_ha.py
         Invoke-Checked $Python ./scripts/verify_staging_stability_session.py --input ./infra/staging/stability-session.example.json --profile ./infra/staging/readiness-profile.example.json --output ./.local/staging-stability-session-wp4-iteration-21/contract-verification.json --write-checksums
         Invoke-Checked pwsh ./scripts/staging-api-ha-contract.ps1 -PythonCommand $Python
+    }
+    if ($IncludeStagingHaGate) {
+        Invoke-Checked $Python -m ruff check ./scripts/control_staging_ha_execution.py ./scripts/tests/test_control_staging_ha_execution.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_control_staging_ha_execution.py
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

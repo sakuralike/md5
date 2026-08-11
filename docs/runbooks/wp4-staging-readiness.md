@@ -495,3 +495,28 @@ python3 scripts/control_staging_formal_session.py status
 5. 运行标识、候选提交和部署版本可追溯。
 
 控制状态和日志不得记录 `.env`、数据库连接串、密码、令牌、Secret 或真实业务数据。正式运行目录不可复用；失败后必须生成新的运行标识，不得覆盖或修改原始证据。
+
+## 20. MySQL/Redis HA 执行前置门禁
+
+正式稳定性会话与 HA 故障演练必须串行。任何数据库或缓存切换前先生成机器可读预检：
+
+```bash
+python3 scripts/control_staging_ha_execution.py \
+  --dependency mysql \
+  --write-checksums \
+  --require-ready
+```
+
+门禁要求正式状态为 `completed`，验证状态为 `passed`，`eligible_for_target_execution=true`，执行状态为 `target-execution`，持续时间达到 profile 下限，并重新计算磁盘验证文件 SHA-256 与控制状态比对。任一条件不满足时输出 `status=blocked`，使用 `--require-ready` 时退出码为 `2`；禁止人工改写报告为 `ready`。
+
+MySQL 目标演练和证据验证完成后，Redis 必须显式绑定该 MySQL 报告：
+
+```bash
+python3 scripts/control_staging_ha_execution.py \
+  --dependency redis \
+  --mysql-report .local/staging-target-execution/mysql-ha-failover-report.json \
+  --write-checksums \
+  --require-ready
+```
+
+Redis 前置报告必须通过既有 `staging-ha-failover-report-v1` 校验且 `evidence_kind=target-execution`；合成 `contract-fixture`、失败报告或缺失报告均不得放行。门禁只负责执行资格和顺序，不触发实际平台故障。实际演练仍应按顺序执行 MySQL、生成并验证证据、再执行 Redis，且全程只使用合成业务数据。
