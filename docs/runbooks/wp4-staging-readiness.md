@@ -232,7 +232,7 @@ pnpm staging:platform-export-contract
   -CandidateCommit <approved-commit-sha>
 ```
 
-封存器会重新验证六个主证据文件、`checksums.sha256`、`source-checksums.sha256`、执行组、执行标识、profile 摘要、来源摘要和目标执行适配器边界，并生成：
+封存器会重新验证六个主证据文件、`checksums.sha256`、`source-checksums.sha256`、执行组、执行标识、profile 摘要、来源摘要和目标执行适配器边界。对于 `target-execution`，还强制要求 `mysql-ha-target-capability.json` 与 `redis-ha-target-capability.json` 均为真实脱敏 `target-observation`，并把能力摘要与文件 SHA-256 纳入最终 `evidence_set_sha256`。随后生成：
 
 - `staging-evidence-archive-manifest.json`；
 - `staging-evidence-archive-manifest.sha256`；

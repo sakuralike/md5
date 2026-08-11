@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sys
@@ -27,6 +28,10 @@ REPORT_NAMES = (
     "mysql-ha-failover-report.json",
     "redis-ha-failover-report.json",
 )
+CAPABILITY_NAMES = {
+    "mysql": "mysql-ha-target-capability.json",
+    "redis": "redis-ha-target-capability.json",
+}
 
 
 def _make_bundle(tmp_path: Path, evidence_kind: str = "contract-fixture", adapter: str | None = None) -> Path:
@@ -58,6 +63,24 @@ def _make_bundle(tmp_path: Path, evidence_kind: str = "contract-fixture", adapte
     )
     checksum_path = evidence / "checksums.sha256"
     checksum_lines = checksum_path.read_text(encoding="utf-8").replace("readiness-profile.example.json", "readiness-profile.json")
+    if evidence_kind == "target-execution":
+        capability_lines = []
+        for dependency, filename in CAPABILITY_NAMES.items():
+            capability = json.loads(
+                (FIXTURE_DIR / f"{dependency}-ha-target-capability.example.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            capability["evidence_kind"] = "target-observation"
+            capability["source_adapter"] = "managed-platform-capability-export-v1"
+            capability_path = evidence / filename
+            capability_path.write_text(
+                json.dumps(capability, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            digest = hashlib.sha256(capability_path.read_bytes()).hexdigest()
+            capability_lines.append(f"{digest}  {filename}")
+        checksum_lines += "\n".join(capability_lines) + "\n"
     checksum_path.write_text(checksum_lines, encoding="utf-8")
     return evidence
 
@@ -79,13 +102,61 @@ def test_seals_contract_fixture_without_promoting_execution(tmp_path: Path) -> N
     assert verify_archive(output / "staging-evidence-archive.zip", output / "staging-evidence-archive-manifest.json")["evidence_set_sha256"] == manifest["evidence_set_sha256"]
 
 
-def test_target_execution_is_ready_for_approval_handoff(tmp_path: Path) -> None:
+def test_target_execution_is_ready_for_release_handoff(tmp_path: Path) -> None:
     _output, manifest = _seal(tmp_path, "target-execution", "prometheus-range-export-v1", "a" * 40)
     assert manifest["status"] == "evidence-sealed"
     assert manifest["handoff_status"] == "ready-for-release"
     assert manifest["execution_status"] == "evidence-valid"
     assert manifest["go_no_go_status"] == "go"
     assert manifest["candidate_commit"] == "a" * 40
+    assert set(manifest["ha_target_capabilities"]) == {"mysql", "redis"}
+    assert all(
+        capability["evidence_kind"] == "target-observation"
+        for capability in manifest["ha_target_capabilities"].values()
+    )
+    assert {entry["path"] for entry in manifest["files"]} >= set(CAPABILITY_NAMES.values())
+
+
+def test_rejects_target_execution_without_capability_evidence(tmp_path: Path) -> None:
+    evidence = _make_bundle(tmp_path, "target-execution", "prometheus-range-export-v1")
+    missing = evidence / CAPABILITY_NAMES["mysql"]
+    missing.unlink()
+    checksum_path = evidence / "checksums.sha256"
+    checksum_path.write_text(
+        "\n".join(
+            line
+            for line in checksum_path.read_text(encoding="utf-8").splitlines()
+            if CAPABILITY_NAMES["mysql"] not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="file set mismatch"):
+        seal_archive(evidence, tmp_path / "archive", "2026-08-10T05:00:00Z", "a" * 40)
+
+
+def test_rejects_target_execution_with_fixture_capability(tmp_path: Path) -> None:
+    evidence = _make_bundle(tmp_path, "target-execution", "prometheus-range-export-v1")
+    capability_path = evidence / CAPABILITY_NAMES["mysql"]
+    capability = json.loads(capability_path.read_text(encoding="utf-8"))
+    capability["evidence_kind"] = "contract-fixture"
+    capability["source_adapter"] = "contract-fixture-generator-v1"
+    capability_path.write_text(
+        json.dumps(capability, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    checksum_path = evidence / "checksums.sha256"
+    lines = []
+    for raw_line in checksum_path.read_text(encoding="utf-8").splitlines():
+        digest, name = raw_line.split()
+        if name == CAPABILITY_NAMES["mysql"]:
+            digest = hashlib.sha256(capability_path.read_bytes()).hexdigest()
+        lines.append(f"{digest}  {name}")
+    checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="evidence_kind=target-observation"):
+        seal_archive(evidence, tmp_path / "archive", "2026-08-10T05:00:00Z", "a" * 40)
 
 
 def test_rejects_candidate_commit_on_contract_fixture(tmp_path: Path) -> None:
@@ -111,7 +182,7 @@ def test_rejects_target_execution_using_fixture_adapter(tmp_path: Path) -> None:
     for raw_line in checksum_path.read_text(encoding="utf-8").splitlines():
         digest, name = raw_line.split()
         if name in REPORT_NAMES:
-            digest = __import__("hashlib").sha256((evidence / name).read_bytes()).hexdigest()
+            digest = hashlib.sha256((evidence / name).read_bytes()).hexdigest()
         lines.append(f"{digest}  {name}")
     checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="cannot use fixture"):

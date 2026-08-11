@@ -1,5 +1,13 @@
 # 需求—模块—测试追踪矩阵
 
+## 2026-08-11 当前验收基线
+
+- 核心业务与 MVP 功能代码约 97%，本地工程与自动化准入约 99%，综合研发完成度约 89%，生产上线就绪度约 76%。
+- 发布不要求人员签字；自动结论必须由 `automated-evidence-gate` 基于真实 `target-execution`、风险阈值、回滚检查、checksum 和候选提交生成。
+- 桌面端不要求签名证书；上传和发布必须由服务端重算字节数与 SHA-256，并确认合法分发声明。
+- 当前 P0 不是缺少业务页面，而是正式 4 小时 Staging 结果、当前提交远端 CI、真实 MySQL/Redis HA 能力与切换证据。
+- `target-execution` 封存包必须同时包含 MySQL/Redis 的脱敏 `target-observation` 能力报告；缺失或使用合同夹具时不得进入 `ready-for-release`。
+
 - 更新日期：2026-08-11
 
 | 需求 | 模块 | 自动化证据 | 状态 |
@@ -308,7 +316,7 @@
 | 至少 4 小时混合负载合同 | `infra/staging/readiness-profile.example.json`、`staging-readiness-plan.ps1` | 校验持续时长、采样周期、四类操作下限、P95/错误阈值与单 Worker 故障要求 | 参数合同完成；staging 实际执行待验收 |
 | 显式 Worker 并发与连接池预算 | `.env.example`、`docker-compose.yml`、容量预算算法 | 默认 API `2 × 2`、Worker `3 × 2`、单 Scheduler；请求 `110` ≤ 允许 `136`，余量 `26`；超预算负向测试 | 静态预算完成；目标 MySQL 上限与慢查询趋势待实测 |
 | MySQL/Redis 高可用证据声明 | `docs/runbooks/wp4-staging-readiness.md`、准入配置 HA 字段 | 拒绝 standalone/single 模式，要求 RTO/RPO、JSON 证据文件名和 Markdown 运行手册 | 证据合同完成；真实切换演练待执行 |
-| 四方 Go/No-Go 审批 | `docs/templates/wp4-staging-go-no-go.md` | 精确要求 technical/security/operations/business 四个角色，缺失角色负向测试 | 模板与角色门禁完成；签字待目标环境证据 |
+| 自动 Go/No-Go 证据门禁 | `docs/templates/wp4-staging-release-decision.md`、`automated-evidence-gate` | 校验目标执行、风险阈值、回滚、checksum 和候选提交；不包含人员签字栏 | 自动门禁完成；最终结论待真实目标证据 |
 | 敏感证据拒绝 | `verify_staging_readiness_profile.py` | 递归拒绝 password/token/secret/key/credential 等敏感键和值 | 自动化完成 |
 | 准入状态边界 | 生成计划 `contract-valid` / `not-run` / `pending-evidence` | 计划快照和 SHA-256 清单 | 合同验证完成，不等同于 4 小时运行或生产放行 |
 
@@ -321,7 +329,7 @@
 | MySQL HA 切换证据 | `mysql-ha-failover-report.example.json` | 主节点变化、读写恢复、数据一致性、幂等、RTO 42 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
 | Redis HA 切换证据 | `redis-ha-failover-report.example.json` | 主节点变化、限流/Worker 恢复、队列清零、RTO 28 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
 | 证据包完整性 | `staging-evidence-contract.ps1`、`staging-execution-evidence-summary.json` | 10 项校验器测试、profile SHA-256、6 文件 checksum、敏感字段拒绝 | 本地合成证据包 `contract-valid` |
-| 执行状态边界 | `staging-execution-evidence-bundle-v1` | fixture 固定为 `not-run/pending-evidence`；target execution 最高进入 `pending-approvals` | 未宣称 staging/HA 已完成 |
+| 执行状态边界 | `staging-execution-evidence-bundle-v1` | fixture 固定为 `not-run/pending-evidence`；真实 target execution 全部通过后输出 `go` | 未宣称 staging/HA 已完成；不再依赖人员审批 |
 
 
 ## 2026-08-10 WP4 第 14 次迭代补充：目标环境采集与 HA 事件适配器
@@ -342,7 +350,7 @@
 | 封存前完整性重验 | `scripts/seal_staging_evidence_archive.py`、`staging-evidence-archive-manifest-v1` | 六个主文件、主 checksum、来源 checksum、执行组、执行标识、profile 摘要和状态边界校验 | 工程合同完成；真实目标证据待生成 |
 | 来源与目标提交绑定 | 封存清单 `source_files`、`candidate_commit`、`evidence_set_sha256` | 目标执行要求 40/64 位候选提交 SHA；fixture/synthetic/test/mock 适配器拒绝 | 目标候选交接规则完成；未绑定真实批准提交 |
 | 确定性证据归档 | `staging-evidence-archive.zip`、manifest/ZIP detached SHA-256 | 固定 ZIP 时间戳、精确文件集合、嵌入清单和篡改检测测试 | 本地合同归档通过；不替代目标环境证据 |
-| 审批状态边界 | `staging-evidence-archive.ps1`、`docs/templates/wp4-staging-go-no-go.md` | `contract-fixture` 固定为 `blocked-by-contract-fixture`；target 最高为 `ready-for-approvals` / `pending-approvals` | 四角色签字和最终 Go/No-Go 仍待完成 |
+| 发布状态边界（历史实现） | `staging-evidence-archive.ps1`、`docs/templates/wp4-staging-go-no-go.md` | 第 16 次迭代当时把 target 停在 `ready-for-approvals`；该规则已由第 22 次迭代的自动证据门禁替代 | 当前以 `ready-for-release` / 自动 Go-No-Go 为准，不要求人员签字 |
 
 
 ## 2026-08-11 WP4 第 22 次迭代补充：自动发布治理与桌面制品合法性
@@ -353,3 +361,12 @@
 | 桌面制品完整性 | `modules/desktop_updates/service.py`、`desktop_releases` | `apps/api/tests/test_m3_desktop_updates.py`：上传和发布重新计算大小/SHA-256，错配拒绝；下载仅暴露已发布且完整制品 | 已实现本轮 |
 | 桌面制品合法分发声明 | `DesktopReleaseCreateRequest`、Admin `DesktopReleasesPage.vue`、迁移 `20260811_0024_desktop_release_legality.py` | API/Admin 服务测试：未确认分发或声明不足时拒绝；发布审计保存声明 SHA-256 | 已实现本轮；声明不等同于外部法律意见 |
 | N2 产品角色审批边界 | `modules/role_changes` | 既有 N2 专项测试 | 保持不变；本轮未移除产品权限治理的双人审批 |
+
+## 2026-08-11 WP4 第 27 次迭代补充：HA 目标能力证据封存绑定
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 真实 HA 能力证据不得脱离最终归档 | `scripts/seal_staging_evidence_archive.py`、`staging-evidence-archive-manifest-v1.ha_target_capabilities` | `target-execution` 强制要求 MySQL/Redis `target-observation`，能力摘要和文件 SHA-256 纳入 `evidence_set_sha256` | 已实现 |
+| 能力文件完整性与类型边界 | `checksums.sha256`、`mysql-ha-target-capability.json`、`redis-ha-target-capability.json` | 缺文件、checksum 集合不完整、`contract-fixture` 冒充目标观察均拒绝 | 已实现 |
+| 合同夹具不冒充正式验收 | `pnpm staging:evidence-archive-contract`、`pnpm staging:ha-capability-contract` | 合同归档继续输出 `contract-sealed / blocked-by-contract-fixture / not-run / pending-evidence`，且 `ha_target_capabilities` 为空 | 已实现 |
+| 自动发布交接 | `handoff_status=ready-for-release`、`go_no_go_status=go` | 仅完整 `target-execution` 可进入自动发布结论，无人员签字依赖 | 工程闭环完成；真实目标证据待取得 |

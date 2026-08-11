@@ -13,19 +13,22 @@ from verify_staging_execution_evidence import (
     validate_ha_report,
     validate_resource_report,
 )
+from verify_staging_ha_target_capability import validate_capability
 from verify_staging_readiness_profile import validate_profile
 
 ARCHIVE_SCHEMA = "staging-evidence-archive-manifest-v1"
-REQUIRED_EVIDENCE_FILES = (
+BASE_EVIDENCE_FILES = (
     "readiness-profile.json",
     "staging-readiness-plan.json",
     "resource-trend-report.json",
     "mysql-ha-failover-report.json",
     "redis-ha-failover-report.json",
     "staging-execution-evidence-summary.json",
-    "checksums.sha256",
-    "source-checksums.sha256",
 )
+TARGET_CAPABILITY_FILES = {
+    "mysql": "mysql-ha-target-capability.json",
+    "redis": "redis-ha-target-capability.json",
+}
 REPORT_FILES = (
     "resource-trend-report.json",
     "mysql-ha-failover-report.json",
@@ -98,8 +101,17 @@ def _parse_manifest(path: Path, expected_names: set[str]) -> dict[str, str]:
     return entries
 
 
-def _validate_main_checksums(evidence_directory: Path) -> list[dict[str, Any]]:
-    expected = set(REQUIRED_EVIDENCE_FILES[:-2])
+def _evidence_file_names(evidence_kind: str) -> set[str]:
+    expected = set(BASE_EVIDENCE_FILES)
+    if evidence_kind == "target-execution":
+        expected.update(TARGET_CAPABILITY_FILES.values())
+    return expected
+
+
+def _validate_main_checksums(
+    evidence_directory: Path, evidence_kind: str
+) -> list[dict[str, Any]]:
+    expected = _evidence_file_names(evidence_kind)
     manifest_path = evidence_directory / "checksums.sha256"
     entries = _parse_manifest(manifest_path, expected)
     files: list[dict[str, Any]] = []
@@ -149,6 +161,25 @@ def _validate_source_checksums(evidence_directory: Path, reports: list[dict[str,
     return sources, [{"path": path.name, "size_bytes": path.stat().st_size, "sha256": _sha256(path)}]
 
 
+def _validate_target_capabilities(
+    evidence_directory: Path, profile: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    capabilities: dict[str, dict[str, Any]] = {}
+    for dependency, filename in TARGET_CAPABILITY_FILES.items():
+        report = _load_object(evidence_directory / filename)
+        if report.get("evidence_kind") != "target-observation":
+            raise ValueError(
+                f"{filename} must use evidence_kind=target-observation for target-execution"
+            )
+        summary = validate_capability(report, profile, REPOSITORY_ROOT, dependency)
+        capabilities[dependency] = {
+            "file": filename,
+            "sha256": _sha256(evidence_directory / filename),
+            **summary,
+        }
+    return capabilities
+
+
 def _validate_metadata(evidence_directory: Path) -> dict[str, Any]:
     summary = _load_object(evidence_directory / "staging-execution-evidence-summary.json")
     profile = _load_object(evidence_directory / "readiness-profile.json")
@@ -177,11 +208,13 @@ def _validate_metadata(evidence_directory: Path) -> dict[str, Any]:
     if any(report.get("evidence_kind") != expected_kind for report in reports):
         raise ValueError("all evidence reports must match summary.evidence_kind")
     provenances = [_report_provenance(report, name) for name, report in zip(REPORT_FILES, reports)]
+    target_capabilities: dict[str, dict[str, Any]] = {}
     if expected_kind == "target-execution":
         for provenance in provenances:
             adapter = _require_string(provenance.get("source_adapter"), "report.provenance.source_adapter")
             if FIXTURE_ADAPTER_RE.search(adapter):
                 raise ValueError("target-execution archive cannot use fixture, synthetic, test or mock adapters")
+        target_capabilities = _validate_target_capabilities(evidence_directory, profile)
     group_ids = {_require_string(provenance.get("execution_group_id"), "report.provenance.execution_group_id") for provenance in provenances}
     if len(group_ids) != 1:
         raise ValueError("all evidence reports must share one execution_group_id")
@@ -207,11 +240,16 @@ def _validate_metadata(evidence_directory: Path) -> dict[str, Any]:
         "resource_started_at": resource_start.isoformat().replace("+00:00", "Z"),
         "resource_finished_at": resource_finished.isoformat().replace("+00:00", "Z"),
         "profile_schema": profile.get("schema"),
+        "target_capabilities": target_capabilities,
     }
 
 
 def _build_manifest(evidence_directory: Path, sealed_at: str, candidate_commit: str | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    files = _validate_main_checksums(evidence_directory)
+    summary = _load_object(evidence_directory / "staging-execution-evidence-summary.json")
+    evidence_kind = _require_string(summary.get("evidence_kind"), "summary.evidence_kind")
+    if evidence_kind not in {"contract-fixture", "target-execution"}:
+        raise ValueError("summary.evidence_kind must be contract-fixture or target-execution")
+    files = _validate_main_checksums(evidence_directory, evidence_kind)
     metadata = _validate_metadata(evidence_directory)
     source_manifest = evidence_directory / "source-checksums.sha256"
     source_entries = _parse_manifest(source_manifest, {line.split()[-1] for line in source_manifest.read_text(encoding="utf-8-sig").splitlines() if line.strip()})
@@ -247,9 +285,21 @@ def _build_manifest(evidence_directory: Path, sealed_at: str, candidate_commit: 
         "sealed_at": sealed.isoformat().replace("+00:00", "Z"),
         "candidate_commit": candidate_commit,
         "source_files": source_files,
+        "ha_target_capabilities": metadata["target_capabilities"],
         "files": files,
     }
-    manifest["evidence_set_sha256"] = _canonical_sha256({key: manifest[key] for key in ("execution_group_id", "profile_sha256", "source_files", "files")})
+    manifest["evidence_set_sha256"] = _canonical_sha256(
+        {
+            key: manifest[key]
+            for key in (
+                "execution_group_id",
+                "profile_sha256",
+                "source_files",
+                "ha_target_capabilities",
+                "files",
+            )
+        }
+    )
     return manifest, files
 
 
