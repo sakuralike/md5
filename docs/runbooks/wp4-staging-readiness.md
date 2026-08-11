@@ -398,3 +398,57 @@ pnpm staging:topology-preflight `
 2026-08-11 的 Staging 实测为 `1 API + 3 Worker + 1 Scheduler + 1 MySQL + 1 Redis`，请求连接 `110`、允许 `136`、剩余 `26`。容量通过，但 API 少一个副本，因此不得进入目标执行。
 
 当前根 Compose 将 API 固定发布到 `${API_PORT:-8000}:8000`，同一主机直接 `--scale api=2` 会产生宿主机端口冲突。正式执行前必须提供 Staging 专用多副本 overlay：API 副本仅暴露容器内部端口，由 loopback 反向代理或负载均衡提供唯一探针入口；Prometheus 也必须覆盖两个 API 实例。不得通过降低 profile 副本数或手工修改预检结果绕过该门禁。
+
+
+## 18. API 双副本与 loopback 代理部署
+
+Staging 同机双 API 必须叠加 `infra/staging/docker-compose.staging.api-ha.yml`。根 Compose 保持本地开发默认值；overlay 使用 `!reset` 取消 API 宿主机端口，并由 `api-proxy` 独占 `127.0.0.1:${API_PORT:-8000}`。本轮不配置域名或 HTTPS。
+
+Linux 目标主机示例：
+
+```bash
+export STAGING_API_IMAGE=password-detective-api:staging-candidate
+export COMPOSE_PROJECT_NAME=password-detective-staging
+
+COMPOSE_FILES=(
+  -f docker-compose.yml
+  -f docker-compose.staging.override.yml
+  -f infra/staging/docker-compose.staging.api-ha.yml
+  -f infra/monitoring/docker-compose.monitoring.yml
+  -f infra/staging/docker-compose.staging.monitoring.yml
+)
+
+docker compose "${COMPOSE_FILES[@]}" build api
+docker compose "${COMPOSE_FILES[@]}" up -d mysql redis
+docker compose "${COMPOSE_FILES[@]}" run --rm api alembic upgrade head
+docker compose "${COMPOSE_FILES[@]}" --profile monitoring up -d \
+  --scale api=2 --scale worker=3 \
+  api api-proxy worker scheduler alert-receiver alertmanager prometheus grafana
+```
+
+顺序不可交换：先构建候选镜像，再启动依赖并一次性迁移，最后启动两个 API 副本。禁止恢复根 Compose 中 API 的固定端口，也禁止让每个 API 副本自行执行 Alembic。
+
+PowerShell 客户端通过 SSH loopback 转发后执行组合 smoke：
+
+```powershell
+pnpm staging:api-ha-contract
+
+pnpm staging:api-ha-smoke `
+  -ApiProxyUrl http://127.0.0.1:8000 `
+  -PrometheusUrl http://127.0.0.1:9090 `
+  -GrafanaUrl http://127.0.0.1:3000 `
+  -AlertmanagerUrl http://127.0.0.1:9093 `
+  -AlertReceiverUrl http://127.0.0.1:18081 `
+  -ExpectedApiReplicas 2 `
+  -ComposeFiles docker-compose.yml,docker-compose.staging.override.yml,infra/staging/docker-compose.staging.api-ha.yml,infra/monitoring/docker-compose.monitoring.yml,infra/staging/docker-compose.staging.monitoring.yml
+```
+
+验收必须同时满足：
+
+1. 代理 readiness 返回 `ready / database=ok / rate_limit=ok`；
+2. 拓扑预检精确观察到 `2 API + 3 Worker + 1 Scheduler`；
+3. Prometheus `service=api` active target 恰好为 2，且两者均为 `up`；
+4. 连接池预算和目标依赖检查通过；
+5. 先执行 75 秒以上短时资源校准，API 每运行副本平均 CPU 不超过 profile 阈值，再启动不少于 4 小时的正式会话。
+
+若 SSH 报告主机身份变化，必须停止部署，通过可信渠道确认新主机密钥后再更新 `known_hosts`；禁止使用 `StrictHostKeyChecking=no` 或静默删除旧记录绕过验证。

@@ -26,7 +26,7 @@ def _copy_monitoring_contract(tmp_path: Path) -> Path:
 def test_monitoring_contract_includes_staging_overlay() -> None:
     report = validate_monitoring_files(ROOT)
 
-    assert report["schema"] == "monitoring-config-v3"
+    assert report["schema"] == "monitoring-config-v4"
     assert "infra/staging/prometheus.staging.yml" in report["files"]
     assert "infra/staging/docker-compose.staging.monitoring.yml" in report["files"]
 
@@ -50,7 +50,7 @@ def test_monitoring_contract_rejects_staging_label_drift(tmp_path: Path) -> None
     prometheus = repo / "infra/staging/prometheus.staging.yml"
     text = prometheus.read_text(encoding="utf-8")
     prometheus.write_text(
-        text.replace("environment: staging", "environment: integration"),
+        text.replace("replacement: staging", "replacement: integration"),
         encoding="utf-8",
     )
 

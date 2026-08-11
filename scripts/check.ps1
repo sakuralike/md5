@@ -128,9 +128,10 @@ try {
         Invoke-Checked $Python ./scripts/verify_staging_resource_observation.py --input ./infra/staging/resource-observation.example.json --output ./.local/staging-resource-observation-wp4-iteration-19/contract-verification.json --write-checksums
     }
     if ($IncludeStagingSession) {
-        Invoke-Checked $Python -m ruff check ./scripts/multi_instance_stability_probe.py ./scripts/staging_topology_preflight.py ./scripts/assemble_staging_stability_session.py ./scripts/verify_staging_stability_session.py ./scripts/run_staging_stability_session.py ./scripts/verify_multi_instance_stability_evidence.py ./scripts/tests/test_staging_topology_preflight.py ./scripts/tests/test_staging_stability_session.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py
-        Invoke-Checked $Python -m pytest ./scripts/tests/test_staging_topology_preflight.py ./scripts/tests/test_staging_stability_session.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py
+        Invoke-Checked $Python -m ruff check ./scripts/multi_instance_stability_probe.py ./scripts/staging_topology_preflight.py ./scripts/assemble_staging_stability_session.py ./scripts/verify_staging_stability_session.py ./scripts/run_staging_stability_session.py ./scripts/verify_multi_instance_stability_evidence.py ./scripts/verify_staging_api_ha.py ./scripts/tests/test_staging_topology_preflight.py ./scripts/tests/test_staging_stability_session.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py ./scripts/tests/test_verify_staging_api_ha.py
+        Invoke-Checked $Python -m pytest ./scripts/tests/test_staging_topology_preflight.py ./scripts/tests/test_staging_stability_session.py ./scripts/tests/test_verify_multi_instance_stability_evidence.py ./scripts/tests/test_verify_staging_api_ha.py
         Invoke-Checked $Python ./scripts/verify_staging_stability_session.py --input ./infra/staging/stability-session.example.json --profile ./infra/staging/readiness-profile.example.json --output ./.local/staging-stability-session-wp4-iteration-21/contract-verification.json --write-checksums
+        Invoke-Checked pwsh ./scripts/staging-api-ha-contract.ps1 -PythonCommand $Python
     }
     if ($IncludeMonitoring) {
         Invoke-Checked $Python ./scripts/verify_monitoring_config.py --write-checksums

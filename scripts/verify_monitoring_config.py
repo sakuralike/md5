@@ -125,13 +125,19 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         and staging_scrape.get("metrics_path") == "/api/v1/metrics",
         "staging Prometheus API scrape contract drifted",
     )
-    staging_static = staging_scrape.get("static_configs", [{}])[0]
     _assert(
-        staging_static.get("targets") == ["api:8000"],
-        "staging Prometheus must scrape the Compose API service",
+        staging_scrape.get("dns_sd_configs")
+        == [{"names": ["api"], "type": "A", "port": 8000}],
+        "staging Prometheus must discover every Compose API replica through DNS",
+    )
+    staging_relabels = staging_scrape.get("relabel_configs", [])
+    _assert(
+        {"target_label": "service", "replacement": "api"} in staging_relabels,
+        "staging Prometheus targets must carry the API service label",
     )
     _assert(
-        staging_static.get("labels") == {"service": "api", "environment": "staging"},
+        {"target_label": "environment", "replacement": "staging"}
+        in staging_relabels,
         "staging Prometheus target must carry the staging environment label",
     )
 
@@ -285,7 +291,7 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
     )
 
     return {
-        "schema": "monitoring-config-v3",
+        "schema": "monitoring-config-v4",
         "status": "passed",
         "rule_count": len(REQUIRED_RULES),
         "dashboard_panel_count": len(panels),

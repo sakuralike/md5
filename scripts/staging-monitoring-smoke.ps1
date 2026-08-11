@@ -5,6 +5,7 @@ param(
     [string]$AlertmanagerUrl = "http://127.0.0.1:9093",
     [string]$AlertReceiverUrl = "http://127.0.0.1:18081",
     [string]$Environment = "staging",
+    [int]$ExpectedApiTargetCount = 1,
     [int]$TimeoutSec = 20
 )
 
@@ -42,18 +43,24 @@ if ($Targets.status -ne "success") {
 $ApiTargets = @($Targets.data.activeTargets | Where-Object {
     $_.labels.job -eq "password-detective-api" -and $_.labels.environment -eq $Environment
 })
-if ($ApiTargets.Count -ne 1) {
-    throw "expected exactly one password-detective-api target for environment '$Environment'; found $($ApiTargets.Count)"
+if ($ExpectedApiTargetCount -lt 1) {
+    throw "ExpectedApiTargetCount must be at least 1"
 }
-if ($ApiTargets[0].health -ne "up") {
-    throw "password-detective-api target is not up: $($ApiTargets[0].lastError)"
+if ($ApiTargets.Count -ne $ExpectedApiTargetCount) {
+    throw "expected $ExpectedApiTargetCount password-detective-api targets for environment '$Environment'; found $($ApiTargets.Count)"
+}
+$UnhealthyTargets = @($ApiTargets | Where-Object { $_.health -ne "up" })
+if ($UnhealthyTargets.Count -gt 0) {
+    throw "$($UnhealthyTargets.Count) password-detective-api target(s) are not up"
 }
 $Results.prometheus_target = "passed"
 
 $Query = [Uri]::EscapeDataString("up{job=`"password-detective-api`",environment=`"$Environment`"}")
 $Up = Invoke-RestMethod -Method Get -Uri "$Prometheus/api/v1/query?query=$Query" -TimeoutSec $TimeoutSec
-if ($Up.status -ne "success" -or @($Up.data.result).Count -ne 1 -or [double]$Up.data.result[0].value[1] -ne 1) {
-    throw "Prometheus up query did not return one healthy staging API series"
+$UpSeries = @($Up.data.result)
+$UnhealthySeries = @($UpSeries | Where-Object { [double]$_.value[1] -ne 1 })
+if ($Up.status -ne "success" -or $UpSeries.Count -ne $ExpectedApiTargetCount -or $UnhealthySeries.Count -gt 0) {
+    throw "Prometheus up query did not return $ExpectedApiTargetCount healthy staging API series"
 }
 $Results.prometheus_query = "passed"
 

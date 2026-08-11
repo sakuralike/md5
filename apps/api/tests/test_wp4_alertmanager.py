@@ -56,6 +56,6 @@ def test_notification_gateway_redacts_sensitive_labels_and_annotations():
 def test_alertmanager_config_is_wired_for_grouping_and_resolved_delivery():
     validator = load_script("scripts/verify_monitoring_config.py", "monitoring_validator_v2")
     report = validator.validate_monitoring_files(ROOT)
-    assert report["schema"] == "monitoring-config-v3"
+    assert report["schema"] == "monitoring-config-v4"
     assert "infra/monitoring/alertmanager/alertmanager.yml" in report["files"]
     assert "scripts/alertmanager_receiver.py" in report["files"]
