@@ -12,7 +12,7 @@ vi.mock("../stores/auth", () => ({
 }));
 
 describe("LoginPage", () => {
-  it("renders the admin login workflow with Shadcn controls", async () => {
+  it("renders a single-column admin login form with Shadcn controls", async () => {
     const html = await renderToString(createSSRApp(LoginPage));
 
     expect(html).toContain("管理端登录");
@@ -20,6 +20,8 @@ describe("LoginPage", () => {
     expect(html).toContain("密码");
     expect(html).toContain("动态验证码");
     expect(html).toContain("登录管理端");
+    expect(html).toContain('data-testid="admin-login-form"');
+    expect(html).toContain("flex w-full max-w-lg flex-col gap-5");
     expect(html).toContain("<button");
     expect(html).toContain('autocomplete="username"');
   });

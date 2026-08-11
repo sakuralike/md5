@@ -20,21 +20,26 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="mx-auto grid min-h-[calc(100vh-8rem)] w-full max-w-5xl items-center gap-6 py-6 lg:grid-cols-[1.05fr_0.95fr]">
-    <div class="hidden space-y-5 rounded-3xl border bg-primary p-8 text-primary-foreground shadow-xl lg:block">
+  <section class="mx-auto grid min-h-[calc(100vh-8rem)] w-full max-w-5xl grid-cols-1 items-center gap-6 py-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
+    <div class="hidden self-stretch rounded-3xl border bg-primary p-8 text-primary-foreground shadow-xl lg:flex lg:flex-col lg:justify-center">
       <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">独立管理入口</p>
-      <h2 class="text-4xl font-semibold tracking-tight">安全运营从受控身份开始。</h2>
-      <p class="max-w-xl text-sm leading-7 text-primary-foreground/75">
+      <h2 class="mt-5 text-4xl font-semibold tracking-tight">安全运营从受控身份开始。</h2>
+      <p class="mt-5 max-w-xl text-sm leading-7 text-primary-foreground/75">
         管理员登录、TOTP、多角色治理与关键写操作审计均在独立入口完成。页面不会展示候选密码、刷新令牌或真实个人信息。
       </p>
-      <ul class="grid gap-3 text-sm text-primary-foreground/85">
+      <ul class="mt-6 flex flex-col gap-3 text-sm text-primary-foreground/85">
         <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">管理员强制 TOTP 与短时会话</li>
         <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">敏感操作具备幂等与不可变审计</li>
         <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">治理数据遵循最小披露原则</li>
       </ul>
     </div>
 
-    <form class="mx-auto grid w-full max-w-md gap-5 rounded-3xl border bg-card p-6 text-card-foreground shadow-xl sm:p-8" aria-labelledby="admin-login-title" @submit.prevent="submit">
+    <form
+      data-testid="admin-login-form"
+      class="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-3xl border bg-card p-6 text-card-foreground shadow-xl sm:p-8"
+      aria-labelledby="admin-login-title"
+      @submit.prevent="submit"
+    >
       <header class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-[0.22em] text-primary">安全会话</p>
         <h1 id="admin-login-title" class="text-2xl font-semibold tracking-tight sm:text-3xl">管理端登录</h1>
@@ -45,19 +50,19 @@ async function submit(): Promise<void> {
         {{ auth.error }}
       </div>
 
-      <div class="grid gap-2">
+      <div class="flex flex-col gap-2">
         <Label for="login">用户名或邮箱</Label>
-        <Input id="login" v-model="loginName" autocomplete="username" required />
+        <Input id="login" v-model="loginName" class="h-11" autocomplete="username" required />
       </div>
-      <div class="grid gap-2">
+      <div class="flex flex-col gap-2">
         <Label for="password">密码</Label>
-        <Input id="password" v-model="password" type="password" autocomplete="current-password" required />
+        <Input id="password" v-model="password" class="h-11" type="password" autocomplete="current-password" required />
       </div>
-      <div class="grid gap-2">
+      <div class="flex flex-col gap-2">
         <Label for="totp">动态验证码（已启用时必填）</Label>
-        <Input id="totp" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="8" />
+        <Input id="totp" v-model="totpCode" class="h-11" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="8" />
       </div>
-      <Button class="w-full" type="submit" :disabled="auth.busy">
+      <Button class="h-11 w-full" type="submit" :disabled="auth.busy">
         {{ auth.busy ? "验证中…" : "登录管理端" }}
       </Button>
       <p class="text-center text-xs leading-5 text-muted-foreground">仅使用分配给你的管理员账号；不要共享密码或动态验证码。</p>
