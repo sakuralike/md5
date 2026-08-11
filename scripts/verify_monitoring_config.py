@@ -62,6 +62,10 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         / "infra/monitoring/grafana/dashboards/password-detective-overview.json"
     )
     compose_path = repo_root / "infra/monitoring/docker-compose.monitoring.yml"
+    staging_compose_path = (
+        repo_root / "infra/staging/docker-compose.staging.monitoring.yml"
+    )
+    staging_prometheus_path = repo_root / "infra/staging/prometheus.staging.yml"
     alertmanager_path = repo_root / "infra/monitoring/alertmanager/alertmanager.yml"
     receiver_path = repo_root / "scripts/alertmanager_receiver.py"
     paths = [
@@ -71,12 +75,14 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         dashboards_path,
         dashboard_path,
         compose_path,
+        staging_compose_path,
+        staging_prometheus_path,
         alertmanager_path,
         receiver_path,
     ]
     _assert(
         all(path.is_file() for path in paths),
-        "all WP4 iteration 9 monitoring files must exist",
+        "all WP4 monitoring and staging overlay files must exist",
     )
 
     prometheus = _load_yaml(prometheus_path)
@@ -105,6 +111,28 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
     _assert(
         rule_files == ["/etc/prometheus/alerts/*.yml"],
         "rule file glob must be mounted alert directory",
+    )
+
+    staging_prometheus = _load_yaml(staging_prometheus_path)
+    staging_scrape_configs = staging_prometheus.get("scrape_configs")
+    _assert(
+        isinstance(staging_scrape_configs, list) and len(staging_scrape_configs) == 1,
+        "staging Prometheus must contain exactly one API scrape config",
+    )
+    staging_scrape = staging_scrape_configs[0]
+    _assert(
+        staging_scrape.get("job_name") == "password-detective-api"
+        and staging_scrape.get("metrics_path") == "/api/v1/metrics",
+        "staging Prometheus API scrape contract drifted",
+    )
+    staging_static = staging_scrape.get("static_configs", [{}])[0]
+    _assert(
+        staging_static.get("targets") == ["api:8000"],
+        "staging Prometheus must scrape the Compose API service",
+    )
+    _assert(
+        staging_static.get("labels") == {"service": "api", "environment": "staging"},
+        "staging Prometheus target must carry the staging environment label",
     )
 
     rules_document = _load_yaml(rules_path)
@@ -190,31 +218,74 @@ def validate_monitoring_files(repo_root: Path) -> dict[str, Any]:
         route.get("group_by") == ["alertname", "service", "severity", "environment"],
         "Alertmanager group_by must stay low-cardinality",
     )
-    _assert(route.get("group_wait") == "2s", "Alertmanager drill group_wait must be two seconds")
-    _assert(route.get("group_interval") == "5s", "Alertmanager drill group_interval must be five seconds")
+    _assert(
+        route.get("group_wait") == "2s",
+        "Alertmanager drill group_wait must be two seconds",
+    )
+    _assert(
+        route.get("group_interval") == "5s",
+        "Alertmanager drill group_interval must be five seconds",
+    )
     receivers = alertmanager.get("receivers", [])
     _assert(
         any(
             receiver.get("name") == "password-detective-notification-gateway"
             and receiver.get("webhook_configs", [{}])[0].get("send_resolved") is True
-            and receiver.get("webhook_configs", [{}])[0].get("url") == "http://alert-receiver:18081/alerts"
+            and receiver.get("webhook_configs", [{}])[0].get("url")
+            == "http://alert-receiver:18081/alerts"
             for receiver in receivers
         ),
         "Alertmanager must expose a resolved-capable internal webhook receiver",
     )
     alertmanager_text = alertmanager_path.read_text(encoding="utf-8-sig")
-    _assert(not FORBIDDEN.search(alertmanager_text), "Alertmanager config contains a sensitive/high-cardinality field")
+    _assert(
+        not FORBIDDEN.search(alertmanager_text),
+        "Alertmanager config contains a sensitive/high-cardinality field",
+    )
     receiver_text = receiver_path.read_text(encoding="utf-8-sig")
-    for marker in ("normalize_alertmanager_payload", "FORBIDDEN_KEY", "REDACTED", "/events"):
+    for marker in (
+        "normalize_alertmanager_payload",
+        "FORBIDDEN_KEY",
+        "REDACTED",
+        "/events",
+    ):
         _assert(marker in receiver_text, f"notification gateway is missing {marker}")
     compose_text = compose_path.read_text(encoding="utf-8-sig")
-    for service in ("prometheus:", "grafana:", "alertmanager:", "alert-receiver:", 'profiles: ["monitoring"]'):
+    for service in (
+        "prometheus:",
+        "grafana:",
+        "alertmanager:",
+        "alert-receiver:",
+        'profiles: ["monitoring"]',
+    ):
         _assert(
             service in compose_text, f"monitoring Compose overlay missing {service}"
         )
+    monitoring_ports = {
+        "ALERT_RECEIVER_PORT": "18081",
+        "ALERTMANAGER_PORT": "9093",
+        "PROMETHEUS_PORT": "9090",
+        "GRAFANA_PORT": "3000",
+    }
+    for variable, port in monitoring_ports.items():
+        expected_binding = '"127.0.0.1:${' + variable + ":-" + port + "}:" + port + '"'
+        _assert(
+            expected_binding in compose_text,
+            f"monitoring port {port} must bind to loopback by default",
+        )
+    _assert(
+        "image: python:3.12.13-alpine3.23" in compose_text,
+        "alert receiver runtime must use the pinned Python image",
+    )
+    staging_compose_text = staging_compose_path.read_text(encoding="utf-8-sig")
+    _assert(
+        "./infra/staging/prometheus.staging.yml:/etc/prometheus/prometheus.yml:ro"
+        in staging_compose_text,
+        "staging monitoring overlay must replace the Prometheus configuration",
+    )
 
     return {
-        "schema": "monitoring-config-v2",
+        "schema": "monitoring-config-v3",
         "status": "passed",
         "rule_count": len(REQUIRED_RULES),
         "dashboard_panel_count": len(panels),

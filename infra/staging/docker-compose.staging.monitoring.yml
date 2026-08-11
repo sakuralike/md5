@@ -1,0 +1,4 @@
+services:
+  prometheus:
+    volumes:
+      - ./infra/staging/prometheus.staging.yml:/etc/prometheus/prometheus.yml:ro

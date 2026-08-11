@@ -269,3 +269,37 @@ pnpm staging:smoke -BaseUrl http://<staging-ip>:8000 -WebUrl http://<staging-ip>
 该入口检查 API liveness/readiness、数据库和 rate-limit 就绪、Web/Admin 页面标题、两端 `/api/` 代理，以及唯一合成账号的注册、登录和个人资料读取。它只代表部署后 smoke 通过，不会生成 `target-execution`，也不会替代 4 小时资源趋势、MySQL/Redis HA 切换或四角色 Go/No-Go 审批。
 
 若只检查页面和服务，不创建合成账号，可追加 `-SkipAuth`。
+
+
+## 14. Staging 监控栈预检
+
+监控栈使用 Staging 专用配置，并将管理端口限制在服务器 loopback：
+
+```powershell
+docker compose `
+  -f docker-compose.yml `
+  -f docker-compose.staging.override.yml `
+  -f infra/monitoring/docker-compose.monitoring.yml `
+  -f infra/staging/docker-compose.staging.monitoring.yml `
+  --profile monitoring up -d alert-receiver alertmanager prometheus grafana
+```
+
+通过 SSH 本地端口转发访问，不要求域名或 HTTPS，也不得把 `3000`、`9090`、`9093`、`18081` 改为公网监听：
+
+```powershell
+ssh -N `
+  -L 19090:127.0.0.1:9090 `
+  -L 13000:127.0.0.1:3000 `
+  -L 19093:127.0.0.1:9093 `
+  -L 18082:127.0.0.1:18081 `
+  <staging-user>@<staging-host>
+
+pnpm staging:monitoring-smoke `
+  -PrometheusUrl http://127.0.0.1:19090 `
+  -GrafanaUrl http://127.0.0.1:13000 `
+  -AlertmanagerUrl http://127.0.0.1:19093 `
+  -AlertReceiverUrl http://127.0.0.1:18082 `
+  -Environment staging
+```
+
+该 smoke 只验证监控组件可用、API target 为 `up` 且标签正确。它不证明 4 小时采样覆盖、资源阈值、HA 切换或审批完成。

@@ -1,6 +1,6 @@
 services:
   alert-receiver:
-    image: python:3.12-alpine
+    image: python:3.12.13-alpine3.23
     profiles: ["monitoring"]
     command:
       - python
@@ -12,7 +12,7 @@ services:
     volumes:
       - ./scripts/alertmanager_receiver.py:/app/scripts/alertmanager_receiver.py:ro
     ports:
-      - "${ALERT_RECEIVER_PORT:-18081}:18081"
+      - "127.0.0.1:${ALERT_RECEIVER_PORT:-18081}:18081"
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:18081/health"]
       interval: 5s
@@ -29,7 +29,7 @@ services:
       - ./infra/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     ports:
-      - "${ALERTMANAGER_PORT:-9093}:9093"
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
     depends_on:
       alert-receiver:
         condition: service_healthy
@@ -51,7 +51,7 @@ services:
       - ./infra/monitoring/prometheus/alerts:/etc/prometheus/alerts:ro
       - prometheus-data:/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     depends_on:
       api:
         condition: service_healthy
@@ -76,7 +76,7 @@ services:
       - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       prometheus:
         condition: service_healthy
