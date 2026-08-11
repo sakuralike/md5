@@ -28,13 +28,13 @@ from control_staging_formal_session import (
 def make_args(root: Path) -> argparse.Namespace:
     return argparse.Namespace(
         profile=str(root / "infra/staging/readiness-profile.example.json"),
-        duration_seconds=14400,
+        duration_seconds=75,
         probe_interval_seconds=1,
-        probe_window_seconds=300,
+        probe_window_seconds=30,
         resource_sample_interval_seconds=15,
         worker_count=3,
-        worker_loss_after_seconds=3600,
-        worker_loss_duration_seconds=60,
+        worker_loss_after_seconds=30,
+        worker_loss_duration_seconds=10,
         api_metrics_url="http://127.0.0.1:8000/api/v1/metrics",
         compose_files=list(DEFAULT_COMPOSE_FILES),
         project_directory=str(root),
@@ -47,9 +47,9 @@ def test_formal_command_uses_target_defaults(tmp_path: Path) -> None:
     args = make_args(tmp_path)
     command = build_runner_command(args, tmp_path, tmp_path / "output")
 
-    assert command[command.index("--duration-seconds") + 1] == "14400"
-    assert command[command.index("--probe-window-seconds") + 1] == "300"
-    assert command[command.index("--worker-loss-after-seconds") + 1] == "3600"
+    assert command[command.index("--duration-seconds") + 1] == "75"
+    assert command[command.index("--probe-window-seconds") + 1] == "30"
+    assert command[command.index("--worker-loss-after-seconds") + 1] == "30"
     assert command.count("--compose-file") == len(DEFAULT_COMPOSE_FILES)
     assert "--request-target-execution" in command
 

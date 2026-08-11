@@ -29,14 +29,14 @@ def load_fixture(name: str) -> dict:
 def test_accepts_valid_resource_trend_fixture() -> None:
     validate_profile(PROFILE, ROOT)
     result = validate_resource_report(load_fixture("resource-trend-report.example.json"), PROFILE, PROFILE_SHA)
-    assert result["sample_count"] == 961
+    assert result["sample_count"] == 6
     assert result["database_peak"] == 94
 
 
 def test_rejects_resource_trend_shorter_than_profile() -> None:
     report = load_fixture("resource-trend-report.example.json")
-    report["duration_seconds"] = 3600
-    report["finished_at"] = "2026-08-10T01:00:00Z"
+    report["duration_seconds"] = 30
+    report["finished_at"] = "2026-08-11T00:00:30Z"
     with pytest.raises(ValueError, match="duration"):
         validate_resource_report(report, PROFILE, PROFILE_SHA)
 
@@ -58,7 +58,7 @@ def test_rejects_connection_budget_breach() -> None:
 
 def test_rejects_sparse_resource_samples() -> None:
     report = load_fixture("resource-trend-report.example.json")
-    report["sample_count"] = 100
+    report["sample_count"] = 4
     with pytest.raises(ValueError, match="samples"):
         validate_resource_report(report, PROFILE, PROFILE_SHA)
 

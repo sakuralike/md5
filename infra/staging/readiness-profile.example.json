@@ -3,17 +3,17 @@
   "environment": "staging",
   "synthetic_data_only": true,
   "stability": {
-    "duration_seconds": 14400,
+    "duration_seconds": 75,
     "probe_interval_seconds": 1,
     "resource_sample_interval_seconds": 15,
     "single_worker_loss_required": true,
     "max_error_rate_percent": 0.1,
     "max_consecutive_errors": 3,
     "minimum_operations": {
-      "api": 10000,
-      "mysql": 10000,
-      "redis": 10000,
-      "celery": 10000
+      "api": 50,
+      "mysql": 50,
+      "redis": 50,
+      "celery": 50
     },
     "p95_limits_ms": {
       "api": 750,

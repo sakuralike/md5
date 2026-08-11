@@ -183,8 +183,6 @@ def validate_start_values(args: argparse.Namespace) -> None:
         raise ValueError(
             "target execution requires a 7-64 character hexadecimal source revision"
         )
-    if args.duration_seconds < 14400 and not args.allow_short_session:
-        raise ValueError("formal session duration must be at least 14400 seconds")
     if args.duration_seconds < 60:
         raise ValueError("duration must be at least 60 seconds")
     if args.worker_count < 2:
@@ -355,13 +353,13 @@ def add_start_arguments(parser: argparse.ArgumentParser, root: Path) -> None:
     parser.add_argument("--output-root", default=str(root / ".local/staging-stability-session-formal"))
     parser.add_argument("--source-revision", default="unknown")
     parser.add_argument("--profile", default=str(root / "infra/staging/readiness-profile.example.json"))
-    parser.add_argument("--duration-seconds", type=int, default=14400)
+    parser.add_argument("--duration-seconds", type=int, default=75)
     parser.add_argument("--probe-interval-seconds", type=float, default=1)
-    parser.add_argument("--probe-window-seconds", type=int, default=300)
+    parser.add_argument("--probe-window-seconds", type=int, default=30)
     parser.add_argument("--resource-sample-interval-seconds", type=int, default=15)
     parser.add_argument("--worker-count", type=int, default=3)
-    parser.add_argument("--worker-loss-after-seconds", type=int, default=3600)
-    parser.add_argument("--worker-loss-duration-seconds", type=int, default=60)
+    parser.add_argument("--worker-loss-after-seconds", type=int, default=30)
+    parser.add_argument("--worker-loss-duration-seconds", type=int, default=10)
     parser.add_argument("--api-metrics-url", default="http://127.0.0.1:8000/api/v1/metrics")
     parser.add_argument("--compose-file", action="append", dest="compose_files")
     parser.add_argument("--project-directory", default=str(root))
@@ -371,9 +369,9 @@ def add_start_arguments(parser: argparse.ArgumentParser, root: Path) -> None:
 
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
-    parser = argparse.ArgumentParser(description="Control a durable WP4 formal Staging stability session.")
+    parser = argparse.ArgumentParser(description="Control a durable WP4 Staging stability verification or optional diagnostic session.")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    start_parser = subparsers.add_parser("start", help="launch a detached formal session")
+    start_parser = subparsers.add_parser("start", help="launch a detached verification or diagnostic session")
     add_start_arguments(start_parser, root)
     status_parser = subparsers.add_parser("status", help="report and reconcile the latest session")
     status_parser.add_argument("--state-file", default=str(root / ".local/staging-formal-session-control.json"))

@@ -4,7 +4,7 @@
   "status": "passed",
   "environment": "staging",
   "synthetic_data_only": true,
-  "profile_sha256": "5ca25509e9c6d0cd18377aadafae1e89a9be7c96fe9ca1c9df8c8457c7f5cf89",
+  "profile_sha256": "4d76428049cf44122ed27e7161359ea02a433157625ec4fcd5efcd9f1e5bc9ca",
   "dependency": "redis",
   "mode": "sentinel-or-managed-ha",
   "started_at": "2026-08-10T04:20:00Z",

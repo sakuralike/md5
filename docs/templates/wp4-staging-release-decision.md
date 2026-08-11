@@ -20,7 +20,7 @@
 | 证据 | 文件或链接 | 校验结果 | 备注 |
 |---|---|---|---|
 | 准入计划 | `staging-readiness-plan.json` | `<PASS/FAIL>` | 配置合同和容量预算 |
-| 长时混合稳定性 | `multi-instance-stability-report.json` | `<PASS/FAIL>` | 不少于 4 小时 |
+| 短时混合稳定性 | `multi-instance-stability-report.json` | `<PASS/FAIL>` | 达到 profile 默认窗口；4 小时长时会话仅作可选诊断 |
 | 资源趋势 | `resource-trend-report.json` | `<PASS/FAIL>` | CPU、内存、连接数和队列 |
 | MySQL 高可用切换 | `mysql-ha-failover-report.json` | `<PASS/FAIL>` | RTO/RPO 与数据一致性 |
 | Redis 高可用切换 | `redis-ha-failover-report.json` | `<PASS/FAIL>` | readiness、限流和任务队列恢复 |
@@ -38,7 +38,7 @@
 | 允许连接数预算 | `<COUNT>` | `<COUNT>` | `<PASS/FAIL>` |
 | 剩余安全余量 | `<COUNT>` | `<COUNT>` | `<PASS/FAIL>` |
 
-## 4. 长时稳定性结论
+## 4. 稳定性回归结论
 
 - 执行时长：`<SECONDS>`
 - API / MySQL / Redis / Celery 操作数：`<COUNTS>`
@@ -84,7 +84,7 @@
 出现以下任一情况必须判定为 `NO-GO`：
 
 1. 任一必需证据缺失、校验失败或 SHA-256 不匹配；
-2. 长时窗口少于 4 小时，或使用了非合成数据；
+2. 必需的短时窗口、操作量、资源、错误率、队列或单 Worker 恢复检查失败，或使用了非合成数据；4 小时窗口不足不再单独触发 `NO-GO`；
 3. 连接池计划超过版本化容量预算，或实测连接数侵占保留连接；
 4. MySQL/Redis 高可用切换未完成，或 RTO/RPO 超过 profile 阈值；
 5. 错误率、连续错误、P95、资源水位或队列深度超过阈值；

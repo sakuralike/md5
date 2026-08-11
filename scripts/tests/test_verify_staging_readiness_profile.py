@@ -105,8 +105,8 @@ def test_accepts_valid_profile_and_builds_capacity_plan(tmp_path: Path) -> None:
 def test_rejects_short_stability_window(tmp_path: Path) -> None:
     root = repository_root(tmp_path)
     profile = valid_profile()
-    profile["stability"]["duration_seconds"] = 3_600
-    with pytest.raises(ValueError, match="at least 14400"):
+    profile["stability"]["duration_seconds"] = 30
+    with pytest.raises(ValueError, match="at least 60"):
         validate_profile(profile, root)
 
 

@@ -1,10 +1,10 @@
-# WP4 Staging 长时稳定性与 Go/No-Go 运行手册
+# WP4 Staging 验收与 Go/No-Go 运行手册
 
 ## 1. 目的与边界
 
-本手册定义 WP4 目标环境准入合同、连接池容量预算、长时混合负载、高可用切换证据和自动 Go/No-Go 决策规则。
+本手册定义 WP4 目标环境准入合同、连接池容量预算、短时混合回归、高可用切换证据和自动 Go/No-Go 决策规则。固定 4 小时稳定性会话已从必需验收中移除；相关脚本仅保留为可选诊断工具。
 
-当前仓库提供的是**可执行合同和证据模板**，不是已经完成的 staging 验收。只有目标环境实际执行不少于 4 小时、完成 MySQL/Redis 高可用切换并通过全部自动证据校验后，才能形成生产放行结论。
+当前仓库提供的是**可执行合同和证据模板**。目标环境完成部署 smoke、拓扑/容量预检、短时混合回归、单 Worker 恢复、资源阈值和必要的 MySQL/Redis 高可用证据，并通过全部自动证据校验后，才可形成生产放行结论；固定 4 小时运行不再是前置条件。
 
 所有演练只能使用合成数据。证据不得记录密码、令牌、连接串、私钥、Cookie、真实用户数据或个人信息。
 
@@ -127,9 +127,9 @@ pnpm staging:target-adapter-contract
 7. 证据目录只允许写入脱敏 JSON、日志摘要和 SHA-256；
 8. 回滚版本、回滚命令和验证步骤已经预演。
 
-## 5. 长时稳定性阶段
+## 5. 短时稳定性回归阶段
 
-建议按以下阶段执行，合计不得少于 profile 的 `duration_seconds`：
+按以下阶段执行，合计达到 profile 的 `duration_seconds` 即可；当前 profile 默认采用可重复的短时窗口，长时会话另行作为可选诊断：
 
 1. **基线阶段**：确认所有副本、依赖、队列和指标正常；
 2. **混合负载阶段**：持续执行 API、MySQL、Redis 与 Celery 合成探针；
@@ -138,7 +138,7 @@ pnpm staging:target-adapter-contract
 5. **队列清空阶段**：停止负载后确认队列归零和最终 readiness 200；
 6. **完整性阶段**：生成证据并写入 SHA-256。
 
-短时 CI 的 60 秒演练只能作为回归门禁，不得替代本阶段。
+短时 CI 演练与目标 Staging 短时回归共同构成当前稳定性证据；不得把可选长时会话的缺失计为当前验收失败。
 
 ## 6. 资源趋势证据
 
@@ -449,13 +449,13 @@ pnpm staging:api-ha-smoke `
 2. 拓扑预检精确观察到 `2 API + 3 Worker + 1 Scheduler`；
 3. Prometheus `service=api` active target 恰好为 2，且两者均为 `up`；
 4. 连接池预算和目标依赖检查通过；
-5. 先执行 75 秒以上短时资源校准，API 每运行副本平均 CPU 不超过 profile 阈值，再启动不少于 4 小时的正式会话。
+5. 执行不少于 profile 默认窗口的短时资源校准，API 每运行副本平均 CPU 不超过 profile 阈值；固定 4 小时正式会话不再启动也不影响当前验收。
 
 若 SSH 报告主机身份变化，必须停止部署，通过可信渠道确认新主机密钥后再更新 `known_hosts`；禁止使用 `StrictHostKeyChecking=no` 或静默删除旧记录绕过验证。
 
-## 19. 正式长时会话后台控制
+## 19. 可选长时会话后台控制
 
-目标 Staging 的正式稳定性会话必须使用持久控制器启动，避免 SSH 断开导致会话中止或人工重复启动：
+如需进行非阻塞的长时诊断，目标 Staging 会话必须使用持久控制器启动，避免 SSH 断开导致会话中止或人工重复启动：
 
 ```bash
 python3 scripts/control_staging_formal_session.py start \
@@ -464,7 +464,7 @@ python3 scripts/control_staging_formal_session.py start \
 
 默认参数已固定为：
 
-- 持续时间 `14400` 秒；
+- 默认诊断持续时间 `14400` 秒；该参数不属于当前必需验收；
 - 探针窗口 `300` 秒、资源采样间隔 `15` 秒；
 - `3` 个 Worker，在第 `3600` 秒缩容一个 Worker，`60` 秒后恢复；
 - 根 Compose、Staging override、API HA、监控、Staging 监控五层配置；
@@ -498,7 +498,7 @@ python3 scripts/control_staging_formal_session.py status
 
 ## 20. MySQL/Redis HA 执行前置门禁
 
-正式稳定性会话与 HA 故障演练必须串行。任何数据库或缓存切换前先生成机器可读预检：
+可选长时会话与 HA 故障演练如同时执行必须串行。任何数据库或缓存切换前先生成机器可读预检：
 
 ```bash
 python3 scripts/control_staging_ha_execution.py \

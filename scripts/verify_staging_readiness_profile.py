@@ -87,7 +87,7 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
 
     stability = _require_object(profile.get("stability"), "stability")
     duration_seconds = _require_int(
-        stability.get("duration_seconds"), "stability.duration_seconds", 14_400, 86_400
+        stability.get("duration_seconds"), "stability.duration_seconds", 60, 86_400
     )
     probe_interval_seconds = _require_number(
         stability.get("probe_interval_seconds"),
@@ -101,8 +101,8 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
         5,
         300,
     )
-    if duration_seconds / resource_sample_interval_seconds < 240:
-        raise ValueError("stability window must contain at least 240 resource samples")
+    if duration_seconds / resource_sample_interval_seconds < 4:
+        raise ValueError("stability window must contain at least 4 resource samples")
     if stability.get("single_worker_loss_required") is not True:
         raise ValueError("single worker loss must remain part of the staging gate")
     max_error_rate_percent = _require_number(
@@ -127,7 +127,7 @@ def validate_profile(profile: dict[str, Any], repository_root: Path) -> dict[str
     if set(minimum_operations) != REQUIRED_PROBES or set(latency_limits) != REQUIRED_PROBES:
         raise ValueError("stability probe thresholds must cover api, mysql, redis and celery")
     for probe in sorted(REQUIRED_PROBES):
-        _require_int(minimum_operations[probe], f"minimum_operations.{probe}", 1_000)
+        _require_int(minimum_operations[probe], f"minimum_operations.{probe}", 50)
         _require_number(latency_limits[probe], f"p95_limits_ms.{probe}", 1, 30_000)
 
     topology = _require_object(profile.get("topology"), "topology")

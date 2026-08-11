@@ -4,12 +4,12 @@
   "status": "passed",
   "environment": "staging",
   "synthetic_data_only": true,
-  "profile_sha256": "5ca25509e9c6d0cd18377aadafae1e89a9be7c96fe9ca1c9df8c8457c7f5cf89",
-  "started_at": "2026-08-10T00:00:00Z",
-  "finished_at": "2026-08-10T04:00:00Z",
-  "duration_seconds": 14400,
+  "profile_sha256": "4d76428049cf44122ed27e7161359ea02a433157625ec4fcd5efcd9f1e5bc9ca",
+  "started_at": "2026-08-11T00:00:00Z",
+  "finished_at": "2026-08-11T00:01:15Z",
+  "duration_seconds": 75,
   "sample_interval_seconds": 15,
-  "sample_count": 961,
+  "sample_count": 6,
   "coverage_percent": 100,
   "single_worker_loss": true,
   "error_rate_percent": 0,
@@ -20,19 +20,19 @@
   },
   "operations": {
     "api": {
-      "count": 10000,
+      "count": 50,
       "p95_ms": 184.2
     },
     "mysql": {
-      "count": 10000,
+      "count": 50,
       "p95_ms": 92.4
     },
     "redis": {
-      "count": 10000,
+      "count": 50,
       "p95_ms": 18.6
     },
     "celery": {
-      "count": 10000,
+      "count": 50,
       "p95_ms": 612.5
     }
   },

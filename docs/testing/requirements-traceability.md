@@ -5,7 +5,7 @@
 - 核心业务与 MVP 功能代码约 97%，本地工程与自动化准入约 99%，综合研发完成度约 89%，生产上线就绪度约 76%。
 - 发布不要求人员签字；自动结论必须由 `automated-evidence-gate` 基于真实 `target-execution`、风险阈值、回滚检查、checksum 和候选提交生成。
 - 桌面端不要求签名证书；上传和发布必须由服务端重算字节数与 SHA-256，并确认合法分发声明。
-- 当前 P0 不是缺少业务页面，而是正式 4 小时 Staging 结果、当前提交远端 CI、真实 MySQL/Redis HA 能力与切换证据。
+- 固定 4 小时 Staging 稳定性验证已按 2026-08-11 的当前决策移出必需验收，不再计为 P0；当前剩余重点是当前提交远端 CI、真实 MySQL/Redis HA 能力与切换证据、真实通知和实机兼容性。
 - `target-execution` 封存包必须同时包含 MySQL/Redis 的脱敏 `target-observation` 能力报告；缺失或使用合同夹具时不得进入 `ready-for-release`。
 
 - 更新日期：2026-08-11
@@ -313,18 +313,18 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| 至少 4 小时混合负载合同 | `infra/staging/readiness-profile.example.json`、`staging-readiness-plan.ps1` | 校验持续时长、采样周期、四类操作下限、P95/错误阈值与单 Worker 故障要求 | 参数合同完成；staging 实际执行待验收 |
+| Staging 混合负载合同 | `infra/staging/readiness-profile.example.json`、`staging-readiness-plan.ps1` | 校验默认 75 秒窗口、采样周期、四类操作下限、P95/错误阈值与单 Worker 故障要求 | 当前短时合同完成；固定 4 小时窗口已豁免 |
 | 显式 Worker 并发与连接池预算 | `.env.example`、`docker-compose.yml`、容量预算算法 | 默认 API `2 × 2`、Worker `3 × 2`、单 Scheduler；请求 `110` ≤ 允许 `136`，余量 `26`；超预算负向测试 | 静态预算完成；目标 MySQL 上限与慢查询趋势待实测 |
 | MySQL/Redis 高可用证据声明 | `docs/runbooks/wp4-staging-readiness.md`、准入配置 HA 字段 | 拒绝 standalone/single 模式，要求 RTO/RPO、JSON 证据文件名和 Markdown 运行手册 | 证据合同完成；真实切换演练待执行 |
 | 自动 Go/No-Go 证据门禁 | `docs/templates/wp4-staging-release-decision.md`、`automated-evidence-gate` | 校验目标执行、风险阈值、回滚、checksum 和候选提交；不包含人员签字栏 | 自动门禁完成；最终结论待真实目标证据 |
 | 敏感证据拒绝 | `verify_staging_readiness_profile.py` | 递归拒绝 password/token/secret/key/credential 等敏感键和值 | 自动化完成 |
-| 准入状态边界 | 生成计划 `contract-valid` / `not-run` / `pending-evidence` | 计划快照和 SHA-256 清单 | 合同验证完成，不等同于 4 小时运行或生产放行 |
+| 准入状态边界 | 生成计划 `contract-valid` / `not-run` / `pending-evidence` | 计划快照和 SHA-256 清单 | 合同验证完成，不等同于目标 Staging 短时回归或生产放行；4 小时运行不再必需 |
 
 ## 2026-08-10 WP4 第 13 次迭代补充：资源趋势与 HA 执行证据合同
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| 资源趋势 schema | `infra/staging/resource-trend-report.example.json`、`verify_staging_execution_evidence.py` | 4 小时窗口、采样覆盖、四类操作量/P95/错误率、CPU/内存峰值和队列清零校验 | 合成合同夹具通过；目标环境采集待验收 |
+| 资源趋势 schema | `infra/staging/resource-trend-report.example.json`、`verify_staging_execution_evidence.py` | profile 窗口、采样覆盖、四类操作量/P95/错误率、CPU/内存峰值和队列清零校验 | 短时合同夹具通过；目标 Staging 78 秒回归已完成 |
 | MySQL 连接预算 | `readiness-profile.example.json`、资源趋势校验器 | 峰值连接、允许连接和剩余余量精确匹配；超预算负向测试 | 机器校验完成；目标 MySQL 上限待实测 |
 | MySQL HA 切换证据 | `mysql-ha-failover-report.example.json` | 主节点变化、读写恢复、数据一致性、幂等、RTO 42 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
 | Redis HA 切换证据 | `redis-ha-failover-report.example.json` | 主节点变化、限流/Worker 恢复、队列清零、RTO 28 秒/RPO 0 合成夹具 | schema 完成；真实切换待执行 |
@@ -337,7 +337,7 @@
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
 | 目标执行源合同 | `materialize_staging_execution_evidence.py` 的资源/HA v1 schema | 严格执行组、UTC 时钟、采样和事件字段校验 | 工程入口完成；真实采集待执行 |
-| 资源采样覆盖 | 资源样本、探针窗口、Worker 丢失/恢复事件 | 推导 4 小时持续时长、961 样本、覆盖率、最大间隔、四类操作和资源趋势 | 合成适配器合同通过；目标趋势待验收 |
+| 资源采样覆盖 | 资源样本、探针窗口、Worker 丢失/恢复事件 | 推导 profile 持续时长、样本覆盖率、最大间隔、四类操作和资源趋势 | 合成适配器合同通过；固定 4 小时持续时长已从当前验收移除 |
 | HA 生命周期与回滚 | MySQL/Redis 依赖专属事件集合 | 切换触发、观测、主节点变化、应用恢复、数据/队列检查、回滚就绪的缺失/乱序负向测试 | 适配合同完成；真实 HA 待执行 |
 | 脱敏与来源完整性 | 递归敏感字段拒绝、source SHA-256、执行组和采集器 provenance | 敏感键、凭据型值、跨执行组、合成适配器冒充 target 的拒绝测试 | 自动化完成 |
 | 人工长时门禁入口 | `staging-target-execution.ps1` | readiness plan → 物化 → 最终校验 → checksum 一次完成 | 可人工触发；当前没有 target evidence |
