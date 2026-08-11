@@ -29,6 +29,7 @@ from password_detective.modules.account_privacy.router import router as account_
 from password_detective.modules.admin.router import router as admin_router
 from password_detective.modules.archives.router import router as archives_router
 from password_detective.modules.auth.router import router as auth_router
+from password_detective.modules.community.admin_router import admin_router as community_admin_router
 from password_detective.modules.community.router import router as community_router
 from password_detective.modules.desktop_updates.router import (
     admin_router as desktop_updates_admin_router,
@@ -81,7 +82,7 @@ def create_app(
     docs_url = "/docs" if resolved_settings.app_env in {"local", "test", "integration"} else None
     app = FastAPI(
         title=resolved_settings.app_name,
-        version="0.5.0",
+        version="0.5.1",
         debug=resolved_settings.app_debug,
         docs_url=docs_url,
         redoc_url=None,
@@ -134,6 +135,7 @@ def create_app(
     app.include_router(trust_cases_admin_router, prefix="/api/v1")
     app.include_router(archives_router, prefix="/api/v1")
     app.include_router(community_router, prefix="/api/v1")
+    app.include_router(community_admin_router, prefix="/api/v1")
     app.include_router(verification_router, prefix="/api/v1")
     app.include_router(reputation_router, prefix="/api/v1")
     app.include_router(risk_alerts_router, prefix="/api/v1")

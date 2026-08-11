@@ -8,6 +8,7 @@ const navigationItems = [
   { to: "/", label: "仪表盘" },
   { to: "/candidates", label: "候选审核" },
   { to: "/trust-cases", label: "举报申诉" },
+  { to: "/community", label: "社区治理" },
   { to: "/risk-alerts", label: "风险告警" },
   { to: "/desktop-releases", label: "桌面发布" },
   { to: "/audit", label: "审计日志" },

@@ -10,6 +10,8 @@ from password_detective.db.models.community import (
     CommunityComment,
     CommunityContentStatus,
     CommunityPost,
+    CommunityReport,
+    CommunityReportStatus,
 )
 from password_detective.db.models.user import User
 from password_detective.modules.auth.dependencies import Principal
@@ -23,6 +25,8 @@ from password_detective.modules.community.schemas import (
     CommunityPostDetail,
     CommunityPostListResponse,
     CommunityPostSummary,
+    CommunityReportCreateRequest,
+    CommunityReportResponse,
 )
 
 _BOARD_CATALOG: tuple[tuple[CommunityBoardCode, str, str], ...] = (
@@ -182,6 +186,76 @@ def create_comment(
     post.last_activity_at = now
     db.commit()
     return get_post(db, post.id)
+
+
+def create_report(
+    db: Session,
+    *,
+    payload: CommunityReportCreateRequest,
+    principal: Principal,
+) -> CommunityReportResponse:
+    if not principal.user.email_verified:
+        raise AppError(
+            "community.email_verification_required",
+            "提交社区举报前需要完成邮箱验证",
+            status_code=403,
+        )
+    post = db.scalar(
+        select(CommunityPost).where(
+            CommunityPost.id == payload.post_id,
+            CommunityPost.status == CommunityContentStatus.PUBLISHED,
+        )
+    )
+    if post is None:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    if payload.comment_id is not None:
+        comment = db.scalar(
+            select(CommunityComment).where(
+                CommunityComment.id == payload.comment_id,
+                CommunityComment.post_id == post.id,
+                CommunityComment.status == CommunityContentStatus.PUBLISHED,
+            )
+        )
+        if comment is None:
+            raise AppError(
+                "community.comment_not_found",
+                "被举报的评论不存在",
+                status_code=404,
+            )
+    duplicate_conditions = [
+        CommunityReport.reporter_id == principal.user.id,
+        CommunityReport.post_id == post.id,
+        CommunityReport.status == CommunityReportStatus.OPEN,
+    ]
+    if payload.comment_id is None:
+        duplicate_conditions.append(CommunityReport.comment_id.is_(None))
+    else:
+        duplicate_conditions.append(CommunityReport.comment_id == payload.comment_id)
+    duplicate = db.scalar(select(CommunityReport).where(*duplicate_conditions))
+    if duplicate is not None:
+        raise AppError(
+            "community.report_already_open",
+            "你已提交过该内容的待处理举报",
+            status_code=409,
+        )
+    report = CommunityReport(
+        reporter_id=principal.user.id,
+        post_id=post.id,
+        comment_id=payload.comment_id,
+        reason=payload.reason,
+        details=payload.details,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return CommunityReportResponse(
+        id=report.id,
+        post_id=report.post_id,
+        comment_id=report.comment_id,
+        reason=report.reason,
+        status=report.status,
+        created_at=report.created_at,
+    )
 
 
 def _require_publish_access(principal: Principal, rules_accepted: bool) -> None:

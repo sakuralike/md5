@@ -1387,6 +1387,10 @@ export interface SettingVersionMutationResponse {
 
 export type CommunityBoardCode = "general" | "recovery_guides" | "verification" | "security";
 export type CommunityContentStatus = "published" | "removed";
+export type CommunityReportReason = "spam" | "harassment" | "privacy" | "unsafe" | "other";
+export type CommunityReportStatus = "open" | "resolved" | "dismissed";
+export type CommunityReportDecision = "dismiss" | "remove_content" | "remove_and_lock";
+export type CommunityModerationAction = "lock" | "unlock" | "pin" | "unpin" | "remove" | "restore";
 
 export interface CommunityBoard {
   code: CommunityBoardCode;
@@ -1457,4 +1461,79 @@ export interface CommunityPostDetail {
   last_activity_at: string;
   created_at: string;
   comments: CommunityCommentResponse[];
+}
+
+export interface CommunityReportCreateRequest {
+  post_id: string;
+  comment_id?: string | null;
+  reason: CommunityReportReason;
+  details: string;
+}
+
+export interface CommunityReportResponse {
+  id: string;
+  post_id: string;
+  comment_id: string | null;
+  reason: CommunityReportReason;
+  status: CommunityReportStatus;
+  created_at: string;
+}
+
+export interface AdminCommunityReportSummary {
+  id: string;
+  reporter_username: string;
+  post_id: string;
+  post_title: string;
+  comment_id: string | null;
+  target_type: "post" | "comment";
+  target_excerpt: string;
+  reason: CommunityReportReason;
+  details: string;
+  status: CommunityReportStatus;
+  decision: CommunityReportDecision | null;
+  resolution_note: string | null;
+  resolved_by_username: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface AdminCommunityReportListResponse {
+  items: AdminCommunityReportSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface AdminCommunityReportResolveRequest {
+  decision: CommunityReportDecision;
+  note: string;
+}
+
+export interface AdminCommunityPostModerateRequest {
+  action: CommunityModerationAction;
+  note: string;
+}
+
+export interface AdminCommunityPostState {
+  id: string;
+  board_code: CommunityBoardCode;
+  title: string;
+  status: CommunityContentStatus;
+  is_pinned: boolean;
+  is_locked: boolean;
+  reply_count: number;
+  updated_at: string;
+}
+
+export interface AdminCommunityReportMutationResponse {
+  report: AdminCommunityReportSummary;
+  post: AdminCommunityPostState;
+  audit_id: string;
+  request_id: string | null;
+}
+
+export interface AdminCommunityPostMutationResponse {
+  post: AdminCommunityPostState;
+  audit_id: string;
+  request_id: string | null;
 }

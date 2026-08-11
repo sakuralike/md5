@@ -4,7 +4,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from password_detective.db.models.community import CommunityBoardCode
+from password_detective.db.models.community import (
+    CommunityBoardCode,
+    CommunityReportReason,
+    CommunityReportStatus,
+)
 from password_detective.db.models.user import UserRole
 
 
@@ -51,6 +55,30 @@ class CommunityCommentCreateRequest(BaseModel):
         if not normalized:
             raise ValueError("回复不能为空")
         return normalized
+
+
+class CommunityReportCreateRequest(BaseModel):
+    post_id: str = Field(min_length=1, max_length=36)
+    comment_id: str | None = Field(default=None, max_length=36)
+    reason: CommunityReportReason
+    details: str = Field(min_length=10, max_length=1000)
+
+    @field_validator("details")
+    @classmethod
+    def normalize_details(cls, value: str) -> str:
+        normalized = value.replace("\x00", "").strip()
+        if not normalized:
+            raise ValueError("举报说明不能为空")
+        return normalized
+
+
+class CommunityReportResponse(BaseModel):
+    id: str
+    post_id: str
+    comment_id: str | None
+    reason: CommunityReportReason
+    status: CommunityReportStatus
+    created_at: datetime
 
 
 class CommunityPostSummary(BaseModel):

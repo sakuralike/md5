@@ -657,3 +657,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Web 社区入口 | `/community`、`services/community.ts`、共享 API 契约 | Web typecheck、lint、Vitest 25 项通过 | 当前为公开社区 MVP；真实浏览器多端 E2E 与目标环境回归待执行 |
 
 本轮结论：社区论坛核心交流切片完成，不能等同于完整社区平台。后续按权限和运营边界补齐版主审核、举报、通知、社交关系和私信。
+
+## 2026-08-11 WP5 第 2 次迭代：社区举报与治理闭环
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 用户内容举报 | `community_reports`、`POST /api/v1/community/reports`、Web 主题/回复举报入口 | `test_verified_user_can_report_content_once`、Web typecheck/lint/Vitest | 邮箱验证、限流、幂等和重复待处理举报阻断已实现 |
+| MFA 举报审核 | `admin_router.py`、`admin_service.py`、Admin `/community` | `test_admin_resolves_comment_report_and_locks_post`、Admin 页面渲染测试 | 审核员/管理员可驳回、移除内容或移除并锁定主题；真实多角色浏览器 E2E 待目标环境回归 |
+| 主题直接治理 | 锁定/解锁、置顶/取消置顶、下架/恢复和不可变审计 | `test_admin_can_pin_remove_and_restore_post` | 单主题治理完成；批量治理、分区版主授权和危险动作再次确认尚未实现 |
+| 数据迁移 | `20260811_0027_community_moderation.py` | Alembic 前滚/回滚纳入统一门禁 | 本地 SQLite 门禁覆盖；目标 MySQL 执行仍需部署验证 |
+
+本轮结论：社区已形成“公开交流 → 用户举报 → MFA 治理 → 逻辑移除/锁定 → 审计”的最小闭环；关注、点赞、标签、通知、私信、可配置分区和批量运营仍属于后续范围。

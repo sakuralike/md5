@@ -24,10 +24,13 @@ from password_detective.modules.community.schemas import (
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostListResponse,
+    CommunityReportCreateRequest,
+    CommunityReportResponse,
 )
 from password_detective.modules.community.service import (
     create_comment,
     create_post,
+    create_report,
     get_post,
     list_boards,
     list_posts,
@@ -108,6 +111,29 @@ def community_comment_create(
             payload=payload,
             principal=principal,
         ),
+    )
+
+
+@router.post(
+    "/reports",
+    response_model=CommunityReportResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("community.report.create", limit=20, window_seconds=86400))],
+)
+def community_report_create(
+    payload: CommunityReportCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityReportResponse:
+    return _create_with_idempotency(
+        db,
+        scope="community.report.create",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=CommunityReportResponse,
+        create=lambda: create_report(db, payload=payload, principal=principal),
     )
 
 

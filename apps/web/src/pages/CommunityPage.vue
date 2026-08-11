@@ -4,6 +4,7 @@ import type {
   CommunityBoardCode,
   CommunityPostDetail,
   CommunityPostSummary,
+  CommunityReportReason,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref, watch } from "vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,11 +14,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createCommunityComment,
   createCommunityIdempotencyKey,
   createCommunityPost,
+  createCommunityReport,
   getCommunityPost,
   listCommunityBoards,
   listCommunityPosts,
@@ -38,6 +47,9 @@ const title = ref("");
 const content = ref("");
 const comment = ref("");
 const rulesAccepted = ref(false);
+const reportTarget = ref<{ type: "post" | "comment"; commentId: string | null } | null>(null);
+const reportReason = ref<CommunityReportReason>("other");
+const reportDetails = ref("");
 
 const selectedBoardName = computed(() => {
   if (!selectedBoard.value) return "全部主题";
@@ -84,6 +96,8 @@ async function openPost(post: CommunityPostSummary): Promise<void> {
   error.value = "";
   try {
     selectedPost.value = await getCommunityPost(post.id);
+    reportTarget.value = null;
+    reportDetails.value = "";
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "主题详情加载失败";
   } finally {
@@ -140,6 +154,57 @@ async function submitComment(): Promise<void> {
   } finally {
     submitting.value = false;
   }
+}
+
+
+function beginReport(type: "post" | "comment", commentId: string | null = null): void {
+  reportTarget.value = { type, commentId };
+  reportReason.value = "other";
+  reportDetails.value = "";
+  error.value = "";
+  success.value = "";
+}
+
+async function submitReport(): Promise<void> {
+  if (
+    !selectedPost.value ||
+    !reportTarget.value ||
+    !auth.isAuthenticated ||
+    !auth.user?.email_verified ||
+    reportDetails.value.trim().length < 10
+  ) return;
+  submitting.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    await createCommunityReport(
+      {
+        post_id: selectedPost.value.id,
+        comment_id: reportTarget.value.commentId,
+        reason: reportReason.value,
+        details: reportDetails.value.trim(),
+      },
+      auth.accessToken,
+      createCommunityIdempotencyKey("report"),
+    );
+    reportTarget.value = null;
+    reportDetails.value = "";
+    success.value = "举报已提交，社区治理人员会在管理端复核。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "举报提交失败";
+  } finally {
+    submitting.value = false;
+  }
+}
+
+function reportReasonLabel(reason: CommunityReportReason): string {
+  return {
+    spam: "垃圾广告",
+    harassment: "骚扰攻击",
+    privacy: "隐私泄露",
+    unsafe: "不安全内容",
+    other: "其他问题",
+  }[reason];
 }
 
 function formatDate(value: string): string {
@@ -269,7 +334,18 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
               <CardDescription>{{ selectedPost.author.username }} · {{ formatDate(selectedPost.created_at) }}</CardDescription>
             </CardHeader>
             <CardContent class="space-y-5">
-              <p class="whitespace-pre-wrap break-words text-sm leading-7">{{ selectedPost.content }}</p>
+              <div class="space-y-3">
+                <p class="whitespace-pre-wrap break-words text-sm leading-7">{{ selectedPost.content }}</p>
+                <Button
+                  v-if="auth.isAuthenticated && auth.user?.email_verified"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  @click="beginReport('post')"
+                >
+                  举报主题
+                </Button>
+              </div>
               <div class="space-y-3 border-t pt-4">
                 <div class="flex items-center justify-between">
                   <h2 class="font-medium">回复（{{ selectedPost.comments.length }}）</h2>
@@ -282,7 +358,57 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
                     <span>{{ formatDate(item.created_at) }}</span>
                   </div>
                   <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{{ item.content }}</p>
+                  <Button
+                    v-if="auth.isAuthenticated && auth.user?.email_verified"
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    class="mt-2"
+                    @click="beginReport('comment', item.id)"
+                  >
+                    举报回复
+                  </Button>
                 </div>
+              </div>
+              <div v-if="reportTarget" class="space-y-4 rounded-lg border bg-muted/30 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 class="font-medium">举报{{ reportTarget.type === "post" ? "主题" : "回复" }}</h3>
+                    <p class="text-sm text-muted-foreground">请说明具体风险，不要在举报中重复粘贴敏感数据。</p>
+                  </div>
+                  <Button type="button" size="sm" variant="ghost" @click="reportTarget = null">取消</Button>
+                </div>
+                <div class="space-y-2">
+                  <Label for="community-report-reason">举报原因</Label>
+                  <Select v-model="reportReason">
+                    <SelectTrigger id="community-report-reason">
+                      <SelectValue :placeholder="reportReasonLabel(reportReason)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="spam">垃圾广告</SelectItem>
+                      <SelectItem value="harassment">骚扰攻击</SelectItem>
+                      <SelectItem value="privacy">隐私泄露</SelectItem>
+                      <SelectItem value="unsafe">不安全内容</SelectItem>
+                      <SelectItem value="other">其他问题</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div class="space-y-2">
+                  <Label for="community-report-details">问题说明</Label>
+                  <Textarea
+                    id="community-report-details"
+                    v-model="reportDetails"
+                    placeholder="请用至少 10 个字说明需要复核的原因…"
+                    :maxlength="1000"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  :disabled="submitting || reportDetails.trim().length < 10"
+                  @click="submitReport"
+                >
+                  {{ submitting ? "提交中…" : "提交举报" }}
+                </Button>
               </div>
               <div v-if="auth.isAuthenticated && auth.user?.email_verified && !selectedPost.is_locked" class="space-y-3 border-t pt-4">
                 <Label for="community-comment">写回复</Label>
@@ -297,7 +423,7 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
           <Card>
             <CardHeader>
               <CardTitle>发布新主题</CardTitle>
-              <CardDescription>首轮迁移仅开放主题与回复；私信、关注、点赞和复杂审核将在后续迭代中接入。</CardDescription>
+              <CardDescription>当前已开放主题、回复和内容举报；私信、关注与点赞将在后续迭代中接入。</CardDescription>
             </CardHeader>
             <CardContent v-if="auth.isAuthenticated && auth.user?.email_verified" class="space-y-4">
               <div class="space-y-2">

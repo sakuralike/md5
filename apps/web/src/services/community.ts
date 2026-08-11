@@ -5,10 +5,12 @@ import type {
   CommunityPostCreateRequest,
   CommunityPostDetail,
   CommunityPostListResponse,
+  CommunityReportCreateRequest,
+  CommunityReportResponse,
 } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
-export function createCommunityIdempotencyKey(kind: "post" | "comment"): string {
+export function createCommunityIdempotencyKey(kind: "post" | "comment" | "report"): string {
   return `web-community-${kind}-${crypto.randomUUID()}`;
 }
 
@@ -52,6 +54,22 @@ export function createCommunityComment(
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
     `/community/posts/${postId}/comments`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function createCommunityReport(
+  payload: CommunityReportCreateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityReportResponse> {
+  return apiRequest<CommunityReportResponse>(
+    "/community/reports",
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },

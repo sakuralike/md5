@@ -23,6 +23,35 @@ class CommunityContentStatus(StrEnum):
     REMOVED = "removed"
 
 
+class CommunityReportReason(StrEnum):
+    SPAM = "spam"
+    HARASSMENT = "harassment"
+    PRIVACY = "privacy"
+    UNSAFE = "unsafe"
+    OTHER = "other"
+
+
+class CommunityReportStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class CommunityReportDecision(StrEnum):
+    DISMISS = "dismiss"
+    REMOVE_CONTENT = "remove_content"
+    REMOVE_AND_LOCK = "remove_and_lock"
+
+
+class CommunityModerationAction(StrEnum):
+    LOCK = "lock"
+    UNLOCK = "unlock"
+    PIN = "pin"
+    UNPIN = "unpin"
+    REMOVE = "remove"
+    RESTORE = "restore"
+
+
 class CommunityPost(Base):
     __tablename__ = "community_posts"
 
@@ -76,6 +105,47 @@ class CommunityComment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityReport(Base):
+    __tablename__ = "community_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    reporter_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    post_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    )
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_comments.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    reason: Mapped[CommunityReportReason] = mapped_column(
+        Enum(CommunityReportReason, native_enum=False, length=24), index=True
+    )
+    details: Mapped[str] = mapped_column(Text)
+    status: Mapped[CommunityReportStatus] = mapped_column(
+        Enum(CommunityReportStatus, native_enum=False, length=16),
+        default=CommunityReportStatus.OPEN,
+        index=True,
+    )
+    decision: Mapped[CommunityReportDecision | None] = mapped_column(
+        Enum(CommunityReportDecision, native_enum=False, length=24), nullable=True
+    )
+    resolved_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
