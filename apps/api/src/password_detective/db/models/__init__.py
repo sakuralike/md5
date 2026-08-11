@@ -77,6 +77,8 @@ from password_detective.db.models.trust_case import (
     TrustCaseStatus,
 )
 from password_detective.db.models.user import User, UserRole, UserStatus
+from password_detective.db.models.user_growth_event import UserGrowthEvent
+from password_detective.db.models.user_level_profile import UserLevelProfile
 from password_detective.db.models.user_session import UserSession
 from password_detective.db.models.verification import (
     CandidateFeedback,
@@ -149,6 +151,8 @@ __all__ = [
     "TrustCaseNotificationStatus",
     "TrustCaseStatus",
     "User",
+    "UserGrowthEvent",
+    "UserLevelProfile",
     "UserRole",
     "UserSession",
     "UserStatus",

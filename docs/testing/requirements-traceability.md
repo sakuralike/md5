@@ -381,3 +381,15 @@
 | 独立生产秘密和密钥环合法性 | `manage_production_secrets.py init/verify` | 初始化、占位值拒绝、密钥环/连接地址一致性测试 | 通过 |
 | 加密备份完整性 | Scrypt + Fernet `.pdsb` | 明文缺失、错误口令拒绝、恢复字节一致 | 通过 |
 | 安全轮换 | `rotate-candidate` + `rotate_candidate_secrets.py` | 轮换前备份、保留旧版本、恢复旧状态 | 工程通过，真实数据库 apply 待执行 |
+
+
+## 2026-08-11 WP4 第 29 次迭代补充：完整用户等级系统
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 等级与积分/信誉/角色分离 | `UserGrowthEvent`、`UserLevelProfile`、`levels.py` | `test_user_levels.py`、`test_m4_reputation_center.py` | 已实现；升级不改变 `UserRole` |
+| 成长奖励幂等 | 登录日、验证贡献、有效验证业务引用唯一 | 重复登录、重复投影、自动晋级测试 | 已实现 |
+| 奖励失效与恢复 | `adjustments.py` 追加 `growth.reward.*` 补偿 | `test_m4_reward_compensation.py` 净值与事件数量断言 | 已实现 |
+| 等级规则治理 | `OperationalSettingsSnapshot.user_levels`、发布/回滚重建 | `test_n2_admin_settings.py` 顺序校验、规则发布、审计数量 | 已实现 |
+| 服务端权益 | `require_submission_entitlement`、`daily_reveal_quota_for_user` | 提交拒绝、额度基线/等级提升测试 | 已实现 |
+| 用户与管理界面 | Web `ReputationPage.vue`、Admin `SystemSettingsPage.vue` / `UserGovernancePage.vue` | Vitest 渲染/服务测试、TypeScript 检查 | 已实现 |

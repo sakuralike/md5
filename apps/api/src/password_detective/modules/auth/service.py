@@ -38,6 +38,10 @@ from password_detective.modules.auth.schemas import (
     TokenResponse,
 )
 from password_detective.modules.auth.totp import verify_user_totp
+from password_detective.modules.reputation.levels import (
+    DAILY_ACTIVITY_GROWTH,
+    record_growth_event,
+)
 
 MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
@@ -174,6 +178,14 @@ def login_user(
         mfa_verified_at=now if mfa_verified else None,
     )
     db.add(session)
+    record_growth_event(
+        db,
+        user_id=user.id,
+        amount=DAILY_ACTIVITY_GROWTH,
+        event_type="activity.login_day",
+        reference_id=now.date().isoformat(),
+        reason_code="growth.daily_activity",
+    )
     write_audit_log(
         db,
         actor_id=user.id,

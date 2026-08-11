@@ -26,6 +26,7 @@ from password_detective.modules.admin.setting_schemas import (
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.auth.reauthentication import consume_reauthentication_grant
+from password_detective.modules.reputation.levels import rebuild_all_level_profiles
 
 
 def _snapshot_hash(snapshot: OperationalSettingsSnapshot) -> str:
@@ -240,6 +241,8 @@ def publish_setting_version(
     record.reason_code = payload.reason_code.value
     snapshot = OperationalSettingsSnapshot.model_validate(record.snapshot_json)
     _apply_snapshot(db, snapshot=snapshot, actor_id=principal.user.id)
+    db.flush()
+    rebuilt_level_profiles = rebuild_all_level_profiles(db)
     audit = write_audit_log(
         db,
         actor_id=principal.user.id,
@@ -253,6 +256,7 @@ def publish_setting_version(
             "previous_version_id": current_id,
             "snapshot_hash": record.snapshot_hash,
             "reason_code": record.reason_code,
+            "rebuilt_level_profiles": rebuilt_level_profiles,
         },
     )
     db.commit()
@@ -306,6 +310,8 @@ def rollback_setting_version(
     db.flush()
     snapshot = OperationalSettingsSnapshot.model_validate(record.snapshot_json)
     _apply_snapshot(db, snapshot=snapshot, actor_id=principal.user.id)
+    db.flush()
+    rebuilt_level_profiles = rebuild_all_level_profiles(db)
     audit = write_audit_log(
         db,
         actor_id=principal.user.id,
@@ -320,6 +326,7 @@ def rollback_setting_version(
             "rollback_of_id": target.id,
             "snapshot_hash": record.snapshot_hash,
             "reason_code": record.reason_code,
+            "rebuilt_level_profiles": rebuilt_level_profiles,
         },
     )
     db.commit()

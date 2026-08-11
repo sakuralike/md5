@@ -10,6 +10,7 @@ from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.submission import Submission
+from password_detective.modules.admin.setting_schemas import default_user_levels
 
 REGISTER_PAYLOAD = {
     "username": "archive_detective",
@@ -197,14 +198,31 @@ def test_reveal_requires_verified_candidate_enforces_quota_and_audits(client):
         candidate.confidence_score = 0.8
         db.commit()
 
-    for expected_remaining in range(4, -1, -1):
-        reveal = client.post(
-            f"/api/v1/archives/{created['archive_id']}/reveal", headers=headers
-        )
-        assert reveal.status_code == 200
-        assert reveal.json()["password"] == "Synthetic-ZIP-Password!"
-        assert reveal.json()["remaining_daily_quota"] == expected_remaining
-        assert reveal.headers["cache-control"] == "no-store"
+    default_level_quota = default_user_levels()[0].daily_reveal_quota
+    with client.app.state.database.session_factory() as db:
+        submission = db.get(Submission, created["submission_id"])
+        assert submission is not None
+        for index in range(default_level_quota - 1):
+            db.add(
+                AuditLog(
+                    actor_id=submission.user_id,
+                    action="archive.password_revealed",
+                    target_type="password_candidate",
+                    target_id=created["candidate_id"],
+                    result="success",
+                    request_id=f"synthetic-quota-{index}",
+                    details={"archive_id": created["archive_id"]},
+                )
+            )
+        db.commit()
+
+    reveal = client.post(
+        f"/api/v1/archives/{created['archive_id']}/reveal", headers=headers
+    )
+    assert reveal.status_code == 200
+    assert reveal.json()["password"] == "Synthetic-ZIP-Password!"
+    assert reveal.json()["remaining_daily_quota"] == 0
+    assert reveal.headers["cache-control"] == "no-store"
 
     exceeded = client.post(f"/api/v1/archives/{created['archive_id']}/reveal", headers=headers)
     assert exceeded.status_code == 429
@@ -215,7 +233,7 @@ def test_reveal_requires_verified_candidate_enforces_quota_and_audits(client):
                 select(AuditLog).where(AuditLog.action == "archive.password_revealed")
             )
         )
-        assert len(audits) == 5
+        assert len(audits) == default_level_quota
         assert all("Synthetic-ZIP-Password!" not in str(item.details) for item in audits)
 
 

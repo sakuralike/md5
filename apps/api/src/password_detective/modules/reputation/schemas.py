@@ -7,6 +7,50 @@ from pydantic import BaseModel
 from password_detective.db.models.points_ledger import PointsLedgerStatus
 
 
+class UserLevelEntitlements(BaseModel):
+    daily_reveal_quota: int
+    can_submit: bool
+
+
+class UserLevelSummary(BaseModel):
+    code: str
+    name: str
+    description: str
+    min_growth_points: int
+    entitlements: UserLevelEntitlements
+
+
+class UserLevelProfileResponse(BaseModel):
+    growth_points: int
+    current: UserLevelSummary
+    next: UserLevelSummary | None
+    progress_percent: int
+    points_to_next_level: int
+    rule_hash: str
+
+
+class UserLevelCatalogResponse(BaseModel):
+    items: list[UserLevelSummary]
+    rule_hash: str
+
+
+class GrowthEventItem(BaseModel):
+    id: str
+    amount: int
+    event_type: str
+    reference_id: str
+    reason_code: str
+    rule_version: str
+    created_at: datetime
+
+
+class GrowthEventsResponse(BaseModel):
+    items: list[GrowthEventItem]
+    page: int
+    page_size: int
+    total: int
+
+
 class PointsSummary(BaseModel):
     available: int
     pending: int
@@ -31,6 +75,7 @@ class TrustProfileResponse(BaseModel):
     points: PointsSummary
     feedback: FeedbackSummary
     contributions: ContributionSummary
+    level: UserLevelProfileResponse
 
 
 class PointsLedgerItem(BaseModel):

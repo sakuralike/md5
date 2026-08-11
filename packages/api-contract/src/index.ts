@@ -352,6 +352,50 @@ export interface ContributionSummary {
   verified: number;
 }
 
+export interface UserLevelEntitlements {
+  daily_reveal_quota: number;
+  can_submit: boolean;
+}
+
+export interface UserLevelSummary {
+  code: string;
+  name: string;
+  description: string;
+  min_growth_points: number;
+  entitlements: UserLevelEntitlements;
+}
+
+export interface UserLevelProfileResponse {
+  growth_points: number;
+  current: UserLevelSummary;
+  next: UserLevelSummary | null;
+  progress_percent: number;
+  points_to_next_level: number;
+  rule_hash: string;
+}
+
+export interface UserLevelCatalogResponse {
+  items: UserLevelSummary[];
+  rule_hash: string;
+}
+
+export interface GrowthEventItem {
+  id: string;
+  amount: number;
+  event_type: string;
+  reference_id: string;
+  reason_code: string;
+  rule_version: string;
+  created_at: string;
+}
+
+export interface GrowthEventsResponse {
+  items: GrowthEventItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 export interface TrustProfileResponse {
   reputation_score: number;
   reputation_min: number;
@@ -359,6 +403,7 @@ export interface TrustProfileResponse {
   points: PointsSummary;
   feedback: FeedbackSummary;
   contributions: ContributionSummary;
+  level: UserLevelProfileResponse;
 }
 
 export interface PointsLedgerItem {
@@ -1159,6 +1204,7 @@ export interface AdminUserListResponse {
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
+  level: UserLevelProfileResponse;
   total_session_count: number;
   submission_count: number;
   trust_case_count: number;
@@ -1253,18 +1299,28 @@ export type SettingChangeReasonCode =
   | "incident_response"
   | "rollback";
 
+export interface UserLevelDefinition {
+  code: string;
+  name: string;
+  description: string;
+  min_growth_points: number;
+  daily_reveal_quota: number;
+  can_submit: boolean;
+}
+
 export interface OperationalSettingsSnapshot {
   daily_reveal_quota: number;
   reauthentication_ttl_minutes: number;
   privacy_deletion_grace_hours: number;
   desktop_min_client_version: string;
   desktop_update_download_cache_seconds: number;
+  user_levels: UserLevelDefinition[];
 }
 
 export interface SettingDifference {
   key: keyof OperationalSettingsSnapshot;
-  previous: number | string | null;
-  current: number | string;
+  previous: number | string | UserLevelDefinition[] | null;
+  current: number | string | UserLevelDefinition[];
 }
 
 export interface SettingVersionSummary {

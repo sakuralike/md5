@@ -31,6 +31,11 @@ from password_detective.modules.correlation.analysis import (
 from password_detective.modules.reputation.adjustments import (
     reconcile_candidate_rewards,
 )
+from password_detective.modules.reputation.levels import (
+    ACCEPTED_VERIFICATION_GROWTH,
+    VERIFIED_CONTRIBUTION_GROWTH,
+    record_growth_event,
+)
 from password_detective.modules.reputation.service import (
     CONTRIBUTION_VERIFIED_REPUTATION,
     VERIFICATION_ACCEPTED_REPUTATION,
@@ -453,6 +458,14 @@ def settle_first_verification_rewards(
             reference_id=first_submission.id,
             reason_code="reputation.valid_contribution",
         )
+        record_growth_event(
+            db,
+            user_id=first_submission.user_id,
+            amount=VERIFIED_CONTRIBUTION_GROWTH,
+            event_type="contribution.verified",
+            reference_id=first_submission.id,
+            reason_code="growth.valid_contribution",
+        )
 
     successful_feedbacks = list(
         db.scalars(
@@ -489,6 +502,14 @@ def settle_first_verification_rewards(
             event_type="verification.accepted",
             reference_id=feedback.id,
             reason_code="reputation.valid_verification",
+        )
+        record_growth_event(
+            db,
+            user_id=feedback.user_id,
+            amount=ACCEPTED_VERIFICATION_GROWTH,
+            event_type="verification.accepted",
+            reference_id=feedback.id,
+            reason_code="growth.valid_verification",
         )
 
 

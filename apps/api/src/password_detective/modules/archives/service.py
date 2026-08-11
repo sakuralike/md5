@@ -38,6 +38,10 @@ from password_detective.modules.archives.schemas import (
 )
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.reputation.levels import (
+    daily_reveal_quota_for_user,
+    require_submission_entitlement,
+)
 from password_detective.modules.verification.service import (
     has_ever_been_verified,
     summarize_feedbacks,
@@ -274,6 +278,7 @@ def create_submission(
     context: ClientContext,
     idempotency_key: str,
 ) -> SubmissionResponse:
+    require_submission_entitlement(db, user_id=principal.user.id)
     fingerprints = normalize_fingerprints(payload.fingerprints)
     predicates = [
         and_(
@@ -452,8 +457,11 @@ def reveal_best_candidate(
             AuditLog.result == "success",
         )
     ) or 0
-    daily_reveal_quota = get_operational_setting(
+    baseline_quota = get_operational_setting(
         db, "daily_reveal_quota", settings.daily_reveal_quota
+    )
+    daily_reveal_quota = daily_reveal_quota_for_user(
+        db, user_id=principal.user.id, baseline=baseline_quota
     )
     if used >= daily_reveal_quota:
         raise AppError(

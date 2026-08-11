@@ -437,6 +437,8 @@ onMounted(() => void loadUsers());
               <div><dt class="text-slate-500">MFA</dt><dd class="font-medium text-slate-900">{{ selected.totp_enabled ? "已启用" : "未启用" }}</dd></div>
               <div><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900">{{ formatDate(selected.created_at) }}</dd></div>
               <div><dt class="text-slate-500">最近活跃</dt><dd class="font-medium text-slate-900">{{ formatDate(selected.last_active_at) }}</dd></div>
+              <div><dt class="text-muted-foreground">用户等级</dt><dd class="font-medium text-foreground">{{ selected.level.current.name }}</dd></div>
+              <div><dt class="text-muted-foreground">成长值</dt><dd class="font-medium text-foreground">{{ selected.level.growth_points }}</dd></div>
             </dl>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">

@@ -15,7 +15,13 @@ from password_detective.db.models.reward_adjustment_event import (
     RewardKind,
 )
 from password_detective.db.models.submission import Submission
+from password_detective.db.models.user_growth_event import UserGrowthEvent
 from password_detective.db.models.verification import CandidateFeedback
+from password_detective.modules.reputation.levels import (
+    ACCEPTED_VERIFICATION_GROWTH,
+    VERIFIED_CONTRIBUTION_GROWTH,
+    record_growth_event,
+)
 from password_detective.modules.reputation.service import apply_reputation_event
 
 REWARD_COMPENSATION_RULE_VERSION = "reward-compensation-v1"
@@ -91,7 +97,29 @@ def reconcile_candidate_rewards(
             - source.original_reputation
             - int(prior_reputation)
         )
-        if points_delta == 0 and reputation_delta == 0:
+        original_growth = (
+            VERIFIED_CONTRIBUTION_GROWTH
+            if source.reward_kind == RewardKind.CONTRIBUTION
+            else ACCEPTED_VERIFICATION_GROWTH
+        )
+        prior_growth = db.scalar(
+            select(func.coalesce(func.sum(UserGrowthEvent.amount), 0))
+            .join(
+                RewardAdjustmentEvent,
+                RewardAdjustmentEvent.id == UserGrowthEvent.reference_id,
+            )
+            .where(
+                RewardAdjustmentEvent.candidate_id == candidate_id,
+                RewardAdjustmentEvent.user_id == source.user_id,
+                RewardAdjustmentEvent.reward_kind == source.reward_kind,
+                RewardAdjustmentEvent.source_reference_id == source.reference_id,
+                UserGrowthEvent.event_type.like("growth.reward.%"),
+            )
+        )
+        growth_delta = (
+            original_growth * desired_multiplier - original_growth - int(prior_growth or 0)
+        )
+        if points_delta == 0 and reputation_delta == 0 and growth_delta == 0:
             continue
 
         event_type = f"reward.{source.reward_kind.value}.{direction.value}"
@@ -121,6 +149,17 @@ def reconcile_candidate_rewards(
                     status=PointsLedgerStatus.POSTED,
                     settled_at=now,
                 )
+            )
+
+        if growth_delta != 0:
+            record_growth_event(
+                db,
+                user_id=source.user_id,
+                amount=growth_delta,
+                event_type=f"growth.{event_type}",
+                reference_id=adjustment.id,
+                reason_code=f"growth.{direction.value}",
+                rule_version=REWARD_COMPENSATION_RULE_VERSION,
             )
 
         if source.has_reputation_event:

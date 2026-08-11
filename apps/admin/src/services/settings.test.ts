@@ -18,6 +18,16 @@ const snapshot = {
   privacy_deletion_grace_hours: 72,
   desktop_min_client_version: "1.2.3",
   desktop_update_download_cache_seconds: 3600,
+  user_levels: [
+    {
+      code: "rookie",
+      name: "新手侦探",
+      description: "合成测试等级",
+      min_growth_points: 0,
+      daily_reveal_quota: 20,
+      can_submit: true,
+    },
+  ],
 };
 
 describe("admin settings service", () => {

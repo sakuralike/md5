@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import UserRole, UserStatus
+from password_detective.modules.reputation.schemas import UserLevelProfileResponse
 
 
 class AdminUserStatusReasonCode(StrEnum):
@@ -79,6 +80,7 @@ class AdminUserListResponse(BaseModel):
 
 
 class AdminUserDetail(AdminUserListItem):
+    level: UserLevelProfileResponse
     total_session_count: int
     submission_count: int
     trust_case_count: int

@@ -57,6 +57,11 @@ function eventLabel(eventType: string): string {
     "reward.verification.invalidate": "验证奖励扣回",
     "reward.contribution.restore": "贡献奖励恢复",
     "reward.verification.restore": "验证奖励恢复",
+    "activity.login_day": "每日活跃",
+    "growth.reward.contribution.invalidate": "有效贡献成长值扣回",
+    "growth.reward.verification.invalidate": "有效验证成长值扣回",
+    "growth.reward.contribution.restore": "有效贡献成长值恢复",
+    "growth.reward.verification.restore": "有效验证成长值恢复",
   }[eventType] ?? eventType;
 }
 
@@ -70,8 +75,8 @@ function scoreText(profile: TrustProfileResponse): string {
     <div class="actions">
       <div>
         <div class="eyebrow">用户中心</div>
-        <h1 class="page-title">积分与信誉</h1>
-        <p class="lead">积分用于激励结算，信誉用于风控判断；两者独立记录且不可互换。</p>
+        <h1 class="page-title">用户等级、积分与信誉</h1>
+        <p class="lead">成长值决定长期等级权益；积分用于激励结算，信誉用于风控判断，三者独立记录。</p>
       </div>
       <Button type="button" variant="outline" :disabled="loading" @click="load">刷新</Button>
     </div>
@@ -80,7 +85,30 @@ function scoreText(profile: TrustProfileResponse): string {
     <p v-if="error" class="error" role="alert" aria-live="assertive">{{ error }}</p>
 
     <template v-if="data">
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <article class="card stack compact-stack sm:col-span-2 xl:col-span-1">
+          <div class="actions">
+            <span class="eyebrow">用户等级</span>
+            <span class="badge">{{ data.profile.level.current.name }}</span>
+          </div>
+          <strong class="text-2xl font-semibold sm:text-3xl">
+            {{ data.profile.level.growth_points }} 成长值
+          </strong>
+          <Progress
+            class="h-2.5 bg-muted"
+            :model-value="data.profile.level.progress_percent"
+            :max="100"
+            aria-label="用户等级成长进度"
+          />
+          <small v-if="data.profile.level.next">
+            距 {{ data.profile.level.next.name }} 还需 {{ data.profile.level.points_to_next_level }} 成长值
+          </small>
+          <small v-else>已达到当前最高等级</small>
+          <small>
+            每日揭示 {{ data.profile.level.current.entitlements.daily_reveal_quota }} 次 ·
+            {{ data.profile.level.current.entitlements.can_submit ? "可提交档案" : "暂停提交档案" }}
+          </small>
+        </article>
         <article class="card stack compact-stack">
           <span class="eyebrow">信誉分</span>
           <strong class="text-2xl font-semibold sm:text-3xl">{{ scoreText(data.profile) }}</strong>
@@ -116,7 +144,7 @@ function scoreText(profile: TrustProfileResponse): string {
         </article>
       </div>
 
-      <div class="grid items-start gap-5 lg:grid-cols-2">
+      <div class="grid items-start gap-5 lg:grid-cols-3">
         <div class="card stack">
           <h2>积分流水</h2>
           <div v-if="data.points.items.length === 0" class="empty-state">暂无积分流水</div>
@@ -147,6 +175,22 @@ function scoreText(profile: TrustProfileResponse): string {
               <span class="badge">{{ item.amount > 0 ? "+" : "" }}{{ item.amount }}</span>
             </div>
             <span>{{ item.previous_score }} → {{ item.next_score }}</span>
+            <small class="muted">{{ item.rule_version }} · {{ formatDate(item.created_at) }}</small>
+          </article>
+        </div>
+
+        <div class="card stack">
+          <h2>成长值流水</h2>
+          <div v-if="data.growth.items.length === 0" class="empty-state">暂无成长值变更</div>
+          <article
+            v-for="item in data.growth.items"
+            :key="item.id"
+            class="grid gap-2 border-t border-border/60 py-3.5"
+          >
+            <div class="actions">
+              <strong>{{ eventLabel(item.event_type) }}</strong>
+              <span class="badge">{{ item.amount > 0 ? "+" : "" }}{{ item.amount }}</span>
+            </div>
             <small class="muted">{{ item.rule_version }} · {{ formatDate(item.created_at) }}</small>
           </article>
         </div>

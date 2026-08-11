@@ -35,6 +35,7 @@ from password_detective.modules.admin.user_schemas import (
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.auth.reauthentication import consume_reauthentication_grant
+from password_detective.modules.reputation.levels import get_user_level_profile
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +200,7 @@ def get_admin_user(db: Session, user_id: str) -> AdminUserDetail:
     )
     return AdminUserDetail(
         **base.model_dump(),
+        level=get_user_level_profile(db, user_id=user.id),
         total_session_count=total_session_count,
         submission_count=_count(db, Submission, Submission.user_id == user.id),
         trust_case_count=_count(db, TrustCase, TrustCase.reporter_id == user.id),

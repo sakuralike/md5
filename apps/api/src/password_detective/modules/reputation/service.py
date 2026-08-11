@@ -14,6 +14,7 @@ from password_detective.db.models.verification import (
     VerificationEvidenceEvent,
 )
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.reputation.levels import get_user_level_profile
 from password_detective.modules.reputation.schemas import (
     ContributionSummary,
     FeedbackSummary,
@@ -166,6 +167,7 @@ def get_trust_profile(db: Session, *, principal: Principal) -> TrustProfileRespo
             total=contribution_total,
             verified=verified_contributions,
         ),
+        level=get_user_level_profile(db, user_id=user_id),
     )
 
 

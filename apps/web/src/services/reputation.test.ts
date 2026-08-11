@@ -11,7 +11,7 @@ function jsonResponse(body: unknown): Response {
 describe("web trust center", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("loads private summary and all three event streams with authorization", async () => {
+  it("loads the private summary and all four event streams with authorization", async () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("trust-profile")) {
@@ -29,7 +29,7 @@ describe("web trust center", () => {
     const result = await loadTrustCenter("access-token");
 
     expect(result.profile.reputation_score).toBe(53);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     const paths = fetchMock.mock.calls.map(([url]) => new URL(String(url), "http://synthetic.local").pathname);
     expect(paths).toEqual(
       expect.arrayContaining([
@@ -37,6 +37,7 @@ describe("web trust center", () => {
         expect.stringContaining("/me/points"),
         expect.stringContaining("/me/reputation"),
         expect.stringContaining("/me/feedback"),
+        expect.stringContaining("/me/growth-events"),
       ]),
     );
     for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {

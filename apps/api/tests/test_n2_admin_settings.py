@@ -50,14 +50,19 @@ def _admin_session(client, suffix: str, role: UserRole = UserRole.ADMIN):
     return {"Authorization": f"Bearer {authenticated.json()['access_token']}"}, user_id, secret
 
 
-def _snapshot(quota: int) -> dict[str, int | str]:
-    return {
+def _snapshot(
+    quota: int, *, user_levels: list[dict[str, object]] | None = None
+) -> dict[str, object]:
+    snapshot: dict[str, object] = {
         "daily_reveal_quota": quota,
         "reauthentication_ttl_minutes": 5,
         "privacy_deletion_grace_hours": 168,
         "desktop_min_client_version": "0.1.0",
         "desktop_update_download_cache_seconds": 86400,
     }
+    if user_levels is not None:
+        snapshot["user_levels"] = user_levels
+    return snapshot
 
 
 def _reauth(client, headers: dict[str, str], secret: str) -> str:
@@ -199,3 +204,79 @@ def test_setting_publish_conflict_preserves_grant_and_rollback_creates_new_versi
     assert versions.json()["published_version_id"] == rollback_version["id"]
     with client.app.state.database.session_factory() as db:
         assert db.get(SystemSetting, "daily_reveal_quota").value_json == {"value": 7}
+
+
+def test_level_rules_publish_rebuilds_profiles_and_rejects_invalid_thresholds(client):
+    headers, admin_id, secret = _admin_session(client, "level_rules")
+    levels = [
+        {
+            "code": "rookie",
+            "name": "新手侦探",
+            "description": "合成测试基础等级。",
+            "min_growth_points": 0,
+            "daily_reveal_quota": 10,
+            "can_submit": True,
+        },
+        {
+            "code": "active",
+            "name": "活跃侦探",
+            "description": "完成当日活跃后的合成测试等级。",
+            "min_growth_points": 5,
+            "daily_reveal_quota": 35,
+            "can_submit": True,
+        },
+    ]
+    created = client.post(
+        "/api/v1/admin/settings/versions",
+        headers={**headers, "Idempotency-Key": "settings-level-create-0001"},
+        json={
+            "expected_base_version_id": None,
+            "reason_code": "product_policy",
+            "snapshot": _snapshot(20, user_levels=levels),
+        },
+    )
+    assert created.status_code == 201
+    draft = created.json()["version"]
+    level_difference = next(
+        item for item in draft["differences"] if item["key"] == "user_levels"
+    )
+    assert level_difference["current"] == levels
+
+    published = client.post(
+        f"/api/v1/admin/settings/versions/{draft['id']}/publish",
+        headers={**headers, "Idempotency-Key": "settings-level-publish-0001"},
+        json={
+            "expected_published_version_id": None,
+            "reason_code": "product_policy",
+            "reauth_token": _reauth(client, headers, secret),
+        },
+    )
+    assert published.status_code == 200
+    profile = client.get("/api/v1/me/level", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json()["growth_points"] == 5
+    assert profile.json()["current"]["code"] == "active"
+    with client.app.state.database.session_factory() as db:
+        stored = db.get(SystemSetting, "user_levels")
+        assert stored is not None
+        assert stored.value_json == {"value": levels}
+        audit = db.scalar(
+            select(AuditLog)
+            .where(AuditLog.action == "admin.settings.published")
+            .order_by(AuditLog.created_at.desc())
+        )
+        assert audit is not None
+        assert audit.details["rebuilt_level_profiles"] >= 1
+        assert db.get(User, admin_id) is not None
+
+    invalid_levels = [levels[1], levels[0]]
+    invalid = client.post(
+        "/api/v1/admin/settings/versions",
+        headers={**headers, "Idempotency-Key": "settings-level-invalid-0001"},
+        json={
+            "expected_base_version_id": draft["id"],
+            "reason_code": "product_policy",
+            "snapshot": _snapshot(20, user_levels=invalid_levels),
+        },
+    )
+    assert invalid.status_code == 422

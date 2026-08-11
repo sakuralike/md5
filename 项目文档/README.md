@@ -16,6 +16,8 @@
 
 ## 开发实施记录
 
+- [WP4 第 29 次开发迭代：完整用户等级系统](../docs/development/2026-08-11-wp4-iteration-29.md)
+- [WP4 第 28 次开发迭代：无外部 KMS 的生产文件型秘密管理](../docs/development/2026-08-11-wp4-iteration-28.md)
 - [下一步开发方案（2026-08-08）](./密码侦探社下一步开发方案-2026-08-08.md)
 - [WP4 第 26 次开发迭代：托管 HA 目标能力证明与单节点防提升](../docs/development/2026-08-11-wp4-iteration-26.md)
 - [WP4 第 25 次开发迭代：HA 执行顺序与正式证据绑定门禁](../docs/development/2026-08-11-wp4-iteration-25.md)

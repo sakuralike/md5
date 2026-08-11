@@ -8,6 +8,7 @@ from password_detective.db.models.points_ledger import PointsLedger
 from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.reward_adjustment_event import RewardAdjustmentEvent
 from password_detective.db.models.user import User, UserRole
+from password_detective.db.models.user_growth_event import UserGrowthEvent
 
 
 def _register_and_login(client, suffix: str) -> tuple[dict[str, str], dict[str, str]]:
@@ -213,6 +214,15 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
         )
         assert len(original_point_events) == 3
         assert sum(item.amount for item in original_point_events) == 3
+        growth_adjustments = list(
+            db.scalars(
+                select(UserGrowthEvent).where(
+                    UserGrowthEvent.event_type.like("growth.reward.%")
+                )
+            )
+        )
+        assert len(growth_adjustments) == 9
+        assert sum(item.amount for item in growth_adjustments) == -150
 
 
 def test_manual_first_verification_settles_original_rewards(client):
@@ -279,3 +289,12 @@ def test_automatic_quarantine_and_reverification_reconcile_rewards(client):
         assert sum(item.points_amount for item in adjustments) == 0
         assert sum(item.reputation_amount for item in adjustments) == 0
         assert {item.direction.value for item in adjustments} == {"invalidate", "restore"}
+        growth_adjustments = list(
+            db.scalars(
+                select(UserGrowthEvent).where(
+                    UserGrowthEvent.event_type.like("growth.reward.%")
+                )
+            )
+        )
+        assert len(growth_adjustments) == 6
+        assert sum(item.amount for item in growth_adjustments) == 0

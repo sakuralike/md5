@@ -6,22 +6,26 @@ import {
   type SettingVersionDetail,
   type SettingVersionSummary,
   type SettingVersionStatus,
+  type UserLevelDefinition,
 } from "@password-detective/api-contract";
 import {
   ArrowDownUp,
   CheckCircle2,
   FileClock,
   History,
+  Plus,
   RefreshCw,
   Rocket,
   RotateCcw,
   Save,
   Settings2,
   ShieldCheck,
+  Trash2,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,12 +54,56 @@ import {
 import { reauthenticateAdmin } from "../services/users";
 import { useAdminAuthStore } from "../stores/auth";
 
+const defaultUserLevels: UserLevelDefinition[] = [
+  {
+    code: "rookie",
+    name: "新手侦探",
+    description: "完成注册并开始参与社区协作。",
+    min_growth_points: 0,
+    daily_reveal_quota: 20,
+    can_submit: true,
+  },
+  {
+    code: "apprentice",
+    name: "见习侦探",
+    description: "持续贡献有效档案或验证反馈。",
+    min_growth_points: 100,
+    daily_reveal_quota: 30,
+    can_submit: true,
+  },
+  {
+    code: "senior",
+    name: "资深侦探",
+    description: "具备稳定、长期的有效社区贡献。",
+    min_growth_points: 500,
+    daily_reveal_quota: 50,
+    can_submit: true,
+  },
+  {
+    code: "expert",
+    name: "专家侦探",
+    description: "在贡献和验证活动中保持高质量表现。",
+    min_growth_points: 1500,
+    daily_reveal_quota: 75,
+    can_submit: true,
+  },
+  {
+    code: "chief",
+    name: "首席侦探",
+    description: "达到社区成长体系的最高长期贡献等级。",
+    min_growth_points: 5000,
+    daily_reveal_quota: 100,
+    can_submit: true,
+  },
+];
+
 const defaultSnapshot: OperationalSettingsSnapshot = {
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,
   desktop_min_client_version: "1.0.0",
   desktop_update_download_cache_seconds: 3600,
+  user_levels: defaultUserLevels,
 };
 
 const auth = useAdminAuthStore();
@@ -70,7 +118,7 @@ const success = ref("");
 const reasonCode = ref<SettingChangeReasonCode>("product_policy");
 const currentPassword = ref("");
 const totpCode = ref("");
-const form = ref<OperationalSettingsSnapshot>({ ...defaultSnapshot });
+const form = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
 
 const statusLabels: Record<SettingVersionStatus, string> = {
   draft: "草稿",
@@ -90,6 +138,7 @@ const settingLabels: Record<keyof OperationalSettingsSnapshot, string> = {
   privacy_deletion_grace_hours: "账号删除宽限期（小时）",
   desktop_min_client_version: "桌面端最低版本",
   desktop_update_download_cache_seconds: "升级下载缓存（秒）",
+  user_levels: "用户等级规则",
 };
 
 const canPublish = computed(() => selected.value?.status === "draft");
@@ -128,7 +177,48 @@ function clearCredentials(): void {
 }
 
 function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
-  form.value = { ...snapshot };
+  form.value = structuredClone(snapshot);
+}
+
+function addUserLevel(): void {
+  let sequence = form.value.user_levels.length + 1;
+  let code = `custom_${sequence}`;
+  while (form.value.user_levels.some((item) => item.code === code)) {
+    sequence += 1;
+    code = `custom_${sequence}`;
+  }
+  const previous = form.value.user_levels.at(-1);
+  form.value.user_levels.push({
+    code,
+    name: `自定义等级 ${sequence}`,
+    description: "请填写该等级的成长目标与用户权益。",
+    min_growth_points: (previous?.min_growth_points ?? 0) + 100,
+    daily_reveal_quota: previous?.daily_reveal_quota ?? form.value.daily_reveal_quota,
+    can_submit: true,
+  });
+}
+
+function removeUserLevel(index: number): void {
+  if (form.value.user_levels.length <= 1) return;
+  form.value.user_levels.splice(index, 1);
+  form.value.user_levels.sort((left, right) => left.min_growth_points - right.min_growth_points);
+  form.value.user_levels[0].min_growth_points = 0;
+}
+
+function normalizedSnapshot(): OperationalSettingsSnapshot {
+  const snapshot = structuredClone(form.value);
+  snapshot.user_levels.sort((left, right) => left.min_growth_points - right.min_growth_points);
+  return snapshot;
+}
+
+function formatDifferenceValue(
+  value: number | string | UserLevelDefinition[] | null,
+): string {
+  if (value === null) return "未设置";
+  if (!Array.isArray(value)) return String(value);
+  return value
+    .map((item) => `${item.name}(${item.min_growth_points}成长值/${item.daily_reveal_quota}次)`)
+    .join("；");
 }
 
 async function loadDetail(versionId: string): Promise<void> {
@@ -173,7 +263,7 @@ async function createDraft(): Promise<void> {
       {
         expectedBaseVersionId: publishedVersionId.value,
         reasonCode: reasonCode.value,
-        snapshot: { ...form.value },
+        snapshot: normalizedSnapshot(),
       },
       auth.accessToken,
       crypto.randomUUID(),
@@ -367,6 +457,86 @@ onMounted(() => void loadVersions());
               </Select>
             </div>
           </div>
+
+          <div class="mt-6 space-y-4 border-t border-border/70 pt-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 class="font-semibold text-foreground">用户等级与权益</h3>
+                <p class="mt-1 text-sm text-muted-foreground">
+                  成长值门槛必须唯一并按升序排列；首级门槛固定为 0。发布后会重建全部用户等级投影。
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" @click="addUserLevel">
+                <Plus class="mr-2 size-4" />新增等级
+              </Button>
+            </div>
+
+            <article
+              v-for="(level, index) in form.user_levels"
+              :key="`${level.code}-${index}`"
+              class="rounded-xl border border-border/80 bg-background/70 p-4"
+            >
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <Badge variant="outline">第 {{ index + 1 }} 级</Badge>
+                  <span class="text-sm font-medium text-foreground">{{ level.name }}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  :disabled="form.user_levels.length <= 1"
+                  :aria-label="`删除等级 ${level.name}`"
+                  @click="removeUserLevel(index)"
+                >
+                  <Trash2 class="size-4 text-destructive" />
+                </Button>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div class="space-y-2">
+                  <Label :for="`level-code-${index}`">等级代码</Label>
+                  <Input :id="`level-code-${index}`" v-model="level.code" placeholder="senior" />
+                </div>
+                <div class="space-y-2">
+                  <Label :for="`level-name-${index}`">等级名称</Label>
+                  <Input :id="`level-name-${index}`" v-model="level.name" placeholder="资深侦探" />
+                </div>
+                <div class="space-y-2">
+                  <Label :for="`level-threshold-${index}`">成长值门槛</Label>
+                  <Input
+                    :id="`level-threshold-${index}`"
+                    v-model.number="level.min_growth_points"
+                    type="number"
+                    min="0"
+                    :disabled="index === 0"
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label :for="`level-quota-${index}`">每日揭示配额</Label>
+                  <Input
+                    :id="`level-quota-${index}`"
+                    v-model.number="level.daily_reveal_quota"
+                    type="number"
+                    min="1"
+                    max="1000"
+                  />
+                </div>
+                <div class="space-y-2 sm:col-span-2">
+                  <Label :for="`level-description-${index}`">等级说明</Label>
+                  <Input
+                    :id="`level-description-${index}`"
+                    v-model="level.description"
+                    placeholder="说明该等级的成长目标与权益"
+                  />
+                </div>
+                <div class="flex items-center gap-2">
+                  <Checkbox :id="`level-submit-${index}`" v-model="level.can_submit" />
+                  <Label :for="`level-submit-${index}`">允许提交档案</Label>
+                </div>
+              </div>
+            </article>
+          </div>
+
           <Button class="mt-5" :disabled="mutationBusy" @click="createDraft">
             <Save class="mr-2 size-4" />创建不可变草稿
           </Button>
@@ -394,9 +564,9 @@ onMounted(() => void loadVersions());
             >
               <p class="text-sm font-medium text-slate-800">{{ settingLabels[difference.key] }}</p>
               <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
-                <code class="rounded bg-muted px-2 py-1 text-muted-foreground">{{ difference.previous ?? "未设置" }}</code>
+                <code class="rounded bg-muted px-2 py-1 text-muted-foreground">{{ formatDifferenceValue(difference.previous) }}</code>
                 <span class="text-slate-400">→</span>
-                <code class="rounded bg-sky-50 px-2 py-1 text-sky-700">{{ difference.current }}</code>
+                <code class="rounded bg-sky-50 px-2 py-1 text-sky-700">{{ formatDifferenceValue(difference.current) }}</code>
               </div>
             </div>
             <div v-if="selected.differences.length === 0" class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-700">

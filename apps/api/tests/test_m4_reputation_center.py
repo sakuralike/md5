@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.user import User
+from password_detective.db.models.user_growth_event import UserGrowthEvent
 from password_detective.modules.reputation.service import apply_reputation_event
 
 SHA256 = "a" * 64
@@ -65,7 +66,9 @@ def test_new_user_has_baseline_reputation_and_empty_private_projection(client):
 
     profile = client.get("/api/v1/me/trust-profile", headers=headers)
     assert profile.status_code == 200
-    assert profile.json() == {
+    body = profile.json()
+    level = body.pop("level")
+    assert body == {
         "reputation_score": 50,
         "reputation_min": 0,
         "reputation_max": 100,
@@ -77,10 +80,50 @@ def test_new_user_has_baseline_reputation_and_empty_private_projection(client):
         },
         "contributions": {"total": 0, "verified": 0},
     }
+    assert level["growth_points"] == 5
+    assert level["current"]["code"] == "rookie"
+    assert level["current"]["entitlements"] == {
+        "daily_reveal_quota": 20,
+        "can_submit": True,
+    }
+    assert level["next"]["code"] == "apprentice"
+    assert level["progress_percent"] == 5
+    assert level["points_to_next_level"] == 95
     assert client.get("/api/v1/me/points", headers=headers).json()["total"] == 0
     assert client.get("/api/v1/me/reputation", headers=headers).json()["total"] == 0
 
     assert client.get("/api/v1/me/trust-profile").status_code == 401
+
+
+def test_daily_login_growth_is_idempotent_and_level_endpoints_are_private(client):
+    registration, headers = _register_and_login(client, "daily_growth")
+    second_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": registration["username"], "password": registration["password"]},
+    )
+    assert second_login.status_code == 200
+
+    level = client.get("/api/v1/me/level", headers=headers)
+    assert level.status_code == 200
+    assert level.json()["growth_points"] == 5
+    assert level.json()["current"]["name"] == "新手侦探"
+
+    events = client.get("/api/v1/me/growth-events", headers=headers)
+    assert events.status_code == 200
+    assert events.json()["total"] == 1
+    assert events.json()["items"][0]["event_type"] == "activity.login_day"
+    assert events.json()["items"][0]["amount"] == 5
+
+    catalog = client.get("/api/v1/me/level-catalog", headers=headers)
+    assert catalog.status_code == 200
+    assert [item["code"] for item in catalog.json()["items"]] == [
+        "rookie",
+        "apprentice",
+        "senior",
+        "expert",
+        "chief",
+    ]
+    assert client.get("/api/v1/me/level").status_code == 401
 
 
 def test_first_verification_settles_points_and_reputation_once(client):
@@ -98,6 +141,8 @@ def test_first_verification_settles_points_and_reputation_once(client):
     assert owner_profile["reputation_score"] == 53
     assert owner_profile["points"] == {"available": 1, "pending": 0, "reversed": 0}
     assert owner_profile["contributions"] == {"total": 1, "verified": 1}
+    assert owner_profile["level"]["growth_points"] == 105
+    assert owner_profile["level"]["current"]["code"] == "apprentice"
 
     verifier_profile = client.get("/api/v1/me/trust-profile", headers=verifier_one).json()
     assert verifier_profile["reputation_score"] == 52
@@ -107,6 +152,8 @@ def test_first_verification_settles_points_and_reputation_once(client):
         "effective_failure": 0,
         "history_events": 1,
     }
+    assert verifier_profile["level"]["growth_points"] == 30
+    assert verifier_profile["level"]["current"]["code"] == "rookie"
 
     owner_events = client.get("/api/v1/me/reputation", headers=owner).json()
     assert owner_events["total"] == 1
@@ -127,6 +174,7 @@ def test_first_verification_settles_points_and_reputation_once(client):
     assert replay.status_code == 200
     with client.app.state.database.session_factory() as db:
         assert len(list(db.scalars(select(ReputationEvent)))) == 3
+        assert len(list(db.scalars(select(UserGrowthEvent)))) == 6
 
 
 def test_reputation_projection_is_bounded_and_reference_idempotent(client):
