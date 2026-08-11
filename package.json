@@ -33,7 +33,8 @@
     "staging:evidence-archive-contract": "pwsh ./scripts/staging-evidence-archive-contract.ps1",
     "staging:smoke": "pwsh ./scripts/staging-smoke.ps1",
     "staging:monitoring-smoke": "pwsh ./scripts/staging-monitoring-smoke.ps1",
-    "staging:resource-observation": "pwsh ./scripts/staging-resource-observation.ps1"
+    "staging:resource-observation": "pwsh ./scripts/staging-resource-observation.ps1",
+    "staging:stability-session": "pwsh ./scripts/staging-stability-session.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

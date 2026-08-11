@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "multi-instance-stability-drill-v1"
-PROBE_SCHEMA = "multi-instance-stability-probe-v1"
+PROBE_SCHEMAS = {"multi-instance-stability-probe-v1", "multi-instance-stability-probe-v2"}
 SECRET_KEY_RE = re.compile(
     r"(password|passwd|secret|token|authorization|cookie|api[_-]?key|private[_-]?key)",
     re.IGNORECASE,
@@ -71,7 +71,7 @@ def validate_report(report: dict[str, Any]) -> None:
         raise ValueError("Celery queue did not drain")
 
     probe = report.get("probe")
-    if not isinstance(probe, dict) or probe.get("schema") != PROBE_SCHEMA:
+    if not isinstance(probe, dict) or probe.get("schema") not in PROBE_SCHEMAS:
         raise ValueError("unexpected probe schema")
     if probe.get("status") != "passed" or int(probe.get("error_count", -1)) != 0:
         raise ValueError("mixed-load probe contains errors")

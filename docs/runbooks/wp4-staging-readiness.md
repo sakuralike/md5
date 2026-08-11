@@ -333,3 +333,43 @@ pnpm staging:resource-observation `
 ```
 
 如需资源趋势预采集，可把 `DurationSeconds` 提升到 `14400`。但该入口始终输出 `observation-only`，不会收集四类业务探针窗口、单 Worker 丢失/恢复或 HA 切换，因此不得改名或直接送入 `target-execution`。完整目标执行必须由下一轮长时会话编排器合并业务探针、资源样本和故障事件后生成。
+
+## 16. 长时稳定性会话编排
+
+目标主机必须从部署目录运行以下入口，使资源采样、四类合成探针和单 Worker 丢失/恢复共享同一时间线：
+
+```bash
+python3 scripts/run_staging_stability_session.py \
+  --compose-file docker-compose.yml \
+  --compose-file docker-compose.staging.override.yml \
+  --profile infra/staging/readiness-profile.example.json \
+  --duration-seconds 14400 \
+  --probe-interval-seconds 1 \
+  --probe-window-seconds 300 \
+  --resource-sample-interval-seconds 15 \
+  --worker-count 3 \
+  --worker-loss-after-seconds 3600 \
+  --worker-loss-duration-seconds 60 \
+  --output-directory .local/staging-stability-session \
+  --request-target-execution
+```
+
+Windows/PowerShell 入口：
+
+```powershell
+pnpm staging:stability-session `
+  -ComposeFiles docker-compose.yml,docker-compose.staging.override.yml `
+  -DurationSeconds 14400 `
+  -ProbeWindowSeconds 300 `
+  -ResourceSampleIntervalSeconds 15 `
+  -WorkerCount 3 `
+  -WorkerLossAfterSeconds 3600 `
+  -WorkerLossDurationSeconds 60 `
+  -RequestTargetExecution
+```
+
+执行器会先记录原 Worker 数量，按要求扩容，在探针运行期间停止一个 Worker，再启动同一实例并确认恢复；`finally` 阶段恢复原数量。资源采集器会在每个采样点重新发现运行实例，因此 `3 -> 2 -> 3` 期间不会因已停止容器缺少 Docker stats 而中断。
+
+`--request-target-execution` 不是强制放行开关。只有持续时间、采样覆盖、四类操作量/错误/P95、Worker 事件、资源阈值、连接预算和队列清零全部通过时，输出才会升级为 `target-execution`；否则必须保持 `target-observation / observation-only`。运行失败或资格未通过时禁止手工改写证据状态。
+
+短时预检建议至少 60 秒，且不得传递 `--request-target-execution`。2026-08-11 的 78 秒预检完成了 `3 -> 2 -> 3` 和四类零错误操作，但聚合 API/Worker CPU 峰值超过当前 profile，同时持续时间与操作量不足，因此只可用于验证编排链路。正式 4 小时执行前必须先确认资源阈值口径，不能为通过门禁而直接放宽阈值。

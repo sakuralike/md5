@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol
 
 SCHEMA = "staging-resource-observation-v1"
-COLLECTOR_VERSION = "1.0.0"
+COLLECTOR_VERSION = "1.1.0"
 REQUIRED_SERVICES = ("api", "worker", "mysql", "redis")
 QUEUE_METRIC_RE = re.compile(
     r"(?m)^password_detective_worker_queue_depth(?:\{[^\n]*\})?\s+([0-9]+(?:\.[0-9]+)?)\s*$"
@@ -215,6 +215,9 @@ def collect_sample(
     queue_depth = parse_queue_depth(metrics_fetcher(metrics_url, timeout_seconds))
     return {
         "observed_at": _format_utc(now()),
+        "service_container_counts": {
+            service: len(containers[service]) for service in REQUIRED_SERVICES
+        },
         "resources": resources,
         "database_connections": database_connections,
         "celery_queue_depth": queue_depth,
@@ -239,6 +242,9 @@ def collect_observation(
     if sample_interval_seconds < 1:
         raise ValueError("sample_interval_seconds must be at least one")
     containers, prefix = discover_containers(runner, compose_files, project_directory)
+    initial_container_counts = {
+        service: len(containers[service]) for service in REQUIRED_SERVICES
+    }
     requested_samples = max(
         1, math.floor(duration_seconds / sample_interval_seconds) + 1
     )
@@ -246,6 +252,12 @@ def collect_observation(
     started_monotonic = monotonic()
     samples: list[dict[str, Any]] = []
     for index in range(requested_samples):
+        if index > 0:
+            containers, current_prefix = discover_containers(
+                runner, compose_files, project_directory
+            )
+            if current_prefix != prefix:
+                raise RuntimeError("Compose command prefix drifted during observation")
         samples.append(
             collect_sample(
                 runner,
@@ -276,9 +288,7 @@ def collect_observation(
         "requested_duration_seconds": duration_seconds,
         "sample_interval_seconds": sample_interval_seconds,
         "sample_count": len(samples),
-        "service_container_counts": {
-            service: len(containers[service]) for service in REQUIRED_SERVICES
-        },
+        "service_container_counts": initial_container_counts,
         "samples": samples,
         "limitations": [
             "operation probe windows are not collected",

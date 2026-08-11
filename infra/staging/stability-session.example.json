@@ -1,0 +1,190 @@
+{
+  "schema": "staging-resource-samples-v1",
+  "evidence_kind": "contract-fixture",
+  "execution_status": "contract-only",
+  "eligible_for_target_execution": false,
+  "environment": "staging",
+  "synthetic_data_only": true,
+  "execution_group_id": "wp4-iteration-20-contract",
+  "execution_id": "stability-session-contract",
+  "source_adapter": "contract-fixture-generator-v1",
+  "collector_version": "1.0.0",
+  "clock": {
+    "timezone": "UTC",
+    "maximum_skew_seconds": 30,
+    "observed_skew_seconds": 0
+  },
+  "started_at": "2026-08-11T02:00:00Z",
+  "finished_at": "2026-08-11T02:01:00Z",
+  "sample_interval_seconds": 15,
+  "samples": [
+    {
+      "observed_at": "2026-08-11T02:00:00Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 10.0,
+          "memory_mebibytes": 96
+        },
+        "worker": {
+          "cpu_percent": 12.0,
+          "memory_mebibytes": 210
+        },
+        "mysql": {
+          "cpu_percent": 8.0,
+          "memory_mebibytes": 512
+        },
+        "redis": {
+          "cpu_percent": 2.0,
+          "memory_mebibytes": 18
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    },
+    {
+      "observed_at": "2026-08-11T02:00:15Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 10.5,
+          "memory_mebibytes": 96
+        },
+        "worker": {
+          "cpu_percent": 12.5,
+          "memory_mebibytes": 210
+        },
+        "mysql": {
+          "cpu_percent": 8.25,
+          "memory_mebibytes": 512
+        },
+        "redis": {
+          "cpu_percent": 2.25,
+          "memory_mebibytes": 18
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    },
+    {
+      "observed_at": "2026-08-11T02:00:30Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 11.0,
+          "memory_mebibytes": 96
+        },
+        "worker": {
+          "cpu_percent": 13.0,
+          "memory_mebibytes": 210
+        },
+        "mysql": {
+          "cpu_percent": 8.5,
+          "memory_mebibytes": 512
+        },
+        "redis": {
+          "cpu_percent": 2.5,
+          "memory_mebibytes": 18
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    },
+    {
+      "observed_at": "2026-08-11T02:00:45Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 11.5,
+          "memory_mebibytes": 96
+        },
+        "worker": {
+          "cpu_percent": 13.5,
+          "memory_mebibytes": 210
+        },
+        "mysql": {
+          "cpu_percent": 8.75,
+          "memory_mebibytes": 512
+        },
+        "redis": {
+          "cpu_percent": 2.75,
+          "memory_mebibytes": 18
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    },
+    {
+      "observed_at": "2026-08-11T02:01:00Z",
+      "resources": {
+        "api": {
+          "cpu_percent": 12.0,
+          "memory_mebibytes": 96
+        },
+        "worker": {
+          "cpu_percent": 14.0,
+          "memory_mebibytes": 210
+        },
+        "mysql": {
+          "cpu_percent": 9.0,
+          "memory_mebibytes": 512
+        },
+        "redis": {
+          "cpu_percent": 3.0,
+          "memory_mebibytes": 18
+        }
+      },
+      "database_connections": 8,
+      "celery_queue_depth": 0
+    }
+  ],
+  "probe_windows": [
+    {
+      "started_at": "2026-08-11T02:00:01Z",
+      "finished_at": "2026-08-11T02:00:59Z",
+      "operations": {
+        "api": {
+          "count": 20,
+          "error_count": 0,
+          "max_consecutive_errors": 0,
+          "p95_ms": 80
+        },
+        "mysql": {
+          "count": 20,
+          "error_count": 0,
+          "max_consecutive_errors": 0,
+          "p95_ms": 45
+        },
+        "redis": {
+          "count": 20,
+          "error_count": 0,
+          "max_consecutive_errors": 0,
+          "p95_ms": 12
+        },
+        "celery": {
+          "count": 20,
+          "error_count": 0,
+          "max_consecutive_errors": 0,
+          "p95_ms": 180
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "type": "worker_lost",
+      "observed_at": "2026-08-11T02:00:20Z"
+    },
+    {
+      "type": "worker_recovered",
+      "observed_at": "2026-08-11T02:00:30Z"
+    }
+  ],
+  "worker_event_summary": {
+    "initial_workers": 2,
+    "degraded_workers": 1,
+    "recovered_workers": 2,
+    "recovery_seconds": 3.2
+  },
+  "limitations": [
+    "duration",
+    "operation_minimums",
+    "worker_loss_recovery"
+  ]
+}

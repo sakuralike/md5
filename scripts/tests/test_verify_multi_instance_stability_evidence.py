@@ -64,3 +64,10 @@ def test_rejects_secret_like_evidence() -> None:
     report["unexpected_password"] = "synthetic"
     with pytest.raises(ValueError, match="secret-like field"):
         validate_report(report)
+
+
+def test_accepts_v2_windowed_probe_report() -> None:
+    report = valid_report()
+    report["probe"]["schema"] = "multi-instance-stability-probe-v2"
+    report["probe"]["probe_windows"] = []
+    validate_report(report)

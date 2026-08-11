@@ -139,6 +139,25 @@ def validate_observation(document: dict[str, Any]) -> dict[str, Any]:
         if observed < started or observed > finished:
             raise ValueError(f"samples[{index}] falls outside the observation timeline")
         sample_times.append(observed)
+        sample_counts = sample.get("service_container_counts")
+        if sample_counts is not None:
+            sample_counts = _require_object(
+                sample_counts, f"samples[{index}].service_container_counts"
+            )
+            if set(sample_counts) != REQUIRED_SERVICES:
+                raise ValueError(
+                    f"samples[{index}].service_container_counts must cover API, Worker, MySQL and Redis"
+                )
+            for service in REQUIRED_SERVICES:
+                if int(
+                    _require_number(
+                        sample_counts[service],
+                        f"samples[{index}].service_container_counts.{service}",
+                    )
+                ) < 1:
+                    raise ValueError(
+                        f"samples[{index}].service_container_counts.{service} must be at least one"
+                    )
         resources = _require_object(
             sample.get("resources"), f"samples[{index}].resources"
         )

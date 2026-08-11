@@ -52,6 +52,47 @@ class FakeRunner:
         raise AssertionError(f"unexpected command: {arguments}")
 
 
+
+
+class WorkerLossRunner(FakeRunner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ps_calls = 0
+
+    def run(self, arguments: list[str]) -> str:
+        self.commands.append(list(arguments))
+        if "ps" in arguments:
+            worker_names = (
+                ["pd-worker-1", "pd-worker-2"]
+                if self.ps_calls != 1
+                else ["pd-worker-2"]
+            )
+            self.ps_calls += 1
+            rows = [
+                {"Service": service, "State": "running", "Name": f"pd-{service}-1"}
+                for service in ("api", "mysql", "redis")
+            ]
+            rows.extend(
+                {"Service": "worker", "State": "running", "Name": name}
+                for name in worker_names
+            )
+            return "\n".join(json.dumps(row) for row in rows)
+        if arguments[:2] == ["docker", "stats"]:
+            rows = []
+            for name in arguments[5:]:
+                rows.append(
+                    {
+                        "Name": name,
+                        "CPUPerc": "1.0%",
+                        "MemUsage": "32MiB / 8GiB",
+                    }
+                )
+            return "\n".join(json.dumps(row) for row in rows)
+        if "exec" in arguments and "mysql" in arguments:
+            return "8\n"
+        raise AssertionError(f"unexpected command: {arguments}")
+
+
 class Clock:
     def __init__(self) -> None:
         self.value = datetime(2026, 8, 11, 1, 0, tzinfo=UTC)
@@ -133,3 +174,32 @@ def test_observation_rejects_container_identity_and_missing_service() -> None:
     del observation["service_container_counts"]["redis"]
     with pytest.raises(ValueError, match="must cover"):
         validate_observation(observation)
+
+
+def test_collector_rediscovers_running_workers_during_loss_and_recovery() -> None:
+    runner = WorkerLossRunner()
+    clock = Clock()
+    observation = collect_observation(
+        runner,
+        ["docker-compose.yml"],
+        None,
+        "http://127.0.0.1:8000/api/v1/metrics",
+        duration_seconds=30,
+        sample_interval_seconds=15,
+        timeout_seconds=5,
+        now=clock.now,
+        sleeper=lambda _seconds: None,
+        monotonic=lambda: 0.0,
+        metrics_fetcher=lambda _url, _timeout: (
+            "password_detective_worker_queue_depth 0\n"
+        ),
+    )
+
+    assert observation["service_container_counts"]["worker"] == 2
+    assert [
+        sample["service_container_counts"]["worker"]
+        for sample in observation["samples"]
+    ] == [2, 1, 2]
+    assert observation["samples"][1]["resources"]["worker"]["memory_mebibytes"] == 32
+    assert "pd-worker" not in json.dumps(observation)
+    validate_observation(observation)
