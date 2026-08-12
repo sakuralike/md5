@@ -673,7 +673,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
-| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期与游标首切片已编码 | 独立首页/详情/发布路由拆分、移动端浏览器旅程与目标环境迁移 |
+| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面和详情治理已编码 | 移动端浏览器旅程、真实目标环境回归与提及通知/回复数重建 |
 | 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | 已规划，未编码 | 事实关系表、可重建计数、隐私偏好、屏蔽和静音 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
@@ -700,8 +700,19 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
 |---|---|---|---|
 | 独立社区首页 | `apps/web/src/pages/CommunityHomePage.vue`、`/community` | `CommunityHomePage.test.ts`、Web typecheck/lint/Vitest | 已完成公开板块筛选、主题摘要、空状态、加载状态和发布入口；移动端 Playwright 及真实 API 旅程待统一验收 |
-| 独立主题详情 | `apps/web/src/pages/CommunityPostPage.vue`、`/community/posts/:postId` | `CommunityPostPage.test.ts`、Web typecheck/lint/Vitest | 已完成详情读取、评论首屏、两级回复、游标加载更多和验证后回复；作者编辑/删除与举报仍在兼容页，后续统一收口 |
+| 独立主题详情 | `apps/web/src/pages/CommunityPostPage.vue`、`/community/posts/:postId` | `CommunityPostPage.test.ts`、Web typecheck/lint/Vitest | 已完成详情读取、评论首屏、两级回复、游标加载更多、验证后回复、作者编辑/删除、评论编辑/删除和举报；移动端 Playwright 及真实目标环境回归待统一验收 |
 | 独立主题发布 | `apps/web/src/pages/CommunityPostComposerPage.vue`、`/community/new` | `CommunityPostComposerPage.test.ts`、Web typecheck/lint/Vitest | 已完成板块选择、规则确认、长度校验、认证提示、幂等发布和成功跳转 |
 | 路由兼容 | `/community/legacy` 保留原综合页 | 现有 `CommunityPage.test.ts` 继续通过 | 旧综合页仅作兼容和功能回退入口，后续可在迁移完成后下线 |
 
-本切片仍不计入 WP5-I3 全部完成；下一轮优先把详情页的编辑、作者删除、举报和评论编辑/删除能力迁移到独立详情页，并补充移动端浏览器主旅程。
+本切片仍不计入 WP5-I3 全部完成；详情治理迁移已在第 3 个开发切片收口，后续优先补充移动端浏览器主旅程、真实目标环境回归、提及通知和回复数投影重建。
+
+## 2026-08-12 WP5-I3 第 3 个开发切片：详情治理能力收口
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 主题作者治理 | `CommunityPostPage.vue` 接入 PATCH/DELETE、版本号和两次确认删除 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；删除保留结构占位，真实目标环境回归待执行 |
+| 评论作者治理 | `CommunityPostPage.vue` 接入评论 PATCH/DELETE、版本号和两次确认删除 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；两级回复结构保持，提及通知仍待后续 |
+| 社区举报 | `CommunityPostPage.vue` 接入主题/回复举报表单和幂等提交 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；治理结果仍由 Admin 工作台处理 |
+| 兼容入口 | `/community/legacy` 继续保留 `CommunityPage.vue` | 原页面测试继续通过 | 兼容回退可用，后续移动端浏览器主旅程完成后再评估下线 |
+
+本切片完成独立详情页的内容生命周期和举报入口迁移；WP5-I3 仍需移动端 Playwright 主旅程、真实目标环境回归以及提及通知和回复数投影重建。

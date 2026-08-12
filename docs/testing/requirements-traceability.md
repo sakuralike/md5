@@ -398,7 +398,7 @@
 
 | 需求 | 计划模块 | 计划自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | `test_community.py` 首页聚合、版本冲突、删除占位、两级回复和评论游标；三个独立页面渲染测试；Web typecheck/lint/Vitest | 部分实现：生命周期、评论游标、独立首页/详情/发布页已落地；草稿、热门规则、提及通知、回复数重建、详情治理迁移和 Playwright 仍待开发 |
+| COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | `test_community.py` 首页聚合、版本冲突、删除占位、两级回复和评论游标；三个独立页面渲染测试、详情治理渲染覆盖；Web typecheck/lint/Vitest | 部分实现：生命周期、评论游标、独立首页/详情/发布页和详情治理已落地；草稿、热门规则、提及通知、回复数重建和 Playwright 仍待开发 |
 | COMMUNITY-32～44 | 点赞、收藏、公开主页、关注/粉丝、屏蔽/静音 | 并发唯一约束、投影重建、隐私旁路和关系服务测试 | 已规划，未编码 |
 | COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | 固定板块迁移往返、群组权限矩阵、私密内容不可见性测试 | 已规划，未编码 |
 | COMMUNITY-55～76 | 动态、搜索和通知中心 | Outbox 重放、搜索重建、通知去重、屏蔽过滤、SSE 降级测试 | 已规划，未编码 |
@@ -410,5 +410,15 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-14～18、21～22、25、29 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、Web typecheck、ESLint、Vitest 28 项 | 部分实现：公开首页、详情、发布页已拆分并可通过现有 API 工作；详情作者治理能力迁移、移动端 Playwright、真实目标环境回归仍待完成 |
+| COMMUNITY-14～18、21～22、25、29～31 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、社区服务请求测试、Web typecheck、ESLint、Vitest 30 项 | 部分实现：公开首页、详情、发布页以及详情作者编辑/删除、评论编辑/删除、主题/回复举报已拆分并复用现有社区 API；移动端 Playwright、真实目标环境回归、提及通知和回复数重建仍待完成 |
 | 兼容回退 | `CommunityPage.vue`、`/community/legacy` | `CommunityPage.test.ts` | 已实现，旧综合页保留为回退入口 |
+
+## 2026-08-12 WP5-I3 第 3 个开发切片：独立详情页治理能力
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 主题作者编辑/删除 | `CommunityPostPage.vue`、`updateCommunityPost`、`deleteCommunityPost` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；采用 `expected_version` 和二次确认删除 |
+| 评论作者编辑/删除 | `CommunityPostPage.vue`、`updateCommunityComment`、`deleteCommunityComment` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；删除保留结构占位 |
+| 主题/回复举报 | `CommunityPostPage.vue`、`createCommunityReport` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；仅登录且邮箱验证用户可提交，Admin 负责处置 |
+
+未验证项：真实浏览器移动端主旅程、目标环境 MySQL 回归、提及通知和回复数投影重建。
