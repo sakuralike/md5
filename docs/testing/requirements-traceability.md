@@ -393,3 +393,15 @@
 | 等级规则治理 | `OperationalSettingsSnapshot.user_levels`、发布/回滚重建 | `test_n2_admin_settings.py` 顺序校验、规则发布、审计数量 | 已实现 |
 | 服务端权益 | `require_submission_entitlement`、`daily_reveal_quota_for_user` | 提交拒绝、额度基线/等级提升测试 | 已实现 |
 | 用户与管理界面 | Web `ReputationPage.vue`、Admin `SystemSettingsPage.vue` / `UserGovernancePage.vue` | Vitest 渲染/服务测试、TypeScript 检查 | 已实现 |
+
+## 2026-08-12 WP5 社区完整功能规划追踪
+
+| 需求 | 计划模块 | 计划自动化证据 | 当前状态 |
+|---|---|---|---|
+| COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | API 集成测试、评论分页/编辑/删除测试、Web 页面渲染和 Playwright 主旅程 | 已规划，未编码 |
+| COMMUNITY-32～44 | 点赞、收藏、公开主页、关注/粉丝、屏蔽/静音 | 并发唯一约束、投影重建、隐私旁路和关系服务测试 | 已规划，未编码 |
+| COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | 固定板块迁移往返、群组权限矩阵、私密内容不可见性测试 | 已规划，未编码 |
+| COMMUNITY-55～76 | 动态、搜索和通知中心 | Outbox 重放、搜索重建、通知去重、屏蔽过滤、SSE 降级测试 | 已规划，未编码 |
+| COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
+
+详细验收标准、数据模型、API 和迭代顺序见 `项目文档/密码侦探社社区完整功能开发计划-v1.0.md`；上述条目不计入当前完成度，直至代码、迁移、自动化和目标环境证据齐备。

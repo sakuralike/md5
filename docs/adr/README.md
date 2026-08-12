@@ -19,6 +19,7 @@
 | [ADR-0015](./0015-risk-alert-sla-assignment-notification-outbox.md) | 风险告警 SLA、值班指派与事务通知 Outbox | 已接受 |
 | [ADR-0016](./0016-signed-webhook-and-notification-dead-letter-replay.md) | 签名 Webhook 与通知死信重放 | 已接受 |
 | [ADR-0017](./0017-provider-neutral-smtp-email-delivery.md) | 提供商无关的 SMTP 邮件投递 | 已接受 |
+| [ADR-0018](./0018-community-social-platform-boundaries.md) | 社区社交平台边界、事件一致性与私信安全 | 已接受，分阶段实施 |
 
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。
