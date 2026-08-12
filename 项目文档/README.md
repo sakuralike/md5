@@ -5,6 +5,7 @@
 
 ## 当前开发基线
 
+- [WP5-I6 第 1 个开发切片：可配置板块与群组治理](../docs/development/2026-08-12-wp5-i6-iteration-1.md)
 - [WP5-I5 第 1 个开发切片：社区公开主页与关系图谱](../docs/development/2026-08-12-wp5-i5-iteration-1.md)
 - [WP5-I4 第 1 个开发切片：社区点赞与收藏闭环](../docs/development/2026-08-12-wp5-i4-iteration-1.md)
 
@@ -22,6 +23,7 @@
 ## 开发实施记录
 
 - [WP5 社区完整功能开发计划 v1.0](./密码侦探社社区完整功能开发计划-v1.0.md)
+- [WP5-I6 第 1 个开发切片：可配置板块与群组治理](../docs/development/2026-08-12-wp5-i6-iteration-1.md)
 - [WP5-I5 第 1 个开发切片：社区公开主页与关系图谱](../docs/development/2026-08-12-wp5-i5-iteration-1.md)
 - [WP5-I4 第 1 个开发切片：社区点赞与收藏闭环](../docs/development/2026-08-12-wp5-i4-iteration-1.md)
 - [WP5-I3 第 7 个开发切片：社区提及通知闭环](../docs/development/2026-08-12-wp5-i3-iteration-7.md)

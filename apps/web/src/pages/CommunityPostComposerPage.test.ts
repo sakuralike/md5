@@ -8,6 +8,7 @@ vi.mock("vue-router", () => ({
     props: ["to"],
     template: "<a><slot /></a>",
   },
+  useRoute: () => ({ query: {} }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 
@@ -20,7 +21,8 @@ vi.mock("../stores/auth", () => ({
 }));
 
 vi.mock("../services/community", () => ({
-  listCommunityBoards: vi.fn(),
+  listCommunityBoards: vi.fn().mockResolvedValue({ items: [] }),
+  listCommunityGroups: vi.fn().mockResolvedValue({ items: [] }),
   createCommunityPost: vi.fn(),
   createCommunityIdempotencyKey: vi.fn(() => "synthetic-idempotency-key"),
 }));

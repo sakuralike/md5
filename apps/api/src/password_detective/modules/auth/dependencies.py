@@ -101,3 +101,13 @@ def require_admin_mfa(
     if not principal.mfa_verified:
         raise AppError("auth.totp_required", "该管理操作需要 TOTP 验证", status_code=403)
     return principal
+
+
+def require_admin_only_mfa(
+    principal: Annotated[Principal, Depends(require_roles(UserRole.ADMIN))],
+) -> Principal:
+    if not principal.user.totp_enabled:
+        raise AppError("auth.totp_setup_required", "管理员必须先启用 TOTP", status_code=403)
+    if not principal.mfa_verified:
+        raise AppError("auth.totp_required", "该管理操作需要 TOTP 验证", status_code=403)
+    return principal

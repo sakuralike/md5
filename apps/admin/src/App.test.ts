@@ -38,6 +38,7 @@ describe("App", () => {
     expect(html).toContain('aria-label="管理导航"');
     expect(html).toContain("候选审核");
     expect(html).toContain("角色审批");
+    expect(html).toContain("社区配置");
     expect(html).toContain("系统配置");
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("focus-visible:ring-2");

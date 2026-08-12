@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { CommunityBoard, CommunityBoardCode, CommunityPostSummary } from "@password-detective/api-contract";
+import type { CommunityBoard, CommunityBoardCode, CommunityGroupSummary, CommunityPostSummary } from "@password-detective/api-contract";
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCommunityHome } from "../services/community";
+import { getCommunityHome, listCommunityGroups } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
@@ -14,6 +14,7 @@ const router = useRouter();
 const auth = useAuthStore();
 const boards = ref<CommunityBoard[]>([]);
 const posts = ref<CommunityPostSummary[]>([]);
+const groups = ref<CommunityGroupSummary[]>([]);
 const selectedBoard = ref<CommunityBoardCode | undefined>(readBoard(route.query.board));
 const loading = ref(true);
 const error = ref("");
@@ -37,8 +38,7 @@ watch(
 
 function readBoard(value: unknown): CommunityBoardCode | undefined {
   if (typeof value !== "string") return undefined;
-  const valid: CommunityBoardCode[] = ["general", "recovery_guides", "verification", "security"];
-  return valid.includes(value as CommunityBoardCode) ? (value as CommunityBoardCode) : undefined;
+  return value.trim().length > 0 ? (value as CommunityBoardCode) : undefined;
 }
 
 async function loadHome(): Promise<void> {
@@ -50,7 +50,8 @@ async function loadHome(): Promise<void> {
       auth.isAuthenticated ? auth.accessToken : undefined,
     );
     boards.value = response.boards;
-    posts.value = response.posts.items;
+      posts.value = response.posts.items;
+    groups.value = (await listCommunityGroups(auth.isAuthenticated ? auth.accessToken : undefined)).items;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "社区首页加载失败";
   } finally {
@@ -122,6 +123,27 @@ function formatDate(value: string): string {
               <span class="block text-xs text-muted-foreground">{{ board.post_count }} 个主题</span>
             </span>
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card class="h-fit lg:col-span-2">
+        <CardHeader class="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>社区群组</CardTitle>
+            <CardDescription>参考论坛板块之外的兴趣小组，支持公开、申请加入和私密邀请。</CardDescription>
+          </div>
+          <Button variant="outline" as-child><RouterLink to="/community/groups">查看全部</RouterLink></Button>
+        </CardHeader>
+        <CardContent class="grid gap-3 md:grid-cols-3">
+          <RouterLink v-for="group in groups.slice(0, 3)" :key="group.slug" :to="`/community/groups/${group.slug}`" class="rounded-xl border p-4 transition-colors hover:bg-muted/50">
+            <div class="flex items-start justify-between gap-3">
+              <h2 class="font-medium">{{ group.name }}</h2>
+              <Badge variant="outline">{{ group.visibility === "private" ? "私密" : group.visibility === "approval" ? "需审批" : "公开" }}</Badge>
+            </div>
+            <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ group.description || "暂无群组说明" }}</p>
+            <p class="mt-3 text-xs text-muted-foreground">{{ group.member_count }} 名成员 · {{ group.post_count }} 个主题</p>
+          </RouterLink>
+          <div v-if="groups.length === 0" class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground md:col-span-3">暂时没有可见群组。</div>
         </CardContent>
       </Card>
 

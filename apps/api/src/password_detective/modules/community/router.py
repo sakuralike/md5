@@ -16,12 +16,22 @@ from password_detective.core.idempotency import (
 )
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
-from password_detective.db.models.community import CommunityBoardCode
+from password_detective.db.models.community import CommunityGroupRole
 from password_detective.modules.auth.context import ClientContext, get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
     get_current_principal,
     get_optional_principal,
+)
+from password_detective.modules.community.group_service import (
+    change_member_role,
+    create_group,
+    decide_member,
+    get_group,
+    join_group,
+    leave_group,
+    list_groups,
+    update_group,
 )
 from password_detective.modules.community.schemas import (
     CommunityBoardListResponse,
@@ -30,6 +40,12 @@ from password_detective.modules.community.schemas import (
     CommunityCommentLikeResponse,
     CommunityCommentListResponse,
     CommunityCommentUpdateRequest,
+    CommunityGroupCreateRequest,
+    CommunityGroupDetail,
+    CommunityGroupListResponse,
+    CommunityGroupMemberDecisionRequest,
+    CommunityGroupMembershipResponse,
+    CommunityGroupUpdateRequest,
     CommunityHomeResponse,
     CommunityMuteRequest,
     CommunityNotificationListResponse,
@@ -92,7 +108,7 @@ def community_boards(
 def community_home(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
-    board_code: CommunityBoardCode | None = None,
+    board_code: str | None = Query(default=None, min_length=1, max_length=32),
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityHomeResponse:
     return list_home(db, board_code=board_code, page_size=page_size, principal=principal)
@@ -102,12 +118,18 @@ def community_home(
 def community_posts(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
-    board_code: CommunityBoardCode | None = None,
+    board_code: str | None = Query(default=None, min_length=1, max_length=32),
+    group_slug: str | None = Query(default=None, min_length=3, max_length=64),
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityPostListResponse:
     return list_posts(
-        db, board_code=board_code, page=page, page_size=page_size, principal=principal
+        db,
+        board_code=board_code,
+        group_slug=group_slug,
+        page=page,
+        page_size=page_size,
+        principal=principal,
     )
 
 
@@ -418,6 +440,180 @@ def community_unmute(
         principal=principal,
         idempotency_key=idempotency_key,
         request=request,
+    )
+
+
+@router.get("/groups", response_model=CommunityGroupListResponse)
+def community_groups(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+) -> CommunityGroupListResponse:
+    return list_groups(db, principal=principal)
+
+
+@router.post("/groups", response_model=CommunityGroupDetail, status_code=201)
+def community_group_create(
+    payload: CommunityGroupCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupDetail:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.create",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=CommunityGroupDetail,
+        create=lambda: create_group(
+            db,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    )
+
+
+@router.get("/groups/{group_slug}", response_model=CommunityGroupDetail)
+def community_group_detail(
+    group_slug: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+) -> CommunityGroupDetail:
+    return get_group(db, slug=group_slug, principal=principal)
+
+
+@router.patch("/groups/{group_slug}", response_model=CommunityGroupDetail)
+def community_group_update(
+    group_slug: str,
+    payload: CommunityGroupUpdateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupDetail:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.update",
+        idempotency_key=idempotency_key,
+        request_payload={"group_slug": group_slug, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityGroupDetail,
+        create=lambda: update_group(
+            db,
+            slug=group_slug,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.post("/groups/{group_slug}/join", response_model=CommunityGroupMembershipResponse)
+def community_group_join(
+    group_slug: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupMembershipResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.join",
+        idempotency_key=idempotency_key,
+        request_payload={"group_slug": group_slug},
+        principal=principal,
+        response_type=CommunityGroupMembershipResponse,
+        create=lambda: join_group(db, slug=group_slug, principal=principal),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.delete("/groups/{group_slug}/membership", response_model=CommunityGroupMembershipResponse)
+def community_group_leave(
+    group_slug: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupMembershipResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.leave",
+        idempotency_key=idempotency_key,
+        request_payload={"group_slug": group_slug},
+        principal=principal,
+        response_type=CommunityGroupMembershipResponse,
+        create=lambda: leave_group(db, slug=group_slug, principal=principal),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.post(
+    "/groups/{group_slug}/members/{username}/decision",
+    response_model=CommunityGroupMembershipResponse,
+)
+def community_group_member_decision(
+    group_slug: str,
+    username: str,
+    payload: CommunityGroupMemberDecisionRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupMembershipResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.member.decision",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "group_slug": group_slug,
+            "username": username,
+            **payload.model_dump(mode="json"),
+        },
+        principal=principal,
+        response_type=CommunityGroupMembershipResponse,
+        create=lambda: decide_member(
+            db,
+            slug=group_slug,
+            username=username,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.patch(
+    "/groups/{group_slug}/members/{username}/role",
+    response_model=CommunityGroupMembershipResponse,
+)
+def community_group_member_role(
+    group_slug: str,
+    username: str,
+    role: CommunityGroupRole,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupMembershipResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.member.role",
+        idempotency_key=idempotency_key,
+        request_payload={"group_slug": group_slug, "username": username, "role": role.value},
+        principal=principal,
+        response_type=CommunityGroupMembershipResponse,
+        create=lambda: change_member_role(
+            db,
+            slug=group_slug,
+            username=username,
+            role=role,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        response_status=status.HTTP_200_OK,
     )
 
 

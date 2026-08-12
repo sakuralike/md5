@@ -22,6 +22,7 @@ vi.mock("../stores/auth", () => ({
 
 vi.mock("../services/community", () => ({
   getCommunityHome: vi.fn(),
+  listCommunityGroups: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 describe("CommunityHomePage", () => {

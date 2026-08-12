@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { CommunityBoard, CommunityBoardCode } from "@password-detective/api-contract";
+import type { CommunityBoard, CommunityBoardCode, CommunityGroupSummary } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createCommunityIdempotencyKey, createCommunityPost, listCommunityBoards } from "../services/community";
+import { createCommunityIdempotencyKey, createCommunityPost, listCommunityBoards, listCommunityGroups } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
+const route = useRoute();
 const router = useRouter();
 const boards = ref<CommunityBoard[]>([]);
-const boardCode = ref<CommunityBoardCode>("general");
+const boardCode = ref<CommunityBoardCode>(typeof route.query.board === "string" ? route.query.board : "general");
+const PUBLIC_GROUP_VALUE = "__public__";
+const groupSlug = ref<string>(typeof route.query.group === "string" ? route.query.group : PUBLIC_GROUP_VALUE);
+const groups = ref<CommunityGroupSummary[]>([]);
 const title = ref("");
 const content = ref("");
 const rulesAccepted = ref(false);
@@ -32,6 +36,7 @@ const canSubmit = computed(
 onMounted(async () => {
   try {
     boards.value = (await listCommunityBoards()).items;
+    groups.value = (await listCommunityGroups(auth.accessToken)).items;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "社区板块加载失败";
   } finally {
@@ -47,6 +52,7 @@ async function submit(): Promise<void> {
     const created = await createCommunityPost(
       {
         board_code: boardCode.value,
+        group_slug: groupSlug.value === PUBLIC_GROUP_VALUE ? null : groupSlug.value,
         title: title.value.trim(),
         content: content.value.trim(),
         rules_accepted: true,
@@ -95,6 +101,17 @@ async function submit(): Promise<void> {
               <SelectItem v-for="board in boards" :key="board.code" :value="board.code">{{ board.name }}</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div class="space-y-2">
+          <Label for="community-composer-group">发布到群组（可选）</Label>
+          <Select v-model="groupSlug" :disabled="loading">
+            <SelectTrigger id="community-composer-group"><SelectValue placeholder="公开社区主题" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem :value="PUBLIC_GROUP_VALUE">公开社区主题</SelectItem>
+              <SelectItem v-for="group in groups.filter((item) => item.viewer_membership_status === 'active')" :key="group.slug" :value="group.slug">{{ group.name }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-muted-foreground">私密群组只允许已加入成员发布，群组权限会在服务端再次校验。</p>
         </div>
         <div class="space-y-2">
           <Label for="community-composer-title">主题标题</Label>

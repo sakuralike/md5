@@ -4,6 +4,8 @@ import AccountPrivacyPage from "../pages/AccountPrivacyPage.vue";
 import CommunityPage from "../pages/CommunityPage.vue";
 import CommunityBookmarksPage from "../pages/CommunityBookmarksPage.vue";
 import CommunityHomePage from "../pages/CommunityHomePage.vue";
+import CommunityGroupsPage from "../pages/CommunityGroupsPage.vue";
+import CommunityGroupPage from "../pages/CommunityGroupPage.vue";
 import CommunityNotificationsPage from "../pages/CommunityNotificationsPage.vue";
 import CommunityPostComposerPage from "../pages/CommunityPostComposerPage.vue";
 import CommunityPostPage from "../pages/CommunityPostPage.vue";
@@ -33,6 +35,8 @@ const router = createRouter({
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
     { path: "/community", component: CommunityHomePage },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },
+    { path: "/community/groups", component: CommunityGroupsPage },
+    { path: "/community/groups/:slug", component: CommunityGroupPage },
     {
       path: "/community/bookmarks",
       component: CommunityBookmarksPage,

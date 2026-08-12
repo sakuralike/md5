@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AuditPage from "../pages/AuditPage.vue";
 import CandidateModerationPage from "../pages/CandidateModerationPage.vue";
+import CommunityConfigurationPage from "../pages/CommunityConfigurationPage.vue";
 import CommunityModerationPage from "../pages/CommunityModerationPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
+    { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
   ],

@@ -6,6 +6,13 @@ import type {
   CommunityCommentLikeResponse,
   CommunityCommentListResponse,
   CommunityCommentUpdateRequest,
+  CommunityGroupCreateRequest,
+  CommunityGroupDetail,
+  CommunityGroupListResponse,
+  CommunityGroupMemberDecisionRequest,
+  CommunityGroupMembershipResponse,
+  CommunityGroupRole,
+  CommunityGroupUpdateRequest,
   CommunityHomeResponse,
   CommunityNotificationListResponse,
   CommunityNotificationReadResponse,
@@ -50,7 +57,13 @@ export function createCommunityIdempotencyKey(
     | "block"
     | "unblock"
     | "mute"
-    | "unmute",
+    | "unmute"
+    | "group-create"
+    | "group-update"
+    | "group-join"
+    | "group-leave"
+    | "group-member-decision"
+    | "group-member-role",
 ): string {
   return `web-community-${kind}-${crypto.randomUUID()}`;
 }
@@ -71,10 +84,64 @@ export function getCommunityHome(
 export function listCommunityPosts(
   boardCode?: CommunityBoardCode,
   token?: string,
+  groupSlug?: string,
 ): Promise<CommunityPostListResponse> {
   const params = new URLSearchParams({ page: "1", page_size: "50" });
   if (boardCode) params.set("board_code", boardCode);
+  if (groupSlug) params.set("group_slug", groupSlug);
   return apiRequest<CommunityPostListResponse>(`/community/posts?${params.toString()}`, {}, token);
+}
+
+export function listCommunityGroups(token?: string): Promise<CommunityGroupListResponse> {
+  return apiRequest<CommunityGroupListResponse>("/community/groups", {}, token);
+}
+
+export function getCommunityGroup(slug: string, token?: string): Promise<CommunityGroupDetail> {
+  return apiRequest<CommunityGroupDetail>(`/community/groups/${encodeURIComponent(slug)}`, {}, token);
+}
+
+export function createCommunityGroup(
+  payload: CommunityGroupCreateRequest, token: string, idempotencyKey: string,
+): Promise<CommunityGroupDetail> {
+  return apiRequest<CommunityGroupDetail>("/community/groups", {
+    method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload),
+  }, token);
+}
+
+export function updateCommunityGroup(
+  slug: string, payload: CommunityGroupUpdateRequest, token: string, idempotencyKey: string,
+): Promise<CommunityGroupDetail> {
+  return apiRequest<CommunityGroupDetail>(`/community/groups/${encodeURIComponent(slug)}`, {
+    method: "PATCH", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload),
+  }, token);
+}
+
+export function setCommunityGroupMembership(
+  slug: string, joined: boolean, token: string, idempotencyKey: string,
+): Promise<CommunityGroupMembershipResponse> {
+  return apiRequest<CommunityGroupMembershipResponse>(
+    `/community/groups/${encodeURIComponent(slug)}/${joined ? "join" : "membership"}`,
+    { method: joined ? "POST" : "DELETE", headers: { "Idempotency-Key": idempotencyKey } }, token,
+  );
+}
+
+export function decideCommunityGroupMember(
+  slug: string, username: string, payload: CommunityGroupMemberDecisionRequest,
+  token: string, idempotencyKey: string,
+): Promise<CommunityGroupMembershipResponse> {
+  return apiRequest<CommunityGroupMembershipResponse>(
+    `/community/groups/${encodeURIComponent(slug)}/members/${encodeURIComponent(username)}/decision`,
+    { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) }, token,
+  );
+}
+
+export function changeCommunityGroupMemberRole(
+  slug: string, username: string, role: CommunityGroupRole, token: string, idempotencyKey: string,
+): Promise<CommunityGroupMembershipResponse> {
+  return apiRequest<CommunityGroupMembershipResponse>(
+    `/community/groups/${encodeURIComponent(slug)}/members/${encodeURIComponent(username)}/role?role=${encodeURIComponent(role)}`,
+    { method: "PATCH", headers: { "Idempotency-Key": idempotencyKey } }, token,
+  );
 }
 
 export function getCommunityPost(

@@ -7,6 +7,7 @@ from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
+    CommunityBoard,
     CommunityComment,
     CommunityContentStatus,
     CommunityModerationAction,
@@ -15,10 +16,15 @@ from password_detective.db.models.community import (
     CommunityReportDecision,
     CommunityReportStatus,
 )
-from password_detective.db.models.user import User
+from password_detective.db.models.user import User, UserRole
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.community.admin_schemas import (
+    AdminCommunityBoardCreateRequest,
+    AdminCommunityBoardListResponse,
+    AdminCommunityBoardMutationResponse,
+    AdminCommunityBoardResponse,
+    AdminCommunityBoardUpdateRequest,
     AdminCommunityPostModerateRequest,
     AdminCommunityPostMutationResponse,
     AdminCommunityPostState,
@@ -27,6 +33,135 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityReportResolveRequest,
     AdminCommunityReportSummary,
 )
+from password_detective.modules.community.boards import ensure_seed_boards
+
+
+def list_admin_boards(db: Session) -> AdminCommunityBoardListResponse:
+    ensure_seed_boards(db)
+    boards = db.scalars(
+        select(CommunityBoard).order_by(CommunityBoard.sort_order, CommunityBoard.code)
+    ).all()
+    return AdminCommunityBoardListResponse(items=[_board_response(db, item) for item in boards])
+
+
+def create_admin_board(
+    db: Session,
+    *,
+    payload: AdminCommunityBoardCreateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminCommunityBoardMutationResponse:
+    _validate_board_role(payload.minimum_role)
+    if db.scalar(select(CommunityBoard.id).where(CommunityBoard.code == payload.code)):
+        raise AppError("community.board_code_conflict", "板块代码已存在", status_code=409)
+    board = CommunityBoard(
+        code=payload.code,
+        name=payload.name,
+        description=payload.description,
+        sort_order=payload.sort_order,
+        minimum_role=payload.minimum_role.value,
+        is_read_only=payload.is_read_only,
+        status=payload.status,
+    )
+    db.add(board)
+    db.flush()
+    audit = _audit_board(db, board, principal, context, "community.board.create", None)
+    db.commit()
+    db.refresh(board)
+    return AdminCommunityBoardMutationResponse(
+        board=_board_response(db, board), audit_id=audit.id, request_id=context.request_id
+    )
+
+
+def update_admin_board(
+    db: Session,
+    *,
+    board_code: str,
+    payload: AdminCommunityBoardUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminCommunityBoardMutationResponse:
+    _validate_board_role(payload.minimum_role)
+    board = db.scalar(select(CommunityBoard).where(CommunityBoard.code == board_code))
+    if board is None:
+        raise AppError("community.board_not_found", "社区板块不存在", status_code=404)
+    before = _board_state(board)
+    board.name = payload.name
+    board.description = payload.description
+    board.sort_order = payload.sort_order
+    board.minimum_role = payload.minimum_role.value
+    board.is_read_only = payload.is_read_only
+    board.status = payload.status
+    audit = _audit_board(db, board, principal, context, "community.board.update", before)
+    db.commit()
+    db.refresh(board)
+    return AdminCommunityBoardMutationResponse(
+        board=_board_response(db, board), audit_id=audit.id, request_id=context.request_id
+    )
+
+
+def _validate_board_role(role: UserRole) -> None:
+    if role == UserRole.SERVICE:
+        raise AppError(
+            "community.board_role_invalid", "服务账号不能作为社区发帖最低角色", status_code=422
+        )
+
+
+def _board_response(db: Session, board: CommunityBoard) -> AdminCommunityBoardResponse:
+    count = (
+        db.scalar(
+            select(func.count(CommunityPost.id)).where(
+                CommunityPost.board_id == board.id,
+                CommunityPost.status == CommunityContentStatus.PUBLISHED,
+            )
+        )
+        or 0
+    )
+    return AdminCommunityBoardResponse(
+        code=board.code,
+        name=board.name,
+        description=board.description,
+        sort_order=board.sort_order,
+        minimum_role=UserRole(board.minimum_role),
+        is_read_only=board.is_read_only,
+        status=board.status,
+        post_count=count,
+        created_at=board.created_at,
+        updated_at=board.updated_at,
+    )
+
+
+def _board_state(board: CommunityBoard) -> dict[str, object]:
+    return {
+        "code": board.code,
+        "name": board.name,
+        "description": board.description,
+        "sort_order": board.sort_order,
+        "minimum_role": board.minimum_role,
+        "is_read_only": board.is_read_only,
+        "status": board.status.value,
+    }
+
+
+def _audit_board(
+    db: Session,
+    board: CommunityBoard,
+    principal: Principal,
+    context: ClientContext,
+    action: str,
+    before: dict[str, object] | None,
+):
+    return write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action=action,
+        target_type="community_board",
+        target_id=board.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"before": before, "after": _board_state(board)},
+    )
 
 
 def list_admin_reports(

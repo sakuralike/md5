@@ -18,8 +18,16 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.community import CommunityReportStatus
 from password_detective.modules.auth.context import get_client_context
-from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
+from password_detective.modules.auth.dependencies import (
+    Principal,
+    require_admin_mfa,
+    require_admin_only_mfa,
+)
 from password_detective.modules.community.admin_schemas import (
+    AdminCommunityBoardCreateRequest,
+    AdminCommunityBoardListResponse,
+    AdminCommunityBoardMutationResponse,
+    AdminCommunityBoardUpdateRequest,
     AdminCommunityPostModerateRequest,
     AdminCommunityPostMutationResponse,
     AdminCommunityReportListResponse,
@@ -27,12 +35,85 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityReportResolveRequest,
 )
 from password_detective.modules.community.admin_service import (
+    create_admin_board,
+    list_admin_boards,
     list_admin_reports,
     moderate_admin_post,
     resolve_admin_report,
+    update_admin_board,
 )
 
 admin_router = APIRouter(prefix="/admin/community", tags=["社区治理"])
+
+
+@admin_router.get("/boards", response_model=AdminCommunityBoardListResponse)
+def admin_community_boards(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> AdminCommunityBoardListResponse:
+    del principal
+    return list_admin_boards(db)
+
+
+@admin_router.post(
+    "/boards",
+    response_model=AdminCommunityBoardMutationResponse,
+    status_code=201,
+    dependencies=[
+        Depends(rate_limit("admin.community.board.create", limit=20, window_seconds=3600))
+    ],
+)
+def admin_community_board_create(
+    payload: AdminCommunityBoardCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> AdminCommunityBoardMutationResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="admin.community.board.create",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=AdminCommunityBoardMutationResponse,
+        mutate=lambda: create_admin_board(
+            db, payload=payload, principal=principal, context=get_client_context(request)
+        ),
+        response_status=201,
+    )
+
+
+@admin_router.patch(
+    "/boards/{board_code}",
+    response_model=AdminCommunityBoardMutationResponse,
+    dependencies=[
+        Depends(rate_limit("admin.community.board.update", limit=60, window_seconds=3600))
+    ],
+)
+def admin_community_board_update(
+    board_code: str,
+    payload: AdminCommunityBoardUpdateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> AdminCommunityBoardMutationResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="admin.community.board.update",
+        idempotency_key=idempotency_key,
+        request_payload={"board_code": board_code, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=AdminCommunityBoardMutationResponse,
+        mutate=lambda: update_admin_board(
+            db,
+            board_code=board_code,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    )
 
 
 @admin_router.get("/reports", response_model=AdminCommunityReportListResponse)
@@ -120,6 +201,7 @@ def _mutate_with_idempotency[ResponseModel: BaseModel](
     principal: Principal,
     response_type: type[ResponseModel],
     mutate: Callable[[], ResponseModel],
+    response_status: int = 200,
 ) -> ResponseModel:
     lease = acquire_idempotency(
         db,
@@ -135,7 +217,7 @@ def _mutate_with_idempotency[ResponseModel: BaseModel](
         complete_idempotency(
             db,
             lease,
-            response_status=200,
+            response_status=response_status,
             response_body=response.model_dump(mode="json"),
         )
         return response

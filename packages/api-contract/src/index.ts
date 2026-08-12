@@ -1385,7 +1385,7 @@ export interface SettingVersionMutationResponse {
 }
 
 
-export type CommunityBoardCode = "general" | "recovery_guides" | "verification" | "security";
+export type CommunityBoardCode = string;
 export type CommunityContentStatus = "published" | "removed";
 export type CommunityReportReason = "spam" | "harassment" | "privacy" | "unsafe" | "other";
 export type CommunityReportStatus = "open" | "resolved" | "dismissed";
@@ -1394,10 +1394,20 @@ export type CommunityModerationAction = "lock" | "unlock" | "pin" | "unpin" | "r
 export type CommunityNotificationKind = "mention";
 export type CommunityNotificationSource = "post" | "comment";
 
+export type CommunityBoardStatus = "active" | "inactive";
+export type CommunityGroupVisibility = "public" | "approval" | "private";
+export type CommunityGroupStatus = "active" | "inactive";
+export type CommunityGroupRole = "owner" | "moderator" | "member";
+export type CommunityGroupMembershipStatus = "pending" | "active" | "rejected" | "removed";
+
 export interface CommunityBoard {
   code: CommunityBoardCode;
   name: string;
   description: string;
+  sort_order: number;
+  minimum_role: UserRole;
+  status: CommunityBoardStatus;
+  is_read_only: boolean;
   post_count: number;
 }
 
@@ -1411,8 +1421,60 @@ export interface CommunityAuthor {
   role: UserRole;
 }
 
+export interface CommunityGroupSummary {
+  slug: string;
+  name: string;
+  description: string;
+  visibility: CommunityGroupVisibility;
+  status: CommunityGroupStatus;
+  member_count: number;
+  post_count: number;
+  viewer_role: CommunityGroupRole | null;
+  viewer_membership_status: CommunityGroupMembershipStatus | null;
+}
+
+export interface CommunityGroupMember {
+  username: string;
+  role: CommunityGroupRole;
+  status: CommunityGroupMembershipStatus;
+}
+
+export interface CommunityGroupListResponse {
+  items: CommunityGroupSummary[];
+}
+
+export interface CommunityGroupDetail extends CommunityGroupSummary {
+  owner_username: string;
+  members: CommunityGroupMember[];
+}
+
+export interface CommunityGroupCreateRequest {
+  slug: string;
+  name: string;
+  description: string;
+  visibility: CommunityGroupVisibility;
+}
+
+export interface CommunityGroupUpdateRequest {
+  name: string;
+  description: string;
+  visibility: CommunityGroupVisibility;
+  status: CommunityGroupStatus;
+}
+
+export interface CommunityGroupMembershipResponse {
+  group: CommunityGroupSummary;
+  message: string;
+}
+
+export interface CommunityGroupMemberDecisionRequest {
+  decision: "approve" | "reject" | "remove" | "invite";
+  role?: CommunityGroupRole;
+}
+
 export interface CommunityPostCreateRequest {
   board_code: CommunityBoardCode;
+  group_slug?: string | null;
   title: string;
   content: string;
   rules_accepted: boolean;
@@ -1440,6 +1502,7 @@ export interface CommunityCommentUpdateRequest {
 export interface CommunityPostSummary {
   id: string;
   board_code: CommunityBoardCode;
+  group_slug: string | null;
   title: string;
   content_preview: string;
   author: CommunityAuthor;
@@ -1485,6 +1548,7 @@ export interface CommunityCommentListResponse {
 export interface CommunityPostDetail {
   id: string;
   board_code: CommunityBoardCode;
+  group_slug: string | null;
   title: string;
   content: string;
   author: CommunityAuthor;
@@ -1718,6 +1782,34 @@ export interface AdminCommunityReportMutationResponse {
 
 export interface AdminCommunityPostMutationResponse {
   post: AdminCommunityPostState;
+  audit_id: string;
+  request_id: string | null;
+}
+
+
+export interface AdminCommunityBoardCreateRequest {
+  code: string;
+  name: string;
+  description: string;
+  sort_order: number;
+  minimum_role: UserRole;
+  is_read_only: boolean;
+  status: CommunityBoardStatus;
+}
+
+export type AdminCommunityBoardUpdateRequest = Omit<AdminCommunityBoardCreateRequest, "code">;
+
+export interface AdminCommunityBoardResponse extends CommunityBoard {
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminCommunityBoardListResponse {
+  items: AdminCommunityBoardResponse[];
+}
+
+export interface AdminCommunityBoardMutationResponse {
+  board: AdminCommunityBoardResponse;
   audit_id: string;
   request_id: string | null;
 }

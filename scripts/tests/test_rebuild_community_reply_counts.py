@@ -12,6 +12,7 @@ from password_detective.core.config import Settings
 from password_detective.core.time import utc_now
 from password_detective.db.database import Database
 from password_detective.db.models.community import (
+    CommunityBoard,
     CommunityBoardCode,
     CommunityComment,
     CommunityContentStatus,
@@ -39,11 +40,23 @@ def seed_projection_fixture(database: Database) -> tuple[str, str]:
     mismatched_post_id = "10000000-0000-0000-0000-000000000001"
     consistent_post_id = "10000000-0000-0000-0000-000000000002"
     synthetic_author_id = "20000000-0000-0000-0000-000000000001"
+    board_id = "10000000-0000-4000-8000-000000000001"
     with database.session_factory() as db:
+        db.add(
+            CommunityBoard(
+                id=board_id,
+                code=CommunityBoardCode.GENERAL.value,
+                name="社区广场",
+                description="仅用于合成回复数投影测试。",
+                sort_order=10,
+            )
+        )
+        db.flush()
         db.add_all(
             [
                 CommunityPost(
                     id=mismatched_post_id,
+                    board_id=board_id,
                     board_code=CommunityBoardCode.GENERAL,
                     author_id=synthetic_author_id,
                     title="合成回复数异常主题",
@@ -52,6 +65,7 @@ def seed_projection_fixture(database: Database) -> tuple[str, str]:
                 ),
                 CommunityPost(
                     id=consistent_post_id,
+                    board_id=board_id,
                     board_code=CommunityBoardCode.GENERAL,
                     author_id=synthetic_author_id,
                     title="合成回复数正常主题",
@@ -89,7 +103,9 @@ def seed_projection_fixture(database: Database) -> tuple[str, str]:
     return mismatched_post_id, consistent_post_id
 
 
-def test_reply_count_projection_dry_run_reports_without_mutation(tmp_path: Path) -> None:
+def test_reply_count_projection_dry_run_reports_without_mutation(
+    tmp_path: Path,
+) -> None:
     database = build_database(tmp_path)
     try:
         mismatched_post_id, _ = seed_projection_fixture(database)

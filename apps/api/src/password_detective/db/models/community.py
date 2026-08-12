@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -16,6 +16,140 @@ class CommunityBoardCode(StrEnum):
     RECOVERY_GUIDES = "recovery_guides"
     VERIFICATION = "verification"
     SECURITY = "security"
+
+
+class CommunityBoardStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class CommunityGroupVisibility(StrEnum):
+    PUBLIC = "public"
+    APPROVAL = "approval"
+    PRIVATE = "private"
+
+
+class CommunityGroupStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class CommunityGroupRole(StrEnum):
+    OWNER = "owner"
+    MODERATOR = "moderator"
+    MEMBER = "member"
+
+
+class CommunityGroupMembershipStatus(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    REJECTED = "rejected"
+    REMOVED = "removed"
+
+
+class CommunityBoard(Base):
+    __tablename__ = "community_boards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(48))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    minimum_role: Mapped[str] = mapped_column(String(32), default="user")
+    status: Mapped[CommunityBoardStatus] = mapped_column(
+        Enum(CommunityBoardStatus, native_enum=False, length=16),
+        default=CommunityBoardStatus.ACTIVE,
+        index=True,
+    )
+    is_read_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityGroup(Base):
+    __tablename__ = "community_groups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    slug: Mapped[str] = mapped_column(String(48), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(500), default="")
+    visibility: Mapped[CommunityGroupVisibility] = mapped_column(
+        Enum(CommunityGroupVisibility, native_enum=False, length=16), index=True
+    )
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    status: Mapped[CommunityGroupStatus] = mapped_column(
+        Enum(CommunityGroupStatus, native_enum=False, length=16),
+        default=CommunityGroupStatus.ACTIVE,
+        index=True,
+    )
+    member_count: Mapped[int] = mapped_column(Integer, default=1)
+    post_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityGroupMembership(Base):
+    __tablename__ = "community_group_memberships"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uq_community_group_membership"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_groups.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[CommunityGroupRole] = mapped_column(
+        Enum(CommunityGroupRole, native_enum=False, length=16),
+        default=CommunityGroupRole.MEMBER,
+        index=True,
+    )
+    status: Mapped[CommunityGroupMembershipStatus] = mapped_column(
+        Enum(CommunityGroupMembershipStatus, native_enum=False, length=16),
+        default=CommunityGroupMembershipStatus.PENDING,
+        index=True,
+    )
+    decided_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityGroupGovernanceEvent(Base):
+    __tablename__ = "community_group_governance_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_groups.id", ondelete="CASCADE"), index=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    subject_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    before_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class CommunityContentStatus(StrEnum):
@@ -65,8 +199,15 @@ class CommunityPost(Base):
     __tablename__ = "community_posts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    board_code: Mapped[CommunityBoardCode] = mapped_column(
-        Enum(CommunityBoardCode, native_enum=False, length=32), index=True
+    board_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_boards.id", ondelete="RESTRICT"), index=True
+    )
+    board_code: Mapped[str] = mapped_column(String(32), index=True)
+    group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_groups.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     author_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True

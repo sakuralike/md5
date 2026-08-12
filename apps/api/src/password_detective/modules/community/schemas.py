@@ -5,7 +5,11 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.community import (
-    CommunityBoardCode,
+    CommunityBoardStatus,
+    CommunityGroupMembershipStatus,
+    CommunityGroupRole,
+    CommunityGroupStatus,
+    CommunityGroupVisibility,
     CommunityInteractionPolicy,
     CommunityNotificationKind,
     CommunityNotificationSource,
@@ -24,14 +28,80 @@ def _normalize(value: str, empty_message: str) -> str:
 
 
 class CommunityBoard(BaseModel):
-    code: CommunityBoardCode
+    code: str
     name: str
     description: str
-    post_count: int
+    sort_order: int = 0
+    minimum_role: UserRole = UserRole.USER
+    status: CommunityBoardStatus = CommunityBoardStatus.ACTIVE
+    is_read_only: bool = False
+    post_count: int = 0
 
 
 class CommunityBoardListResponse(BaseModel):
     items: list[CommunityBoard]
+
+
+class CommunityGroupCreateRequest(BaseModel):
+    slug: str = Field(min_length=3, max_length=48, pattern=r"^[a-z0-9][a-z0-9-]{2,47}$")
+    name: str = Field(min_length=2, max_length=64)
+    description: str = Field(default="", max_length=500)
+    visibility: CommunityGroupVisibility
+
+    @field_validator("name", "description")
+    @classmethod
+    def normalize_group_text(cls, value: str) -> str:
+        return value.replace("\x00", "").strip()
+
+
+class CommunityGroupUpdateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=64)
+    description: str = Field(default="", max_length=500)
+    visibility: CommunityGroupVisibility
+    status: CommunityGroupStatus = CommunityGroupStatus.ACTIVE
+
+    @field_validator("name", "description")
+    @classmethod
+    def normalize_group_text(cls, value: str) -> str:
+        return value.replace("\x00", "").strip()
+
+
+class CommunityGroupMember(BaseModel):
+    username: str
+    role: CommunityGroupRole
+    status: CommunityGroupMembershipStatus
+
+
+class CommunityGroupSummary(BaseModel):
+    slug: str
+    name: str
+    description: str
+    visibility: CommunityGroupVisibility
+    status: CommunityGroupStatus
+    member_count: int
+    post_count: int
+    viewer_role: CommunityGroupRole | None = None
+    viewer_membership_status: CommunityGroupMembershipStatus | None = None
+
+
+class CommunityGroupListResponse(BaseModel):
+    items: list[CommunityGroupSummary]
+
+
+class CommunityGroupDetail(CommunityGroupSummary):
+    owner_username: str
+    members: list[CommunityGroupMember]
+    posts: CommunityPostListResponse | None = None
+
+
+class CommunityGroupMembershipResponse(BaseModel):
+    group: CommunityGroupSummary
+    message: str
+
+
+class CommunityGroupMemberDecisionRequest(BaseModel):
+    decision: str = Field(pattern=r"^(approve|reject|remove|invite)$")
+    role: CommunityGroupRole = CommunityGroupRole.MEMBER
 
 
 class CommunityAuthor(BaseModel):
@@ -41,7 +111,8 @@ class CommunityAuthor(BaseModel):
 
 
 class CommunityPostCreateRequest(BaseModel):
-    board_code: CommunityBoardCode
+    board_code: str
+    group_slug: str | None = None
     title: str = Field(min_length=4, max_length=120)
     content: str = Field(min_length=20, max_length=10000)
     rules_accepted: bool
@@ -109,7 +180,8 @@ class CommunityReportResponse(BaseModel):
 
 class CommunityPostSummary(BaseModel):
     id: str
-    board_code: CommunityBoardCode
+    board_code: str
+    group_slug: str | None = None
     title: str
     content_preview: str
     author: CommunityAuthor
@@ -154,7 +226,8 @@ class CommunityCommentListResponse(BaseModel):
 
 class CommunityPostDetail(BaseModel):
     id: str
-    board_code: CommunityBoardCode
+    board_code: str
+    group_slug: str | None = None
     title: str
     content: str
     author: CommunityAuthor

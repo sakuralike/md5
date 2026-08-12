@@ -13,7 +13,8 @@ from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
-    CommunityBoardCode,
+    CommunityBoard,
+    CommunityBoardStatus,
     CommunityComment,
     CommunityCommentLike,
     CommunityContentStatus,
@@ -36,9 +37,18 @@ from password_detective.db.models.community import (
 from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.community.boards import get_board_by_code, require_board_post_access
+from password_detective.modules.community.group_service import (
+    can_user_view_post,
+    group_slug_for_post,
+    increment_group_post_count,
+    post_visibility_condition,
+    require_group_post_access,
+    require_post_visible,
+    visible_group_model,
+)
 from password_detective.modules.community.schemas import (
     CommunityAuthor,
-    CommunityBoard,
     CommunityBoardListResponse,
     CommunityBookmarkItem,
     CommunityBookmarkListResponse,
@@ -72,36 +82,43 @@ from password_detective.modules.community.schemas import (
     CommunityReportCreateRequest,
     CommunityReportResponse,
 )
+from password_detective.modules.community.schemas import (
+    CommunityBoard as CommunityBoardSchema,
+)
 
 _MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,32})")
 _MAX_MENTIONS_PER_CONTENT = 10
 
 
-_BOARD_CATALOG: tuple[tuple[CommunityBoardCode, str, str], ...] = (
-    (CommunityBoardCode.GENERAL, "社区广场", "交流安全恢复经验、工具使用方式与协作建议。"),
-    (CommunityBoardCode.RECOVERY_GUIDES, "恢复指南", "分享合法授权场景下的恢复流程与排障记录。"),
-    (CommunityBoardCode.VERIFICATION, "验证协作", "讨论指纹、候选结果与验证证据，不发布真实密码。"),
-    (CommunityBoardCode.SECURITY, "安全与隐私", "交流账号保护、数据最小化与隐私实践。"),
-)
-
-
 def list_boards(db: Session) -> CommunityBoardListResponse:
+    from password_detective.modules.community.boards import ensure_seed_boards
+
+    ensure_seed_boards(db)
     counts = dict(
         db.execute(
-            select(CommunityPost.board_code, func.count(CommunityPost.id))
+            select(CommunityPost.board_id, func.count(CommunityPost.id))
             .where(CommunityPost.status == CommunityContentStatus.PUBLISHED)
-            .group_by(CommunityPost.board_code)
+            .group_by(CommunityPost.board_id)
         ).all()
     )
+    boards = db.scalars(
+        select(CommunityBoard)
+        .where(CommunityBoard.status == CommunityBoardStatus.ACTIVE)
+        .order_by(CommunityBoard.sort_order.asc(), CommunityBoard.created_at.asc())
+    ).all()
     return CommunityBoardListResponse(
         items=[
-            CommunityBoard(
-                code=code,
-                name=name,
-                description=description,
-                post_count=counts.get(code, 0),
+            CommunityBoardSchema(
+                code=board.code,
+                name=board.name,
+                description=board.description,
+                sort_order=board.sort_order,
+                minimum_role=board.minimum_role,
+                status=board.status,
+                is_read_only=board.is_read_only,
+                post_count=counts.get(board.id, 0),
             )
-            for code, name, description in _BOARD_CATALOG
+            for board in boards
         ]
     )
 
@@ -109,17 +126,25 @@ def list_boards(db: Session) -> CommunityBoardListResponse:
 def list_posts(
     db: Session,
     *,
-    board_code: CommunityBoardCode | None,
+    board_code: str | None,
+    group_slug: str | None,
     page: int,
     page_size: int,
     principal: Principal | None = None,
 ) -> CommunityPostListResponse:
-    conditions = [CommunityPost.status == CommunityContentStatus.PUBLISHED]
+    viewer_id = principal.user.id if principal is not None else None
+    conditions = [
+        CommunityPost.status == CommunityContentStatus.PUBLISHED,
+        post_visibility_condition(viewer_id),
+    ]
     hidden_author_ids = _hidden_author_ids(db, principal.user.id if principal is not None else None)
     if hidden_author_ids:
         conditions.append(CommunityPost.author_id.not_in(hidden_author_ids))
     if board_code is not None:
         conditions.append(CommunityPost.board_code == board_code)
+    if group_slug is not None:
+        group = visible_group_model(db, slug=group_slug, principal=principal)
+        conditions.append(CommunityPost.group_id == group.id)
     total = db.scalar(select(func.count(CommunityPost.id)).where(*conditions)) or 0
     posts = db.scalars(
         select(CommunityPost)
@@ -130,7 +155,7 @@ def list_posts(
     ).all()
     authors = _load_authors(db, [post.author_id for post in posts])
     return CommunityPostListResponse(
-        items=[_post_summary(post, authors[post.author_id]) for post in posts],
+        items=[_post_summary(db, post, authors[post.author_id]) for post in posts],
         page=page,
         page_size=page_size,
         total=total,
@@ -144,6 +169,7 @@ def get_post(
     principal: Principal | None = None,
 ) -> CommunityPostDetail:
     post = _get_published_post(db, post_id)
+    require_post_visible(db, post, principal)
     viewer_id = principal.user.id if principal is not None else None
     if post.author_id in _hidden_author_ids(db, viewer_id):
         raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
@@ -160,6 +186,7 @@ def get_post(
     )
     liked_comment_ids = _liked_comment_ids(db, viewer_id, comments)
     return _post_detail(
+        db,
         post,
         authors,
         comments,
@@ -172,7 +199,7 @@ def get_post(
 def list_home(
     db: Session,
     *,
-    board_code: CommunityBoardCode | None,
+    board_code: str | None,
     page_size: int,
     principal: Principal | None = None,
 ) -> CommunityHomeResponse:
@@ -181,6 +208,7 @@ def list_home(
         posts=list_posts(
             db,
             board_code=board_code,
+            group_slug=None,
             page=1,
             page_size=page_size,
             principal=principal,
@@ -197,6 +225,7 @@ def list_comments(
     principal: Principal | None = None,
 ) -> CommunityCommentListResponse:
     post = _get_published_post(db, post_id)
+    require_post_visible(db, post, principal)
     viewer_id = principal.user.id if principal is not None else None
     hidden_author_ids = _hidden_author_ids(db, viewer_id)
     if post.author_id in hidden_author_ids:
@@ -231,14 +260,20 @@ def create_post(
     principal: Principal,
 ) -> CommunityPostDetail:
     _require_publish_access(principal, payload.rules_accepted)
+    board = get_board_by_code(db, payload.board_code)
+    require_board_post_access(board, principal.user.role)
+    group = require_group_post_access(db, payload.group_slug, principal)
     post = CommunityPost(
-        board_code=payload.board_code,
+        board_id=board.id,
+        board_code=board.code,
+        group_id=group.id if group is not None else None,
         author_id=principal.user.id,
         title=payload.title,
         content=payload.content,
     )
     db.add(post)
     db.flush()
+    increment_group_post_count(db, post.group_id, 1)
     _sync_mention_notifications(
         db,
         text=f"{post.title}\n{post.content}",
@@ -263,6 +298,7 @@ def update_post(
 ) -> CommunityPostDetail:
     _require_publish_access(principal, payload.rules_accepted)
     post = _get_published_post(db, post_id)
+    require_post_visible(db, post, principal)
     _require_author(post.author_id, principal.user.id)
     _require_version(post.version, payload.expected_version)
     now = utc_now()
@@ -315,6 +351,7 @@ def delete_post(
     context: ClientContext,
 ) -> CommunityPostDetail:
     post = _get_published_post(db, post_id)
+    require_post_visible(db, post, principal)
     _require_author(post.author_id, principal.user.id)
     _require_version(post.version, expected_version)
     now = utc_now()
@@ -512,6 +549,7 @@ def create_report(
     )
     if post is None:
         raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    require_post_visible(db, post, principal)
     if payload.comment_id is not None:
         comment = db.scalar(
             select(CommunityComment).where(
@@ -579,6 +617,7 @@ def set_post_like(
         )
     )
     if liked:
+        require_post_visible(db, post, principal)
         if post.status != CommunityContentStatus.PUBLISHED:
             raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
         if existing is None:
@@ -610,6 +649,7 @@ def set_comment_like(
     )
     if liked:
         post = db.get(CommunityPost, comment.post_id)
+        require_post_visible(db, post, principal)
         if (
             comment.status != CommunityContentStatus.PUBLISHED
             or post is None
@@ -648,6 +688,7 @@ def set_post_bookmark(
         )
     )
     if bookmarked:
+        require_post_visible(db, post, principal)
         if post.status != CommunityContentStatus.PUBLISHED:
             raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
         if existing is None:
@@ -690,6 +731,7 @@ def list_bookmarks(
             select(CommunityPost).where(
                 CommunityPost.id.in_(post_ids),
                 CommunityPost.status == CommunityContentStatus.PUBLISHED,
+                post_visibility_condition(principal.user.id),
                 CommunityPost.author_id.not_in(hidden_author_ids),
             )
         ).all()
@@ -706,6 +748,7 @@ def list_bookmarks(
                 bookmarked_at=bookmark.created_at,
                 post=(
                     _post_summary(
+                        db,
                         post_by_id[bookmark.post_id],
                         authors[post_by_id[bookmark.post_id].author_id],
                     )
@@ -728,7 +771,10 @@ def list_notifications(
     limit: int,
     unread_only: bool,
 ) -> CommunityNotificationListResponse:
-    conditions = [CommunityNotification.recipient_id == principal.user.id]
+    conditions = [
+        CommunityNotification.recipient_id == principal.user.id,
+        _notification_visibility_condition(principal.user.id),
+    ]
     if unread_only:
         conditions.append(CommunityNotification.read_at.is_(None))
     if cursor is not None:
@@ -779,7 +825,7 @@ def mark_notification_read(
             CommunityNotification.recipient_id == principal.user.id,
         )
     )
-    if notification is None:
+    if notification is None or not _notification_is_visible(db, notification, principal.user.id):
         raise AppError("community.notification_not_found", "社区通知不存在", status_code=404)
     if notification.read_at is None:
         notification.read_at = utc_now()
@@ -799,6 +845,7 @@ def mark_all_notifications_read(
         select(CommunityNotification).where(
             CommunityNotification.recipient_id == principal.user.id,
             CommunityNotification.read_at.is_(None),
+            _notification_visibility_condition(principal.user.id),
         )
     ).all()
     now = utc_now()
@@ -861,12 +908,13 @@ def get_public_profile(
             .where(
                 CommunityPost.author_id == user.id,
                 CommunityPost.status == CommunityContentStatus.PUBLISHED,
+                post_visibility_condition(viewer_id),
             )
             .order_by(CommunityPost.created_at.desc(), CommunityPost.id.desc())
             .limit(10)
         ).all()
         author = _author_from_user(user)
-        recent_posts = [_post_summary(post, author) for post in posts]
+        recent_posts = [_post_summary(db, post, author) for post in posts]
         comments = db.execute(
             select(CommunityComment, CommunityPost.title)
             .join(CommunityPost, CommunityPost.id == CommunityComment.post_id)
@@ -874,6 +922,7 @@ def get_public_profile(
                 CommunityComment.author_id == user.id,
                 CommunityComment.status == CommunityContentStatus.PUBLISHED,
                 CommunityPost.status == CommunityContentStatus.PUBLISHED,
+                post_visibility_condition(viewer_id),
             )
             .order_by(CommunityComment.created_at.desc(), CommunityComment.id.desc())
             .limit(10)
@@ -1455,6 +1504,11 @@ def _sync_mention_notifications(
         recipient
         for recipient in recipients
         if _mention_allowed(db, actor_id=actor_id, recipient_id=recipient.id)
+        and can_user_view_post(
+            db,
+            db.get(CommunityPost, post_id),
+            recipient.id,
+        )
     ]
     if not recipients:
         return
@@ -1541,12 +1595,30 @@ def _notification_response(
     )
 
 
+def _notification_visibility_condition(user_id: str):
+    visible_post_ids = select(CommunityPost.id).where(post_visibility_condition(user_id))
+    return or_(
+        CommunityNotification.post_id.is_(None),
+        CommunityNotification.post_id.in_(visible_post_ids),
+    )
+
+
+def _notification_is_visible(
+    db: Session, notification: CommunityNotification, user_id: str
+) -> bool:
+    if notification.post_id is None:
+        return True
+    post = db.get(CommunityPost, notification.post_id)
+    return post is not None and can_user_view_post(db, post, user_id)
+
+
 def _unread_notification_count(db: Session, user_id: str) -> int:
     return (
         db.scalar(
             select(func.count(CommunityNotification.id)).where(
                 CommunityNotification.recipient_id == user_id,
                 CommunityNotification.read_at.is_(None),
+                _notification_visibility_condition(user_id),
             )
         )
         or 0
@@ -1658,12 +1730,15 @@ def _load_authors(db: Session, author_ids: list[str]) -> dict[str, CommunityAuth
     }
 
 
-def _post_summary(post: CommunityPost, author: CommunityAuthor) -> CommunityPostSummary:
+def _post_summary(
+    db: Session, post: CommunityPost, author: CommunityAuthor
+) -> CommunityPostSummary:
     compact = " ".join(post.content.split())
     preview = compact if len(compact) <= 180 else f"{compact[:177]}..."
     return CommunityPostSummary(
         id=post.id,
         board_code=post.board_code,
+        group_slug=group_slug_for_post(db, post.group_id),
         title=post.title,
         content_preview=preview,
         author=author,
@@ -1794,6 +1869,7 @@ def _list_comment_models(
 
 
 def _post_detail(
+    db: Session,
     post: CommunityPost,
     authors: dict[str, CommunityAuthor],
     comments: list[CommunityComment],
@@ -1805,6 +1881,7 @@ def _post_detail(
     return CommunityPostDetail(
         id=post.id,
         board_code=post.board_code,
+        group_slug=group_slug_for_post(db, post.group_id),
         title=post.title,
         content=post.content,
         author=authors[post.author_id],
