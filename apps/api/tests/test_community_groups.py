@@ -116,6 +116,15 @@ def test_approval_group_requires_owner_decision(client):
     assert requested.status_code == 200
     assert requested.json()["group"]["viewer_membership_status"] == "pending"
 
+    applications = client.get(
+        "/api/v1/community/notifications?kind=group_application",
+        headers={"Authorization": f"Bearer {owner['access_token']}"},
+    )
+    assert applications.status_code == 200
+    assert len(applications.json()["items"]) == 1
+    assert applications.json()["items"][0]["source_type"] == "group"
+    assert applications.json()["items"][0]["actor"]["username"] == "approval_member"
+
     rejected_post = client.post(
         "/api/v1/community/posts",
         json={
@@ -136,6 +145,27 @@ def test_approval_group_requires_owner_decision(client):
         headers=headers(owner, "group-approval-decision"),
     )
     assert approved.status_code == 200
+    decisions = client.get(
+        "/api/v1/community/notifications?kind=group_decision",
+        headers={"Authorization": f"Bearer {member['access_token']}"},
+    )
+    assert decisions.status_code == 200
+    assert len(decisions.json()["items"]) == 1
+    assert "已通过" in decisions.json()["items"][0]["preview"]
+
+    role_changed = client.patch(
+        "/api/v1/community/groups/approval-lab/members/approval_member/role?role=moderator",
+        headers=headers(owner, "group-approval-role"),
+    )
+    assert role_changed.status_code == 200
+    role_notifications = client.get(
+        "/api/v1/community/notifications?kind=group_role_change",
+        headers={"Authorization": f"Bearer {member['access_token']}"},
+    )
+    assert role_notifications.status_code == 200
+    assert len(role_notifications.json()["items"]) == 1
+    assert "版主" in role_notifications.json()["items"][0]["preview"]
+
     detail = client.get(
         "/api/v1/community/groups/approval-lab",
         headers={"Authorization": f"Bearer {member['access_token']}"},
@@ -296,6 +326,14 @@ def test_private_group_owner_can_invite_member(client):
         headers=headers(owner, "group-private-invite-member"),
     )
     assert response.status_code == 200, response.text
+    invitation = client.get(
+        "/api/v1/community/notifications?kind=group_decision",
+        headers={"Authorization": f"Bearer {invited['access_token']}"},
+    )
+    assert invitation.status_code == 200
+    assert len(invitation.json()["items"]) == 1
+    assert "邀请加入" in invitation.json()["items"][0]["preview"]
+
     detail = client.get(
         "/api/v1/community/groups/invite-only-lab",
         headers={"Authorization": f"Bearer {invited['access_token']}"},

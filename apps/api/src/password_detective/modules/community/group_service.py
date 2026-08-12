@@ -16,12 +16,15 @@ from password_detective.db.models.community import (
     CommunityGroupRole,
     CommunityGroupStatus,
     CommunityGroupVisibility,
+    CommunityNotificationKind,
+    CommunityNotificationSource,
     CommunityPost,
 )
 from password_detective.db.models.user import User, UserRole
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.community.activity_service import record_group_joined
+from password_detective.modules.community.notification_service import create_notification
 from password_detective.modules.community.schemas import (
     CommunityGroupCreateRequest,
     CommunityGroupDetail,
@@ -197,6 +200,9 @@ def join_group(db: Session, *, slug: str, principal: Principal) -> CommunityGrou
         membership.decided_at = (
             utc_now() if target_status == CommunityGroupMembershipStatus.ACTIVE else None
         )
+    db.flush()
+    if target_status == CommunityGroupMembershipStatus.PENDING:
+        _notify_group_application(db, group, membership, principal.user)
     _event(
         db,
         group,
@@ -320,6 +326,14 @@ def decide_member(
             membership.status = CommunityGroupMembershipStatus.REMOVED
     membership.decided_by_id = principal.user.id
     membership.decided_at = utc_now()
+    db.flush()
+    _notify_group_decision(
+        db,
+        group,
+        membership,
+        actor_id=principal.user.id,
+        decision=payload.decision,
+    )
     _event(
         db,
         group,
@@ -381,6 +395,13 @@ def change_member_role(
                 status_code=409,
             )
         membership.role = role
+    db.flush()
+    _notify_group_role_change(
+        db,
+        group,
+        membership,
+        actor_id=principal.user.id,
+    )
     _event(
         db,
         group,
@@ -402,6 +423,90 @@ def change_member_role(
     return CommunityGroupMembershipResponse(
         group=_group_summary(group, _get_membership(db, group.id, principal.user.id)),
         message="成员角色已更新",
+    )
+
+
+def _notify_group_application(
+    db: Session,
+    group: CommunityGroup,
+    membership: CommunityGroupMembership,
+    applicant: User,
+) -> None:
+    governor_ids = db.scalars(
+        select(CommunityGroupMembership.user_id).where(
+            CommunityGroupMembership.group_id == group.id,
+            CommunityGroupMembership.status == CommunityGroupMembershipStatus.ACTIVE,
+            CommunityGroupMembership.role.in_(
+                [CommunityGroupRole.OWNER, CommunityGroupRole.MODERATOR]
+            ),
+        )
+    ).all()
+    for recipient_id in governor_ids:
+        create_notification(
+            db,
+            recipient_id=recipient_id,
+            actor_id=applicant.id,
+            kind=CommunityNotificationKind.GROUP_APPLICATION,
+            source_type=CommunityNotificationSource.GROUP,
+            source_id=membership.id,
+            post_id=None,
+            comment_id=None,
+            preview=f"{applicant.username} 申请加入群组「{group.name}」",
+            refresh_existing=True,
+        )
+
+
+def _notify_group_decision(
+    db: Session,
+    group: CommunityGroup,
+    membership: CommunityGroupMembership,
+    *,
+    actor_id: str,
+    decision: str,
+) -> None:
+    messages = {
+        "approve": f"你加入群组「{group.name}」的申请已通过",
+        "reject": f"你加入群组「{group.name}」的申请已拒绝",
+        "invite": f"你已被邀请加入群组「{group.name}」",
+        "remove": f"你已被移出群组「{group.name}」",
+    }
+    create_notification(
+        db,
+        recipient_id=membership.user_id,
+        actor_id=actor_id,
+        kind=CommunityNotificationKind.GROUP_DECISION,
+        source_type=CommunityNotificationSource.GROUP,
+        source_id=membership.id,
+        post_id=None,
+        comment_id=None,
+        preview=messages[decision],
+        refresh_existing=True,
+    )
+
+
+def _notify_group_role_change(
+    db: Session,
+    group: CommunityGroup,
+    membership: CommunityGroupMembership,
+    *,
+    actor_id: str,
+) -> None:
+    role_names = {
+        CommunityGroupRole.OWNER: "群主",
+        CommunityGroupRole.MODERATOR: "版主",
+        CommunityGroupRole.MEMBER: "成员",
+    }
+    create_notification(
+        db,
+        recipient_id=membership.user_id,
+        actor_id=actor_id,
+        kind=CommunityNotificationKind.GROUP_ROLE_CHANGE,
+        source_type=CommunityNotificationSource.GROUP,
+        source_id=membership.id,
+        post_id=None,
+        comment_id=None,
+        preview=f"你在群组「{group.name}」中的角色已更新为{role_names[membership.role]}",
+        refresh_existing=True,
     )
 
 

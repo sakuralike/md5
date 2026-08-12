@@ -781,6 +781,20 @@ def test_post_and_comment_likes_are_idempotent_and_project_counts(client):
         "viewer_has_liked": True,
     }
 
+    like_notifications = client.get(
+        "/api/v1/community/notifications?kind=like_summary",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert like_notifications.status_code == 200
+    assert {item["source_type"] for item in like_notifications.json()["items"]} == {
+        "post",
+        "comment",
+    }
+    assert {item["source_id"] for item in like_notifications.json()["items"]} == {
+        post["id"],
+        comment_id,
+    }
+
     anonymous_detail = client.get(f"/api/v1/community/posts/{post['id']}")
     assert anonymous_detail.status_code == 200
     assert anonymous_detail.json()["like_count"] == 1
@@ -815,6 +829,106 @@ def test_post_and_comment_likes_are_idempotent_and_project_counts(client):
     with client.app.state.database.session_factory() as db:
         assert db.scalar(select(CommunityPostLike)) is None
         assert db.scalar(select(CommunityCommentLike)) is None
+
+
+def test_like_summary_notifications_aggregate_reopen_and_honor_preferences(client):
+    author = register_and_login(
+        client, username="like_notice_author", email="like-notice-author@example.com"
+    )
+    first = register_and_login(
+        client, username="like_notice_first", email="like-notice-first@example.com"
+    )
+    second = register_and_login(
+        client, username="like_notice_second", email="like-notice-second@example.com"
+    )
+    post = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "like-notice-post"),
+    ).json()
+
+    assert client.put(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(first, "like-notice-first-like"),
+    ).status_code == 200
+    notifications = client.get(
+        "/api/v1/community/notifications?kind=like_summary",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert notifications.status_code == 200
+    assert len(notifications.json()["items"]) == 1
+    notification = notifications.json()["items"][0]
+    assert notification["source_type"] == "post"
+    assert notification["source_id"] == post["id"]
+    assert notification["actor"]["username"] == "like_notice_first"
+    assert "共 1 个赞" in notification["preview"]
+
+    marked = client.post(
+        f"/api/v1/community/notifications/{notification['id']}/read",
+        headers=headers(author, "like-notice-read"),
+    )
+    assert marked.status_code == 200
+    assert marked.json()["unread_count"] == 0
+
+    assert client.put(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(second, "like-notice-second-like"),
+    ).status_code == 200
+    reopened = client.get(
+        "/api/v1/community/notifications?kind=like_summary&unread_only=true",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    ).json()["items"]
+    assert len(reopened) == 1
+    assert reopened[0]["id"] == notification["id"]
+    assert reopened[0]["actor"]["username"] == "like_notice_second"
+    assert "共 2 个赞" in reopened[0]["preview"]
+
+    assert client.delete(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(second, "like-notice-second-unlike"),
+    ).status_code == 200
+    reduced = client.get(
+        "/api/v1/community/notifications?kind=like_summary",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    ).json()["items"]
+    assert len(reduced) == 1
+    assert reduced[0]["actor"]["username"] == "like_notice_first"
+    assert "共 1 个赞" in reduced[0]["preview"]
+
+    assert client.delete(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(first, "like-notice-first-unlike"),
+    ).status_code == 200
+    cleared = client.get(
+        "/api/v1/community/notifications?kind=like_summary",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert cleared.json()["items"] == []
+
+    preference = client.put(
+        "/api/v1/community/notifications/preferences",
+        json={
+            "items": [
+                {
+                    "kind": "like_summary",
+                    "in_app_enabled": False,
+                    "email_digest_enabled": False,
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert preference.status_code == 200
+    assert client.put(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(first, "like-notice-disabled-like"),
+    ).status_code == 200
+    disabled = client.get(
+        "/api/v1/community/notifications?kind=like_summary",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert disabled.json()["items"] == []
+
 
 
 def test_bookmarks_are_private_paginated_and_allow_removed_cleanup(client):

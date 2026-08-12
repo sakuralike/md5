@@ -53,6 +53,11 @@ from password_detective.modules.community.group_service import (
     require_post_visible,
     visible_group_model,
 )
+from password_detective.modules.community.notification_service import (
+    create_notification,
+    notification_preview,
+    sync_like_summary,
+)
 from password_detective.modules.community.schemas import (
     CommunityAuthor,
     CommunityBoardListResponse,
@@ -454,7 +459,7 @@ def create_comment(
         comment_id=comment.id,
     )
     reply_recipient_id = parent.author_id if parent is not None else post.author_id
-    _create_notification(
+    create_notification(
         db,
         recipient_id=reply_recipient_id,
         actor_id=principal.user.id,
@@ -639,6 +644,7 @@ def set_post_like(
             CommunityPostLike.post_id == post.id,
         )
     )
+    changed = False
     if liked:
         require_post_visible(db, post, principal)
         if post.status != CommunityContentStatus.PUBLISHED:
@@ -646,10 +652,14 @@ def set_post_like(
         if existing is None:
             db.add(CommunityPostLike(user_id=principal.user.id, post_id=post.id))
             db.flush()
+            changed = True
     elif existing is not None:
         db.delete(existing)
         db.flush()
+        changed = True
     post.like_count = _count_post_likes(db, post.id)
+    if changed and principal.user.id != post.author_id:
+        _sync_post_like_notification(db, post, refresh_unread=liked)
     db.commit()
     return _post_interaction_response(db, post, principal.user.id)
 
@@ -664,14 +674,15 @@ def set_comment_like(
     comment = db.get(CommunityComment, comment_id)
     if comment is None:
         raise AppError("community.comment_not_found", "社区回复不存在", status_code=404)
+    post = db.get(CommunityPost, comment.post_id)
     existing = db.scalar(
         select(CommunityCommentLike).where(
             CommunityCommentLike.user_id == principal.user.id,
             CommunityCommentLike.comment_id == comment.id,
         )
     )
+    changed = False
     if liked:
-        post = db.get(CommunityPost, comment.post_id)
         require_post_visible(db, post, principal)
         if (
             comment.status != CommunityContentStatus.PUBLISHED
@@ -682,10 +693,14 @@ def set_comment_like(
         if existing is None:
             db.add(CommunityCommentLike(user_id=principal.user.id, comment_id=comment.id))
             db.flush()
+            changed = True
     elif existing is not None:
         db.delete(existing)
         db.flush()
+        changed = True
     comment.like_count = _count_comment_likes(db, comment.id)
+    if changed and principal.user.id != comment.author_id:
+        _sync_comment_like_notification(db, comment, refresh_unread=liked)
     db.commit()
     return CommunityCommentLikeResponse(
         comment_id=comment.id,
@@ -1084,7 +1099,7 @@ def set_follow(
         db.add(follow)
         db.flush()
         record_user_followed(db, follow)
-        _create_notification(
+        create_notification(
             db,
             recipient_id=target.id,
             actor_id=principal.user.id,
@@ -1563,11 +1578,11 @@ def _sync_mention_notifications(
             )
         ).all()
     )
-    preview = _notification_preview(text)
+    preview = notification_preview(text)
     for recipient in recipients:
         if recipient.id in existing:
             continue
-        _create_notification(
+        create_notification(
             db,
             recipient_id=recipient.id,
             actor_id=actor_id,
@@ -1640,64 +1655,6 @@ def update_notification_preferences(
     return get_notification_preferences(db, principal=principal)
 
 
-def _create_notification(
-    db: Session,
-    *,
-    recipient_id: str,
-    actor_id: str,
-    kind: CommunityNotificationKind,
-    source_type: CommunityNotificationSource,
-    source_id: str,
-    post_id: str | None,
-    comment_id: str | None,
-    preview: str,
-) -> None:
-    if recipient_id == actor_id or not _notification_enabled(db, recipient_id, kind):
-        return
-    if kind not in {
-        CommunityNotificationKind.GROUP_DECISION,
-        CommunityNotificationKind.GROUP_ROLE_CHANGE,
-    }:
-        try:
-            _require_not_blocked(db, actor_id=actor_id, target_id=recipient_id)
-        except AppError:
-            return
-    existing = db.scalar(
-        select(CommunityNotification.id).where(
-            CommunityNotification.recipient_id == recipient_id,
-            CommunityNotification.kind == kind,
-            CommunityNotification.source_type == source_type,
-            CommunityNotification.source_id == source_id,
-        )
-    )
-    if existing is not None:
-        return
-    db.add(
-        CommunityNotification(
-            recipient_id=recipient_id,
-            actor_id=actor_id,
-            kind=kind,
-            source_type=source_type,
-            source_id=source_id,
-            post_id=post_id,
-            comment_id=comment_id,
-            preview=_notification_preview(preview),
-        )
-    )
-
-
-def _notification_enabled(
-    db: Session, recipient_id: str, kind: CommunityNotificationKind
-) -> bool:
-    preference = db.scalar(
-        select(CommunityNotificationPreference).where(
-            CommunityNotificationPreference.user_id == recipient_id,
-            CommunityNotificationPreference.kind == kind,
-        )
-    )
-    return preference is None or preference.in_app_enabled
-
-
 def _mention_allowed(db: Session, *, actor_id: str, recipient_id: str) -> bool:
     if (
         db.scalar(
@@ -1729,10 +1686,6 @@ def _mention_allowed(db: Session, *, actor_id: str, recipient_id: str) -> bool:
         )
     return True
 
-
-def _notification_preview(text: str) -> str:
-    compact = " ".join(text.split())
-    return compact if len(compact) <= 180 else f"{compact[:177]}..."
 
 
 def _notification_response(
@@ -1826,6 +1779,76 @@ def _liked_comment_ids(
                 CommunityCommentLike.comment_id.in_(comment_ids),
             )
         ).all()
+    )
+
+
+def _sync_post_like_notification(
+    db: Session, post: CommunityPost, *, refresh_unread: bool
+) -> None:
+    latest = db.scalar(
+        select(CommunityPostLike)
+        .where(
+            CommunityPostLike.post_id == post.id,
+            CommunityPostLike.user_id != post.author_id,
+        )
+        .order_by(CommunityPostLike.created_at.desc(), CommunityPostLike.id.desc())
+    )
+    external_count = (
+        db.scalar(
+            select(func.count(CommunityPostLike.id)).where(
+                CommunityPostLike.post_id == post.id,
+                CommunityPostLike.user_id != post.author_id,
+            )
+        )
+        or 0
+    )
+    sync_like_summary(
+        db,
+        recipient_id=post.author_id,
+        actor_id=latest.user_id if latest is not None else post.author_id,
+        source_type=CommunityNotificationSource.POST,
+        source_id=post.id,
+        post_id=post.id,
+        comment_id=None,
+        like_count=external_count,
+        preview=f"有人赞了你的主题《{post.title}》",
+        refresh_unread=refresh_unread,
+        create_if_missing=refresh_unread,
+    )
+
+
+def _sync_comment_like_notification(
+    db: Session, comment: CommunityComment, *, refresh_unread: bool
+) -> None:
+    latest = db.scalar(
+        select(CommunityCommentLike)
+        .where(
+            CommunityCommentLike.comment_id == comment.id,
+            CommunityCommentLike.user_id != comment.author_id,
+        )
+        .order_by(CommunityCommentLike.created_at.desc(), CommunityCommentLike.id.desc())
+    )
+    external_count = (
+        db.scalar(
+            select(func.count(CommunityCommentLike.id)).where(
+                CommunityCommentLike.comment_id == comment.id,
+                CommunityCommentLike.user_id != comment.author_id,
+            )
+        )
+        or 0
+    )
+    sync_like_summary(
+        db,
+        recipient_id=comment.author_id,
+        actor_id=latest.user_id if latest is not None else comment.author_id,
+        source_type=CommunityNotificationSource.COMMENT,
+        source_id=comment.id,
+        post_id=comment.post_id,
+        comment_id=comment.id,
+        like_count=external_count,
+        preview=f"有人赞了你的回复：{notification_preview(comment.content)}",
+        refresh_unread=refresh_unread,
+        create_if_missing=refresh_unread,
     )
 
 

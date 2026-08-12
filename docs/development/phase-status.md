@@ -815,3 +815,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Web 注册与请求追踪 | `apps/web/src/lib/clientId.ts`，Web 全部请求标识与幂等键改用统一生成器 | `clientId.test.ts`、Web lint/typecheck/Vitest | 本地完成，待目标服务器部署回归 |
 | Admin 治理写操作 | `apps/admin/src/lib/clientId.ts`，Admin 全部直接 UUID 调用已替换 | `clientId.test.ts`、Admin lint/typecheck/Vitest | 本地完成，待目标服务器部署回归 |
 | 安全边界 | 请求标识不用于认证、密钥或密码学材料 | 代码审查与类型门禁 | 已明确 |
+
+## 2026-08-12 WP5-I7 第 2 个开发切片：点赞摘要与群组治理通知
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| COMMUNITY-36 点赞摘要通知 | `notification_service.py`、主题/回复点赞写入后的聚合同步 | `test_post_and_comment_likes_are_idempotent_and_project_counts`、`test_like_summary_notifications_aggregate_reopen_and_honor_preferences` | 已实现主题和回复摘要、业务键聚合、最新外部点赞人、已读后新点赞重新置为未读、全部取消后清理；作者自赞不计入通知 |
+| 群组申请通知 | 审批制群组申请写入后通知有效群主和版主 | `test_approval_group_requires_owner_decision` | 已实现偏好、屏蔽、自通知和业务键去重；重新申请复用成员记录并刷新通知 |
+| 群组处理与角色通知 | 审批、拒绝、邀请、移除和角色变更写入统一通知服务 | 审批、邀请、版主变更接口断言 | 已实现；治理结果不因普通社交屏蔽而丢失，仍受接收者通知偏好控制 |
+| 通知公共服务 | `notification_service.py` 统一摘要裁剪、偏好、屏蔽、去重和刷新逻辑 | 社区与群组测试集 | 已消除主社区服务与群组服务之间的通知循环依赖；本切片无需新迁移 |
+
+本切片收口点赞摘要和群组治理站内通知。WP5-I7 后续范围仍包括可靠 Outbox/重放、邮件摘要实际投递和 SSE/实时未读增强；这些能力不应与本轮同步数据库写入混为同一交付状态。
