@@ -3,6 +3,11 @@
 Revision ID: 20260812_0032
 Revises: 20260812_0031
 Create Date: 2026-08-12
+
+MySQL executes DDL outside a transaction. A failed final nullability change can
+therefore leave every table, index and foreign key present while Alembic still
+records revision 0031. The upgrade detects that exact completed-DDL state and
+only finishes the board backfill and nullability change on retry.
 """
 
 from __future__ import annotations
@@ -51,7 +56,58 @@ _SEED_BOARDS = (
 )
 
 
+def _column_metadata(inspector: sa.Inspector, table_name: str) -> dict[str, dict[str, object]]:
+    return {column["name"]: column for column in inspector.get_columns(table_name)}
+
+
+def _retry_completed_mysql_ddl(bind: sa.Connection) -> bool:
+    if bind.dialect.name != "mysql":
+        return False
+
+    inspector = sa.inspect(bind)
+    required_tables = {
+        "community_boards",
+        "community_groups",
+        "community_group_memberships",
+        "community_group_governance_events",
+    }
+    if not required_tables.issubset(set(inspector.get_table_names())):
+        return False
+
+    post_columns = _column_metadata(inspector, "community_posts")
+    if not {"board_id", "group_id"}.issubset(post_columns):
+        return False
+
+    for board_id, code, *_ in _SEED_BOARDS:
+        bind.execute(
+            sa.text(
+                "UPDATE community_posts SET board_id = :board_id "
+                "WHERE board_id IS NULL AND (board_code = :code OR board_code = :upper_code)"
+            ),
+            {"board_id": board_id, "code": code, "upper_code": code.upper()},
+        )
+
+    missing_board_count = bind.scalar(
+        sa.text("SELECT COUNT(*) FROM community_posts WHERE board_id IS NULL")
+    )
+    if missing_board_count:
+        raise RuntimeError("community_posts 仍存在无法映射到有效板块的记录")
+
+    if post_columns["board_id"].get("nullable", True):
+        with op.batch_alter_table("community_posts") as batch:
+            batch.alter_column(
+                "board_id",
+                existing_type=sa.String(36),
+                nullable=False,
+            )
+    return True
+
+
 def upgrade() -> None:
+    connection = op.get_bind()
+    if _retry_completed_mysql_ddl(connection):
+        return
+
     op.create_table(
         "community_boards",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -185,7 +241,6 @@ def upgrade() -> None:
         )
         batch.create_index("ix_community_posts_board_id", ["board_id"])
         batch.create_index("ix_community_posts_group_id", ["group_id"])
-    connection = op.get_bind()
     for board_id, code, *_ in _SEED_BOARDS:
         connection.execute(
             sa.text("UPDATE community_posts SET board_id = :board_id WHERE board_code = :code"),
@@ -196,7 +251,9 @@ def upgrade() -> None:
             {"board_id": board_id, "code": code},
         )
     with op.batch_alter_table("community_posts") as batch:
-        batch.alter_column("board_id", nullable=False)
+        batch.alter_column(
+            "board_id", existing_type=sa.String(36), nullable=False
+        )
 
 
 def downgrade() -> None:
