@@ -4,6 +4,7 @@ import type {
   CommunityCommentCreateRequest,
   CommunityCommentListResponse,
   CommunityCommentUpdateRequest,
+  CommunityHomeResponse,
   CommunityPostCreateRequest,
   CommunityPostUpdateRequest,
   CommunityPostDetail,
@@ -23,6 +24,14 @@ export function listCommunityBoards(): Promise<CommunityBoardListResponse> {
   return apiRequest<CommunityBoardListResponse>("/community/boards");
 }
 
+export function getCommunityHome(
+  boardCode?: CommunityBoardCode,
+): Promise<CommunityHomeResponse> {
+  const params = new URLSearchParams({ page_size: "50" });
+  if (boardCode) params.set("board_code", boardCode);
+  return apiRequest<CommunityHomeResponse>(`/community/home?${params.toString()}`);
+}
+
 export function listCommunityPosts(
   boardCode?: CommunityBoardCode,
 ): Promise<CommunityPostListResponse> {
@@ -32,7 +41,7 @@ export function listCommunityPosts(
 }
 
 export function getCommunityPost(postId: string): Promise<CommunityPostDetail> {
-  return apiRequest<CommunityPostDetail>(`/community/posts/${postId}`);
+  return apiRequest<CommunityPostDetail>(`/community/posts/${encodeURIComponent(postId)}`);
 }
 
 export function createCommunityPost(
@@ -51,7 +60,6 @@ export function createCommunityPost(
   );
 }
 
-
 export function listCommunityComments(
   postId: string,
   cursor?: string,
@@ -60,7 +68,7 @@ export function listCommunityComments(
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
   return apiRequest<CommunityCommentListResponse>(
-    `/community/posts/${postId}/comments?${params.toString()}`,
+    `/community/posts/${encodeURIComponent(postId)}/comments?${params.toString()}`,
   );
 }
 
@@ -71,7 +79,7 @@ export function updateCommunityPost(
   idempotencyKey: string,
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
-    `/community/posts/${postId}`,
+    `/community/posts/${encodeURIComponent(postId)}`,
     {
       method: "PATCH",
       headers: { "Idempotency-Key": idempotencyKey },
@@ -88,7 +96,7 @@ export function deleteCommunityPost(
   idempotencyKey: string,
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
-    `/community/posts/${postId}?expected_version=${expectedVersion}`,
+    `/community/posts/${encodeURIComponent(postId)}?expected_version=${expectedVersion}`,
     { method: "DELETE", headers: { "Idempotency-Key": idempotencyKey } },
     token,
   );
@@ -101,7 +109,7 @@ export function createCommunityComment(
   idempotencyKey: string,
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
-    `/community/posts/${postId}/comments`,
+    `/community/posts/${encodeURIComponent(postId)}/comments`,
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
@@ -111,7 +119,6 @@ export function createCommunityComment(
   );
 }
 
-
 export function updateCommunityComment(
   commentId: string,
   payload: CommunityCommentUpdateRequest,
@@ -119,7 +126,7 @@ export function updateCommunityComment(
   idempotencyKey: string,
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
-    `/community/comments/${commentId}`,
+    `/community/comments/${encodeURIComponent(commentId)}`,
     {
       method: "PATCH",
       headers: { "Idempotency-Key": idempotencyKey },
@@ -136,7 +143,7 @@ export function deleteCommunityComment(
   idempotencyKey: string,
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
-    `/community/comments/${commentId}?expected_version=${expectedVersion}`,
+    `/community/comments/${encodeURIComponent(commentId)}?expected_version=${expectedVersion}`,
     { method: "DELETE", headers: { "Idempotency-Key": idempotencyKey } },
     token,
   );

@@ -690,7 +690,18 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 社区首页聚合 | `GET /api/v1/community/home`、`CommunityHomeResponse` | `test_community_home_returns_boards_and_post_summary` | 已提供板块与首屏主题摘要；公告、热门规则和稳定主题游标仍待后续 |
 | 主题生命周期 | `version`、`edited_at`、`deleted_by_author_at`、`community_post_revisions`、作者 PATCH/DELETE | `test_author_post_lifecycle_uses_versions_revisions_and_placeholder_delete` | 作者权限、编辑冲突、修订快照、删除占位和最小审计已实现；草稿仍未实现 |
 | 评论与回复 | `root_id`、`reply_to_user_id`、评论游标 GET、作者 PATCH/DELETE | `test_comment_cursor_and_nested_reply_metadata` | 两级关系、独立分页、编辑/删除服务已实现；提及通知和回复数投影重建仍待后续 |
-| Web 兼容交互 | `/community` 增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest | 保持现有入口兼容；独立首页/详情/发布页及移动端浏览器 E2E 仍属于 WP5-I3 后续切片 |
+| Web 兼容交互 | 原综合页增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest | 已迁移到 `/community/legacy` 作为兼容入口；独立页面见第 2 个开发切片，移动端浏览器 E2E 仍待执行 |
 | 数据迁移 | `20260812_0028_community_content_lifecycle.py` | 统一门禁执行 Alembic 前滚/降级/重新前滚 | 本地 SQLite 门禁覆盖；目标 MySQL 迁移仍需部署验证 |
 
-本切片不能等同于 WP5-I3 全部完成；下一切片继续拆分独立路由和页面，并补移动端浏览器主旅程。
+本切片不能等同于 WP5-I3 全部完成；独立路由和页面已在第 2 个开发切片实现，移动端浏览器主旅程与详情治理迁移仍待后续。
+
+## 2026-08-12 WP5-I3 第 2 个开发切片：独立社区页面路由
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 独立社区首页 | `apps/web/src/pages/CommunityHomePage.vue`、`/community` | `CommunityHomePage.test.ts`、Web typecheck/lint/Vitest | 已完成公开板块筛选、主题摘要、空状态、加载状态和发布入口；移动端 Playwright 及真实 API 旅程待统一验收 |
+| 独立主题详情 | `apps/web/src/pages/CommunityPostPage.vue`、`/community/posts/:postId` | `CommunityPostPage.test.ts`、Web typecheck/lint/Vitest | 已完成详情读取、评论首屏、两级回复、游标加载更多和验证后回复；作者编辑/删除与举报仍在兼容页，后续统一收口 |
+| 独立主题发布 | `apps/web/src/pages/CommunityPostComposerPage.vue`、`/community/new` | `CommunityPostComposerPage.test.ts`、Web typecheck/lint/Vitest | 已完成板块选择、规则确认、长度校验、认证提示、幂等发布和成功跳转 |
+| 路由兼容 | `/community/legacy` 保留原综合页 | 现有 `CommunityPage.test.ts` 继续通过 | 旧综合页仅作兼容和功能回退入口，后续可在迁移完成后下线 |
+
+本切片仍不计入 WP5-I3 全部完成；下一轮优先把详情页的编辑、作者删除、举报和评论编辑/删除能力迁移到独立详情页，并补充移动端浏览器主旅程。
