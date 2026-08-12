@@ -1,0 +1,12 @@
+services:
+  api:
+    environment:
+      CORS_ORIGINS: ${STAGING_CORS_ORIGINS:-http://localhost:5173,http://localhost:5174}
+
+  worker:
+    environment:
+      CORS_ORIGINS: ${STAGING_CORS_ORIGINS:-http://localhost:5173,http://localhost:5174}
+
+  scheduler:
+    environment:
+      CORS_ORIGINS: ${STAGING_CORS_ORIGINS:-http://localhost:5173,http://localhost:5174}
