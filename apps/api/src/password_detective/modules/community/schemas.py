@@ -6,8 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.community import (
     CommunityBoardCode,
+    CommunityInteractionPolicy,
     CommunityNotificationKind,
     CommunityNotificationSource,
+    CommunityRelationVisibility,
     CommunityReportReason,
     CommunityReportStatus,
 )
@@ -203,6 +205,7 @@ class CommunityMutationResponse(BaseModel):
     message: str
     version: int
 
+
 class CommunityNotificationResponse(BaseModel):
     id: str
     kind: CommunityNotificationKind
@@ -226,3 +229,101 @@ class CommunityNotificationListResponse(BaseModel):
 class CommunityNotificationReadResponse(BaseModel):
     message: str
     unread_count: int
+
+
+class CommunityPublicLevel(BaseModel):
+    code: str
+    name: str
+
+
+class CommunityProfileStats(BaseModel):
+    post_count: int
+    comment_count: int
+    follower_count: int
+    following_count: int
+
+
+class CommunityRelationshipState(BaseModel):
+    viewer_is_self: bool = False
+    viewer_is_following: bool = False
+    follows_viewer: bool = False
+    viewer_is_blocking: bool = False
+    viewer_is_blocked: bool = False
+    viewer_is_muting: bool = False
+
+
+class CommunityPublicCommentSummary(BaseModel):
+    id: str
+    post_id: str
+    post_title: str
+    content_preview: str
+    like_count: int
+    created_at: datetime
+
+
+class CommunityPublicProfileResponse(BaseModel):
+    username: str
+    display_name: str
+    bio: str
+    avatar_seed: str
+    role: UserRole
+    level: CommunityPublicLevel
+    registered_month: str
+    stats: CommunityProfileStats
+    relationship: CommunityRelationshipState
+    recent_posts: list[CommunityPostSummary]
+    recent_comments: list[CommunityPublicCommentSummary]
+
+
+class CommunityOwnProfileResponse(CommunityPublicProfileResponse):
+    follower_visibility: CommunityRelationVisibility
+    following_visibility: CommunityRelationVisibility
+    message_policy: CommunityInteractionPolicy
+    mention_policy: CommunityInteractionPolicy
+
+
+class CommunityProfileUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=48)
+    bio: str = Field(default="", max_length=300)
+    regenerate_avatar: bool = False
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        return _normalize(value, "公开显示名不能为空")
+
+    @field_validator("bio")
+    @classmethod
+    def normalize_bio(cls, value: str) -> str:
+        return value.replace("\x00", "").strip()
+
+
+class CommunityPrivacyUpdateRequest(BaseModel):
+    follower_visibility: CommunityRelationVisibility
+    following_visibility: CommunityRelationVisibility
+    message_policy: CommunityInteractionPolicy
+    mention_policy: CommunityInteractionPolicy
+
+
+class CommunityMuteRequest(BaseModel):
+    expires_at: datetime | None = None
+
+
+class CommunityRelationshipMutationResponse(BaseModel):
+    username: str
+    relationship: CommunityRelationshipState
+    message: str
+
+
+class CommunityRelationUser(BaseModel):
+    username: str
+    display_name: str
+    avatar_seed: str
+    role: UserRole
+    level: CommunityPublicLevel
+
+
+class CommunityRelationListResponse(BaseModel):
+    items: list[CommunityRelationUser]
+    next_cursor: str | None = None
+    has_more: bool = False

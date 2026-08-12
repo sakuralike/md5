@@ -117,7 +117,10 @@ onServerPrefetch(() => load());
                   {{ item.post.content_preview }}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                  {{ item.post.author.username }} · 收藏于 {{ formatDate(item.bookmarked_at) }}
+                  <RouterLink :to="`/community/users/${item.post.author.username}`" class="font-medium text-foreground hover:underline">
+                    {{ item.post.author.username }}
+                  </RouterLink>
+                  · 收藏于 {{ formatDate(item.bookmarked_at) }}
                 </p>
               </div>
               <div class="flex shrink-0 flex-wrap gap-2">

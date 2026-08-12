@@ -440,7 +440,12 @@ function reportReasonLabel(reason: CommunityReportReason): string {
           </div>
           <template v-else>
             <CardTitle class="text-2xl">{{ post.title }}</CardTitle>
-            <CardDescription>{{ post.author.username }} · {{ new Date(post.created_at).toLocaleString() }}</CardDescription>
+            <CardDescription>
+              <RouterLink :to="`/community/users/${post.author.username}`" class="font-medium text-foreground hover:underline">
+                {{ post.author.username }}
+              </RouterLink>
+              · {{ new Date(post.created_at).toLocaleString() }}
+            </CardDescription>
             <div class="flex flex-wrap gap-2 pt-2">
               <Button v-if="isPostAuthor && !post.content.startsWith('该主题正文已删除')" size="sm" variant="outline" @click="beginPostEdit">编辑主题</Button>
               <Button v-if="isPostAuthor && !post.content.startsWith('该主题正文已删除')" size="sm" variant="destructive" :disabled="submitting" @click="removePost">{{ postDeleteArmed ? "再次确认删除" : "删除主题" }}</Button>
@@ -474,7 +479,12 @@ function reportReasonLabel(reason: CommunityReportReason): string {
           <div v-if="comments.length === 0" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">还没有回复。</div>
           <article v-for="item in comments" :key="item.id" class="rounded-lg border p-4" :class="{ 'ml-6': item.parent_id }">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="text-sm font-medium">{{ item.author.username }}<span v-if="item.reply_to_user_id" class="ml-2 text-xs text-muted-foreground">定向回复</span></div>
+              <div class="text-sm font-medium">
+                <RouterLink :to="`/community/users/${item.author.username}`" class="hover:underline">
+                  {{ item.author.username }}
+                </RouterLink>
+                <span v-if="item.reply_to_user_id" class="ml-2 text-xs text-muted-foreground">定向回复</span>
+              </div>
               <span class="text-xs text-muted-foreground">{{ new Date(item.created_at).toLocaleString() }}</span>
             </div>
             <div v-if="editingCommentId === item.id" class="mt-3 space-y-3">

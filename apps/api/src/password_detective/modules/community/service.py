@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import secrets
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
@@ -16,6 +17,7 @@ from password_detective.db.models.community import (
     CommunityComment,
     CommunityCommentLike,
     CommunityContentStatus,
+    CommunityInteractionPolicy,
     CommunityNotification,
     CommunityNotificationKind,
     CommunityNotificationSource,
@@ -23,8 +25,13 @@ from password_detective.db.models.community import (
     CommunityPostBookmark,
     CommunityPostLike,
     CommunityPostRevision,
+    CommunityPublicProfile,
+    CommunityRelationVisibility,
     CommunityReport,
     CommunityReportStatus,
+    CommunityUserBlock,
+    CommunityUserFollow,
+    CommunityUserMute,
 )
 from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.auth.context import ClientContext
@@ -41,15 +48,27 @@ from password_detective.modules.community.schemas import (
     CommunityCommentResponse,
     CommunityCommentUpdateRequest,
     CommunityHomeResponse,
+    CommunityMuteRequest,
     CommunityNotificationListResponse,
     CommunityNotificationReadResponse,
     CommunityNotificationResponse,
+    CommunityOwnProfileResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostInteractionResponse,
     CommunityPostListResponse,
     CommunityPostSummary,
     CommunityPostUpdateRequest,
+    CommunityPrivacyUpdateRequest,
+    CommunityProfileStats,
+    CommunityProfileUpdateRequest,
+    CommunityPublicCommentSummary,
+    CommunityPublicLevel,
+    CommunityPublicProfileResponse,
+    CommunityRelationListResponse,
+    CommunityRelationshipMutationResponse,
+    CommunityRelationshipState,
+    CommunityRelationUser,
     CommunityReportCreateRequest,
     CommunityReportResponse,
 )
@@ -93,8 +112,12 @@ def list_posts(
     board_code: CommunityBoardCode | None,
     page: int,
     page_size: int,
+    principal: Principal | None = None,
 ) -> CommunityPostListResponse:
     conditions = [CommunityPost.status == CommunityContentStatus.PUBLISHED]
+    hidden_author_ids = _hidden_author_ids(db, principal.user.id if principal is not None else None)
+    if hidden_author_ids:
+        conditions.append(CommunityPost.author_id.not_in(hidden_author_ids))
     if board_code is not None:
         conditions.append(CommunityPost.board_code == board_code)
     total = db.scalar(select(func.count(CommunityPost.id)).where(*conditions)) or 0
@@ -121,12 +144,20 @@ def get_post(
     principal: Principal | None = None,
 ) -> CommunityPostDetail:
     post = _get_published_post(db, post_id)
-    comments = _list_comment_models(db, post.id, cursor=None, limit=50)[0]
+    viewer_id = principal.user.id if principal is not None else None
+    if post.author_id in _hidden_author_ids(db, viewer_id):
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    comments = _list_comment_models(
+        db,
+        post.id,
+        cursor=None,
+        limit=50,
+        hidden_author_ids=_hidden_author_ids(db, viewer_id),
+    )[0]
     authors = _load_authors(
         db,
         [post.author_id, *(comment.author_id for comment in comments)],
     )
-    viewer_id = principal.user.id if principal is not None else None
     liked_comment_ids = _liked_comment_ids(db, viewer_id, comments)
     return _post_detail(
         post,
@@ -143,10 +174,17 @@ def list_home(
     *,
     board_code: CommunityBoardCode | None,
     page_size: int,
+    principal: Principal | None = None,
 ) -> CommunityHomeResponse:
     return CommunityHomeResponse(
         boards=list_boards(db).items,
-        posts=list_posts(db, board_code=board_code, page=1, page_size=page_size),
+        posts=list_posts(
+            db,
+            board_code=board_code,
+            page=1,
+            page_size=page_size,
+            principal=principal,
+        ),
     )
 
 
@@ -159,9 +197,18 @@ def list_comments(
     principal: Principal | None = None,
 ) -> CommunityCommentListResponse:
     post = _get_published_post(db, post_id)
-    comments, next_cursor = _list_comment_models(db, post.id, cursor=cursor, limit=limit)
-    authors = _load_authors(db, [comment.author_id for comment in comments])
     viewer_id = principal.user.id if principal is not None else None
+    hidden_author_ids = _hidden_author_ids(db, viewer_id)
+    if post.author_id in hidden_author_ids:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    comments, next_cursor = _list_comment_models(
+        db,
+        post.id,
+        cursor=cursor,
+        limit=limit,
+        hidden_author_ids=hidden_author_ids,
+    )
+    authors = _load_authors(db, [comment.author_id for comment in comments])
     liked_comment_ids = _liked_comment_ids(db, viewer_id, comments)
     return CommunityCommentListResponse(
         items=[
@@ -204,7 +251,6 @@ def create_post(
     db.commit()
     db.refresh(post)
     return get_post(db, post.id, principal=principal)
-
 
 
 def update_post(
@@ -365,7 +411,6 @@ def create_comment(
     return get_post(db, post.id, principal=principal)
 
 
-
 def update_comment(
     db: Session,
     *,
@@ -517,7 +562,6 @@ def create_report(
     )
 
 
-
 def set_post_like(
     db: Session,
     *,
@@ -622,6 +666,7 @@ def list_bookmarks(
     limit: int,
 ) -> CommunityBookmarkListResponse:
     conditions = [CommunityPostBookmark.user_id == principal.user.id]
+    hidden_author_ids = _hidden_author_ids(db, principal.user.id)
     if cursor is not None:
         created_at, record_id = _decode_cursor(cursor)
         conditions.append(
@@ -640,17 +685,20 @@ def list_bookmarks(
     has_more = len(bookmarks) > limit
     items = bookmarks[:limit]
     post_ids = [bookmark.post_id for bookmark in items]
-    posts = db.scalars(
-        select(CommunityPost).where(
-            CommunityPost.id.in_(post_ids),
-            CommunityPost.status == CommunityContentStatus.PUBLISHED,
-        )
-    ).all() if post_ids else []
+    posts = (
+        db.scalars(
+            select(CommunityPost).where(
+                CommunityPost.id.in_(post_ids),
+                CommunityPost.status == CommunityContentStatus.PUBLISHED,
+                CommunityPost.author_id.not_in(hidden_author_ids),
+            )
+        ).all()
+        if post_ids
+        else []
+    )
     post_by_id = {post.id: post for post in posts}
     authors = _load_authors(db, [post.author_id for post in posts])
-    next_cursor = (
-        _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
-    )
+    next_cursor = _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
     return CommunityBookmarkListResponse(
         items=[
             CommunityBookmarkItem(
@@ -701,12 +749,15 @@ def list_notifications(
     has_more = len(notifications) > limit
     items = notifications[:limit]
     actors = _load_authors(db, [item.actor_id for item in items])
-    unread_count = db.scalar(
-        select(func.count(CommunityNotification.id)).where(
-            CommunityNotification.recipient_id == principal.user.id,
-            CommunityNotification.read_at.is_(None),
+    unread_count = (
+        db.scalar(
+            select(func.count(CommunityNotification.id)).where(
+                CommunityNotification.recipient_id == principal.user.id,
+                CommunityNotification.read_at.is_(None),
+            )
         )
-    ) or 0
+        or 0
+    )
     next_cursor = _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
     return CommunityNotificationListResponse(
         items=[_notification_response(item, actors[item.actor_id]) for item in items],
@@ -757,6 +808,620 @@ def mark_all_notifications_read(
     return CommunityNotificationReadResponse(message="社区通知已全部标记为已读", unread_count=0)
 
 
+def _hidden_author_ids(db: Session, viewer_id: str | None) -> set[str]:
+    if viewer_id is None:
+        return set()
+    now = utc_now()
+    muted_ids = set(
+        db.scalars(
+            select(CommunityUserMute.muted_user_id).where(
+                CommunityUserMute.user_id == viewer_id,
+                or_(
+                    CommunityUserMute.expires_at.is_(None),
+                    CommunityUserMute.expires_at > now,
+                ),
+            )
+        ).all()
+    )
+    block_rows = db.execute(
+        select(CommunityUserBlock.blocker_id, CommunityUserBlock.blocked_id).where(
+            or_(
+                CommunityUserBlock.blocker_id == viewer_id,
+                CommunityUserBlock.blocked_id == viewer_id,
+            )
+        )
+    ).all()
+    blocked_ids = {
+        blocked_id if blocker_id == viewer_id else blocker_id
+        for blocker_id, blocked_id in block_rows
+    }
+    return muted_ids | blocked_ids
+
+
+def get_public_profile(
+    db: Session,
+    *,
+    username: str,
+    principal: Principal | None = None,
+) -> CommunityPublicProfileResponse:
+    user = _get_active_user_by_username(db, username)
+    viewer_id = principal.user.id if principal is not None else None
+    profile = _profile_or_default(db, user)
+    relationship = _relationship_state(db, viewer_id=viewer_id, target_id=user.id)
+    can_show_content = not (
+        relationship.viewer_is_blocking
+        or relationship.viewer_is_blocked
+        or relationship.viewer_is_muting
+    )
+    recent_posts: list[CommunityPostSummary] = []
+    recent_comments: list[CommunityPublicCommentSummary] = []
+    if can_show_content:
+        posts = db.scalars(
+            select(CommunityPost)
+            .where(
+                CommunityPost.author_id == user.id,
+                CommunityPost.status == CommunityContentStatus.PUBLISHED,
+            )
+            .order_by(CommunityPost.created_at.desc(), CommunityPost.id.desc())
+            .limit(10)
+        ).all()
+        author = _author_from_user(user)
+        recent_posts = [_post_summary(post, author) for post in posts]
+        comments = db.execute(
+            select(CommunityComment, CommunityPost.title)
+            .join(CommunityPost, CommunityPost.id == CommunityComment.post_id)
+            .where(
+                CommunityComment.author_id == user.id,
+                CommunityComment.status == CommunityContentStatus.PUBLISHED,
+                CommunityPost.status == CommunityContentStatus.PUBLISHED,
+            )
+            .order_by(CommunityComment.created_at.desc(), CommunityComment.id.desc())
+            .limit(10)
+        ).all()
+        recent_comments = [
+            CommunityPublicCommentSummary(
+                id=comment.id,
+                post_id=comment.post_id,
+                post_title=post_title,
+                content_preview=_compact_preview(comment.content, limit=180),
+                like_count=comment.like_count,
+                created_at=comment.created_at,
+            )
+            for comment, post_title in comments
+        ]
+    return _public_profile_response(
+        db,
+        user=user,
+        profile=profile,
+        relationship=relationship,
+        recent_posts=recent_posts,
+        recent_comments=recent_comments,
+    )
+
+
+def get_own_profile(db: Session, *, principal: Principal) -> CommunityOwnProfileResponse:
+    user = principal.user
+    profile = _profile_or_default(db, user)
+    response = _public_profile_response(
+        db,
+        user=user,
+        profile=profile,
+        relationship=_relationship_state(db, viewer_id=user.id, target_id=user.id),
+        recent_posts=[],
+        recent_comments=[],
+    )
+    return CommunityOwnProfileResponse(
+        **response.model_dump(),
+        follower_visibility=profile.follower_visibility,
+        following_visibility=profile.following_visibility,
+        message_policy=profile.message_policy,
+        mention_policy=profile.mention_policy,
+    )
+
+
+def update_public_profile(
+    db: Session,
+    *,
+    payload: CommunityProfileUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityOwnProfileResponse:
+    profile = _ensure_profile(db, principal.user)
+    profile.display_name = payload.display_name
+    profile.bio = payload.bio
+    if payload.regenerate_avatar:
+        profile.avatar_seed = _new_avatar_seed()
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.profile.updated",
+        target_type="community_public_profile",
+        target_id=principal.user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "fields": [
+                "display_name",
+                "bio",
+                *(["avatar_seed"] if payload.regenerate_avatar else []),
+            ]
+        },
+    )
+    db.commit()
+    return get_own_profile(db, principal=principal)
+
+
+def update_privacy_preferences(
+    db: Session,
+    *,
+    payload: CommunityPrivacyUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityOwnProfileResponse:
+    profile = _ensure_profile(db, principal.user)
+    profile.follower_visibility = payload.follower_visibility
+    profile.following_visibility = payload.following_visibility
+    profile.message_policy = payload.message_policy
+    profile.mention_policy = payload.mention_policy
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.privacy.updated",
+        target_type="community_public_profile",
+        target_id=principal.user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "fields": [
+                "follower_visibility",
+                "following_visibility",
+                "message_policy",
+                "mention_policy",
+            ]
+        },
+    )
+    db.commit()
+    return get_own_profile(db, principal=principal)
+
+
+def set_follow(
+    db: Session,
+    *,
+    username: str,
+    followed: bool,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityRelationshipMutationResponse:
+    target = _get_active_user_by_username(db, username)
+    _require_other_user(principal.user.id, target.id)
+    _require_not_blocked(db, actor_id=principal.user.id, target_id=target.id)
+    existing = db.scalar(
+        select(CommunityUserFollow).where(
+            CommunityUserFollow.follower_id == principal.user.id,
+            CommunityUserFollow.followed_id == target.id,
+        )
+    )
+    if followed and existing is None:
+        db.add(CommunityUserFollow(follower_id=principal.user.id, followed_id=target.id))
+    elif not followed and existing is not None:
+        db.delete(existing)
+    db.flush()
+    _rebuild_follow_counts(db, [principal.user.id, target.id])
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.follow.created" if followed else "community.follow.removed",
+        target_type="user",
+        target_id=target.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={},
+    )
+    db.commit()
+    return CommunityRelationshipMutationResponse(
+        username=target.username,
+        relationship=_relationship_state(db, viewer_id=principal.user.id, target_id=target.id),
+        message="已关注该用户" if followed else "已取消关注该用户",
+    )
+
+
+def set_block(
+    db: Session,
+    *,
+    username: str,
+    blocked: bool,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityRelationshipMutationResponse:
+    target = _get_active_user_by_username(db, username)
+    _require_other_user(principal.user.id, target.id)
+    existing = db.scalar(
+        select(CommunityUserBlock).where(
+            CommunityUserBlock.blocker_id == principal.user.id,
+            CommunityUserBlock.blocked_id == target.id,
+        )
+    )
+    if blocked and existing is None:
+        db.add(CommunityUserBlock(blocker_id=principal.user.id, blocked_id=target.id))
+        db.execute(
+            CommunityUserFollow.__table__.delete().where(
+                (
+                    (CommunityUserFollow.follower_id == principal.user.id)
+                    & (CommunityUserFollow.followed_id == target.id)
+                )
+                | (
+                    (CommunityUserFollow.follower_id == target.id)
+                    & (CommunityUserFollow.followed_id == principal.user.id)
+                )
+            )
+        )
+    elif not blocked and existing is not None:
+        db.delete(existing)
+    db.flush()
+    _rebuild_follow_counts(db, [principal.user.id, target.id])
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.block.created" if blocked else "community.block.removed",
+        target_type="user",
+        target_id=target.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"follow_edges_removed": blocked},
+    )
+    db.commit()
+    return CommunityRelationshipMutationResponse(
+        username=target.username,
+        relationship=_relationship_state(db, viewer_id=principal.user.id, target_id=target.id),
+        message="已拉黑该用户并移除双方关注关系" if blocked else "已解除拉黑该用户",
+    )
+
+
+def set_mute(
+    db: Session,
+    *,
+    username: str,
+    muted: bool,
+    payload: CommunityMuteRequest | None,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityRelationshipMutationResponse:
+    target = _get_active_user_by_username(db, username)
+    _require_other_user(principal.user.id, target.id)
+    now = utc_now()
+    if payload is not None and payload.expires_at is not None and payload.expires_at <= now:
+        raise AppError(
+            "community.invalid_mute_expiry", "静音截止时间必须晚于当前时间", status_code=422
+        )
+    existing = db.scalar(
+        select(CommunityUserMute).where(
+            CommunityUserMute.user_id == principal.user.id,
+            CommunityUserMute.muted_user_id == target.id,
+        )
+    )
+    if muted:
+        if existing is None:
+            db.add(
+                CommunityUserMute(
+                    user_id=principal.user.id,
+                    muted_user_id=target.id,
+                    expires_at=payload.expires_at if payload is not None else None,
+                )
+            )
+        else:
+            existing.expires_at = payload.expires_at if payload is not None else None
+    elif existing is not None:
+        db.delete(existing)
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.mute.created" if muted else "community.mute.removed",
+        target_type="user",
+        target_id=target.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "expires_at": payload.expires_at.isoformat()
+            if muted and payload and payload.expires_at
+            else None
+        },
+    )
+    db.commit()
+    return CommunityRelationshipMutationResponse(
+        username=target.username,
+        relationship=_relationship_state(db, viewer_id=principal.user.id, target_id=target.id),
+        message="已静音该用户；不会改变其访问权限" if muted else "已取消静音该用户",
+    )
+
+
+def list_relationship_users(
+    db: Session,
+    *,
+    username: str,
+    direction: str,
+    principal: Principal | None,
+    cursor: str | None,
+    limit: int,
+) -> CommunityRelationListResponse:
+    target = _get_active_user_by_username(db, username)
+    viewer_id = principal.user.id if principal is not None else None
+    profile = _profile_or_default(db, target)
+    is_self = viewer_id == target.id
+    visibility = (
+        profile.follower_visibility if direction == "followers" else profile.following_visibility
+    )
+    if not is_self and visibility != CommunityRelationVisibility.PUBLIC:
+        raise AppError(
+            "community.relation_list_private", "该用户已将关系列表设为私密", status_code=403
+        )
+    relation_column = (
+        CommunityUserFollow.followed_id
+        if direction == "followers"
+        else CommunityUserFollow.follower_id
+    )
+    member_column = (
+        CommunityUserFollow.follower_id
+        if direction == "followers"
+        else CommunityUserFollow.followed_id
+    )
+    conditions = [relation_column == target.id]
+    if cursor is not None:
+        created_at, record_id = _decode_cursor(cursor)
+        conditions.append(
+            or_(
+                CommunityUserFollow.created_at < created_at,
+                (CommunityUserFollow.created_at == created_at)
+                & (CommunityUserFollow.id < record_id),
+            )
+        )
+    relations = db.scalars(
+        select(CommunityUserFollow)
+        .join(User, User.id == member_column)
+        .where(*conditions, User.status == UserStatus.ACTIVE)
+        .order_by(CommunityUserFollow.created_at.desc(), CommunityUserFollow.id.desc())
+        .limit(limit + 1)
+    ).all()
+    has_more = len(relations) > limit
+    items = relations[:limit]
+    users = {
+        user.id: user
+        for user in db.scalars(
+            select(User).where(
+                User.id.in_([getattr(item, member_column.key) for item in items]),
+                User.status == UserStatus.ACTIVE,
+            )
+        ).all()
+    }
+    cards = [
+        _relation_user(db, users[getattr(item, member_column.key)])
+        for item in items
+        if getattr(item, member_column.key) in users
+    ]
+    next_cursor = _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
+    return CommunityRelationListResponse(
+        items=cards, next_cursor=next_cursor, has_more=next_cursor is not None
+    )
+
+
+def _get_active_user_by_username(db: Session, username: str) -> User:
+    user = db.scalar(
+        select(User).where(
+            func.lower(User.username) == username.strip().lower(), User.status == UserStatus.ACTIVE
+        )
+    )
+    if user is None:
+        raise AppError("community.user_not_found", "社区用户不存在", status_code=404)
+    return user
+
+
+def _profile_or_default(db: Session, user: User) -> CommunityPublicProfile:
+    profile = db.get(CommunityPublicProfile, user.id)
+    if profile is not None:
+        return profile
+    return CommunityPublicProfile(
+        user_id=user.id,
+        display_name=user.username,
+        bio="",
+        avatar_seed=_default_avatar_seed(user.id),
+        follower_visibility=CommunityRelationVisibility.PUBLIC,
+        following_visibility=CommunityRelationVisibility.PUBLIC,
+        message_policy=CommunityInteractionPolicy.FOLLOWING,
+        mention_policy=CommunityInteractionPolicy.EVERYONE,
+        follower_count=_follow_count(db, followed_id=user.id),
+        following_count=_follow_count(db, follower_id=user.id),
+    )
+
+
+def _ensure_profile(db: Session, user: User) -> CommunityPublicProfile:
+    profile = db.get(CommunityPublicProfile, user.id)
+    if profile is None:
+        profile = _profile_or_default(db, user)
+        db.add(profile)
+        db.flush()
+    return profile
+
+
+def _new_avatar_seed() -> str:
+    return secrets.token_hex(12)
+
+
+def _default_avatar_seed(user_id: str) -> str:
+    return re.sub("-", "", user_id)[:24].ljust(24, "0")
+
+
+def _follow_count(
+    db: Session, *, follower_id: str | None = None, followed_id: str | None = None
+) -> int:
+    condition = (
+        CommunityUserFollow.follower_id == follower_id
+        if follower_id is not None
+        else CommunityUserFollow.followed_id == followed_id
+    )
+    return int(db.scalar(select(func.count(CommunityUserFollow.id)).where(condition)) or 0)
+
+
+def _rebuild_follow_counts(db: Session, user_ids: list[str]) -> None:
+    for user_id in set(user_ids):
+        user = db.get(User, user_id)
+        if user is None:
+            continue
+        profile = _ensure_profile(db, user)
+        profile.follower_count = _follow_count(db, followed_id=user_id)
+        profile.following_count = _follow_count(db, follower_id=user_id)
+    db.flush()
+
+
+def _relationship_state(
+    db: Session, *, viewer_id: str | None, target_id: str
+) -> CommunityRelationshipState:
+    if viewer_id is None:
+        return CommunityRelationshipState()
+    if viewer_id == target_id:
+        return CommunityRelationshipState(viewer_is_self=True)
+    now = utc_now()
+    return CommunityRelationshipState(
+        viewer_is_following=db.scalar(
+            select(CommunityUserFollow.id).where(
+                CommunityUserFollow.follower_id == viewer_id,
+                CommunityUserFollow.followed_id == target_id,
+            )
+        )
+        is not None,
+        follows_viewer=db.scalar(
+            select(CommunityUserFollow.id).where(
+                CommunityUserFollow.follower_id == target_id,
+                CommunityUserFollow.followed_id == viewer_id,
+            )
+        )
+        is not None,
+        viewer_is_blocking=db.scalar(
+            select(CommunityUserBlock.id).where(
+                CommunityUserBlock.blocker_id == viewer_id,
+                CommunityUserBlock.blocked_id == target_id,
+            )
+        )
+        is not None,
+        viewer_is_blocked=db.scalar(
+            select(CommunityUserBlock.id).where(
+                CommunityUserBlock.blocker_id == target_id,
+                CommunityUserBlock.blocked_id == viewer_id,
+            )
+        )
+        is not None,
+        viewer_is_muting=db.scalar(
+            select(CommunityUserMute.id).where(
+                CommunityUserMute.user_id == viewer_id,
+                CommunityUserMute.muted_user_id == target_id,
+                or_(CommunityUserMute.expires_at.is_(None), CommunityUserMute.expires_at > now),
+            )
+        )
+        is not None,
+    )
+
+
+def _require_other_user(actor_id: str, target_id: str) -> None:
+    if actor_id == target_id:
+        raise AppError(
+            "community.self_relation_not_allowed", "不能对自己执行该关系操作", status_code=422
+        )
+
+
+def _require_not_blocked(db: Session, *, actor_id: str, target_id: str) -> None:
+    if (
+        db.scalar(
+            select(CommunityUserBlock.id).where(
+                or_(
+                    (CommunityUserBlock.blocker_id == actor_id)
+                    & (CommunityUserBlock.blocked_id == target_id),
+                    (CommunityUserBlock.blocker_id == target_id)
+                    & (CommunityUserBlock.blocked_id == actor_id),
+                )
+            )
+        )
+        is not None
+    ):
+        raise AppError(
+            "community.interaction_blocked", "双方存在拉黑关系，无法执行此操作", status_code=403
+        )
+
+
+def _author_from_user(user: User) -> CommunityAuthor:
+    return CommunityAuthor(user_id=user.id, username=user.username, role=user.role)
+
+
+def _public_level(db: Session, user_id: str) -> CommunityPublicLevel:
+    from password_detective.modules.reputation.levels import get_user_level_profile
+
+    level = get_user_level_profile(db, user_id=user_id).current
+    return CommunityPublicLevel(code=level.code, name=level.name)
+
+
+def _public_profile_response(
+    db: Session,
+    *,
+    user: User,
+    profile: CommunityPublicProfile,
+    relationship: CommunityRelationshipState,
+    recent_posts: list[CommunityPostSummary],
+    recent_comments: list[CommunityPublicCommentSummary],
+) -> CommunityPublicProfileResponse:
+    return CommunityPublicProfileResponse(
+        username=user.username,
+        display_name=profile.display_name,
+        bio=profile.bio,
+        avatar_seed=profile.avatar_seed,
+        role=user.role,
+        level=_public_level(db, user.id),
+        registered_month=user.created_at.strftime("%Y-%m"),
+        stats=CommunityProfileStats(
+            post_count=int(
+                db.scalar(
+                    select(func.count(CommunityPost.id)).where(
+                        CommunityPost.author_id == user.id,
+                        CommunityPost.status == CommunityContentStatus.PUBLISHED,
+                    )
+                )
+                or 0
+            ),
+            comment_count=int(
+                db.scalar(
+                    select(func.count(CommunityComment.id)).where(
+                        CommunityComment.author_id == user.id,
+                        CommunityComment.status == CommunityContentStatus.PUBLISHED,
+                    )
+                )
+                or 0
+            ),
+            follower_count=profile.follower_count,
+            following_count=profile.following_count,
+        ),
+        relationship=relationship,
+        recent_posts=recent_posts,
+        recent_comments=recent_comments,
+    )
+
+
+def _relation_user(db: Session, user: User) -> CommunityRelationUser:
+    profile = _profile_or_default(db, user)
+    return CommunityRelationUser(
+        username=user.username,
+        display_name=profile.display_name,
+        avatar_seed=profile.avatar_seed,
+        role=user.role,
+        level=_public_level(db, user.id),
+    )
+
+
+def _compact_preview(value: str, *, limit: int) -> str:
+    compact = " ".join(value.split())
+    return compact if len(compact) <= limit else f"{compact[: limit - 3]}..."
+
+
 def _sync_mention_notifications(
     db: Session,
     *,
@@ -786,6 +1451,11 @@ def _sync_mention_notifications(
             User.id != actor_id,
         )
     ).all()
+    recipients = [
+        recipient
+        for recipient in recipients
+        if _mention_allowed(db, actor_id=actor_id, recipient_id=recipient.id)
+    ]
     if not recipients:
         return
     existing = set(
@@ -816,6 +1486,38 @@ def _sync_mention_notifications(
         )
 
 
+def _mention_allowed(db: Session, *, actor_id: str, recipient_id: str) -> bool:
+    if (
+        db.scalar(
+            select(CommunityUserBlock.id).where(
+                or_(
+                    (CommunityUserBlock.blocker_id == actor_id)
+                    & (CommunityUserBlock.blocked_id == recipient_id),
+                    (CommunityUserBlock.blocker_id == recipient_id)
+                    & (CommunityUserBlock.blocked_id == actor_id),
+                )
+            )
+        )
+        is not None
+    ):
+        return False
+    profile = db.get(CommunityPublicProfile, recipient_id)
+    policy = profile.mention_policy if profile is not None else CommunityInteractionPolicy.EVERYONE
+    if policy == CommunityInteractionPolicy.NOBODY:
+        return False
+    if policy == CommunityInteractionPolicy.FOLLOWING:
+        return (
+            db.scalar(
+                select(CommunityUserFollow.id).where(
+                    CommunityUserFollow.follower_id == recipient_id,
+                    CommunityUserFollow.followed_id == actor_id,
+                )
+            )
+            is not None
+        )
+    return True
+
+
 def _notification_preview(text: str) -> str:
     compact = " ".join(text.split())
     return compact if len(compact) <= 180 else f"{compact[:177]}..."
@@ -840,34 +1542,43 @@ def _notification_response(
 
 
 def _unread_notification_count(db: Session, user_id: str) -> int:
-    return db.scalar(
-        select(func.count(CommunityNotification.id)).where(
-            CommunityNotification.recipient_id == user_id,
-            CommunityNotification.read_at.is_(None),
+    return (
+        db.scalar(
+            select(func.count(CommunityNotification.id)).where(
+                CommunityNotification.recipient_id == user_id,
+                CommunityNotification.read_at.is_(None),
+            )
         )
-    ) or 0
+        or 0
+    )
 
 
 def _has_post_like(db: Session, user_id: str | None, post_id: str) -> bool:
     if user_id is None:
         return False
-    return db.scalar(
-        select(CommunityPostLike.id).where(
-            CommunityPostLike.user_id == user_id,
-            CommunityPostLike.post_id == post_id,
+    return (
+        db.scalar(
+            select(CommunityPostLike.id).where(
+                CommunityPostLike.user_id == user_id,
+                CommunityPostLike.post_id == post_id,
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def _has_post_bookmark(db: Session, user_id: str | None, post_id: str) -> bool:
     if user_id is None:
         return False
-    return db.scalar(
-        select(CommunityPostBookmark.id).where(
-            CommunityPostBookmark.user_id == user_id,
-            CommunityPostBookmark.post_id == post_id,
+    return (
+        db.scalar(
+            select(CommunityPostBookmark.id).where(
+                CommunityPostBookmark.user_id == user_id,
+                CommunityPostBookmark.post_id == post_id,
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def _liked_comment_ids(
@@ -889,17 +1600,23 @@ def _liked_comment_ids(
 
 
 def _count_post_likes(db: Session, post_id: str) -> int:
-    return db.scalar(
-        select(func.count(CommunityPostLike.id)).where(CommunityPostLike.post_id == post_id)
-    ) or 0
+    return (
+        db.scalar(
+            select(func.count(CommunityPostLike.id)).where(CommunityPostLike.post_id == post_id)
+        )
+        or 0
+    )
 
 
 def _count_comment_likes(db: Session, comment_id: str) -> int:
-    return db.scalar(
-        select(func.count(CommunityCommentLike.id)).where(
-            CommunityCommentLike.comment_id == comment_id
+    return (
+        db.scalar(
+            select(func.count(CommunityCommentLike.id)).where(
+                CommunityCommentLike.comment_id == comment_id
+            )
         )
-    ) or 0
+        or 0
+    )
 
 
 def _post_interaction_response(
@@ -982,7 +1699,6 @@ def _comment_response(
     )
 
 
-
 def _get_published_post(db: Session, post_id: str) -> CommunityPost:
     post = db.scalar(
         select(CommunityPost).where(
@@ -1049,18 +1765,20 @@ def _list_comment_models(
     *,
     cursor: str | None,
     limit: int,
+    hidden_author_ids: set[str] | None = None,
 ) -> tuple[list[CommunityComment], str | None]:
     conditions = [
         CommunityComment.post_id == post_id,
         CommunityComment.status == CommunityContentStatus.PUBLISHED,
     ]
+    if hidden_author_ids:
+        conditions.append(CommunityComment.author_id.not_in(hidden_author_ids))
     if cursor is not None:
         created_at, record_id = _decode_cursor(cursor)
         conditions.append(
             or_(
                 CommunityComment.created_at > created_at,
-                (CommunityComment.created_at == created_at)
-                & (CommunityComment.id > record_id),
+                (CommunityComment.created_at == created_at) & (CommunityComment.id > record_id),
             )
         )
     comments = db.scalars(

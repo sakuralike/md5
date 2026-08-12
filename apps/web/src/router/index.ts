@@ -7,6 +7,9 @@ import CommunityHomePage from "../pages/CommunityHomePage.vue";
 import CommunityNotificationsPage from "../pages/CommunityNotificationsPage.vue";
 import CommunityPostComposerPage from "../pages/CommunityPostComposerPage.vue";
 import CommunityPostPage from "../pages/CommunityPostPage.vue";
+import CommunityProfilePage from "../pages/CommunityProfilePage.vue";
+import CommunityRelationsPage from "../pages/CommunityRelationsPage.vue";
+import CommunitySettingsPage from "../pages/CommunitySettingsPage.vue";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage.vue";
 import HomePage from "../pages/HomePage.vue";
 import LoginPage from "../pages/LoginPage.vue";
@@ -41,6 +44,22 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     { path: "/community/posts/:postId", component: CommunityPostPage },
+    {
+      path: "/community/users/:username/followers",
+      component: CommunityRelationsPage,
+      meta: { direction: "followers" },
+    },
+    {
+      path: "/community/users/:username/following",
+      component: CommunityRelationsPage,
+      meta: { direction: "following" },
+    },
+    { path: "/community/users/:username", component: CommunityProfilePage },
+    {
+      path: "/community/settings",
+      component: CommunitySettingsPage,
+      meta: { requiresAuth: true },
+    },
     { path: "/community/legacy", component: CommunityPage },
     { path: "/account/profile", redirect: "/security" },
     { path: "/account/activity", component: AccountActivityPage, meta: { requiresAuth: true } },

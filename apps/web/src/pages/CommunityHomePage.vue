@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCommunityHome } from "../services/community";
+import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 const boards = ref<CommunityBoard[]>([]);
 const posts = ref<CommunityPostSummary[]>([]);
 const selectedBoard = ref<CommunityBoardCode | undefined>(readBoard(route.query.board));
@@ -43,7 +45,10 @@ async function loadHome(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const response = await getCommunityHome(selectedBoard.value);
+    const response = await getCommunityHome(
+      selectedBoard.value,
+      auth.isAuthenticated ? auth.accessToken : undefined,
+    );
     boards.value = response.boards;
     posts.value = response.posts.items;
   } catch (caught) {

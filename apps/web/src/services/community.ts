@@ -9,6 +9,13 @@ import type {
   CommunityHomeResponse,
   CommunityNotificationListResponse,
   CommunityNotificationReadResponse,
+  CommunityMuteRequest,
+  CommunityOwnProfileResponse,
+  CommunityPrivacyUpdateRequest,
+  CommunityProfileUpdateRequest,
+  CommunityPublicProfileResponse,
+  CommunityRelationListResponse,
+  CommunityRelationshipMutationResponse,
   CommunityPostCreateRequest,
   CommunityPostInteractionResponse,
   CommunityPostUpdateRequest,
@@ -35,7 +42,15 @@ export function createCommunityIdempotencyKey(
     | "post-bookmark"
     | "post-unbookmark"
     | "notification-read"
-    | "notifications-read-all",
+    | "notifications-read-all"
+    | "profile-update"
+    | "privacy-update"
+    | "follow"
+    | "unfollow"
+    | "block"
+    | "unblock"
+    | "mute"
+    | "unmute",
 ): string {
   return `web-community-${kind}-${crypto.randomUUID()}`;
 }
@@ -46,18 +61,20 @@ export function listCommunityBoards(): Promise<CommunityBoardListResponse> {
 
 export function getCommunityHome(
   boardCode?: CommunityBoardCode,
+  token?: string,
 ): Promise<CommunityHomeResponse> {
   const params = new URLSearchParams({ page_size: "50" });
   if (boardCode) params.set("board_code", boardCode);
-  return apiRequest<CommunityHomeResponse>(`/community/home?${params.toString()}`);
+  return apiRequest<CommunityHomeResponse>(`/community/home?${params.toString()}`, {}, token);
 }
 
 export function listCommunityPosts(
   boardCode?: CommunityBoardCode,
+  token?: string,
 ): Promise<CommunityPostListResponse> {
   const params = new URLSearchParams({ page: "1", page_size: "50" });
   if (boardCode) params.set("board_code", boardCode);
-  return apiRequest<CommunityPostListResponse>(`/community/posts?${params.toString()}`);
+  return apiRequest<CommunityPostListResponse>(`/community/posts?${params.toString()}`, {}, token);
 }
 
 export function getCommunityPost(
@@ -290,6 +307,88 @@ export function listCommunityBookmarks(
   return apiRequest<CommunityBookmarkListResponse>(
     `/community/bookmarks?${params.toString()}`,
     {},
+    token,
+  );
+}
+
+
+export function getCommunityPublicProfile(
+  username: string,
+  token?: string,
+): Promise<CommunityPublicProfileResponse> {
+  return apiRequest<CommunityPublicProfileResponse>(
+    `/community/users/${encodeURIComponent(username)}`,
+    {},
+    token,
+  );
+}
+
+export function getCommunityOwnProfile(token: string): Promise<CommunityOwnProfileResponse> {
+  return apiRequest<CommunityOwnProfileResponse>("/community/me/profile", {}, token);
+}
+
+export function updateCommunityOwnProfile(
+  payload: CommunityProfileUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityOwnProfileResponse> {
+  return apiRequest<CommunityOwnProfileResponse>(
+    "/community/me/profile",
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateCommunityPrivacy(
+  payload: CommunityPrivacyUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityOwnProfileResponse> {
+  return apiRequest<CommunityOwnProfileResponse>(
+    "/community/me/privacy",
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function listCommunityRelations(
+  username: string,
+  direction: "followers" | "following",
+  token?: string,
+  cursor?: string,
+): Promise<CommunityRelationListResponse> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) params.set("cursor", cursor);
+  return apiRequest<CommunityRelationListResponse>(
+    `/community/users/${encodeURIComponent(username)}/${direction}?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function setCommunityUserRelation(
+  username: string,
+  relation: "follow" | "block" | "mute",
+  enabled: boolean,
+  token: string,
+  idempotencyKey: string,
+  mutePayload: CommunityMuteRequest = { expires_at: null },
+): Promise<CommunityRelationshipMutationResponse> {
+  return apiRequest<CommunityRelationshipMutationResponse>(
+    `/community/users/${encodeURIComponent(username)}/${relation}`,
+    {
+      method: enabled ? "PUT" : "DELETE",
+      headers: { "Idempotency-Key": idempotencyKey },
+      ...(enabled && relation === "mute" ? { body: JSON.stringify(mutePayload) } : {}),
+    },
     token,
   );
 }

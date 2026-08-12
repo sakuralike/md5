@@ -314,33 +314,14 @@ def update_profile(
     payload: ProfileUpdateRequest,
     context: ClientContext,
 ) -> User:
-    username = payload.username.strip().lower()
-    if username == user.username:
-        return user
-
-    existing = db.scalar(select(User.id).where(User.username == username, User.id != user.id))
-    if existing:
-        raise AppError("auth.username_conflict", "用户名已被使用", status_code=409)
-
-    user.username = username
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise AppError("auth.username_conflict", "用户名已被使用", status_code=409) from exc
-    write_audit_log(
-        db,
-        actor_id=user.id,
-        action="auth.profile.updated",
-        target_type="user",
-        target_id=user.id,
-        result="success",
-        ip_prefix=context.ip_prefix,
-        request_id=context.request_id,
-        details={"fields": ["username"]},
-    )
-    db.commit()
-    db.refresh(user)
+    del db, context
+    requested_username = payload.username.strip().lower()
+    if requested_username != user.username:
+        raise AppError(
+            "auth.username_immutable",
+            "用户名在注册后不可修改；请在社区资料中维护公开展示名",
+            status_code=409,
+        )
     return user
 
 

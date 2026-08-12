@@ -674,7 +674,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
 | 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 业务编码与本地自动化已收口 | 当前提交的目标 MySQL 与浏览器回归 |
-| 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | WP5-I4 COMMUNITY-32～35 已编码；WP5-I5 未编码 | 点赞摘要通知留待 I7；下一轮进入公开主页、关注/粉丝、屏蔽和静音 |
+| 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | WP5-I4 COMMUNITY-32～35、WP5-I5 COMMUNITY-37～44 已完成本地编码与自动化 | 点赞摘要、关注通知留待 I7；下一轮进入 I6 板块与群组 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
 | 私信与站内聊天 | 同上 WP5-I9～I10 | 已规划，未编码 | 一对一纯文本、独立 AES-GCM 密钥环、REST 基线、SSE 实时增强、举报最小披露 |
@@ -769,4 +769,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Web 互动入口 | `CommunityPostPage.vue`、`CommunityBookmarksPage.vue`、主导航和路由 | 页面渲染测试、服务请求测试、Web typecheck/lint/Vitest | 已提供点赞、收藏、取消与失效引用清理；真实目标环境浏览器回归待部署后执行 |
 | 数据迁移 | `20260812_0030_community_likes_bookmarks.py` | Alembic 前滚/降级/重新前滚和统一门禁 | 本地 SQLite 门禁覆盖；目标 MySQL 执行仍需部署验证 |
 
-本切片完成 COMMUNITY-32～35。COMMUNITY-36 点赞摘要通知不在当前关系写入链路中临时实现，留待 WP5-I7 与 Outbox、通知偏好和聚合去重统一收口。下一开发轮次进入 WP5-I5 公开主页和关系图。
+本切片完成 COMMUNITY-32～35。COMMUNITY-36 点赞摘要通知不在当前关系写入链路中临时实现，留待 WP5-I7 与 Outbox、通知偏好和聚合去重统一收口。
+
+## 2026-08-12 WP5-I5 第 1 个开发切片：公开主页与关系图谱
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 公开资料与隐私配置 | `community_public_profiles`、`GET/PATCH /community/me/profile`、`PATCH /community/me/privacy` | `test_public_profile_update_privacy_and_safe_projection` | COMMUNITY-38～40 本地完成；公开响应不含邮箱、网络/设备、精确时间、积分或隐私策略 |
+| 关注、粉丝与计数 | `community_user_follows`、关系唯一约束、可重建 follow/follower 投影、关系列表 API | `test_follow_relationships_are_unique_and_private_lists_stay_private` | COMMUNITY-37、43 本地完成；禁用账户不进入公开关系投影 |
+| 屏蔽和静音 | `community_user_blocks`、`community_user_mutes`、隐藏作者过滤和提及策略检查 | `test_block_removes_follow_edges_and_prevents_follow`、`test_block_and_mute_filter_existing_posts_from_read_paths` | COMMUNITY-41～42 本地完成；私信还未实现，后续必须复用消息策略和屏蔽边界 |
+| Web 资料与关系入口 | `CommunityProfilePage.vue`、`CommunityRelationsPage.vue`、`CommunitySettingsPage.vue` 与社区路由 | 三个页面渲染测试、Web typecheck/lint/Vitest | 已实现；目标环境浏览器回归待部署后执行 |
+| 数据迁移 | `20260812_0031_community_profiles_relations.py` | Alembic 前滚/降级/重新前滚纳入统一门禁 | 本地 SQLite 门禁待本轮统一执行；目标 MySQL 待部署验证 |
+
+本切片完成 COMMUNITY-37～44 的本地实现与自动化。`message_policy` 已被持久化为后续私信的授权边界，但私信本身和关注通知均未提前实现；下一开发轮次进入 WP5-I6 可配置板块与群组。

@@ -12,6 +12,14 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+
+vi.mock("../stores/auth", () => ({
+  useAuthStore: () => ({
+    accessToken: "",
+    isAuthenticated: false,
+  }),
+}));
+
 vi.mock("../services/community", () => ({
   getCommunityHome: vi.fn(),
 }));

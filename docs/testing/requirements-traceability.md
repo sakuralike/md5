@@ -401,7 +401,7 @@
 | COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | `test_community.py` 首页聚合、版本冲突、删除占位、两级回复和评论游标；三个独立页面渲染测试、详情治理渲染覆盖；Web typecheck/lint/Vitest | 部分实现：生命周期、评论游标、独立首页/详情/发布页和详情治理已落地；草稿、热门规则、提及通知、回复数重建和 Playwright 仍待开发 |
 | COMMUNITY-32～35 | 点赞、收藏、可重建计数、失效引用清理 | 关系唯一约束、幂等重放、投影计数、私有收藏与不可见内容负向测试 | 本地编码和自动化完成，目标 MySQL/浏览器回归待部署 |
 | COMMUNITY-36 | 点赞摘要通知 | Outbox 重试、聚合窗口、通知偏好和屏蔽关系测试 | 留待 WP5-I7，当前未编码 |
-| COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | 隐私旁路和关系服务测试 | 已规划，未编码 |
+| COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | `test_community_profiles.py`、关系页面渲染测试和统一门禁 | 本地已实现；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | 固定板块迁移往返、群组权限矩阵、私密内容不可见性测试 | 已规划，未编码 |
 | COMMUNITY-55～76 | 动态、搜索和通知中心 | Outbox 重放、搜索重建、通知去重、屏蔽过滤、SSE 降级测试 | 已规划，未编码 |
 | COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
@@ -473,3 +473,16 @@
 | COMMUNITY-34 唯一关系和计数投影 | 数据库唯一约束、写后从事实表重新计数 | 重放同一幂等请求及重复关系测试 | 已通过 |
 | COMMUNITY-35 移除内容互动约束 | 新增互动校验、取消互动保留、失效收藏返回空内容 | 后端负向测试覆盖新增阻断和清理成功 | 已通过 |
 | COMMUNITY-36 点赞摘要通知 | 尚无代码 | 留待 Outbox、聚合和偏好测试 | 未实现，归入 WP5-I7 |
+
+
+## 2026-08-12 WP5-I5 第 1 个开发切片：公开主页与关系图谱
+
+| 需求 | 代码证据 | 自动化证据 | 状态 |
+|---|---|---|---|
+| COMMUNITY-37 关注与取消关注 | `CommunityUserFollow`、PUT/DELETE `/community/users/{username}/follow`、唯一约束 | `test_follow_relationships_are_unique_and_private_lists_stay_private` | 已通过本地测试 |
+| COMMUNITY-38～39 最小化公开主页 | `CommunityPublicProfile`、`GET /community/users/{username}`、公开内容投影 | `test_public_profile_update_privacy_and_safe_projection` | 已通过；禁止字段断言覆盖邮箱、活动、网络/设备、积分和策略 |
+| COMMUNITY-40 隐私策略与关系列表 | `PATCH /community/me/privacy`、粉丝/关注列表访问控制 | 私有列表拒绝旁观者测试 | 已通过本地测试 |
+| COMMUNITY-41 屏蔽强约束 | `CommunityUserBlock`、双向关注删除、提及策略与读取过滤 | `test_block_removes_follow_edges_and_prevents_follow`、内容读取过滤测试 | 已通过本地测试；私信通道待 WP5-I9 接入同一限制 |
+| COMMUNITY-42 静音视图过滤 | `CommunityUserMute`、当前用户隐藏作者集合 | `test_block_and_mute_filter_existing_posts_from_read_paths` | 已通过本地测试 |
+| COMMUNITY-43～44 计数投影和用户名策略 | 关注/粉丝投影重建、禁用用户过滤、认证用户名不可变 | 关系测试、`test_username_cannot_change_after_registration` | 已通过本地测试 |
+| Web 路径 | 公开主页、关系列表、社区设置及资料链接 | `CommunityProfilePage.test.ts`、`CommunityRelationsPage.test.ts`、`CommunitySettingsPage.test.ts` | 已通过本地 Vitest；目标浏览器回归待部署 |

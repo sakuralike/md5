@@ -42,7 +42,6 @@ def auth_headers(tokens, *, idempotency_key=None):
     return headers
 
 
-
 def reauthenticate(
     client,
     tokens,
@@ -118,35 +117,32 @@ def test_login_refresh_rotation_and_reuse_detection(client):
         assert active == []
 
 
-def test_profile_update_is_idempotent_and_conflict_safe(client):
+def test_username_is_immutable_after_registration(client):
     assert register(client).status_code == 201
     tokens = login(client).json()
-    headers = auth_headers(tokens, idempotency_key="profile-update-key-001")
-    response = client.patch(
-        "/api/v1/me/profile", json={"username": "detective_updated"}, headers=headers
-    )
-    assert response.status_code == 200
-    assert response.json()["username"] == "detective_updated"
-
-    replay = client.patch(
-        "/api/v1/me/profile", json={"username": "detective_updated"}, headers=headers
-    )
-    assert replay.status_code == 200
-    assert replay.json()["username"] == "detective_updated"
-
-    conflict = client.patch(
+    unchanged = client.patch(
         "/api/v1/me/profile",
-        json={"username": "another_name"},
-        headers={**auth_headers(tokens), "Idempotency-Key": "profile-update-key-001"},
+        json={"username": "detective_one"},
+        headers=auth_headers(tokens, idempotency_key="profile-unchanged-001"),
     )
-    assert conflict.status_code == 409
-    assert conflict.json()["code"] == "request.idempotency_conflict"
+    assert unchanged.status_code == 200
+    assert unchanged.json()["username"] == "detective_one"
+
+    changed = client.patch(
+        "/api/v1/me/profile",
+        json={"username": "detective_updated"},
+        headers=auth_headers(tokens, idempotency_key="profile-change-rejected-001"),
+    )
+    assert changed.status_code == 409
+    assert changed.json()["code"] == "auth.username_immutable"
 
     with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "detective_one"))
+        assert user is not None
         actions = db.scalars(
             select(AuditLog).where(AuditLog.action == "auth.profile.updated")
         ).all()
-        assert len(actions) == 1
+        assert actions == []
 
 
 def test_password_change_revokes_other_sessions_and_rejects_reuse(client):
@@ -256,7 +252,6 @@ def test_user_totp_setup_confirm_login_and_disable(client):
     assert login(client).status_code == 200
 
 
-
 def test_reauthentication_grant_is_purpose_session_and_one_time_bound(client):
     assert register(client).status_code == 201
     first = login(client).json()
@@ -326,7 +321,6 @@ def test_reauthentication_grant_is_purpose_session_and_one_time_bound(client):
     assert reused.json()["code"] == "auth.invalid_reauthentication_token"
 
 
-
 def test_reauthentication_grant_expiry_is_enforced(client):
     assert register(client).status_code == 201
     tokens = login(client).json()
@@ -336,8 +330,7 @@ def test_reauthentication_grant_expiry_is_enforced(client):
     with client.app.state.database.session_factory() as db:
         record = db.scalar(
             select(ReauthenticationGrant).where(
-                ReauthenticationGrant.token_hash
-                == hash_opaque_token(grant.json()["reauth_token"])
+                ReauthenticationGrant.token_hash == hash_opaque_token(grant.json()["reauth_token"])
             )
         )
         assert record is not None

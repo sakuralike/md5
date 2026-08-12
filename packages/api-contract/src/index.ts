@@ -1556,6 +1556,97 @@ export interface CommunityNotificationReadResponse {
   unread_count: number;
 }
 
+export type CommunityRelationVisibility = "public" | "private";
+export type CommunityInteractionPolicy = "everyone" | "following" | "nobody";
+
+export interface CommunityPublicLevel {
+  code: string;
+  name: string;
+}
+
+export interface CommunityProfileStats {
+  post_count: number;
+  comment_count: number;
+  follower_count: number;
+  following_count: number;
+}
+
+export interface CommunityRelationshipState {
+  viewer_is_self: boolean;
+  viewer_is_following: boolean;
+  follows_viewer: boolean;
+  viewer_is_blocking: boolean;
+  viewer_is_blocked: boolean;
+  viewer_is_muting: boolean;
+}
+
+export interface CommunityPublicCommentSummary {
+  id: string;
+  post_id: string;
+  post_title: string;
+  content_preview: string;
+  like_count: number;
+  created_at: string;
+}
+
+export interface CommunityPublicProfileResponse {
+  username: string;
+  display_name: string;
+  bio: string;
+  avatar_seed: string;
+  role: UserRole;
+  level: CommunityPublicLevel;
+  registered_month: string;
+  stats: CommunityProfileStats;
+  relationship: CommunityRelationshipState;
+  recent_posts: CommunityPostSummary[];
+  recent_comments: CommunityPublicCommentSummary[];
+}
+
+export interface CommunityOwnProfileResponse extends CommunityPublicProfileResponse {
+  follower_visibility: CommunityRelationVisibility;
+  following_visibility: CommunityRelationVisibility;
+  message_policy: CommunityInteractionPolicy;
+  mention_policy: CommunityInteractionPolicy;
+}
+
+export interface CommunityProfileUpdateRequest {
+  display_name: string;
+  bio: string;
+  regenerate_avatar: boolean;
+}
+
+export interface CommunityPrivacyUpdateRequest {
+  follower_visibility: CommunityRelationVisibility;
+  following_visibility: CommunityRelationVisibility;
+  message_policy: CommunityInteractionPolicy;
+  mention_policy: CommunityInteractionPolicy;
+}
+
+export interface CommunityMuteRequest {
+  expires_at: string | null;
+}
+
+export interface CommunityRelationshipMutationResponse {
+  username: string;
+  relationship: CommunityRelationshipState;
+  message: string;
+}
+
+export interface CommunityRelationUser {
+  username: string;
+  display_name: string;
+  avatar_seed: string;
+  role: UserRole;
+  level: CommunityPublicLevel;
+}
+
+export interface CommunityRelationListResponse {
+  items: CommunityRelationUser[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
 export interface CommunityReportCreateRequest {
   post_id: string;
   comment_id?: string | null;

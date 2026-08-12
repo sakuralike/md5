@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -31,13 +31,20 @@ from password_detective.modules.community.schemas import (
     CommunityCommentListResponse,
     CommunityCommentUpdateRequest,
     CommunityHomeResponse,
+    CommunityMuteRequest,
     CommunityNotificationListResponse,
     CommunityNotificationReadResponse,
+    CommunityOwnProfileResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostInteractionResponse,
     CommunityPostListResponse,
     CommunityPostUpdateRequest,
+    CommunityPrivacyUpdateRequest,
+    CommunityProfileUpdateRequest,
+    CommunityPublicProfileResponse,
+    CommunityRelationListResponse,
+    CommunityRelationshipMutationResponse,
     CommunityReportCreateRequest,
     CommunityReportResponse,
 )
@@ -47,23 +54,33 @@ from password_detective.modules.community.service import (
     create_report,
     delete_comment,
     delete_post,
+    get_own_profile,
     get_post,
+    get_public_profile,
     list_boards,
     list_bookmarks,
     list_comments,
     list_home,
     list_notifications,
     list_posts,
+    list_relationship_users,
     mark_all_notifications_read,
     mark_notification_read,
+    set_block,
     set_comment_like,
+    set_follow,
+    set_mute,
     set_post_bookmark,
     set_post_like,
     update_comment,
     update_post,
+    update_privacy_preferences,
+    update_public_profile,
 )
 
 router = APIRouter(prefix="/community", tags=["community"])
+
+
 @router.get("/boards", response_model=CommunityBoardListResponse)
 def community_boards(
     db: Annotated[Session, Depends(get_db)],
@@ -74,22 +91,334 @@ def community_boards(
 @router.get("/home", response_model=CommunityHomeResponse)
 def community_home(
     db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
     board_code: CommunityBoardCode | None = None,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityHomeResponse:
-    return list_home(db, board_code=board_code, page_size=page_size)
+    return list_home(db, board_code=board_code, page_size=page_size, principal=principal)
 
 
-@router.get(
-    "/posts", response_model=CommunityPostListResponse, response_model_exclude_unset=True
-)
+@router.get("/posts", response_model=CommunityPostListResponse, response_model_exclude_unset=True)
 def community_posts(
     db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
     board_code: CommunityBoardCode | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityPostListResponse:
-    return list_posts(db, board_code=board_code, page=page, page_size=page_size)
+    return list_posts(
+        db, board_code=board_code, page=page, page_size=page_size, principal=principal
+    )
+
+
+@router.get("/me/profile", response_model=CommunityOwnProfileResponse)
+def community_my_profile(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> CommunityOwnProfileResponse:
+    return get_own_profile(db, principal=principal)
+
+
+@router.patch(
+    "/me/profile",
+    response_model=CommunityOwnProfileResponse,
+    dependencies=[Depends(rate_limit("community.profile.update", limit=30, window_seconds=3600))],
+)
+def community_my_profile_update(
+    payload: CommunityProfileUpdateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityOwnProfileResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.profile.update",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=CommunityOwnProfileResponse,
+        create=lambda: update_public_profile(
+            db, payload=payload, principal=principal, context=get_client_context(request)
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.patch(
+    "/me/privacy",
+    response_model=CommunityOwnProfileResponse,
+    dependencies=[Depends(rate_limit("community.privacy.update", limit=30, window_seconds=3600))],
+)
+def community_my_privacy_update(
+    payload: CommunityPrivacyUpdateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityOwnProfileResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.privacy.update",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=CommunityOwnProfileResponse,
+        create=lambda: update_privacy_preferences(
+            db, payload=payload, principal=principal, context=get_client_context(request)
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.get("/users/{username}", response_model=CommunityPublicProfileResponse)
+def community_public_profile(
+    username: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+) -> CommunityPublicProfileResponse:
+    return get_public_profile(db, username=username, principal=principal)
+
+
+@router.get("/users/{username}/followers", response_model=CommunityRelationListResponse)
+def community_followers(
+    username: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> CommunityRelationListResponse:
+    return list_relationship_users(
+        db,
+        username=username,
+        direction="followers",
+        principal=principal,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+@router.get("/users/{username}/following", response_model=CommunityRelationListResponse)
+def community_following(
+    username: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> CommunityRelationListResponse:
+    return list_relationship_users(
+        db,
+        username=username,
+        direction="following",
+        principal=principal,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+def _relationship_mutation(
+    *,
+    username: str,
+    operation: str,
+    db: Session,
+    principal: Principal,
+    idempotency_key: str,
+    request: Request,
+    mute_payload: CommunityMuteRequest | None = None,
+) -> CommunityRelationshipMutationResponse:
+    action = {
+        "follow": lambda: set_follow(
+            db,
+            username=username,
+            followed=True,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        "unfollow": lambda: set_follow(
+            db,
+            username=username,
+            followed=False,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        "block": lambda: set_block(
+            db,
+            username=username,
+            blocked=True,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        "unblock": lambda: set_block(
+            db,
+            username=username,
+            blocked=False,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        "mute": lambda: set_mute(
+            db,
+            username=username,
+            muted=True,
+            payload=mute_payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+        "unmute": lambda: set_mute(
+            db,
+            username=username,
+            muted=False,
+            payload=None,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    }[operation]
+    payload: dict[str, object] = {"username": username, "operation": operation}
+    if mute_payload is not None:
+        payload["mute"] = mute_payload.model_dump(mode="json")
+    return _mutate_with_idempotency(
+        db,
+        scope=f"community.relation.{operation}",
+        idempotency_key=idempotency_key,
+        request_payload=payload,
+        principal=principal,
+        response_type=CommunityRelationshipMutationResponse,
+        create=action,
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.put(
+    "/users/{username}/follow",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.follow", limit=120, window_seconds=3600))],
+)
+def community_follow(
+    username: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="follow",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+    )
+
+
+@router.delete(
+    "/users/{username}/follow",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.unfollow", limit=120, window_seconds=3600))],
+)
+def community_unfollow(
+    username: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="unfollow",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+    )
+
+
+@router.put(
+    "/users/{username}/block",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.block", limit=60, window_seconds=3600))],
+)
+def community_block(
+    username: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="block",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+    )
+
+
+@router.delete(
+    "/users/{username}/block",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.unblock", limit=60, window_seconds=3600))],
+)
+def community_unblock(
+    username: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="unblock",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+    )
+
+
+@router.put(
+    "/users/{username}/mute",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.mute", limit=60, window_seconds=3600))],
+)
+def community_mute(
+    username: str,
+    payload: CommunityMuteRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="mute",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+        mute_payload=payload,
+    )
+
+
+@router.delete(
+    "/users/{username}/mute",
+    response_model=CommunityRelationshipMutationResponse,
+    dependencies=[Depends(rate_limit("community.unmute", limit=60, window_seconds=3600))],
+)
+def community_unmute(
+    username: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityRelationshipMutationResponse:
+    return _relationship_mutation(
+        username=username,
+        operation="unmute",
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+        request=request,
+    )
 
 
 @router.get("/notifications", response_model=CommunityNotificationListResponse)

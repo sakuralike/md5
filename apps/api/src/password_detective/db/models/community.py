@@ -299,3 +299,104 @@ class CommunityNotification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
+
+
+class CommunityRelationVisibility(StrEnum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class CommunityInteractionPolicy(StrEnum):
+    EVERYONE = "everyone"
+    FOLLOWING = "following"
+    NOBODY = "nobody"
+
+
+class CommunityPublicProfile(Base):
+    __tablename__ = "community_public_profiles"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_name: Mapped[str] = mapped_column(String(48))
+    bio: Mapped[str] = mapped_column(String(300), default="")
+    avatar_seed: Mapped[str] = mapped_column(String(32))
+    follower_visibility: Mapped[CommunityRelationVisibility] = mapped_column(
+        Enum(CommunityRelationVisibility, native_enum=False, length=16),
+        default=CommunityRelationVisibility.PUBLIC,
+    )
+    following_visibility: Mapped[CommunityRelationVisibility] = mapped_column(
+        Enum(CommunityRelationVisibility, native_enum=False, length=16),
+        default=CommunityRelationVisibility.PUBLIC,
+    )
+    message_policy: Mapped[CommunityInteractionPolicy] = mapped_column(
+        Enum(CommunityInteractionPolicy, native_enum=False, length=16),
+        default=CommunityInteractionPolicy.FOLLOWING,
+    )
+    mention_policy: Mapped[CommunityInteractionPolicy] = mapped_column(
+        Enum(CommunityInteractionPolicy, native_enum=False, length=16),
+        default=CommunityInteractionPolicy.EVERYONE,
+    )
+    follower_count: Mapped[int] = mapped_column(Integer, default=0)
+    following_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityUserFollow(Base):
+    __tablename__ = "community_user_follows"
+    __table_args__ = (
+        UniqueConstraint("follower_id", "followed_id", name="uq_community_user_follow_pair"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    follower_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    followed_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityUserBlock(Base):
+    __tablename__ = "community_user_blocks"
+    __table_args__ = (
+        UniqueConstraint("blocker_id", "blocked_id", name="uq_community_user_block_pair"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    blocker_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    blocked_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityUserMute(Base):
+    __tablename__ = "community_user_mutes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "muted_user_id", name="uq_community_user_mute_pair"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    muted_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )

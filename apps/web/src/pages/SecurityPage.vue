@@ -52,19 +52,6 @@ async function load(): Promise<void> {
   }
 }
 
-async function saveProfile(): Promise<void> {
-  clearFeedback();
-  busy.value = true;
-  try {
-    await auth.updateProfile({ username: username.value });
-    success.value = "个人资料已保存";
-  } catch (caught) {
-    error.value = messageFrom(caught, "资料保存失败");
-  } finally {
-    busy.value = false;
-  }
-}
-
 async function resendVerification(): Promise<void> {
   clearFeedback();
   busy.value = true;
@@ -206,13 +193,13 @@ onMounted(load);
         <Card>
           <CardHeader>
             <CardTitle>基础资料</CardTitle>
-            <CardDescription>邮箱用于验证与找回账号，当前阶段仅开放用户名修改。</CardDescription>
+            <CardDescription>用户名为注册后不可变的公开标识；公开展示名与社区隐私设置请在社区资料中维护。</CardDescription>
           </CardHeader>
           <CardContent class="grid gap-5 sm:max-w-xl">
             <div class="space-y-2">
               <Label for="security-username">用户名</Label>
-              <Input id="security-username" v-model="username" autocomplete="username" />
-              <p class="text-xs text-muted-foreground">3-32 个字符，仅支持字母、数字和下划线。</p>
+              <Input id="security-username" :model-value="username" autocomplete="username" disabled />
+              <p class="text-xs text-muted-foreground">用户名不可修改，以保障内容归属、审核记录和社区关系的一致性。</p>
             </div>
             <div class="space-y-2">
               <div class="flex flex-wrap items-center gap-2">
@@ -236,7 +223,9 @@ onMounted(load);
             </div>
           </CardContent>
           <CardFooter>
-            <Button :disabled="busy || !username" @click="saveProfile">保存资料</Button>
+            <Button as-child variant="outline">
+              <RouterLink to="/community/settings">前往社区资料与隐私设置</RouterLink>
+            </Button>
           </CardFooter>
         </Card>
       </TabsContent>
