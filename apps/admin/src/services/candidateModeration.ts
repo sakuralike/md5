@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   CandidateModerationDetail,
   CandidateModerationListResponse,
@@ -15,7 +16,7 @@ export interface CandidateModerationFilters {
 }
 
 export function createTransitionKey(): string {
-  return `admin-candidate-transition-${crypto.randomUUID()}`;
+  return `admin-candidate-transition-${createClientId()}`;
 }
 
 export function listModerationCandidates(

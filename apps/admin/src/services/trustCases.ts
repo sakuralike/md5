@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   TrustCaseAssignRequest,
   TrustCaseAssignResponse,
@@ -25,23 +26,23 @@ export interface TrustCaseFilters {
 }
 
 export function createTrustCaseTransitionKey(): string {
-  return `admin-trust-case-transition-${crypto.randomUUID()}`;
+  return `admin-trust-case-transition-${createClientId()}`;
 }
 
 export function createTrustCaseAssignKey(): string {
-  return `admin-trust-case-assign-${crypto.randomUUID()}`;
+  return `admin-trust-case-assign-${createClientId()}`;
 }
 
 export function createTrustCaseReopenKey(): string {
-  return `admin-trust-case-reopen-${crypto.randomUUID()}`;
+  return `admin-trust-case-reopen-${createClientId()}`;
 }
 
 export function createTrustCaseResolveKey(): string {
-  return `admin-trust-case-resolve-${crypto.randomUUID()}`;
+  return `admin-trust-case-resolve-${createClientId()}`;
 }
 
 export function createTrustCaseNotificationReplayKey(): string {
-  return `admin-trust-case-notification-replay-${crypto.randomUUID()}`;
+  return `admin-trust-case-notification-replay-${createClientId()}`;
 }
 
 export function listTrustCases(

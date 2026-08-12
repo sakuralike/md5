@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import {
   ApiError,
   type AdminAuditLogEntry,
@@ -89,7 +90,7 @@ export async function downloadAdminAuditLogs(
   const headers = new Headers({
     Accept: "text/csv",
     Authorization: `Bearer ${token}`,
-    "X-Request-ID": `admin_${crypto.randomUUID()}`,
+    "X-Request-ID": `admin_${createClientId()}`,
   });
   const response = await fetch(
     `${baseUrl}/admin/audit-logs/export?${params.toString()}`,

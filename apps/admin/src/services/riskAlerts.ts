@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   RiskAlertAssignmentRequest,
   RiskAlertAssignmentResponse,
@@ -30,15 +31,15 @@ export interface RiskAlertFilters {
 }
 
 export function createRiskAlertTransitionKey(): string {
-  return `admin-risk-alert-transition-${crypto.randomUUID()}`;
+  return `admin-risk-alert-transition-${createClientId()}`;
 }
 
 export function createRiskAlertAssignmentKey(): string {
-  return `admin-risk-alert-assignment-${crypto.randomUUID()}`;
+  return `admin-risk-alert-assignment-${createClientId()}`;
 }
 
 export function createRiskAlertNotificationReplayKey(): string {
-  return `admin-risk-alert-notification-replay-${crypto.randomUUID()}`;
+  return `admin-risk-alert-notification-replay-${createClientId()}`;
 }
 
 export function listRiskAlerts(

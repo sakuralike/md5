@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createClientId } from "@/lib/clientId";
 import {
   ApiError,
   type AdminSessionRevocationReasonCode,
@@ -248,7 +249,7 @@ async function submitAction(): Promise<void> {
       { currentPassword: currentPassword.value, totpCode: totpCode.value },
       auth.accessToken,
     );
-    const idempotencyKey = `admin-${mode}-${crypto.randomUUID()}`;
+    const idempotencyKey = `admin-${mode}-${createClientId()}`;
     if (mode === "revoke_sessions") {
       const result = await revokeAdminUserSessions(
         userId,

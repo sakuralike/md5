@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   AdminCommunityBoardCreateRequest,
   AdminCommunityBoardListResponse,
@@ -7,7 +8,7 @@ import type {
 import { apiRequest } from "./api";
 
 export function createCommunityConfigurationKey(kind: "create" | "update"): string {
-  return `admin-community-board-${kind}-${crypto.randomUUID()}`;
+  return `admin-community-board-${kind}-${createClientId()}`;
 }
 
 export function listCommunityBoards(token: string): Promise<AdminCommunityBoardListResponse> {

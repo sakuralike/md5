@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "../services/api";
 import {
   calculateArchiveFingerprints,
@@ -157,7 +158,7 @@ async function submitContribution(): Promise<void> {
       "/archives/submissions",
       {
         method: "POST",
-        headers: { "Idempotency-Key": `web-submission-${crypto.randomUUID()}` },
+        headers: { "Idempotency-Key": `web-submission-${createClientId()}` },
         body: JSON.stringify(payload),
       },
       auth.accessToken,
@@ -184,7 +185,7 @@ async function submitFeedback(candidateId: string, outcome: FeedbackOutcome): Pr
       `/candidates/${encodeURIComponent(candidateId)}/feedback`,
       {
         method: "POST",
-        headers: { "Idempotency-Key": `web-feedback-${crypto.randomUUID()}` },
+        headers: { "Idempotency-Key": `web-feedback-${createClientId()}` },
         body: JSON.stringify({ outcome }),
       },
       auth.accessToken,

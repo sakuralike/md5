@@ -6,10 +6,11 @@ import type {
   TrustCaseKind,
   TrustCaseListResponse,
 } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "./api";
 
 export function createTrustCaseSubmissionKey(kind: TrustCaseKind): string {
-  return `web-trust-${kind}-${crypto.randomUUID()}`;
+  return `web-trust-${kind}-${createClientId()}`;
 }
 
 export function listMyTrustCases(

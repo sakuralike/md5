@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   AdminCommunityPostModerateRequest,
   AdminCommunityPostMutationResponse,
@@ -15,7 +16,7 @@ export interface CommunityReportFilters {
 }
 
 export function createCommunityModerationKey(kind: "report" | "post"): string {
-  return `admin-community-${kind}-${crypto.randomUUID()}`;
+  return `admin-community-${kind}-${createClientId()}`;
 }
 
 export function listCommunityReports(

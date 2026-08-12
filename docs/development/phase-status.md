@@ -807,3 +807,11 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 数据迁移 | `20260812_0033_community_activity_notifications.py` | Alembic 往返和统一门禁 | 本地 SQLite 验证待本轮统一门禁；目标 MySQL 待部署 |
 
 下一开发切片继续 WP5-I7，优先实现点赞摘要、群组治理通知与 Outbox 重放，再接入邮件摘要实际投递和实时未读增强。
+
+## 2026-08-12 HTTP 非安全上下文兼容修复
+
+| 范围 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web 注册与请求追踪 | `apps/web/src/lib/clientId.ts`，Web 全部请求标识与幂等键改用统一生成器 | `clientId.test.ts`、Web lint/typecheck/Vitest | 本地完成，待目标服务器部署回归 |
+| Admin 治理写操作 | `apps/admin/src/lib/clientId.ts`，Admin 全部直接 UUID 调用已替换 | `clientId.test.ts`、Admin lint/typecheck/Vitest | 本地完成，待目标服务器部署回归 |
+| 安全边界 | 请求标识不用于认证、密钥或密码学材料 | 代码审查与类型门禁 | 已明确 |

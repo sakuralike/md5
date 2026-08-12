@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createClientId } from "@/lib/clientId";
 import {
   ApiError,
   type EmailDeliverySettings,
@@ -280,7 +281,7 @@ async function createDraft(): Promise<void> {
         snapshot: normalizedSnapshot(),
       },
       auth.accessToken,
-      crypto.randomUUID(),
+      createClientId(),
     );
     await loadVersions(response.version.id);
     success.value = `不可变草稿 ${shortId(response.version.id)} 已创建，可在差异确认后发布。`;
@@ -320,7 +321,7 @@ async function publishSelected(): Promise<void> {
         reauthToken,
       },
       auth.accessToken,
-      crypto.randomUUID(),
+      createClientId(),
     );
     await loadVersions(response.version.id);
     success.value = `版本 ${shortId(response.version.id)} 已发布并写入运行时配置投影。`;
@@ -347,7 +348,7 @@ async function rollbackSelected(): Promise<void> {
         reauthToken,
       },
       auth.accessToken,
-      crypto.randomUUID(),
+      createClientId(),
     );
     await loadVersions(response.version.id);
     success.value = `已从历史版本 ${shortId(historicalVersionId)} 创建新的不可变回滚版本。`;

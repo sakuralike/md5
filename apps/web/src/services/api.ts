@@ -1,4 +1,5 @@
 import { ApiError, type ApiErrorBody } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -9,7 +10,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
-  headers.set("X-Request-ID", `web_${crypto.randomUUID()}`);
+  headers.set("X-Request-ID", `web_${createClientId()}`);
   if (options.body) headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
@@ -40,7 +41,7 @@ export async function apiFileRequest(
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   headers.set("Content-Type", "application/json");
-  headers.set("X-Request-ID", `web_${crypto.randomUUID()}`);
+  headers.set("X-Request-ID", `web_${createClientId()}`);
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   const response = await fetch(`${baseUrl}${path}`, { credentials: "include", ...options, headers });
   if (!response.ok) {

@@ -6,10 +6,11 @@ import type {
   PasswordForgotRequest,
   PasswordResetRequest,
 } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "./api";
 
 function idempotencyHeaders(): HeadersInit {
-  return { "Idempotency-Key": crypto.randomUUID() };
+  return { "Idempotency-Key": createClientId() };
 }
 
 export function loginBrowser(payload: BrowserLoginRequest): Promise<BrowserTokenResponse> {

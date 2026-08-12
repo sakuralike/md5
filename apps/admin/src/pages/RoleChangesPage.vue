@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createClientId } from "@/lib/clientId";
 import {
   type RoleChangeReasonCode,
   type RoleChangeRequestStatus,
@@ -51,7 +52,7 @@ const {
   createRequest,
 } = useRoleChanges({
   accessToken: () => auth.accessToken,
-  randomUUID: () => crypto.randomUUID(),
+  randomUUID: () => createClientId(),
   listRoleChangeRequests,
   createRoleChangeRequest,
   approveRoleChangeRequest,

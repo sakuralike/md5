@@ -38,6 +38,7 @@ import type {
   CommunityReportCreateRequest,
   CommunityReportResponse,
 } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "./api";
 
 export function createCommunityIdempotencyKey(
@@ -74,7 +75,7 @@ export function createCommunityIdempotencyKey(
     | "group-member-decision"
     | "group-member-role",
 ): string {
-  return `web-community-${kind}-${crypto.randomUUID()}`;
+  return `web-community-${kind}-${createClientId()}`;
 }
 
 export function listCommunityBoards(): Promise<CommunityBoardListResponse> {

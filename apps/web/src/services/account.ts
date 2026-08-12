@@ -17,10 +17,11 @@ import type {
   TotpSetupResponse,
   User,
 } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 import { apiFileRequest, apiRequest } from "./api";
 
 function idempotencyHeaders(): HeadersInit {
-  return { "Idempotency-Key": crypto.randomUUID() };
+  return { "Idempotency-Key": createClientId() };
 }
 
 export function loadProfile(accessToken: string): Promise<User> {

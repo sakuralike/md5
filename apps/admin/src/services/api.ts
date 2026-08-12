@@ -1,11 +1,12 @@
 import { ApiError, type ApiErrorBody } from "@password-detective/api-contract";
+import { createClientId } from "@/lib/clientId";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
-  headers.set("X-Request-ID", `admin_${crypto.randomUUID()}`);
+  headers.set("X-Request-ID", `admin_${createClientId()}`);
   if (typeof options.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
