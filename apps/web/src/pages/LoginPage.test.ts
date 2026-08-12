@@ -28,6 +28,9 @@ describe("LoginPage", () => {
     expect(html).toContain("TOTP 验证码");
     expect(html).toContain('data-testid="user-login-form"');
     expect(html).toContain("flex flex-col gap-5");
+    expect(html).toContain("从本地指纹开始，找到可信答案");
+    expect(html).toContain("bg-gradient-to-r from-primary to-accent");
+    expect(html).toContain("backdrop-blur-2xl");
     expect(html).toContain('autocomplete="username"');
     expect(html).toContain("<button");
   });

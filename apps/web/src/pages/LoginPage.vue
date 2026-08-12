@@ -23,8 +23,22 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="mx-auto flex min-h-[calc(100vh-10rem)] w-full items-center justify-center py-4 sm:py-8">
-    <Card class="w-full max-w-lg border-white/60 bg-white/75 shadow-xl shadow-slate-200/40 backdrop-blur-xl">
+  <section class="mx-auto grid min-h-[calc(100vh-11rem)] w-full max-w-5xl items-center gap-8 py-4 lg:grid-cols-[0.9fr_1.1fr] lg:py-8">
+    <div class="space-y-5 px-2 text-center lg:text-left">
+      <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xl font-bold text-primary-foreground shadow-lg lg:mx-0">密</div>
+      <div class="space-y-3">
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">隐私优先的协作工作台</p>
+        <h1 class="bg-gradient-to-r from-primary to-accent bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">从本地指纹开始，找到可信答案。</h1>
+        <p class="mx-auto max-w-xl text-sm leading-7 text-muted-foreground lg:mx-0">压缩包始终留在本地。登录后可查看授权范围内的候选、贡献验证结果并参与安全社区。</p>
+      </div>
+      <div class="mx-auto flex max-w-xl flex-wrap justify-center gap-2 lg:mx-0 lg:justify-start">
+        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">本地计算</span>
+        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">最小披露</span>
+        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">全程审计</span>
+      </div>
+    </div>
+
+    <Card class="w-full border-card/80 bg-card/75 shadow-xl backdrop-blur-2xl">
       <CardHeader class="space-y-1.5 p-6 pb-5 sm:p-8 sm:pb-6">
         <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">安全会话</p>
         <CardTitle class="text-2xl leading-tight sm:text-3xl">登录密码侦探社</CardTitle>

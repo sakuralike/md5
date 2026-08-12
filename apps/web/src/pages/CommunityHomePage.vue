@@ -72,8 +72,8 @@ function formatDate(value: string): string {
 </script>
 
 <template>
-  <section class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <header class="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
+  <section class="mx-auto flex w-full flex-col gap-6 py-2 sm:py-4">
+    <header class="overflow-hidden rounded-3xl border border-card/80 bg-card/70 p-6 shadow-xl backdrop-blur-2xl sm:p-8">
       <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl space-y-3">
           <div class="flex flex-wrap items-center gap-2">
@@ -81,7 +81,7 @@ function formatDate(value: string): string {
             <Badge variant="secondary">公开阅读</Badge>
             <Badge variant="outline">首页</Badge>
           </div>
-          <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">社区首页</h1>
+          <h1 class="bg-gradient-to-r from-primary to-accent bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-5xl">社区首页</h1>
           <p class="text-muted-foreground">
             按板块浏览合成数据、验证流程和安全实践。帖子详情、评论和发布均使用独立页面，便于分享和返回。
           </p>
@@ -98,7 +98,7 @@ function formatDate(value: string): string {
     </Alert>
 
     <div class="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <Card class="h-fit">
+      <Card class="h-fit border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
         <CardHeader>
           <CardTitle>社区板块</CardTitle>
           <CardDescription>选择讨论边界。</CardDescription>
@@ -126,7 +126,7 @@ function formatDate(value: string): string {
         </CardContent>
       </Card>
 
-      <Card class="h-fit lg:col-span-2">
+      <Card class="h-fit border-card/80 bg-card/70 shadow-lg backdrop-blur-xl lg:col-span-2">
         <CardHeader class="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>社区群组</CardTitle>
@@ -147,7 +147,7 @@ function formatDate(value: string): string {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
         <CardHeader class="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>{{ selectedBoardName }}</CardTitle>

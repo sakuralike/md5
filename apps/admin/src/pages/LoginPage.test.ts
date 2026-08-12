@@ -22,6 +22,9 @@ describe("LoginPage", () => {
     expect(html).toContain("登录管理端");
     expect(html).toContain('data-testid="admin-login-form"');
     expect(html).toContain("flex w-full max-w-lg flex-col gap-5");
+    expect(html).toContain("安全运营从受控身份开始");
+    expect(html).toContain("bg-gradient-to-r from-primary to-accent");
+    expect(html).toContain("backdrop-blur-2xl");
     expect(html).toContain("<button");
     expect(html).toContain('autocomplete="username"');
   });

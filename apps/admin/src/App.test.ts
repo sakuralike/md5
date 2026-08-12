@@ -42,6 +42,8 @@ describe("App", () => {
     expect(html).toContain("系统配置");
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("focus-visible:ring-2");
+    expect(html).toContain("bg-gradient-to-br from-primary to-accent");
+    expect(html).toContain("backdrop-blur-2xl");
     expect(html).toContain("退出");
   });
 });

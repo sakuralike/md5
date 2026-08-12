@@ -20,23 +20,26 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="mx-auto grid min-h-[calc(100vh-8rem)] w-full max-w-5xl grid-cols-1 items-center gap-6 py-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
-    <div class="hidden self-stretch rounded-3xl border bg-primary p-8 text-primary-foreground shadow-xl lg:flex lg:flex-col lg:justify-center">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">独立管理入口</p>
-      <h2 class="mt-5 text-4xl font-semibold tracking-tight">安全运营从受控身份开始。</h2>
-      <p class="mt-5 max-w-xl text-sm leading-7 text-primary-foreground/75">
+  <section class="mx-auto grid min-h-[calc(100vh-9rem)] w-full max-w-5xl grid-cols-1 items-center gap-8 py-6 lg:grid-cols-[0.95fr_1.05fr] lg:gap-10">
+    <div class="space-y-6 px-2 text-center lg:text-left">
+      <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xl text-primary-foreground shadow-lg lg:mx-0">🛡️</div>
+      <div class="space-y-3">
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">独立管理入口</p>
+        <h2 class="bg-gradient-to-r from-primary to-accent bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">安全运营从受控身份开始。</h2>
+      </div>
+      <p class="mx-auto max-w-xl text-sm leading-7 text-muted-foreground lg:mx-0">
         管理员登录、TOTP、多角色治理与关键写操作审计均在独立入口完成。页面不会展示候选密码、刷新令牌或真实个人信息。
       </p>
-      <ul class="mt-6 flex flex-col gap-3 text-sm text-primary-foreground/85">
-        <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">管理员强制 TOTP 与短时会话</li>
-        <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">敏感操作具备幂等与不可变审计</li>
-        <li class="rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3">治理数据遵循最小披露原则</li>
+      <ul class="mx-auto flex max-w-xl flex-wrap justify-center gap-2 text-xs text-muted-foreground lg:mx-0 lg:justify-start">
+        <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">强制 TOTP</li>
+        <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">不可变审计</li>
+        <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">最小披露</li>
       </ul>
     </div>
 
     <form
       data-testid="admin-login-form"
-      class="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-3xl border bg-card p-6 text-card-foreground shadow-xl sm:p-8"
+      class="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-3xl border border-card/80 bg-card/75 p-6 text-card-foreground shadow-xl backdrop-blur-2xl sm:p-8"
       aria-labelledby="admin-login-title"
       @submit.prevent="submit"
     >
