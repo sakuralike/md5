@@ -78,6 +78,8 @@ try {
 
 Push-Location $Root
 try {
+    Invoke-Checked $Python -m ruff check ./scripts/rebuild_community_reply_counts.py ./scripts/tests/test_rebuild_community_reply_counts.py
+    Invoke-Checked $Python -m pytest ./scripts/tests/test_rebuild_community_reply_counts.py
     Invoke-Checked $Pnpm lint
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test

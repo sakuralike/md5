@@ -154,6 +154,48 @@ def test_verified_user_can_reply_and_locked_posts_reject_replies(client):
     assert locked.json()["code"] == "community.post_locked"
 
 
+def test_author_comment_delete_updates_reply_count_once(client):
+    author = register_and_login(
+        client,
+        username="reply_projection_author",
+        email="reply-projection-author@example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "community-reply-projection-post-001"),
+    ).json()
+    replied = client.post(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        json={
+            "content": "这是一条用于验证回复数投影的合成评论。",
+            "parent_id": None,
+            "rules_accepted": True,
+        },
+        headers=headers(author, "community-reply-projection-comment-001"),
+    ).json()
+    comment = replied["comments"][0]
+    assert replied["reply_count"] == 1
+
+    deleted = client.delete(
+        f"/api/v1/community/comments/{comment['id']}?expected_version=1",
+        headers=headers(author, "community-reply-projection-delete-001"),
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["reply_count"] == 0
+    assert deleted.json()["comments"][0]["content"].startswith("该回复已由作者删除")
+
+    duplicate = client.delete(
+        f"/api/v1/community/comments/{comment['id']}?expected_version=2",
+        headers=headers(author, "community-reply-projection-delete-002"),
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "community.comment_already_deleted"
+    detail = client.get(f"/api/v1/community/posts/{created['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["reply_count"] == 0
+
+
 def test_publish_requires_verified_email_and_rules_acceptance(client):
     unverified = register_and_login(
         client,
@@ -355,6 +397,63 @@ def test_admin_resolves_comment_report_and_locks_post(client):
             )
         )
         assert audit is not None
+
+
+def test_moderating_author_deleted_comment_does_not_double_decrement(client):
+    author = register_and_login(
+        client,
+        username="deleted_comment_author",
+        email="deleted-comment-author@example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "community-deleted-comment-post-001"),
+    ).json()
+    comment = client.post(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        json={
+            "content": "这是一条先由作者删除、再进入治理流程的合成评论。",
+            "parent_id": None,
+            "rules_accepted": True,
+        },
+        headers=headers(author, "community-deleted-comment-create-001"),
+    ).json()["comments"][0]
+    deleted = client.delete(
+        f"/api/v1/community/comments/{comment['id']}?expected_version=1",
+        headers=headers(author, "community-deleted-comment-delete-001"),
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["reply_count"] == 0
+
+    reporter = register_and_login(
+        client,
+        username="deleted_comment_reporter",
+        email="deleted-comment-reporter@example.com",
+    )
+    report = client.post(
+        "/api/v1/community/reports",
+        json={
+            "post_id": created["id"],
+            "comment_id": comment["id"],
+            "reason": "privacy",
+            "details": "该合成占位回复仍需完成治理状态闭环，但不得重复扣减回复数。",
+        },
+        headers=headers(reporter, "community-deleted-comment-report-001"),
+    ).json()
+    resolved = client.post(
+        f"/api/v1/admin/community/reports/{report['id']}/resolve",
+        json={
+            "decision": "remove_and_lock",
+            "note": "移除作者已删除的占位回复，并验证回复数投影保持不变。",
+        },
+        headers={
+            **admin_headers(client),
+            "Idempotency-Key": "community-deleted-comment-resolve-001",
+        },
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["post"]["reply_count"] == 0
 
 
 def test_admin_can_pin_remove_and_restore_post(client):

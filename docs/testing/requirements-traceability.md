@@ -410,7 +410,7 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-14～18、21～22、25、29～31 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、社区服务请求测试、Web typecheck、ESLint、Vitest 30 项 | 部分实现：公开首页、详情、发布页以及详情作者编辑/删除、评论编辑/删除、主题/回复举报已拆分并复用现有社区 API；移动端 Playwright、真实目标环境回归、提及通知和回复数重建仍待完成 |
+| COMMUNITY-14～18、21～22、25、29～31 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、社区回复数写入修复与重建工具、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、社区服务请求测试、回复数投影专项测试、Web typecheck、ESLint、Vitest 30 项 | 部分实现：公开首页、详情、发布页、详情治理、举报及 COMMUNITY-31 回复数投影修复已完成；移动端 Playwright、真实目标环境回归和提及通知仍待完成 |
 | 兼容回退 | `CommunityPage.vue`、`/community/legacy` | `CommunityPage.test.ts` | 已实现，旧综合页保留为回退入口 |
 
 ## 2026-08-12 WP5-I3 第 3 个开发切片：独立详情页治理能力
@@ -421,4 +421,12 @@
 | 评论作者编辑/删除 | `CommunityPostPage.vue`、`updateCommunityComment`、`deleteCommunityComment` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；删除保留结构占位 |
 | 主题/回复举报 | `CommunityPostPage.vue`、`createCommunityReport` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；仅登录且邮箱验证用户可提交，Admin 负责处置 |
 
-未验证项：真实浏览器移动端主旅程、目标环境 MySQL 回归、提及通知和回复数投影重建。
+未验证项：真实浏览器移动端主旅程、目标环境 MySQL 回归和提及通知。
+
+## 2026-08-12 WP5-I3 第 4 个开发切片：回复数投影一致性
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| COMMUNITY-31 作者删除同步 | `service.delete_comment` 扣减 `reply_count`，重复删除返回 409 | `test_author_comment_delete_updates_reply_count_once` | 已实现并通过本地自动化 |
+| COMMUNITY-31 治理移除同步 | `admin_service._remove_reported_content` 排除作者已删除占位 | `test_moderating_author_deleted_comment_does_not_double_decrement` | 已实现并通过本地自动化 |
+| COMMUNITY-31 离线校验/重建 | `community/projection.py`、`scripts/rebuild_community_reply_counts.py` | `test_rebuild_community_reply_counts.py`，纳入 `scripts/check.ps1` | 已实现 dry-run 与显式 apply；目标 MySQL 执行仍待真实环境回归 |

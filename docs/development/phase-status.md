@@ -673,7 +673,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
-| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面和详情治理已编码 | 移动端浏览器旅程、真实目标环境回归与提及通知/回复数重建 |
+| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面、详情治理和回复数投影修复已编码 | 移动端浏览器旅程、真实目标环境回归与提及通知 |
 | 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | 已规划，未编码 | 事实关系表、可重建计数、隐私偏好、屏蔽和静音 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
@@ -689,7 +689,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 |---|---|---|---|
 | 社区首页聚合 | `GET /api/v1/community/home`、`CommunityHomeResponse` | `test_community_home_returns_boards_and_post_summary` | 已提供板块与首屏主题摘要；公告、热门规则和稳定主题游标仍待后续 |
 | 主题生命周期 | `version`、`edited_at`、`deleted_by_author_at`、`community_post_revisions`、作者 PATCH/DELETE | `test_author_post_lifecycle_uses_versions_revisions_and_placeholder_delete` | 作者权限、编辑冲突、修订快照、删除占位和最小审计已实现；草稿仍未实现 |
-| 评论与回复 | `root_id`、`reply_to_user_id`、评论游标 GET、作者 PATCH/DELETE | `test_comment_cursor_and_nested_reply_metadata` | 两级关系、独立分页、编辑/删除服务已实现；提及通知和回复数投影重建仍待后续 |
+| 评论与回复 | `root_id`、`reply_to_user_id`、评论游标 GET、作者 PATCH/DELETE | `test_comment_cursor_and_nested_reply_metadata`、`test_author_comment_delete_updates_reply_count_once` | 两级关系、独立分页、编辑/删除服务和公开回复数同步已实现；提及通知仍待后续 |
 | Web 兼容交互 | 原综合页增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest | 已迁移到 `/community/legacy` 作为兼容入口；独立页面见第 2 个开发切片，移动端浏览器 E2E 仍待执行 |
 | 数据迁移 | `20260812_0028_community_content_lifecycle.py` | 统一门禁执行 Alembic 前滚/降级/重新前滚 | 本地 SQLite 门禁覆盖；目标 MySQL 迁移仍需部署验证 |
 
@@ -704,7 +704,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 独立主题发布 | `apps/web/src/pages/CommunityPostComposerPage.vue`、`/community/new` | `CommunityPostComposerPage.test.ts`、Web typecheck/lint/Vitest | 已完成板块选择、规则确认、长度校验、认证提示、幂等发布和成功跳转 |
 | 路由兼容 | `/community/legacy` 保留原综合页 | 现有 `CommunityPage.test.ts` 继续通过 | 旧综合页仅作兼容和功能回退入口，后续可在迁移完成后下线 |
 
-本切片仍不计入 WP5-I3 全部完成；详情治理迁移已在第 3 个开发切片收口，后续优先补充移动端浏览器主旅程、真实目标环境回归、提及通知和回复数投影重建。
+本切片仍不计入 WP5-I3 全部完成；详情治理迁移已在第 3 个开发切片收口，回复数投影修复已在第 4 个开发切片完成，后续优先补充移动端浏览器主旅程、真实目标环境回归和提及通知。
 
 ## 2026-08-12 WP5-I3 第 3 个开发切片：详情治理能力收口
 
@@ -715,4 +715,15 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 社区举报 | `CommunityPostPage.vue` 接入主题/回复举报表单和幂等提交 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；治理结果仍由 Admin 工作台处理 |
 | 兼容入口 | `/community/legacy` 继续保留 `CommunityPage.vue` | 原页面测试继续通过 | 兼容回退可用，后续移动端浏览器主旅程完成后再评估下线 |
 
-本切片完成独立详情页的内容生命周期和举报入口迁移；WP5-I3 仍需移动端 Playwright 主旅程、真实目标环境回归以及提及通知和回复数投影重建。
+本切片完成独立详情页的内容生命周期和举报入口迁移；回复数投影修复已在第 4 个开发切片完成，WP5-I3 仍需移动端 Playwright 主旅程、真实目标环境回归以及提及通知。
+
+## 2026-08-12 WP5-I3 第 4 个开发切片：回复数投影一致性收口
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 作者逻辑删除回复 | `community.service.delete_comment` 同事务扣减主题 `reply_count`，重复删除返回 `community.comment_already_deleted` | `test_author_comment_delete_updates_reply_count_once` | 已修复未扣减和重复删除风险；计数下限保持为 0 |
+| 治理移除作者删除占位 | `community.admin_service._remove_reported_content` 仅对仍计入公开回复数的评论扣减 | `test_moderating_author_deleted_comment_does_not_double_decrement` | 已修复治理二次扣减风险 |
+| 离线投影审计与重建 | `scripts/rebuild_community_reply_counts.py`、`community.projection.rebuild_reply_count_projection` | `test_rebuild_community_reply_counts.py`、统一门禁 | 默认 dry-run；`--apply` 才写入；报告只包含主题 ID 与计数，不包含评论内容、账号或秘密 |
+| 运维可执行性 | `docs/runbooks/community-reply-count-projection.md` | dry-run/apply 命令和复核步骤 | 本地 SQLite 自动化已覆盖；真实目标 MySQL 执行证据仍归目标环境回归 |
+
+本切片已满足 COMMUNITY-31 的本地编码和自动化要求。WP5-I3 尚未整体完成，剩余项为移动端 Playwright 主旅程、真实目标环境回归和提及通知。

@@ -192,8 +192,10 @@ def _remove_reported_content(
     if comment is None:
         raise AppError("community.comment_not_found", "被举报的评论不存在", status_code=404)
     if comment.status == CommunityContentStatus.PUBLISHED:
+        was_counted_as_public_reply = comment.deleted_by_author_at is None
         comment.status = CommunityContentStatus.REMOVED
-        post.reply_count = max(0, post.reply_count - 1)
+        if was_counted_as_public_reply:
+            post.reply_count = max(0, post.reply_count - 1)
 
 
 def _report_summary(db: Session, report: CommunityReport) -> AdminCommunityReportSummary:

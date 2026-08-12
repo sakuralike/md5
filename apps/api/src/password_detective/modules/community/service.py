@@ -338,11 +338,21 @@ def delete_comment(
     comment = _get_published_comment(db, comment_id)
     _require_author(comment.author_id, principal.user.id)
     _require_version(comment.version, expected_version)
+    if comment.deleted_by_author_at is not None:
+        raise AppError(
+            "community.comment_already_deleted",
+            "该回复已由作者删除",
+            status_code=409,
+        )
+    post = db.get(CommunityPost, comment.post_id)
+    if post is None:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
     comment.content = "该回复已由作者删除，原文不再公开展示。"
     comment.deleted_by_author_at = utc_now()
     previous_version = comment.version
     comment.version += 1
     comment.edited_at = comment.deleted_by_author_at
+    post.reply_count = max(0, post.reply_count - 1)
     write_audit_log(
         db,
         actor_id=principal.user.id,
