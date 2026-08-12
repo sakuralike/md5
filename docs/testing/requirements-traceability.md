@@ -410,7 +410,7 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-14～18、21～22、25、29～31 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、社区回复数写入修复与重建工具、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、社区服务请求测试、回复数投影专项测试、Web typecheck、ESLint、Vitest 30 项 | 部分实现：公开首页、详情、发布页、详情治理、举报及 COMMUNITY-31 回复数投影修复已完成；移动端 Playwright、真实目标环境回归和提及通知仍待完成 |
+| COMMUNITY-14～18、21～22、25、29～31 | `CommunityHomePage.vue`、`CommunityPostPage.vue`、`CommunityPostComposerPage.vue`、社区回复数写入修复与重建工具、Web 路由 `/community`、`/community/posts/:postId`、`/community/new` | 三个独立页面渲染测试、社区服务请求测试、回复数投影专项测试、移动端 Playwright、Web typecheck、ESLint、Vitest 30 项 | 部分实现：公开首页、详情、发布页、详情治理、举报、COMMUNITY-31 回复数投影修复及移动端主旅程已完成；真实目标环境回归和提及通知仍待完成 |
 | 兼容回退 | `CommunityPage.vue`、`/community/legacy` | `CommunityPage.test.ts` | 已实现，旧综合页保留为回退入口 |
 
 ## 2026-08-12 WP5-I3 第 3 个开发切片：独立详情页治理能力
@@ -421,7 +421,7 @@
 | 评论作者编辑/删除 | `CommunityPostPage.vue`、`updateCommunityComment`、`deleteCommunityComment` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；删除保留结构占位 |
 | 主题/回复举报 | `CommunityPostPage.vue`、`createCommunityReport` | Web typecheck、ESLint、Vitest、统一门禁 | 已实现；仅登录且邮箱验证用户可提交，Admin 负责处置 |
 
-未验证项：真实浏览器移动端主旅程、目标环境 MySQL 回归和提及通知。
+未验证项：目标环境 MySQL 回归和提及通知。移动端真实 API 主旅程已在第 5 个开发切片的 Chromium 390×844 触控视口执行。
 
 ## 2026-08-12 WP5-I3 第 4 个开发切片：回复数投影一致性
 
@@ -430,3 +430,13 @@
 | COMMUNITY-31 作者删除同步 | `service.delete_comment` 扣减 `reply_count`，重复删除返回 409 | `test_author_comment_delete_updates_reply_count_once` | 已实现并通过本地自动化 |
 | COMMUNITY-31 治理移除同步 | `admin_service._remove_reported_content` 排除作者已删除占位 | `test_moderating_author_deleted_comment_does_not_double_decrement` | 已实现并通过本地自动化 |
 | COMMUNITY-31 离线校验/重建 | `community/projection.py`、`scripts/rebuild_community_reply_counts.py` | `test_rebuild_community_reply_counts.py`，纳入 `scripts/check.ps1` | 已实现 dry-run 与显式 apply；目标 MySQL 执行仍待真实环境回归 |
+
+## 2026-08-12 WP5-I3 第 5 个开发切片：移动端社区主旅程
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| COMMUNITY-14～18 登录后核心旅程 | 独立社区首页、发布页和详情页，以及既有社区创建/回复 API | `tests/e2e/web-community-mobile-journeys.spec.ts` 在 `web-chromium` 的 390×844 触控移动视口运行 | 已验证“登录 → 首页 → 发帖 → 详情 → 回复 → 返回首页”，并确认发布后的回复计数显示和首页主题回流 |
+| COMMUNITY-21 合法发布边界 | 发布主题/回复的规则确认控件、验证后写入 | 同一 Playwright 主旅程勾选两次规则确认，并用合成文本写入 | 已验证合法授权确认参与前端提交条件；后端权限、限流和幂等继续由既有 API 测试覆盖 |
+| 移动端错误观测 | 社区页面和真实 API 调用 | 同一用例执行 `observeBrowserErrors` / `expectNoBrowserErrors` | Chromium 主旅程无浏览器控制台错误；不替代 iOS/Android 真机或真实目标环境回归 |
+
+未验证项：目标环境 MySQL 回归、真实目标浏览器/设备覆盖和提及通知。以上 Chromium 移动视口结果为本地自动化证据，不是生产验收结论。

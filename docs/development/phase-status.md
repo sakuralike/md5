@@ -673,7 +673,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
-| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面、详情治理和回复数投影修复已编码 | 移动端浏览器旅程、真实目标环境回归与提及通知 |
+| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面、详情治理、回复数投影修复和移动端主旅程已编码 | 真实目标环境回归与提及通知 |
 | 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | 已规划，未编码 | 事实关系表、可重建计数、隐私偏好、屏蔽和静音 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
@@ -690,7 +690,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 社区首页聚合 | `GET /api/v1/community/home`、`CommunityHomeResponse` | `test_community_home_returns_boards_and_post_summary` | 已提供板块与首屏主题摘要；公告、热门规则和稳定主题游标仍待后续 |
 | 主题生命周期 | `version`、`edited_at`、`deleted_by_author_at`、`community_post_revisions`、作者 PATCH/DELETE | `test_author_post_lifecycle_uses_versions_revisions_and_placeholder_delete` | 作者权限、编辑冲突、修订快照、删除占位和最小审计已实现；草稿仍未实现 |
 | 评论与回复 | `root_id`、`reply_to_user_id`、评论游标 GET、作者 PATCH/DELETE | `test_comment_cursor_and_nested_reply_metadata`、`test_author_comment_delete_updates_reply_count_once` | 两级关系、独立分页、编辑/删除服务和公开回复数同步已实现；提及通知仍待后续 |
-| Web 兼容交互 | 原综合页增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest | 已迁移到 `/community/legacy` 作为兼容入口；独立页面见第 2 个开发切片，移动端浏览器 E2E 仍待执行 |
+| Web 兼容交互 | 原综合页增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest、移动端 Playwright 主旅程 | 已迁移到 `/community/legacy` 作为兼容入口；独立页面的移动端首页→发帖→详情→回复→返回首页旅程已在第 5 个开发切片覆盖 |
 | 数据迁移 | `20260812_0028_community_content_lifecycle.py` | 统一门禁执行 Alembic 前滚/降级/重新前滚 | 本地 SQLite 门禁覆盖；目标 MySQL 迁移仍需部署验证 |
 
 本切片不能等同于 WP5-I3 全部完成；独立路由和页面已在第 2 个开发切片实现，移动端浏览器主旅程与详情治理迁移仍待后续。
@@ -699,12 +699,12 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
 |---|---|---|---|
-| 独立社区首页 | `apps/web/src/pages/CommunityHomePage.vue`、`/community` | `CommunityHomePage.test.ts`、Web typecheck/lint/Vitest | 已完成公开板块筛选、主题摘要、空状态、加载状态和发布入口；移动端 Playwright 及真实 API 旅程待统一验收 |
-| 独立主题详情 | `apps/web/src/pages/CommunityPostPage.vue`、`/community/posts/:postId` | `CommunityPostPage.test.ts`、Web typecheck/lint/Vitest | 已完成详情读取、评论首屏、两级回复、游标加载更多、验证后回复、作者编辑/删除、评论编辑/删除和举报；移动端 Playwright 及真实目标环境回归待统一验收 |
+| 独立社区首页 | `apps/web/src/pages/CommunityHomePage.vue`、`/community` | `CommunityHomePage.test.ts`、移动端 Playwright、Web typecheck/lint/Vitest | 已完成公开板块筛选、主题摘要、空状态、加载状态和发布入口；移动端真实 API 主旅程已覆盖 |
+| 独立主题详情 | `apps/web/src/pages/CommunityPostPage.vue`、`/community/posts/:postId` | `CommunityPostPage.test.ts`、移动端 Playwright、Web typecheck/lint/Vitest | 已完成详情读取、评论首屏、两级回复、游标加载更多、验证后回复、作者编辑/删除、评论编辑/删除和举报；移动端真实 API 主旅程已覆盖，真实目标环境回归仍待执行 |
 | 独立主题发布 | `apps/web/src/pages/CommunityPostComposerPage.vue`、`/community/new` | `CommunityPostComposerPage.test.ts`、Web typecheck/lint/Vitest | 已完成板块选择、规则确认、长度校验、认证提示、幂等发布和成功跳转 |
 | 路由兼容 | `/community/legacy` 保留原综合页 | 现有 `CommunityPage.test.ts` 继续通过 | 旧综合页仅作兼容和功能回退入口，后续可在迁移完成后下线 |
 
-本切片仍不计入 WP5-I3 全部完成；详情治理迁移已在第 3 个开发切片收口，回复数投影修复已在第 4 个开发切片完成，后续优先补充移动端浏览器主旅程、真实目标环境回归和提及通知。
+本切片仍不计入 WP5-I3 全部完成；详情治理迁移已在第 3 个开发切片收口，回复数投影修复已在第 4 个开发切片完成，移动端浏览器主旅程已在第 5 个开发切片完成，后续优先真实目标环境回归和提及通知。
 
 ## 2026-08-12 WP5-I3 第 3 个开发切片：详情治理能力收口
 
@@ -713,9 +713,9 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 主题作者治理 | `CommunityPostPage.vue` 接入 PATCH/DELETE、版本号和两次确认删除 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；删除保留结构占位，真实目标环境回归待执行 |
 | 评论作者治理 | `CommunityPostPage.vue` 接入评论 PATCH/DELETE、版本号和两次确认删除 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；两级回复结构保持，提及通知仍待后续 |
 | 社区举报 | `CommunityPostPage.vue` 接入主题/回复举报表单和幂等提交 | Web typecheck、ESLint、Vitest、统一门禁 | 已迁移到独立详情页；治理结果仍由 Admin 工作台处理 |
-| 兼容入口 | `/community/legacy` 继续保留 `CommunityPage.vue` | 原页面测试继续通过 | 兼容回退可用，后续移动端浏览器主旅程完成后再评估下线 |
+| 兼容入口 | `/community/legacy` 继续保留 `CommunityPage.vue` | 原页面测试和移动端 Playwright 主旅程继续通过 | 兼容回退可用，后续结合真实目标环境回归评估下线 |
 
-本切片完成独立详情页的内容生命周期和举报入口迁移；回复数投影修复已在第 4 个开发切片完成，WP5-I3 仍需移动端 Playwright 主旅程、真实目标环境回归以及提及通知。
+本切片完成独立详情页的内容生命周期和举报入口迁移；回复数投影修复已在第 4 个开发切片完成，移动端 Playwright 主旅程已在第 5 个开发切片完成，WP5-I3 仍需真实目标环境回归以及提及通知。
 
 ## 2026-08-12 WP5-I3 第 4 个开发切片：回复数投影一致性收口
 
@@ -726,4 +726,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 离线投影审计与重建 | `scripts/rebuild_community_reply_counts.py`、`community.projection.rebuild_reply_count_projection` | `test_rebuild_community_reply_counts.py`、统一门禁 | 默认 dry-run；`--apply` 才写入；报告只包含主题 ID 与计数，不包含评论内容、账号或秘密 |
 | 运维可执行性 | `docs/runbooks/community-reply-count-projection.md` | dry-run/apply 命令和复核步骤 | 本地 SQLite 自动化已覆盖；真实目标 MySQL 执行证据仍归目标环境回归 |
 
-本切片已满足 COMMUNITY-31 的本地编码和自动化要求。WP5-I3 尚未整体完成，剩余项为移动端 Playwright 主旅程、真实目标环境回归和提及通知。
+本切片已满足 COMMUNITY-31 的本地编码和自动化要求。移动端 Playwright 主旅程已在第 5 个开发切片完成；WP5-I3 尚未整体完成，剩余项为真实目标环境回归和提及通知。
+
+## 2026-08-12 WP5-I3 第 5 个开发切片：移动端社区主旅程
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| COMMUNITY-14～18 社区核心旅程 | `CommunityHomePage.vue`、`CommunityPostComposerPage.vue`、`CommunityPostPage.vue`，以及现有 Web 登录与社区 API | `tests/e2e/web-community-mobile-journeys.spec.ts`，`web-chromium` 项目，390×844 触控移动视口 | 已覆盖登录后首页、发布主题、成功跳转详情、发布回复、回复数展示和返回首页；每步均通过真实 API 完成 |
+| 浏览器运行安全 | 既有社区规则确认、邮箱验证、幂等写入和回复数投影 | `observeBrowserErrors` / `expectNoBrowserErrors` | 该主旅程未出现页面错误或控制台错误；只使用合成主题和回复文本 |
+| 移动端边界 | Chromium 390×844、`hasTouch`、`isMobile` | 专项 Playwright 用例 | 已覆盖一个主流窄屏触控基线；iOS Safari、Android 真机和目标环境仍不由此替代 |
+
+本切片完成 WP5-I3 的移动端浏览器主旅程本地证据。WP5-I3 仍未整体完成：真实目标环境（含 MySQL）回归和提及通知尚未实现或验证，后续不得把本地 Chromium 结果表述为生产验收。

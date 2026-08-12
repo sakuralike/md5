@@ -19,6 +19,7 @@
 ## 开发实施记录
 
 - [WP5 社区完整功能开发计划 v1.0](./密码侦探社社区完整功能开发计划-v1.0.md)
+- [WP5-I3 第 5 个开发切片：移动端社区主旅程](../docs/development/2026-08-12-wp5-i3-iteration-5.md)
 - [WP5-I3 第 4 个开发切片：回复数投影一致性](../docs/development/2026-08-12-wp5-i3-iteration-4.md)
 - [社区回复数投影运行手册](../docs/runbooks/community-reply-count-projection.md)
 - [WP5 第 2 次迭代：举报与治理闭环](../docs/development/2026-08-11-wp5-community-iteration-2.md)
