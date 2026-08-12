@@ -452,3 +452,11 @@
 | 发布失败保护 | 迁移成功前不滚动替换 API/Web/Admin | 原运行容器持续健康；最终提交部署后执行完整 HTTP 复核 | 进行中 |
 
 未验证项：提及通知和真实移动设备覆盖。目标 MySQL 的 COMMUNITY-14～31 数据结构迁移阻断已完成修复候选验证，最终状态以本轮提交重新部署后的统一验收为准。
+
+## 2026-08-12 WP5-I3 第 7 个开发切片：社区提及通知
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| COMMUNITY-30 提及用户 | `service._sync_mention_notifications`、`community_notifications`、Alembic `20260812_0029` | 主题提及去重、自提及/未知用户过滤、回复提及测试 | 已实现主题/回复发布和编辑触发；屏蔽/提及偏好依赖后续社交关系模块 |
+| COMMUNITY-69～72 提及通知子集 | 通知业务唯一键、最小化摘要、本人列表、未读数、单条/全部已读 | 越权已读阻断、幂等重放、游标列表、批量已读测试 | 部分实现：提及类型闭环完成；回复、点赞、关注、群组、私信、治理通知和类型偏好仍待 WP5-I7 |
+| Web 通知中心 | `CommunityNotificationsPage.vue`、`/community/notifications`、`services/community.ts` | 页面渲染、认证头、URL 编码、幂等键、lint/typecheck/Vitest | 已实现 |

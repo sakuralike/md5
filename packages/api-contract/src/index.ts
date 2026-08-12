@@ -1391,6 +1391,8 @@ export type CommunityReportReason = "spam" | "harassment" | "privacy" | "unsafe"
 export type CommunityReportStatus = "open" | "resolved" | "dismissed";
 export type CommunityReportDecision = "dismiss" | "remove_content" | "remove_and_lock";
 export type CommunityModerationAction = "lock" | "unlock" | "pin" | "unpin" | "remove" | "restore";
+export type CommunityNotificationKind = "mention";
+export type CommunityNotificationSource = "post" | "comment";
 
 export interface CommunityBoard {
   code: CommunityBoardCode;
@@ -1496,6 +1498,31 @@ export interface CommunityPostDetail {
 export interface CommunityHomeResponse {
   boards: CommunityBoard[];
   posts: CommunityPostListResponse;
+}
+
+export interface CommunityNotificationResponse {
+  id: string;
+  kind: CommunityNotificationKind;
+  source_type: CommunityNotificationSource;
+  source_id: string;
+  post_id: string;
+  comment_id: string | null;
+  preview: string;
+  actor: CommunityAuthor;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface CommunityNotificationListResponse {
+  items: CommunityNotificationResponse[];
+  unread_count: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface CommunityNotificationReadResponse {
+  message: string;
+  unread_count: number;
 }
 
 export interface CommunityReportCreateRequest {

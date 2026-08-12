@@ -5,6 +5,9 @@ import {
   getCommunityHome,
   getCommunityPost,
   listCommunityComments,
+  listCommunityNotifications,
+  markAllCommunityNotificationsRead,
+  markCommunityNotificationRead,
 } from "./community";
 
 function jsonResponse(body: unknown): Response {
@@ -70,4 +73,47 @@ describe("web community service", () => {
       "stable-delete-key",
     );
   });
+
+  it("keeps notification reads authenticated and idempotent", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ items: [], unread_count: 0 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await listCommunityNotifications("access-token", {
+      cursor: "notification-cursor",
+      limit: 15,
+      unreadOnly: true,
+    });
+    await markCommunityNotificationRead(
+      "notification/with space",
+      "access-token",
+      "stable-notification-key",
+    );
+    await markAllCommunityNotificationsRead(
+      "access-token",
+      "stable-notifications-all-key",
+    );
+
+    const listUrl = new URL(String(fetchMock.mock.calls[0]?.[0]), "http://synthetic.local");
+    expect(listUrl.pathname).toContain("/community/notifications");
+    expect(listUrl.searchParams.get("cursor")).toBe("notification-cursor");
+    expect(listUrl.searchParams.get("limit")).toBe("15");
+    expect(listUrl.searchParams.get("unread_only")).toBe("true");
+    expect((fetchMock.mock.calls[0]?.[1]?.headers as Headers).get("Authorization")).toBe(
+      "Bearer access-token",
+    );
+
+    const [readUrl, readInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(readUrl).toContain("/community/notifications/notification%2Fwith%20space/read");
+    expect((readInit.headers as Headers).get("Idempotency-Key")).toBe(
+      "stable-notification-key",
+    );
+    const [, readAllInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect((readAllInit.headers as Headers).get("Idempotency-Key")).toBe(
+      "stable-notifications-all-key",
+    );
+  });
+
 });

@@ -5,6 +5,8 @@ import type {
   CommunityCommentListResponse,
   CommunityCommentUpdateRequest,
   CommunityHomeResponse,
+  CommunityNotificationListResponse,
+  CommunityNotificationReadResponse,
   CommunityPostCreateRequest,
   CommunityPostUpdateRequest,
   CommunityPostDetail,
@@ -15,7 +17,16 @@ import type {
 import { apiRequest } from "./api";
 
 export function createCommunityIdempotencyKey(
-  kind: "post" | "post-update" | "post-delete" | "comment" | "comment-update" | "comment-delete" | "report",
+  kind:
+    | "post"
+    | "post-update"
+    | "post-delete"
+    | "comment"
+    | "comment-update"
+    | "comment-delete"
+    | "report"
+    | "notification-read"
+    | "notifications-read-all",
 ): string {
   return `web-community-${kind}-${crypto.randomUUID()}`;
 }
@@ -161,6 +172,44 @@ export function createCommunityReport(
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+
+export function listCommunityNotifications(
+  token: string,
+  options: { cursor?: string; limit?: number; unreadOnly?: boolean } = {},
+): Promise<CommunityNotificationListResponse> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.unreadOnly) params.set("unread_only", "true");
+  return apiRequest<CommunityNotificationListResponse>(
+    `/community/notifications?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function markCommunityNotificationRead(
+  notificationId: string,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityNotificationReadResponse> {
+  return apiRequest<CommunityNotificationReadResponse>(
+    `/community/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
+    token,
+  );
+}
+
+export function markAllCommunityNotificationsRead(
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityNotificationReadResponse> {
+  return apiRequest<CommunityNotificationReadResponse>(
+    "/community/notifications/read-all",
+    { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
     token,
   );
 }

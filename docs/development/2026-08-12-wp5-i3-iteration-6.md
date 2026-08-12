@@ -32,10 +32,17 @@
 | 非事务 DDL 失败重入 | `test_mysql_retry_after_non_transactional_ddl_only_runs_backfill` | 已通过 |
 | 社区 API 回归 | `apps/api/tests/test_community.py` | 已通过 |
 | 本地全量质量门禁 | `pwsh ./scripts/check.ps1 -SkipInstall` | 提交前执行 |
-| 目标 MySQL 迁移到 head | Alembic `current`、字段/索引/外键检查 | 修复候选已验证，最终提交部署后复核 |
-| 目标服务与社区页面 | live/ready、社区首页 API、Web/Admin HTTP 检查 | 最终提交部署后执行 |
+| 目标 MySQL 迁移到 head | Alembic `current`、字段/索引/外键检查 | 已完成：版本为 `20260812_0028 (head)` |
+| 目标服务与社区页面 | live/ready、社区首页 API、Web/Admin HTTP 检查 | 已完成：健康检查和公开社区/Web/Admin HTTP 检查均返回 200 |
 
-## 5. 后续
+## 5. 目标环境部署复核
 
-WP5-I3 的下一个业务切片仍为社区提及通知闭环；本轮只处理真实目标环境暴露的发布阻断项，
+- 已部署提交：`8e0066f`（`fix(community): make mysql lifecycle migration retryable`）。
+- 发布包 SHA-256 已在上传后校验；原部署目录已保留回滚副本。
+- 目标 MySQL Alembic 版本已推进到 `20260812_0028 (head)`；社区评论生命周期字段和索引存在。
+- API `live`、`ready`、`GET /api/v1/community/home`、Web `/community`、Admin `/login` 均已完成 HTTP 健康检查。
+
+## 6. 后续
+
+WP5-I3 的下一个业务切片为社区提及通知闭环；本轮只处理真实目标环境暴露的发布阻断项，
 不扩张通知数据模型或 API 范围。

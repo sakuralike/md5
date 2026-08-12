@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
@@ -14,12 +15,15 @@ from password_detective.db.models.community import (
     CommunityBoardCode,
     CommunityComment,
     CommunityContentStatus,
+    CommunityNotification,
+    CommunityNotificationKind,
+    CommunityNotificationSource,
     CommunityPost,
     CommunityPostRevision,
     CommunityReport,
     CommunityReportStatus,
 )
-from password_detective.db.models.user import User
+from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.community.schemas import (
@@ -31,6 +35,9 @@ from password_detective.modules.community.schemas import (
     CommunityCommentResponse,
     CommunityCommentUpdateRequest,
     CommunityHomeResponse,
+    CommunityNotificationListResponse,
+    CommunityNotificationReadResponse,
+    CommunityNotificationResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostListResponse,
@@ -39,6 +46,10 @@ from password_detective.modules.community.schemas import (
     CommunityReportCreateRequest,
     CommunityReportResponse,
 )
+
+_MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,32})")
+_MAX_MENTIONS_PER_CONTENT = 10
+
 
 _BOARD_CATALOG: tuple[tuple[CommunityBoardCode, str, str], ...] = (
     (CommunityBoardCode.GENERAL, "社区广场", "交流安全恢复经验、工具使用方式与协作建议。"),
@@ -149,6 +160,16 @@ def create_post(
         content=payload.content,
     )
     db.add(post)
+    db.flush()
+    _sync_mention_notifications(
+        db,
+        text=f"{post.title}\n{post.content}",
+        actor_id=principal.user.id,
+        source_type=CommunityNotificationSource.POST,
+        source_id=post.id,
+        post_id=post.id,
+        comment_id=None,
+    )
     db.commit()
     db.refresh(post)
     return get_post(db, post.id)
@@ -194,6 +215,15 @@ def update_post(
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
         details={"previous_version": previous_version, "current_version": post.version},
+    )
+    _sync_mention_notifications(
+        db,
+        text=f"{post.title}\n{post.content}",
+        actor_id=principal.user.id,
+        source_type=CommunityNotificationSource.POST,
+        source_id=post.id,
+        post_id=post.id,
+        comment_id=None,
     )
     db.commit()
     return get_post(db, post.id)
@@ -279,15 +309,24 @@ def create_comment(
             status_code=404,
         )
     now = utc_now()
-    db.add(
-        CommunityComment(
-            post_id=post.id,
-            author_id=principal.user.id,
-            parent_id=payload.parent_id,
-            root_id=(parent.root_id or parent.id) if parent is not None else None,
-            reply_to_user_id=parent.author_id if parent is not None else None,
-            content=payload.content,
-        )
+    comment = CommunityComment(
+        post_id=post.id,
+        author_id=principal.user.id,
+        parent_id=payload.parent_id,
+        root_id=(parent.root_id or parent.id) if parent is not None else None,
+        reply_to_user_id=parent.author_id if parent is not None else None,
+        content=payload.content,
+    )
+    db.add(comment)
+    db.flush()
+    _sync_mention_notifications(
+        db,
+        text=comment.content,
+        actor_id=principal.user.id,
+        source_type=CommunityNotificationSource.COMMENT,
+        source_id=comment.id,
+        post_id=post.id,
+        comment_id=comment.id,
     )
     post.reply_count += 1
     post.last_activity_at = now
@@ -322,6 +361,15 @@ def update_comment(
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
         details={"previous_version": previous_version, "current_version": comment.version},
+    )
+    _sync_mention_notifications(
+        db,
+        text=comment.content,
+        actor_id=principal.user.id,
+        source_type=CommunityNotificationSource.COMMENT,
+        source_id=comment.id,
+        post_id=comment.post_id,
+        comment_id=comment.id,
     )
     db.commit()
     return get_post(db, comment.post_id)
@@ -436,6 +484,183 @@ def create_report(
         status=report.status,
         created_at=report.created_at,
     )
+
+
+
+def list_notifications(
+    db: Session,
+    *,
+    principal: Principal,
+    cursor: str | None,
+    limit: int,
+    unread_only: bool,
+) -> CommunityNotificationListResponse:
+    conditions = [CommunityNotification.recipient_id == principal.user.id]
+    if unread_only:
+        conditions.append(CommunityNotification.read_at.is_(None))
+    if cursor is not None:
+        created_at, record_id = _decode_cursor(cursor)
+        conditions.append(
+            or_(
+                CommunityNotification.created_at < created_at,
+                (CommunityNotification.created_at == created_at)
+                & (CommunityNotification.id < record_id),
+            )
+        )
+    notifications = db.scalars(
+        select(CommunityNotification)
+        .where(*conditions)
+        .order_by(CommunityNotification.created_at.desc(), CommunityNotification.id.desc())
+        .limit(limit + 1)
+    ).all()
+    has_more = len(notifications) > limit
+    items = notifications[:limit]
+    actors = _load_authors(db, [item.actor_id for item in items])
+    unread_count = db.scalar(
+        select(func.count(CommunityNotification.id)).where(
+            CommunityNotification.recipient_id == principal.user.id,
+            CommunityNotification.read_at.is_(None),
+        )
+    ) or 0
+    next_cursor = _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
+    return CommunityNotificationListResponse(
+        items=[_notification_response(item, actors[item.actor_id]) for item in items],
+        unread_count=unread_count,
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
+
+
+def mark_notification_read(
+    db: Session,
+    *,
+    notification_id: str,
+    principal: Principal,
+) -> CommunityNotificationReadResponse:
+    notification = db.scalar(
+        select(CommunityNotification).where(
+            CommunityNotification.id == notification_id,
+            CommunityNotification.recipient_id == principal.user.id,
+        )
+    )
+    if notification is None:
+        raise AppError("community.notification_not_found", "社区通知不存在", status_code=404)
+    if notification.read_at is None:
+        notification.read_at = utc_now()
+    db.commit()
+    return CommunityNotificationReadResponse(
+        message="通知已标记为已读",
+        unread_count=_unread_notification_count(db, principal.user.id),
+    )
+
+
+def mark_all_notifications_read(
+    db: Session,
+    *,
+    principal: Principal,
+) -> CommunityNotificationReadResponse:
+    notifications = db.scalars(
+        select(CommunityNotification).where(
+            CommunityNotification.recipient_id == principal.user.id,
+            CommunityNotification.read_at.is_(None),
+        )
+    ).all()
+    now = utc_now()
+    for notification in notifications:
+        notification.read_at = now
+    db.commit()
+    return CommunityNotificationReadResponse(message="社区通知已全部标记为已读", unread_count=0)
+
+
+def _sync_mention_notifications(
+    db: Session,
+    *,
+    text: str,
+    actor_id: str,
+    source_type: CommunityNotificationSource,
+    source_id: str,
+    post_id: str,
+    comment_id: str | None,
+) -> None:
+    usernames: list[str] = []
+    seen: set[str] = set()
+    for match in _MENTION_PATTERN.finditer(text):
+        username = match.group(1).lower()
+        if username in seen:
+            continue
+        seen.add(username)
+        usernames.append(username)
+        if len(usernames) >= _MAX_MENTIONS_PER_CONTENT:
+            break
+    if not usernames:
+        return
+    recipients = db.scalars(
+        select(User).where(
+            func.lower(User.username).in_(usernames),
+            User.status == UserStatus.ACTIVE,
+            User.id != actor_id,
+        )
+    ).all()
+    if not recipients:
+        return
+    existing = set(
+        db.scalars(
+            select(CommunityNotification.recipient_id).where(
+                CommunityNotification.kind == CommunityNotificationKind.MENTION,
+                CommunityNotification.source_type == source_type,
+                CommunityNotification.source_id == source_id,
+                CommunityNotification.recipient_id.in_([user.id for user in recipients]),
+            )
+        ).all()
+    )
+    preview = _notification_preview(text)
+    for recipient in recipients:
+        if recipient.id in existing:
+            continue
+        db.add(
+            CommunityNotification(
+                recipient_id=recipient.id,
+                actor_id=actor_id,
+                kind=CommunityNotificationKind.MENTION,
+                source_type=source_type,
+                source_id=source_id,
+                post_id=post_id,
+                comment_id=comment_id,
+                preview=preview,
+            )
+        )
+
+
+def _notification_preview(text: str) -> str:
+    compact = " ".join(text.split())
+    return compact if len(compact) <= 180 else f"{compact[:177]}..."
+
+
+def _notification_response(
+    notification: CommunityNotification,
+    actor: CommunityAuthor,
+) -> CommunityNotificationResponse:
+    return CommunityNotificationResponse(
+        id=notification.id,
+        kind=notification.kind,
+        source_type=notification.source_type,
+        source_id=notification.source_id,
+        post_id=notification.post_id,
+        comment_id=notification.comment_id,
+        preview=notification.preview,
+        actor=actor,
+        read_at=notification.read_at,
+        created_at=notification.created_at,
+    )
+
+
+def _unread_notification_count(db: Session, user_id: str) -> int:
+    return db.scalar(
+        select(func.count(CommunityNotification.id)).where(
+            CommunityNotification.recipient_id == user_id,
+            CommunityNotification.read_at.is_(None),
+        )
+    ) or 0
 
 
 def _require_publish_access(principal: Principal, rules_accepted: bool) -> None:

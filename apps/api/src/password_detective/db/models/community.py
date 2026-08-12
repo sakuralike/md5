@@ -52,6 +52,15 @@ class CommunityModerationAction(StrEnum):
     RESTORE = "restore"
 
 
+class CommunityNotificationKind(StrEnum):
+    MENTION = "mention"
+
+
+class CommunityNotificationSource(StrEnum):
+    POST = "post"
+    COMMENT = "comment"
+
+
 class CommunityPost(Base):
     __tablename__ = "community_posts"
 
@@ -189,4 +198,48 @@ class CommunityReport(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityNotification(Base):
+    __tablename__ = "community_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_id",
+            "kind",
+            "source_type",
+            "source_id",
+            name="uq_community_notification_delivery",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    recipient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    kind: Mapped[CommunityNotificationKind] = mapped_column(
+        Enum(CommunityNotificationKind, native_enum=False, length=24), index=True
+    )
+    source_type: Mapped[CommunityNotificationSource] = mapped_column(
+        Enum(CommunityNotificationSource, native_enum=False, length=16), index=True
+    )
+    source_id: Mapped[str] = mapped_column(String(36))
+    post_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    )
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_comments.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    preview: Mapped[str] = mapped_column(String(180))
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
     )

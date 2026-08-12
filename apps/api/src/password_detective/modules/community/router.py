@@ -25,6 +25,8 @@ from password_detective.modules.community.schemas import (
     CommunityCommentListResponse,
     CommunityCommentUpdateRequest,
     CommunityHomeResponse,
+    CommunityNotificationListResponse,
+    CommunityNotificationReadResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostListResponse,
@@ -42,7 +44,10 @@ from password_detective.modules.community.service import (
     list_boards,
     list_comments,
     list_home,
+    list_notifications,
     list_posts,
+    mark_all_notifications_read,
+    mark_notification_read,
     update_comment,
     update_post,
 )
@@ -74,6 +79,74 @@ def community_posts(
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityPostListResponse:
     return list_posts(db, board_code=board_code, page=page, page_size=page_size)
+
+
+@router.get("/notifications", response_model=CommunityNotificationListResponse)
+def community_notifications(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    unread_only: bool = False,
+) -> CommunityNotificationListResponse:
+    return list_notifications(
+        db,
+        principal=principal,
+        cursor=cursor,
+        limit=limit,
+        unread_only=unread_only,
+    )
+
+
+@router.post(
+    "/notifications/read-all",
+    response_model=CommunityNotificationReadResponse,
+    dependencies=[
+        Depends(rate_limit("community.notification.read_all", limit=30, window_seconds=3600))
+    ],
+)
+def community_notifications_read_all(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityNotificationReadResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.notification.read_all",
+        idempotency_key=idempotency_key,
+        request_payload={},
+        principal=principal,
+        response_type=CommunityNotificationReadResponse,
+        create=lambda: mark_all_notifications_read(db, principal=principal),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.post(
+    "/notifications/{notification_id}/read",
+    response_model=CommunityNotificationReadResponse,
+    dependencies=[
+        Depends(rate_limit("community.notification.read", limit=120, window_seconds=3600))
+    ],
+)
+def community_notification_read(
+    notification_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityNotificationReadResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.notification.read",
+        idempotency_key=idempotency_key,
+        request_payload={"notification_id": notification_id},
+        principal=principal,
+        response_type=CommunityNotificationReadResponse,
+        create=lambda: mark_notification_read(
+            db, notification_id=notification_id, principal=principal
+        ),
+        response_status=status.HTTP_200_OK,
+    )
 
 
 @router.get("/posts/{post_id}", response_model=CommunityPostDetail)

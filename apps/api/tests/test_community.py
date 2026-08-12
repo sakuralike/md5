@@ -597,3 +597,131 @@ def test_community_home_returns_boards_and_post_summary(client):
     assert response.status_code == 200
     assert len(response.json()["boards"]) == 4
     assert response.json()["posts"]["page_size"] == 5
+
+
+def test_mentions_create_deduplicated_recipient_notifications(client):
+    author = register_and_login(
+        client,
+        username="mention_author",
+        email="mention-author@example.com",
+    )
+    mentioned = register_and_login(
+        client,
+        username="mention_target",
+        email="mention-target@example.com",
+    )
+    payload = {
+        **post_payload(),
+        "title": "邀请 @mention_target 复核合成恢复记录",
+        "content": (
+            "请 @mention_target 与 @MENTION_TARGET 复核授权范围和哈希校验步骤，"
+            "同时忽略未知用户 @missing_user 和作者自己 @mention_author。"
+        ),
+    }
+    created = client.post(
+        "/api/v1/community/posts",
+        json=payload,
+        headers=headers(author, "community-mention-post-001"),
+    )
+    assert created.status_code == 201
+
+    target_list = client.get(
+        "/api/v1/community/notifications",
+        headers={"Authorization": f"Bearer {mentioned['access_token']}"},
+    )
+    assert target_list.status_code == 200
+    body = target_list.json()
+    assert body["unread_count"] == 1
+    assert len(body["items"]) == 1
+    notification = body["items"][0]
+    assert notification["kind"] == "mention"
+    assert notification["source_type"] == "post"
+    assert notification["post_id"] == created.json()["id"]
+    assert notification["comment_id"] is None
+    assert notification["actor"]["username"] == "mention_author"
+    assert "@mention_target" in notification["preview"]
+
+    author_list = client.get(
+        "/api/v1/community/notifications",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert author_list.status_code == 200
+    assert author_list.json()["items"] == []
+
+    marked = client.post(
+        f"/api/v1/community/notifications/{notification['id']}/read",
+        headers=headers(mentioned, "community-mention-read-001"),
+    )
+    assert marked.status_code == 200
+    assert marked.json()["unread_count"] == 0
+
+    replay = client.post(
+        f"/api/v1/community/notifications/{notification['id']}/read",
+        headers=headers(mentioned, "community-mention-read-001"),
+    )
+    assert replay.status_code == 200
+    assert replay.json() == marked.json()
+
+
+def test_comment_mentions_and_read_all_are_scoped_to_recipient(client):
+    author = register_and_login(
+        client,
+        username="notify_author",
+        email="notify-author@example.com",
+    )
+    recipient = register_and_login(
+        client,
+        username="notify_target",
+        email="notify-target@example.com",
+    )
+    outsider = register_and_login(
+        client,
+        username="notify_outsider",
+        email="notify-outsider@example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json={
+            **post_payload(),
+            "content": "请 @notify_target 审阅这份合成测试恢复记录，并确认授权和回滚步骤完整。",
+        },
+        headers=headers(author, "community-mention-post-002"),
+    ).json()
+    commented = client.post(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        json={
+            "content": "再次请 @notify_target 检查评论中的最小化数据说明。",
+            "rules_accepted": True,
+        },
+        headers=headers(author, "community-mention-comment-001"),
+    )
+    assert commented.status_code == 201
+
+    unread = client.get(
+        "/api/v1/community/notifications?unread_only=true&limit=1",
+        headers={"Authorization": f"Bearer {recipient['access_token']}"},
+    )
+    assert unread.status_code == 200
+    assert unread.json()["unread_count"] == 2
+    assert unread.json()["has_more"] is True
+    assert unread.json()["items"][0]["source_type"] == "comment"
+
+    foreign_read = client.post(
+        f"/api/v1/community/notifications/{unread.json()['items'][0]['id']}/read",
+        headers=headers(outsider, "community-mention-foreign-read-001"),
+    )
+    assert foreign_read.status_code == 404
+    assert foreign_read.json()["code"] == "community.notification_not_found"
+
+    read_all = client.post(
+        "/api/v1/community/notifications/read-all",
+        headers=headers(recipient, "community-mention-read-all-001"),
+    )
+    assert read_all.status_code == 200
+    assert read_all.json()["unread_count"] == 0
+    remaining = client.get(
+        "/api/v1/community/notifications?unread_only=true",
+        headers={"Authorization": f"Bearer {recipient['access_token']}"},
+    )
+    assert remaining.status_code == 200
+    assert remaining.json()["items"] == []

@@ -748,3 +748,13 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 目标服务器部署门禁 | 迁移失败不替换运行中容器，保留回滚目录和校验发布包 | live/ready、社区 API、Web/Admin 在最终提交部署后复核 | 进行中 |
 
 本轮优先修复真实 MySQL 暴露的发布阻断项。WP5-I3 后续业务入口保持为提及通知闭环。
+
+## 2026-08-12 WP5-I3 第 7 个开发切片：社区提及通知闭环
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| `@用户名` 提及识别与去重 | `CommunityNotification`、`service._sync_mention_notifications`、`20260812_0029` | `test_mentions_create_deduplicated_recipient_notifications` | 已实现主题/回复发布与编辑触发、大小写去重、自提及/未知/非活动用户过滤和每内容 10 人上限 |
+| 本人通知列表与未读状态 | `GET /community/notifications`、单条/全部已读 API | `test_comment_mentions_and_read_all_are_scoped_to_recipient` | 已实现游标、未读总数、本人资源归属和幂等已读；类型过滤和通知偏好留待 WP5-I7 |
+| Web 社区通知中心 | `/community/notifications`、`CommunityNotificationsPage.vue`、主导航入口 | 页面渲染、Web 服务认证/路径/幂等测试，lint、typecheck、Vitest | 已实现数据库事实源的站内提及通知；邮件摘要、SSE、屏蔽与提及偏好尚未实现 |
+
+本轮完成 WP5-I3 剩余的提及通知业务编码。WP5-I3 的代码和本地自动化已收口；新迁移和页面仍需随本轮提交部署后执行目标 MySQL 与浏览器回归。下一轮开发进入 WP5-I4 点赞与收藏。

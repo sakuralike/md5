@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.community import (
     CommunityBoardCode,
+    CommunityNotificationKind,
+    CommunityNotificationSource,
     CommunityReportReason,
     CommunityReportStatus,
 )
@@ -169,3 +171,27 @@ class CommunityHomeResponse(BaseModel):
 class CommunityMutationResponse(BaseModel):
     message: str
     version: int
+
+class CommunityNotificationResponse(BaseModel):
+    id: str
+    kind: CommunityNotificationKind
+    source_type: CommunityNotificationSource
+    source_id: str
+    post_id: str
+    comment_id: str | None
+    preview: str
+    actor: CommunityAuthor
+    read_at: datetime | None
+    created_at: datetime
+
+
+class CommunityNotificationListResponse(BaseModel):
+    items: list[CommunityNotificationResponse]
+    unread_count: int
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class CommunityNotificationReadResponse(BaseModel):
+    message: str
+    unread_count: int
