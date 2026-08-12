@@ -440,3 +440,15 @@
 | 移动端错误观测 | 社区页面和真实 API 调用 | 同一用例执行 `observeBrowserErrors` / `expectNoBrowserErrors` | Chromium 主旅程无浏览器控制台错误；不替代 iOS/Android 真机或真实目标环境回归 |
 
 未验证项：目标环境 MySQL 回归、真实目标浏览器/设备覆盖和提及通知。以上 Chromium 移动视口结果为本地自动化证据，不是生产验收结论。
+
+
+## 2026-08-12 WP5-I3 第 6 个开发切片：MySQL 迁移与部署收口
+
+| 追踪项 | 代码/迁移证据 | 测试或目标环境证据 | 状态 |
+|---|---|---|---|
+| COMMUNITY-14～31 目标 MySQL 迁移 | `20260812_0028_community_content_lifecycle.py` | 真实 MySQL 8.4 首次暴露 1093，修复候选重试后 `alembic current` 为 head | 已验证迁移修复 |
+| MySQL 同表回填 | `UPDATE ... AS child INNER JOIN ... AS parent` | `test_mysql_backfill_uses_join_update` | 已实现 |
+| 半执行迁移重入 | 反射已有字段、修订表、索引和外键后只执行缺失步骤 | `test_mysql_retry_after_non_transactional_ddl_only_runs_backfill` | 已实现 |
+| 发布失败保护 | 迁移成功前不滚动替换 API/Web/Admin | 原运行容器持续健康；最终提交部署后执行完整 HTTP 复核 | 进行中 |
+
+未验证项：提及通知和真实移动设备覆盖。目标 MySQL 的 COMMUNITY-14～31 数据结构迁移阻断已完成修复候选验证，最终状态以本轮提交重新部署后的统一验收为准。
