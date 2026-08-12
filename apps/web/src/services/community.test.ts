@@ -8,6 +8,10 @@ import {
   listCommunityNotifications,
   markAllCommunityNotificationsRead,
   markCommunityNotificationRead,
+  listCommunityBookmarks,
+  setCommunityCommentLike,
+  setCommunityPostBookmark,
+  setCommunityPostLike,
 } from "./community";
 
 function jsonResponse(body: unknown): Response {
@@ -114,6 +118,66 @@ describe("web community service", () => {
     expect((readAllInit.headers as Headers).get("Idempotency-Key")).toBe(
       "stable-notifications-all-key",
     );
+  });
+
+
+  it("sends authenticated idempotent like bookmark and list requests", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({
+          post_id: "synthetic-post/id",
+          like_count: 1,
+          viewer_has_liked: true,
+          viewer_has_bookmarked: false,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await setCommunityPostLike(
+      "synthetic-post/id",
+      true,
+      "synthetic-token",
+      "synthetic-like-key",
+    );
+    await setCommunityCommentLike(
+      "synthetic-comment/id",
+      false,
+      "synthetic-token",
+      "synthetic-unlike-key",
+    );
+    await setCommunityPostBookmark(
+      "synthetic-post/id",
+      true,
+      "synthetic-token",
+      "synthetic-bookmark-key",
+    );
+    await listCommunityBookmarks("synthetic-token", { cursor: "next/value", limit: 10 });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/community/posts/synthetic-post%2Fid/like",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/community/comments/synthetic-comment%2Fid/like",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/community/posts/synthetic-post%2Fid/bookmark",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/community/bookmarks?limit=10&cursor=next%2Fvalue",
+      expect.any(Object),
+    );
+    for (const call of fetchMock.mock.calls) {
+      const headers = new Headers(call[1]?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer synthetic-token");
+    }
   });
 
 });

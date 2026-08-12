@@ -1446,6 +1446,7 @@ export interface CommunityPostSummary {
   is_pinned: boolean;
   is_locked: boolean;
   reply_count: number;
+  like_count: number;
   version: number;
   edited_at: string | null;
   last_activity_at: string;
@@ -1468,6 +1469,8 @@ export interface CommunityCommentResponse {
   reply_to_user_id: string | null;
   content: string;
   author: CommunityAuthor;
+  like_count: number;
+  viewer_has_liked: boolean;
   version: number;
   edited_at: string | null;
   created_at: string;
@@ -1488,6 +1491,9 @@ export interface CommunityPostDetail {
   is_pinned: boolean;
   is_locked: boolean;
   reply_count: number;
+  like_count: number;
+  viewer_has_liked: boolean;
+  viewer_has_bookmarked: boolean;
   version: number;
   edited_at: string | null;
   last_activity_at: string;
@@ -1498,6 +1504,31 @@ export interface CommunityPostDetail {
 export interface CommunityHomeResponse {
   boards: CommunityBoard[];
   posts: CommunityPostListResponse;
+}
+
+export interface CommunityPostInteractionResponse {
+  post_id: string;
+  like_count: number;
+  viewer_has_liked: boolean;
+  viewer_has_bookmarked: boolean;
+}
+
+export interface CommunityCommentLikeResponse {
+  comment_id: string;
+  like_count: number;
+  viewer_has_liked: boolean;
+}
+
+export interface CommunityBookmarkItem {
+  post_id: string;
+  bookmarked_at: string;
+  post: CommunityPostSummary | null;
+}
+
+export interface CommunityBookmarkListResponse {
+  items: CommunityBookmarkItem[];
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 export interface CommunityNotificationResponse {

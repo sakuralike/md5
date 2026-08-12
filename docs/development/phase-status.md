@@ -673,8 +673,8 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
-| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期、游标、独立页面、详情治理、回复数投影修复和移动端主旅程已编码 | 真实目标环境回归与提及通知 |
-| 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | 已规划，未编码 | 事实关系表、可重建计数、隐私偏好、屏蔽和静音 |
+| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 业务编码与本地自动化已收口 | 当前提交的目标 MySQL 与浏览器回归 |
+| 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | WP5-I4 COMMUNITY-32～35 已编码；WP5-I5 未编码 | 点赞摘要通知留待 I7；下一轮进入公开主页、关注/粉丝、屏蔽和静音 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
 | 私信与站内聊天 | 同上 WP5-I9～I10 | 已规划，未编码 | 一对一纯文本、独立 AES-GCM 密钥环、REST 基线、SSE 实时增强、举报最小披露 |
@@ -758,3 +758,15 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Web 社区通知中心 | `/community/notifications`、`CommunityNotificationsPage.vue`、主导航入口 | 页面渲染、Web 服务认证/路径/幂等测试，lint、typecheck、Vitest | 已实现数据库事实源的站内提及通知；邮件摘要、SSE、屏蔽与提及偏好尚未实现 |
 
 本轮完成 WP5-I3 剩余的提及通知业务编码。WP5-I3 的代码和本地自动化已收口；新迁移和页面仍需随本轮提交部署后执行目标 MySQL 与浏览器回归。下一轮开发进入 WP5-I4 点赞与收藏。
+
+
+## 2026-08-12 WP5-I4 第 1 个开发切片：社区点赞与收藏闭环
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 主题/回复点赞 | `community_post_likes`、`community_comment_likes`、PUT/DELETE like API | `test_post_and_comment_likes_are_idempotent_and_project_counts` | COMMUNITY-32、34 本地编码完成；唯一约束与幂等重放防重复计数 |
+| 私有主题收藏 | `community_post_bookmarks`、`GET /community/bookmarks`、PUT/DELETE bookmark API | `test_bookmarks_are_private_paginated_and_removed_targets_are_cleanup_only` | COMMUNITY-33、35 本地编码完成；收藏列表仅本人可见，失效内容不旁路泄露 |
+| Web 互动入口 | `CommunityPostPage.vue`、`CommunityBookmarksPage.vue`、主导航和路由 | 页面渲染测试、服务请求测试、Web typecheck/lint/Vitest | 已提供点赞、收藏、取消与失效引用清理；真实目标环境浏览器回归待部署后执行 |
+| 数据迁移 | `20260812_0030_community_likes_bookmarks.py` | Alembic 前滚/降级/重新前滚和统一门禁 | 本地 SQLite 门禁覆盖；目标 MySQL 执行仍需部署验证 |
+
+本切片完成 COMMUNITY-32～35。COMMUNITY-36 点赞摘要通知不在当前关系写入链路中临时实现，留待 WP5-I7 与 Outbox、通知偏好和聚合去重统一收口。下一开发轮次进入 WP5-I5 公开主页和关系图。

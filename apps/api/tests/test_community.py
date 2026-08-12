@@ -7,8 +7,11 @@ from password_detective.core.time import utc_now
 from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.community import (
     CommunityComment,
+    CommunityCommentLike,
     CommunityContentStatus,
     CommunityPost,
+    CommunityPostBookmark,
+    CommunityPostLike,
     CommunityPostRevision,
     CommunityReport,
     CommunityReportStatus,
@@ -725,3 +728,189 @@ def test_comment_mentions_and_read_all_are_scoped_to_recipient(client):
     )
     assert remaining.status_code == 200
     assert remaining.json()["items"] == []
+
+def test_post_and_comment_likes_are_idempotent_and_project_counts(client):
+    author = register_and_login(
+        client,
+        username="interaction_author",
+        email="interaction-author@example.com",
+    )
+    viewer = register_and_login(
+        client,
+        username="interaction_viewer",
+        email="interaction-viewer@example.com",
+    )
+    post = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "community-interaction-post-001"),
+    ).json()
+    detail = client.post(
+        f"/api/v1/community/posts/{post['id']}/comments",
+        json={
+            "content": "这是一条用于测试点赞投影的合成回复。",
+            "rules_accepted": True,
+        },
+        headers=headers(author, "community-interaction-comment-001"),
+    ).json()
+    comment_id = detail["comments"][0]["id"]
+
+    liked_post = client.put(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(viewer, "community-post-like-001"),
+    )
+    assert liked_post.status_code == 200
+    assert liked_post.json()["like_count"] == 1
+    assert liked_post.json()["viewer_has_liked"] is True
+
+    replay = client.put(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(viewer, "community-post-like-001"),
+    )
+    assert replay.status_code == 200
+    assert replay.json() == liked_post.json()
+
+    liked_comment = client.put(
+        f"/api/v1/community/comments/{comment_id}/like",
+        headers=headers(viewer, "community-comment-like-001"),
+    )
+    assert liked_comment.status_code == 200
+    assert liked_comment.json() == {
+        "comment_id": comment_id,
+        "like_count": 1,
+        "viewer_has_liked": True,
+    }
+
+    anonymous_detail = client.get(f"/api/v1/community/posts/{post['id']}")
+    assert anonymous_detail.status_code == 200
+    assert anonymous_detail.json()["like_count"] == 1
+    assert anonymous_detail.json()["viewer_has_liked"] is False
+    assert anonymous_detail.json()["comments"][0]["like_count"] == 1
+    assert anonymous_detail.json()["comments"][0]["viewer_has_liked"] is False
+
+    viewer_detail = client.get(
+        f"/api/v1/community/posts/{post['id']}",
+        headers={"Authorization": f"Bearer {viewer['access_token']}"},
+    )
+    assert viewer_detail.status_code == 200
+    assert viewer_detail.json()["viewer_has_liked"] is True
+    assert viewer_detail.json()["comments"][0]["viewer_has_liked"] is True
+
+    unliked_post = client.delete(
+        f"/api/v1/community/posts/{post['id']}/like",
+        headers=headers(viewer, "community-post-unlike-001"),
+    )
+    assert unliked_post.status_code == 200
+    assert unliked_post.json()["like_count"] == 0
+    assert unliked_post.json()["viewer_has_liked"] is False
+
+    unliked_comment = client.delete(
+        f"/api/v1/community/comments/{comment_id}/like",
+        headers=headers(viewer, "community-comment-unlike-001"),
+    )
+    assert unliked_comment.status_code == 200
+    assert unliked_comment.json()["like_count"] == 0
+    assert unliked_comment.json()["viewer_has_liked"] is False
+
+    with client.app.state.database.session_factory() as db:
+        assert db.scalar(select(CommunityPostLike)) is None
+        assert db.scalar(select(CommunityCommentLike)) is None
+
+
+def test_bookmarks_are_private_paginated_and_allow_removed_cleanup(client):
+    author = register_and_login(
+        client,
+        username="bookmark_author",
+        email="bookmark-author@example.com",
+    )
+    owner = register_and_login(
+        client,
+        username="bookmark_owner",
+        email="bookmark-owner@example.com",
+    )
+    outsider = register_and_login(
+        client,
+        username="bookmark_outsider",
+        email="bookmark-outsider@example.com",
+    )
+    first = client.post(
+        "/api/v1/community/posts",
+        json={**post_payload(), "title": "第一份合成收藏主题"},
+        headers=headers(author, "community-bookmark-post-001"),
+    ).json()
+    second = client.post(
+        "/api/v1/community/posts",
+        json={**post_payload(), "title": "第二份合成收藏主题"},
+        headers=headers(author, "community-bookmark-post-002"),
+    ).json()
+
+    for index, post in enumerate((first, second), start=1):
+        bookmarked = client.put(
+            f"/api/v1/community/posts/{post['id']}/bookmark",
+            headers=headers(owner, f"community-bookmark-create-00{index}"),
+        )
+        assert bookmarked.status_code == 200
+        assert bookmarked.json()["viewer_has_bookmarked"] is True
+
+    owner_page = client.get(
+        "/api/v1/community/bookmarks?limit=1",
+        headers={"Authorization": f"Bearer {owner['access_token']}"},
+    )
+    assert owner_page.status_code == 200
+    assert len(owner_page.json()["items"]) == 1
+    assert owner_page.json()["has_more"] is True
+    assert owner_page.json()["next_cursor"]
+
+    second_page = client.get(
+        f"/api/v1/community/bookmarks?limit=1&cursor={owner_page.json()['next_cursor']}",
+        headers={"Authorization": f"Bearer {owner['access_token']}"},
+    )
+    assert second_page.status_code == 200
+    assert len(second_page.json()["items"]) == 1
+    assert second_page.json()["has_more"] is False
+
+    outsider_page = client.get(
+        "/api/v1/community/bookmarks",
+        headers={"Authorization": f"Bearer {outsider['access_token']}"},
+    )
+    assert outsider_page.status_code == 200
+    assert outsider_page.json()["items"] == []
+
+    with client.app.state.database.session_factory() as db:
+        removed = db.get(CommunityPost, first["id"])
+        assert removed is not None
+        removed.status = CommunityContentStatus.REMOVED
+        db.commit()
+
+    removed_bookmarks = client.get(
+        "/api/v1/community/bookmarks?limit=10",
+        headers={"Authorization": f"Bearer {owner['access_token']}"},
+    )
+    assert removed_bookmarks.status_code == 200
+    removed_item = next(
+        item for item in removed_bookmarks.json()["items"] if item["post_id"] == first["id"]
+    )
+    assert removed_item["post"] is None
+
+    cannot_add_removed = client.put(
+        f"/api/v1/community/posts/{first['id']}/bookmark",
+        headers=headers(outsider, "community-bookmark-removed-add-001"),
+    )
+    assert cannot_add_removed.status_code == 404
+
+    cleanup = client.delete(
+        f"/api/v1/community/posts/{first['id']}/bookmark",
+        headers=headers(owner, "community-bookmark-removed-delete-001"),
+    )
+    assert cleanup.status_code == 200
+    assert cleanup.json()["viewer_has_bookmarked"] is False
+
+    with client.app.state.database.session_factory() as db:
+        assert db.scalar(
+            select(CommunityPostBookmark).where(
+                CommunityPostBookmark.user_id == db.scalar(
+                    select(User.id).where(User.username == "bookmark_owner")
+                ),
+                CommunityPostBookmark.post_id == first["id"],
+            )
+        ) is None

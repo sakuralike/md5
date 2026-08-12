@@ -18,10 +18,16 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.community import CommunityBoardCode
 from password_detective.modules.auth.context import ClientContext, get_client_context
-from password_detective.modules.auth.dependencies import Principal, get_current_principal
+from password_detective.modules.auth.dependencies import (
+    Principal,
+    get_current_principal,
+    get_optional_principal,
+)
 from password_detective.modules.community.schemas import (
     CommunityBoardListResponse,
+    CommunityBookmarkListResponse,
     CommunityCommentCreateRequest,
+    CommunityCommentLikeResponse,
     CommunityCommentListResponse,
     CommunityCommentUpdateRequest,
     CommunityHomeResponse,
@@ -29,6 +35,7 @@ from password_detective.modules.community.schemas import (
     CommunityNotificationReadResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
+    CommunityPostInteractionResponse,
     CommunityPostListResponse,
     CommunityPostUpdateRequest,
     CommunityReportCreateRequest,
@@ -42,12 +49,16 @@ from password_detective.modules.community.service import (
     delete_post,
     get_post,
     list_boards,
+    list_bookmarks,
     list_comments,
     list_home,
     list_notifications,
     list_posts,
     mark_all_notifications_read,
     mark_notification_read,
+    set_comment_like,
+    set_post_bookmark,
+    set_post_like,
     update_comment,
     update_post,
 )
@@ -153,18 +164,26 @@ def community_notification_read(
 def community_post_detail(
     post_id: str,
     db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
 ) -> CommunityPostDetail:
-    return get_post(db, post_id)
+    return get_post(db, post_id, principal=principal)
 
 
 @router.get("/posts/{post_id}/comments", response_model=CommunityCommentListResponse)
 def community_comments(
     post_id: str,
     db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> CommunityCommentListResponse:
-    return list_comments(db, post_id=post_id, cursor=cursor, limit=limit)
+    return list_comments(
+        db,
+        post_id=post_id,
+        cursor=cursor,
+        limit=limit,
+        principal=principal,
+    )
 
 
 @router.post(
@@ -332,6 +351,216 @@ def community_comment_delete(
             context=context,
         ),
         response_status=status.HTTP_200_OK,
+    )
+
+
+@router.get("/bookmarks", response_model=CommunityBookmarkListResponse)
+def community_bookmarks(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> CommunityBookmarkListResponse:
+    return list_bookmarks(
+        db,
+        principal=principal,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+def _post_like_mutation(
+    *,
+    liked: bool,
+    post_id: str,
+    db: Session,
+    principal: Principal,
+    idempotency_key: str,
+) -> CommunityPostInteractionResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope=f"community.post.like.{str(liked).lower()}",
+        idempotency_key=idempotency_key,
+        request_payload={"post_id": post_id, "liked": liked},
+        principal=principal,
+        response_type=CommunityPostInteractionResponse,
+        create=lambda: set_post_like(
+            db,
+            post_id=post_id,
+            principal=principal,
+            liked=liked,
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.put(
+    "/posts/{post_id}/like",
+    response_model=CommunityPostInteractionResponse,
+    dependencies=[Depends(rate_limit("community.post.like", limit=240, window_seconds=3600))],
+)
+def community_post_like(
+    post_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityPostInteractionResponse:
+    return _post_like_mutation(
+        liked=True,
+        post_id=post_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.delete(
+    "/posts/{post_id}/like",
+    response_model=CommunityPostInteractionResponse,
+    dependencies=[Depends(rate_limit("community.post.unlike", limit=240, window_seconds=3600))],
+)
+def community_post_unlike(
+    post_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityPostInteractionResponse:
+    return _post_like_mutation(
+        liked=False,
+        post_id=post_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+def _comment_like_mutation(
+    *,
+    liked: bool,
+    comment_id: str,
+    db: Session,
+    principal: Principal,
+    idempotency_key: str,
+) -> CommunityCommentLikeResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope=f"community.comment.like.{str(liked).lower()}",
+        idempotency_key=idempotency_key,
+        request_payload={"comment_id": comment_id, "liked": liked},
+        principal=principal,
+        response_type=CommunityCommentLikeResponse,
+        create=lambda: set_comment_like(
+            db,
+            comment_id=comment_id,
+            principal=principal,
+            liked=liked,
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.put(
+    "/comments/{comment_id}/like",
+    response_model=CommunityCommentLikeResponse,
+    dependencies=[Depends(rate_limit("community.comment.like", limit=240, window_seconds=3600))],
+)
+def community_comment_like(
+    comment_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityCommentLikeResponse:
+    return _comment_like_mutation(
+        liked=True,
+        comment_id=comment_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.delete(
+    "/comments/{comment_id}/like",
+    response_model=CommunityCommentLikeResponse,
+    dependencies=[Depends(rate_limit("community.comment.unlike", limit=240, window_seconds=3600))],
+)
+def community_comment_unlike(
+    comment_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityCommentLikeResponse:
+    return _comment_like_mutation(
+        liked=False,
+        comment_id=comment_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+def _post_bookmark_mutation(
+    *,
+    bookmarked: bool,
+    post_id: str,
+    db: Session,
+    principal: Principal,
+    idempotency_key: str,
+) -> CommunityPostInteractionResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope=f"community.post.bookmark.{str(bookmarked).lower()}",
+        idempotency_key=idempotency_key,
+        request_payload={"post_id": post_id, "bookmarked": bookmarked},
+        principal=principal,
+        response_type=CommunityPostInteractionResponse,
+        create=lambda: set_post_bookmark(
+            db,
+            post_id=post_id,
+            principal=principal,
+            bookmarked=bookmarked,
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.put(
+    "/posts/{post_id}/bookmark",
+    response_model=CommunityPostInteractionResponse,
+    dependencies=[Depends(rate_limit("community.post.bookmark", limit=240, window_seconds=3600))],
+)
+def community_post_bookmark(
+    post_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityPostInteractionResponse:
+    return _post_bookmark_mutation(
+        bookmarked=True,
+        post_id=post_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.delete(
+    "/posts/{post_id}/bookmark",
+    response_model=CommunityPostInteractionResponse,
+    dependencies=[Depends(rate_limit("community.post.unbookmark", limit=240, window_seconds=3600))],
+)
+def community_post_unbookmark(
+    post_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityPostInteractionResponse:
+    return _post_bookmark_mutation(
+        bookmarked=False,
+        post_id=post_id,
+        db=db,
+        principal=principal,
+        idempotency_key=idempotency_key,
     )
 
 

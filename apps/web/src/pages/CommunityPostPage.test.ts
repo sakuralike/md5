@@ -29,12 +29,18 @@ vi.mock("../services/community", () => ({
     is_pinned: false,
     is_locked: false,
     reply_count: 1,
+    like_count: 2,
+    viewer_has_liked: false,
+    viewer_has_bookmarked: false,
     version: 2,
     edited_at: "2026-08-12T03:00:00Z",
     last_activity_at: "2026-08-12T03:00:00Z",
     created_at: "2026-08-12T02:00:00Z",
     comments: [],
   })),
+  setCommunityCommentLike: vi.fn(),
+  setCommunityPostBookmark: vi.fn(),
+  setCommunityPostLike: vi.fn(),
   listCommunityComments: vi.fn(() => Promise.resolve({
     items: [{
       id: "synthetic-comment-id",
@@ -43,6 +49,8 @@ vi.mock("../services/community", () => ({
       reply_to_user_id: null,
       content: "合成回复内容。",
       author: { user_id: "synthetic-author-id", username: "synthetic-author", role: "user" },
+      like_count: 1,
+      viewer_has_liked: false,
       version: 1,
       edited_at: null,
       created_at: "2026-08-12T03:10:00Z",
@@ -67,6 +75,8 @@ describe("CommunityPostPage", () => {
     expect(html).toContain("合成社区主题");
     expect(html).toContain("编辑主题");
     expect(html).toContain("举报主题");
+    expect(html).toContain("点赞 2");
+    expect(html).toContain("收藏");
     expect(html).toContain("编辑");
     expect(html).toContain("举报回复");
   });

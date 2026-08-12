@@ -114,6 +114,7 @@ class CommunityPostSummary(BaseModel):
     is_pinned: bool
     is_locked: bool
     reply_count: int
+    like_count: int = 0
     version: int
     edited_at: datetime | None
     last_activity_at: datetime
@@ -136,6 +137,8 @@ class CommunityCommentResponse(BaseModel):
     reply_to_user_id: str | None
     content: str
     author: CommunityAuthor
+    like_count: int = 0
+    viewer_has_liked: bool = False
     version: int
     edited_at: datetime | None
     created_at: datetime
@@ -156,6 +159,9 @@ class CommunityPostDetail(BaseModel):
     is_pinned: bool
     is_locked: bool
     reply_count: int
+    like_count: int = 0
+    viewer_has_liked: bool = False
+    viewer_has_bookmarked: bool = False
     version: int
     edited_at: datetime | None
     last_activity_at: datetime
@@ -166,6 +172,31 @@ class CommunityPostDetail(BaseModel):
 class CommunityHomeResponse(BaseModel):
     boards: list[CommunityBoard]
     posts: CommunityPostListResponse
+
+
+class CommunityPostInteractionResponse(BaseModel):
+    post_id: str
+    like_count: int = 0
+    viewer_has_liked: bool = False
+    viewer_has_bookmarked: bool = False
+
+
+class CommunityCommentLikeResponse(BaseModel):
+    comment_id: str
+    like_count: int = 0
+    viewer_has_liked: bool = False
+
+
+class CommunityBookmarkItem(BaseModel):
+    post_id: str
+    bookmarked_at: datetime
+    post: CommunityPostSummary | None
+
+
+class CommunityBookmarkListResponse(BaseModel):
+    items: list[CommunityBookmarkItem]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class CommunityMutationResponse(BaseModel):

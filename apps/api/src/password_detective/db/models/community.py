@@ -81,6 +81,7 @@ class CommunityPost(Base):
     is_pinned: Mapped[bool] = mapped_column(default=False, index=True)
     is_locked: Mapped[bool] = mapped_column(default=False, index=True)
     reply_count: Mapped[int] = mapped_column(Integer, default=0)
+    like_count: Mapped[int] = mapped_column(Integer, default=0)
     version: Mapped[int] = mapped_column(Integer, default=1)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_by_author_at: Mapped[datetime | None] = mapped_column(
@@ -147,6 +148,7 @@ class CommunityComment(Base):
         default=CommunityContentStatus.PUBLISHED,
         index=True,
     )
+    like_count: Mapped[int] = mapped_column(Integer, default=0)
     version: Mapped[int] = mapped_column(Integer, default=1)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_by_author_at: Mapped[datetime | None] = mapped_column(
@@ -157,6 +159,60 @@ class CommunityComment(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityPostLike(Base):
+    __tablename__ = "community_post_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_community_post_like_user_post"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    post_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityCommentLike(Base):
+    __tablename__ = "community_comment_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "comment_id", name="uq_community_comment_like_user_comment"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    comment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_comments.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityPostBookmark(Base):
+    __tablename__ = "community_post_bookmarks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_community_post_bookmark_user_post"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    post_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
     )
 
 

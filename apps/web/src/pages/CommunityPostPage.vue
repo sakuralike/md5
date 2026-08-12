@@ -29,6 +29,9 @@ import {
   deleteCommunityPost,
   getCommunityPost,
   listCommunityComments,
+  setCommunityCommentLike,
+  setCommunityPostBookmark,
+  setCommunityPostLike,
   updateCommunityComment,
   updateCommunityPost,
 } from "../services/community";
@@ -57,6 +60,8 @@ const commentDeleteArmed = ref<string | null>(null);
 const reportTarget = ref<{ type: "post" | "comment"; commentId: string | null } | null>(null);
 const reportReason = ref<CommunityReportReason>("other");
 const reportDetails = ref("");
+const postInteractionBusy = ref(false);
+const commentLikeBusyIds = ref(new Set<string>());
 
 const isPostAuthor = computed(
   () => Boolean(auth.user && post.value?.author.user_id === auth.user.id),
@@ -72,7 +77,10 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const [detail, page] = await Promise.all([getCommunityPost(postId), listCommunityComments(postId)]);
+    const [detail, page] = await Promise.all([
+      getCommunityPost(postId, auth.accessToken || undefined),
+      listCommunityComments(postId, undefined, 20, auth.accessToken || undefined),
+    ]);
     post.value = detail;
     comments.value = page.items;
     nextCursor.value = page.next_cursor;
@@ -87,8 +95,8 @@ async function load(): Promise<void> {
 async function refresh(): Promise<void> {
   if (!post.value) return;
   const [detail, page] = await Promise.all([
-    getCommunityPost(post.value.id),
-    listCommunityComments(post.value.id),
+    getCommunityPost(post.value.id, auth.accessToken || undefined),
+    listCommunityComments(post.value.id, undefined, 20, auth.accessToken || undefined),
   ]);
   post.value = detail;
   comments.value = page.items;
@@ -99,13 +107,90 @@ async function loadMore(): Promise<void> {
   if (!post.value || !nextCursor.value || commentsLoading.value) return;
   commentsLoading.value = true;
   try {
-    const page = await listCommunityComments(post.value.id, nextCursor.value);
+    const page = await listCommunityComments(
+      post.value.id,
+      nextCursor.value,
+      20,
+      auth.accessToken || undefined,
+    );
     comments.value = [...comments.value, ...page.items];
     nextCursor.value = page.next_cursor;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "更多回复加载失败";
   } finally {
     commentsLoading.value = false;
+  }
+}
+
+function requireInteractionLogin(): boolean {
+  if (auth.isAuthenticated) return true;
+  error.value = "登录后才能点赞或收藏社区内容";
+  return false;
+}
+
+async function togglePostLike(): Promise<void> {
+  if (!post.value || postInteractionBusy.value || !requireInteractionLogin()) return;
+  postInteractionBusy.value = true;
+  error.value = "";
+  try {
+    const nextLiked = !post.value.viewer_has_liked;
+    const response = await setCommunityPostLike(
+      post.value.id,
+      nextLiked,
+      auth.accessToken,
+      createCommunityIdempotencyKey(nextLiked ? "post-like" : "post-unlike"),
+    );
+    post.value.like_count = response.like_count;
+    post.value.viewer_has_liked = response.viewer_has_liked;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题点赞操作失败";
+  } finally {
+    postInteractionBusy.value = false;
+  }
+}
+
+async function togglePostBookmark(): Promise<void> {
+  if (!post.value || postInteractionBusy.value || !requireInteractionLogin()) return;
+  postInteractionBusy.value = true;
+  error.value = "";
+  try {
+    const nextBookmarked = !post.value.viewer_has_bookmarked;
+    const response = await setCommunityPostBookmark(
+      post.value.id,
+      nextBookmarked,
+      auth.accessToken,
+      createCommunityIdempotencyKey(
+        nextBookmarked ? "post-bookmark" : "post-unbookmark",
+      ),
+    );
+    post.value.viewer_has_bookmarked = response.viewer_has_bookmarked;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题收藏操作失败";
+  } finally {
+    postInteractionBusy.value = false;
+  }
+}
+
+async function toggleCommentLike(item: CommunityCommentResponse): Promise<void> {
+  if (commentLikeBusyIds.value.has(item.id) || !requireInteractionLogin()) return;
+  commentLikeBusyIds.value = new Set(commentLikeBusyIds.value).add(item.id);
+  error.value = "";
+  try {
+    const nextLiked = !item.viewer_has_liked;
+    const response = await setCommunityCommentLike(
+      item.id,
+      nextLiked,
+      auth.accessToken,
+      createCommunityIdempotencyKey(nextLiked ? "comment-like" : "comment-unlike"),
+    );
+    item.like_count = response.like_count;
+    item.viewer_has_liked = response.viewer_has_liked;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "回复点赞操作失败";
+  } finally {
+    const next = new Set(commentLikeBusyIds.value);
+    next.delete(item.id);
+    commentLikeBusyIds.value = next;
   }
 }
 
@@ -360,6 +445,22 @@ function reportReasonLabel(reason: CommunityReportReason): string {
               <Button v-if="isPostAuthor && !post.content.startsWith('该主题正文已删除')" size="sm" variant="outline" @click="beginPostEdit">编辑主题</Button>
               <Button v-if="isPostAuthor && !post.content.startsWith('该主题正文已删除')" size="sm" variant="destructive" :disabled="submitting" @click="removePost">{{ postDeleteArmed ? "再次确认删除" : "删除主题" }}</Button>
               <Button v-if="auth.isAuthenticated && auth.user?.email_verified" size="sm" variant="ghost" @click="beginReport('post')">举报主题</Button>
+              <Button
+                size="sm"
+                :variant="post.viewer_has_liked ? 'default' : 'outline'"
+                :disabled="postInteractionBusy"
+                @click="togglePostLike"
+              >
+                {{ post.viewer_has_liked ? "已点赞" : "点赞" }} {{ post.like_count }}
+              </Button>
+              <Button
+                size="sm"
+                :variant="post.viewer_has_bookmarked ? 'secondary' : 'outline'"
+                :disabled="postInteractionBusy"
+                @click="togglePostBookmark"
+              >
+                {{ post.viewer_has_bookmarked ? "已收藏" : "收藏" }}
+              </Button>
             </div>
           </template>
         </CardHeader>
@@ -389,6 +490,14 @@ function reportReasonLabel(reason: CommunityReportReason): string {
               <Button v-if="auth.isAuthenticated && auth.user?.email_verified && !post.is_locked" size="sm" variant="ghost" @click="replyParent = item">回复</Button>
               <Button v-if="item.author.user_id === auth.user?.id && !item.content.startsWith('该回复已由作者删除')" size="sm" variant="ghost" @click="beginCommentEdit(item)">编辑</Button>
               <Button v-if="item.author.user_id === auth.user?.id && !item.content.startsWith('该回复已由作者删除')" size="sm" variant="destructive" :disabled="submitting" @click="removeComment(item)">{{ commentDeleteArmed === item.id ? "再次确认删除" : "删除" }}</Button>
+              <Button
+                size="sm"
+                :variant="item.viewer_has_liked ? 'secondary' : 'ghost'"
+                :disabled="commentLikeBusyIds.has(item.id)"
+                @click="toggleCommentLike(item)"
+              >
+                {{ item.viewer_has_liked ? "已赞" : "点赞" }} {{ item.like_count }}
+              </Button>
               <Button v-if="auth.isAuthenticated && auth.user?.email_verified" size="sm" variant="ghost" @click="beginReport('comment', item.id)">举报回复</Button>
             </div>
           </article>

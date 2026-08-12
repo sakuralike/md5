@@ -14,11 +14,14 @@ from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
     CommunityBoardCode,
     CommunityComment,
+    CommunityCommentLike,
     CommunityContentStatus,
     CommunityNotification,
     CommunityNotificationKind,
     CommunityNotificationSource,
     CommunityPost,
+    CommunityPostBookmark,
+    CommunityPostLike,
     CommunityPostRevision,
     CommunityReport,
     CommunityReportStatus,
@@ -30,7 +33,10 @@ from password_detective.modules.community.schemas import (
     CommunityAuthor,
     CommunityBoard,
     CommunityBoardListResponse,
+    CommunityBookmarkItem,
+    CommunityBookmarkListResponse,
     CommunityCommentCreateRequest,
+    CommunityCommentLikeResponse,
     CommunityCommentListResponse,
     CommunityCommentResponse,
     CommunityCommentUpdateRequest,
@@ -40,6 +46,7 @@ from password_detective.modules.community.schemas import (
     CommunityNotificationResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
+    CommunityPostInteractionResponse,
     CommunityPostListResponse,
     CommunityPostSummary,
     CommunityPostUpdateRequest,
@@ -107,14 +114,28 @@ def list_posts(
     )
 
 
-def get_post(db: Session, post_id: str) -> CommunityPostDetail:
+def get_post(
+    db: Session,
+    post_id: str,
+    *,
+    principal: Principal | None = None,
+) -> CommunityPostDetail:
     post = _get_published_post(db, post_id)
     comments = _list_comment_models(db, post.id, cursor=None, limit=50)[0]
     authors = _load_authors(
         db,
         [post.author_id, *(comment.author_id for comment in comments)],
     )
-    return _post_detail(post, authors, comments)
+    viewer_id = principal.user.id if principal is not None else None
+    liked_comment_ids = _liked_comment_ids(db, viewer_id, comments)
+    return _post_detail(
+        post,
+        authors,
+        comments,
+        viewer_has_liked=_has_post_like(db, viewer_id, post.id),
+        viewer_has_bookmarked=_has_post_bookmark(db, viewer_id, post.id),
+        liked_comment_ids=liked_comment_ids,
+    )
 
 
 def list_home(
@@ -135,12 +156,22 @@ def list_comments(
     post_id: str,
     cursor: str | None,
     limit: int,
+    principal: Principal | None = None,
 ) -> CommunityCommentListResponse:
     post = _get_published_post(db, post_id)
     comments, next_cursor = _list_comment_models(db, post.id, cursor=cursor, limit=limit)
     authors = _load_authors(db, [comment.author_id for comment in comments])
+    viewer_id = principal.user.id if principal is not None else None
+    liked_comment_ids = _liked_comment_ids(db, viewer_id, comments)
     return CommunityCommentListResponse(
-        items=[_comment_response(comment, authors[comment.author_id]) for comment in comments],
+        items=[
+            _comment_response(
+                comment,
+                authors[comment.author_id],
+                viewer_has_liked=comment.id in liked_comment_ids,
+            )
+            for comment in comments
+        ],
         next_cursor=next_cursor,
         has_more=next_cursor is not None,
     )
@@ -172,7 +203,7 @@ def create_post(
     )
     db.commit()
     db.refresh(post)
-    return get_post(db, post.id)
+    return get_post(db, post.id, principal=principal)
 
 
 
@@ -226,7 +257,7 @@ def update_post(
         comment_id=None,
     )
     db.commit()
-    return get_post(db, post.id)
+    return get_post(db, post.id, principal=principal)
 
 
 def delete_post(
@@ -270,7 +301,7 @@ def delete_post(
         details={"previous_version": previous_version, "current_version": post.version},
     )
     db.commit()
-    return get_post(db, post.id)
+    return get_post(db, post.id, principal=principal)
 
 
 def create_comment(
@@ -331,7 +362,7 @@ def create_comment(
     post.reply_count += 1
     post.last_activity_at = now
     db.commit()
-    return get_post(db, post.id)
+    return get_post(db, post.id, principal=principal)
 
 
 
@@ -372,7 +403,7 @@ def update_comment(
         comment_id=comment.id,
     )
     db.commit()
-    return get_post(db, comment.post_id)
+    return get_post(db, comment.post_id, principal=principal)
 
 
 def delete_comment(
@@ -413,7 +444,7 @@ def delete_comment(
         details={"previous_version": previous_version, "current_version": comment.version},
     )
     db.commit()
-    return get_post(db, comment.post_id)
+    return get_post(db, comment.post_id, principal=principal)
 
 
 def create_report(
@@ -485,6 +516,160 @@ def create_report(
         created_at=report.created_at,
     )
 
+
+
+def set_post_like(
+    db: Session,
+    *,
+    post_id: str,
+    principal: Principal,
+    liked: bool,
+) -> CommunityPostInteractionResponse:
+    post = db.get(CommunityPost, post_id)
+    if post is None:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    existing = db.scalar(
+        select(CommunityPostLike).where(
+            CommunityPostLike.user_id == principal.user.id,
+            CommunityPostLike.post_id == post.id,
+        )
+    )
+    if liked:
+        if post.status != CommunityContentStatus.PUBLISHED:
+            raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+        if existing is None:
+            db.add(CommunityPostLike(user_id=principal.user.id, post_id=post.id))
+            db.flush()
+    elif existing is not None:
+        db.delete(existing)
+        db.flush()
+    post.like_count = _count_post_likes(db, post.id)
+    db.commit()
+    return _post_interaction_response(db, post, principal.user.id)
+
+
+def set_comment_like(
+    db: Session,
+    *,
+    comment_id: str,
+    principal: Principal,
+    liked: bool,
+) -> CommunityCommentLikeResponse:
+    comment = db.get(CommunityComment, comment_id)
+    if comment is None:
+        raise AppError("community.comment_not_found", "社区回复不存在", status_code=404)
+    existing = db.scalar(
+        select(CommunityCommentLike).where(
+            CommunityCommentLike.user_id == principal.user.id,
+            CommunityCommentLike.comment_id == comment.id,
+        )
+    )
+    if liked:
+        post = db.get(CommunityPost, comment.post_id)
+        if (
+            comment.status != CommunityContentStatus.PUBLISHED
+            or post is None
+            or post.status != CommunityContentStatus.PUBLISHED
+        ):
+            raise AppError("community.comment_not_found", "社区回复不存在", status_code=404)
+        if existing is None:
+            db.add(CommunityCommentLike(user_id=principal.user.id, comment_id=comment.id))
+            db.flush()
+    elif existing is not None:
+        db.delete(existing)
+        db.flush()
+    comment.like_count = _count_comment_likes(db, comment.id)
+    db.commit()
+    return CommunityCommentLikeResponse(
+        comment_id=comment.id,
+        like_count=comment.like_count,
+        viewer_has_liked=liked,
+    )
+
+
+def set_post_bookmark(
+    db: Session,
+    *,
+    post_id: str,
+    principal: Principal,
+    bookmarked: bool,
+) -> CommunityPostInteractionResponse:
+    post = db.get(CommunityPost, post_id)
+    if post is None:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    existing = db.scalar(
+        select(CommunityPostBookmark).where(
+            CommunityPostBookmark.user_id == principal.user.id,
+            CommunityPostBookmark.post_id == post.id,
+        )
+    )
+    if bookmarked:
+        if post.status != CommunityContentStatus.PUBLISHED:
+            raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+        if existing is None:
+            db.add(CommunityPostBookmark(user_id=principal.user.id, post_id=post.id))
+    elif existing is not None:
+        db.delete(existing)
+    db.commit()
+    return _post_interaction_response(db, post, principal.user.id)
+
+
+def list_bookmarks(
+    db: Session,
+    *,
+    principal: Principal,
+    cursor: str | None,
+    limit: int,
+) -> CommunityBookmarkListResponse:
+    conditions = [CommunityPostBookmark.user_id == principal.user.id]
+    if cursor is not None:
+        created_at, record_id = _decode_cursor(cursor)
+        conditions.append(
+            or_(
+                CommunityPostBookmark.created_at < created_at,
+                (CommunityPostBookmark.created_at == created_at)
+                & (CommunityPostBookmark.id < record_id),
+            )
+        )
+    bookmarks = db.scalars(
+        select(CommunityPostBookmark)
+        .where(*conditions)
+        .order_by(CommunityPostBookmark.created_at.desc(), CommunityPostBookmark.id.desc())
+        .limit(limit + 1)
+    ).all()
+    has_more = len(bookmarks) > limit
+    items = bookmarks[:limit]
+    post_ids = [bookmark.post_id for bookmark in items]
+    posts = db.scalars(
+        select(CommunityPost).where(
+            CommunityPost.id.in_(post_ids),
+            CommunityPost.status == CommunityContentStatus.PUBLISHED,
+        )
+    ).all() if post_ids else []
+    post_by_id = {post.id: post for post in posts}
+    authors = _load_authors(db, [post.author_id for post in posts])
+    next_cursor = (
+        _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
+    )
+    return CommunityBookmarkListResponse(
+        items=[
+            CommunityBookmarkItem(
+                post_id=bookmark.post_id,
+                bookmarked_at=bookmark.created_at,
+                post=(
+                    _post_summary(
+                        post_by_id[bookmark.post_id],
+                        authors[post_by_id[bookmark.post_id].author_id],
+                    )
+                    if bookmark.post_id in post_by_id
+                    else None
+                ),
+            )
+            for bookmark in items
+        ],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 def list_notifications(
@@ -663,6 +848,73 @@ def _unread_notification_count(db: Session, user_id: str) -> int:
     ) or 0
 
 
+def _has_post_like(db: Session, user_id: str | None, post_id: str) -> bool:
+    if user_id is None:
+        return False
+    return db.scalar(
+        select(CommunityPostLike.id).where(
+            CommunityPostLike.user_id == user_id,
+            CommunityPostLike.post_id == post_id,
+        )
+    ) is not None
+
+
+def _has_post_bookmark(db: Session, user_id: str | None, post_id: str) -> bool:
+    if user_id is None:
+        return False
+    return db.scalar(
+        select(CommunityPostBookmark.id).where(
+            CommunityPostBookmark.user_id == user_id,
+            CommunityPostBookmark.post_id == post_id,
+        )
+    ) is not None
+
+
+def _liked_comment_ids(
+    db: Session,
+    user_id: str | None,
+    comments: list[CommunityComment],
+) -> set[str]:
+    if user_id is None or not comments:
+        return set()
+    comment_ids = [comment.id for comment in comments]
+    return set(
+        db.scalars(
+            select(CommunityCommentLike.comment_id).where(
+                CommunityCommentLike.user_id == user_id,
+                CommunityCommentLike.comment_id.in_(comment_ids),
+            )
+        ).all()
+    )
+
+
+def _count_post_likes(db: Session, post_id: str) -> int:
+    return db.scalar(
+        select(func.count(CommunityPostLike.id)).where(CommunityPostLike.post_id == post_id)
+    ) or 0
+
+
+def _count_comment_likes(db: Session, comment_id: str) -> int:
+    return db.scalar(
+        select(func.count(CommunityCommentLike.id)).where(
+            CommunityCommentLike.comment_id == comment_id
+        )
+    ) or 0
+
+
+def _post_interaction_response(
+    db: Session,
+    post: CommunityPost,
+    user_id: str,
+) -> CommunityPostInteractionResponse:
+    return CommunityPostInteractionResponse(
+        post_id=post.id,
+        like_count=post.like_count,
+        viewer_has_liked=_has_post_like(db, user_id, post.id),
+        viewer_has_bookmarked=_has_post_bookmark(db, user_id, post.id),
+    )
+
+
 def _require_publish_access(principal: Principal, rules_accepted: bool) -> None:
     if not principal.user.email_verified:
         raise AppError(
@@ -701,6 +953,7 @@ def _post_summary(post: CommunityPost, author: CommunityAuthor) -> CommunityPost
         is_pinned=post.is_pinned,
         is_locked=post.is_locked,
         reply_count=post.reply_count,
+        like_count=post.like_count,
         version=post.version,
         edited_at=post.edited_at,
         last_activity_at=post.last_activity_at,
@@ -709,7 +962,10 @@ def _post_summary(post: CommunityPost, author: CommunityAuthor) -> CommunityPost
 
 
 def _comment_response(
-    comment: CommunityComment, author: CommunityAuthor
+    comment: CommunityComment,
+    author: CommunityAuthor,
+    *,
+    viewer_has_liked: bool = False,
 ) -> CommunityCommentResponse:
     return CommunityCommentResponse(
         id=comment.id,
@@ -717,6 +973,8 @@ def _comment_response(
         root_id=comment.root_id,
         reply_to_user_id=comment.reply_to_user_id,
         content=comment.content,
+        like_count=comment.like_count,
+        viewer_has_liked=viewer_has_liked,
         version=comment.version,
         edited_at=comment.edited_at,
         author=author,
@@ -821,6 +1079,10 @@ def _post_detail(
     post: CommunityPost,
     authors: dict[str, CommunityAuthor],
     comments: list[CommunityComment],
+    *,
+    viewer_has_liked: bool,
+    viewer_has_bookmarked: bool,
+    liked_comment_ids: set[str],
 ) -> CommunityPostDetail:
     return CommunityPostDetail(
         id=post.id,
@@ -831,9 +1093,19 @@ def _post_detail(
         is_pinned=post.is_pinned,
         is_locked=post.is_locked,
         reply_count=post.reply_count,
+        like_count=post.like_count,
+        viewer_has_liked=viewer_has_liked,
+        viewer_has_bookmarked=viewer_has_bookmarked,
         version=post.version,
         edited_at=post.edited_at,
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
-        comments=[_comment_response(comment, authors[comment.author_id]) for comment in comments],
+        comments=[
+            _comment_response(
+                comment,
+                authors[comment.author_id],
+                viewer_has_liked=comment.id in liked_comment_ids,
+            )
+            for comment in comments
+        ],
     )

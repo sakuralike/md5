@@ -399,7 +399,9 @@
 | 需求 | 计划模块 | 计划自动化证据 | 当前状态 |
 |---|---|---|---|
 | COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | `test_community.py` 首页聚合、版本冲突、删除占位、两级回复和评论游标；三个独立页面渲染测试、详情治理渲染覆盖；Web typecheck/lint/Vitest | 部分实现：生命周期、评论游标、独立首页/详情/发布页和详情治理已落地；草稿、热门规则、提及通知、回复数重建和 Playwright 仍待开发 |
-| COMMUNITY-32～44 | 点赞、收藏、公开主页、关注/粉丝、屏蔽/静音 | 并发唯一约束、投影重建、隐私旁路和关系服务测试 | 已规划，未编码 |
+| COMMUNITY-32～35 | 点赞、收藏、可重建计数、失效引用清理 | 关系唯一约束、幂等重放、投影计数、私有收藏与不可见内容负向测试 | 本地编码和自动化完成，目标 MySQL/浏览器回归待部署 |
+| COMMUNITY-36 | 点赞摘要通知 | Outbox 重试、聚合窗口、通知偏好和屏蔽关系测试 | 留待 WP5-I7，当前未编码 |
+| COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | 隐私旁路和关系服务测试 | 已规划，未编码 |
 | COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | 固定板块迁移往返、群组权限矩阵、私密内容不可见性测试 | 已规划，未编码 |
 | COMMUNITY-55～76 | 动态、搜索和通知中心 | Outbox 重放、搜索重建、通知去重、屏蔽过滤、SSE 降级测试 | 已规划，未编码 |
 | COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
@@ -460,3 +462,14 @@
 | COMMUNITY-30 提及用户 | `service._sync_mention_notifications`、`community_notifications`、Alembic `20260812_0029` | 主题提及去重、自提及/未知用户过滤、回复提及测试 | 已实现主题/回复发布和编辑触发；屏蔽/提及偏好依赖后续社交关系模块 |
 | COMMUNITY-69～72 提及通知子集 | 通知业务唯一键、最小化摘要、本人列表、未读数、单条/全部已读 | 越权已读阻断、幂等重放、游标列表、批量已读测试 | 部分实现：提及类型闭环完成；回复、点赞、关注、群组、私信、治理通知和类型偏好仍待 WP5-I7 |
 | Web 通知中心 | `CommunityNotificationsPage.vue`、`/community/notifications`、`services/community.ts` | 页面渲染、认证头、URL 编码、幂等键、lint/typecheck/Vitest | 已实现 |
+
+
+## 2026-08-12 WP5-I4 第 1 个开发切片：点赞与收藏
+
+| 需求 | 代码证据 | 自动化证据 | 状态 |
+|---|---|---|---|
+| COMMUNITY-32 主题/回复点赞与取消 | 三张互动关系模型中的两张点赞事实表、PUT/DELETE like API | `test_post_and_comment_likes_are_idempotent_and_project_counts` | 已通过 |
+| COMMUNITY-33 私有主题收藏 | `community_post_bookmarks`、本人收藏列表 API 和 `/community/bookmarks` | `test_bookmarks_are_private_paginated_and_removed_targets_are_cleanup_only`、`CommunityBookmarksPage.test.ts` | 已通过 |
+| COMMUNITY-34 唯一关系和计数投影 | 数据库唯一约束、写后从事实表重新计数 | 重放同一幂等请求及重复关系测试 | 已通过 |
+| COMMUNITY-35 移除内容互动约束 | 新增互动校验、取消互动保留、失效收藏返回空内容 | 后端负向测试覆盖新增阻断和清理成功 | 已通过 |
+| COMMUNITY-36 点赞摘要通知 | 尚无代码 | 留待 Outbox、聚合和偏好测试 | 未实现，归入 WP5-I7 |

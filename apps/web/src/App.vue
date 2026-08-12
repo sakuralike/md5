@@ -113,6 +113,7 @@ onBeforeUnmount(releaseCustomBackground);
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/community">社区</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/community/notifications">社区通知</RouterLink>
+        <RouterLink v-if="auth.isAuthenticated" to="/community/bookmarks">我的收藏</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/submissions">我的贡献</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/reputation">积分信誉</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/trust-cases">举报申诉</RouterLink>

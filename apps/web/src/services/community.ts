@@ -1,13 +1,16 @@
 import type {
   CommunityBoardListResponse,
+  CommunityBookmarkListResponse,
   CommunityBoardCode,
   CommunityCommentCreateRequest,
+  CommunityCommentLikeResponse,
   CommunityCommentListResponse,
   CommunityCommentUpdateRequest,
   CommunityHomeResponse,
   CommunityNotificationListResponse,
   CommunityNotificationReadResponse,
   CommunityPostCreateRequest,
+  CommunityPostInteractionResponse,
   CommunityPostUpdateRequest,
   CommunityPostDetail,
   CommunityPostListResponse,
@@ -25,6 +28,12 @@ export function createCommunityIdempotencyKey(
     | "comment-update"
     | "comment-delete"
     | "report"
+    | "post-like"
+    | "post-unlike"
+    | "comment-like"
+    | "comment-unlike"
+    | "post-bookmark"
+    | "post-unbookmark"
     | "notification-read"
     | "notifications-read-all",
 ): string {
@@ -51,8 +60,15 @@ export function listCommunityPosts(
   return apiRequest<CommunityPostListResponse>(`/community/posts?${params.toString()}`);
 }
 
-export function getCommunityPost(postId: string): Promise<CommunityPostDetail> {
-  return apiRequest<CommunityPostDetail>(`/community/posts/${encodeURIComponent(postId)}`);
+export function getCommunityPost(
+  postId: string,
+  token?: string,
+): Promise<CommunityPostDetail> {
+  return apiRequest<CommunityPostDetail>(
+    `/community/posts/${encodeURIComponent(postId)}`,
+    {},
+    token,
+  );
 }
 
 export function createCommunityPost(
@@ -75,11 +91,14 @@ export function listCommunityComments(
   postId: string,
   cursor?: string,
   limit = 20,
+  token?: string,
 ): Promise<CommunityCommentListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
   return apiRequest<CommunityCommentListResponse>(
     `/community/posts/${encodeURIComponent(postId)}/comments?${params.toString()}`,
+    {},
+    token,
   );
 }
 
@@ -210,6 +229,67 @@ export function markAllCommunityNotificationsRead(
   return apiRequest<CommunityNotificationReadResponse>(
     "/community/notifications/read-all",
     { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
+    token,
+  );
+}
+
+export function setCommunityPostLike(
+  postId: string,
+  liked: boolean,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityPostInteractionResponse> {
+  return apiRequest<CommunityPostInteractionResponse>(
+    `/community/posts/${encodeURIComponent(postId)}/like`,
+    {
+      method: liked ? "PUT" : "DELETE",
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
+    token,
+  );
+}
+
+export function setCommunityCommentLike(
+  commentId: string,
+  liked: boolean,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityCommentLikeResponse> {
+  return apiRequest<CommunityCommentLikeResponse>(
+    `/community/comments/${encodeURIComponent(commentId)}/like`,
+    {
+      method: liked ? "PUT" : "DELETE",
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
+    token,
+  );
+}
+
+export function setCommunityPostBookmark(
+  postId: string,
+  bookmarked: boolean,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityPostInteractionResponse> {
+  return apiRequest<CommunityPostInteractionResponse>(
+    `/community/posts/${encodeURIComponent(postId)}/bookmark`,
+    {
+      method: bookmarked ? "PUT" : "DELETE",
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
+    token,
+  );
+}
+
+export function listCommunityBookmarks(
+  token: string,
+  options: { cursor?: string; limit?: number } = {},
+): Promise<CommunityBookmarkListResponse> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  return apiRequest<CommunityBookmarkListResponse>(
+    `/community/bookmarks?${params.toString()}`,
+    {},
     token,
   );
 }

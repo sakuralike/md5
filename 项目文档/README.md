@@ -5,7 +5,7 @@
 
 ## 当前开发基线
 
-- [WP5-I3 第 7 个开发切片：社区提及通知闭环](../docs/development/2026-08-12-wp5-i3-iteration-7.md)
+- [WP5-I4 第 1 个开发切片：社区点赞与收藏闭环](../docs/development/2026-08-12-wp5-i4-iteration-1.md)
 
 | 文档 | 用途 | 状态 |
 |---|---|---|
@@ -21,6 +21,8 @@
 ## 开发实施记录
 
 - [WP5 社区完整功能开发计划 v1.0](./密码侦探社社区完整功能开发计划-v1.0.md)
+- [WP5-I4 第 1 个开发切片：社区点赞与收藏闭环](../docs/development/2026-08-12-wp5-i4-iteration-1.md)
+- [WP5-I3 第 7 个开发切片：社区提及通知闭环](../docs/development/2026-08-12-wp5-i3-iteration-7.md)
 - [WP5-I3 第 6 个开发切片：MySQL 迁移与目标服务器部署收口](../docs/development/2026-08-12-wp5-i3-iteration-6.md)
 - [WP5-I3 第 5 个开发切片：移动端社区主旅程](../docs/development/2026-08-12-wp5-i3-iteration-5.md)
 - [WP5-I3 第 4 个开发切片：回复数投影一致性](../docs/development/2026-08-12-wp5-i3-iteration-4.md)
