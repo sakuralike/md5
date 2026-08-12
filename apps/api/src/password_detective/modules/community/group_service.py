@@ -21,6 +21,7 @@ from password_detective.db.models.community import (
 from password_detective.db.models.user import User, UserRole
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.community.activity_service import record_group_joined
 from password_detective.modules.community.schemas import (
     CommunityGroupCreateRequest,
     CommunityGroupDetail,
@@ -208,6 +209,8 @@ def join_group(db: Session, *, slug: str, principal: Principal) -> CommunityGrou
         {"status": target_status.value},
     )
     _recount_members(db, group)
+    if target_status == CommunityGroupMembershipStatus.ACTIVE:
+        record_group_joined(db, membership, group)
     db.commit()
     return CommunityGroupMembershipResponse(
         group=_group_summary(group, membership),
@@ -327,6 +330,11 @@ def decide_member(
         _membership_state(membership),
     )
     _recount_members(db, group)
+    became_active = membership.status == CommunityGroupMembershipStatus.ACTIVE and (
+        before is None or before.get("status") != CommunityGroupMembershipStatus.ACTIVE.value
+    )
+    if became_active:
+        record_group_joined(db, membership, group)
     _audit(
         db,
         context,

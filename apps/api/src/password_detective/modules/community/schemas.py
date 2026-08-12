@@ -5,6 +5,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from password_detective.db.models.community import (
+    CommunityActivityFeed,
+    CommunityActivityKind,
+    CommunityActivitySource,
     CommunityBoardStatus,
     CommunityGroupMembershipStatus,
     CommunityGroupRole,
@@ -284,7 +287,7 @@ class CommunityNotificationResponse(BaseModel):
     kind: CommunityNotificationKind
     source_type: CommunityNotificationSource
     source_id: str
-    post_id: str
+    post_id: str | None
     comment_id: str | None
     preview: str
     actor: CommunityAuthor
@@ -302,6 +305,53 @@ class CommunityNotificationListResponse(BaseModel):
 class CommunityNotificationReadResponse(BaseModel):
     message: str
     unread_count: int
+
+
+class CommunityNotificationPreferenceItem(BaseModel):
+    kind: CommunityNotificationKind
+    in_app_enabled: bool = True
+    email_digest_enabled: bool = False
+
+
+class CommunityNotificationPreferencesResponse(BaseModel):
+    items: list[CommunityNotificationPreferenceItem]
+
+
+class CommunityNotificationPreferencesUpdateRequest(BaseModel):
+    items: list[CommunityNotificationPreferenceItem] = Field(min_length=1, max_length=16)
+
+
+class CommunityActivityPreferenceResponse(BaseModel):
+    share_group_joins: bool = True
+    share_follows: bool = True
+
+
+class CommunityActivityPreferenceUpdateRequest(BaseModel):
+    share_group_joins: bool
+    share_follows: bool
+
+
+class CommunityActivityItem(BaseModel):
+    id: str
+    kind: CommunityActivityKind
+    source_type: CommunityActivitySource
+    source_id: str
+    actor: CommunityAuthor
+    preview: str
+    post_id: str | None = None
+    post_title: str | None = None
+    comment_id: str | None = None
+    group_slug: str | None = None
+    group_name: str | None = None
+    target_username: str | None = None
+    created_at: datetime
+
+
+class CommunityActivityListResponse(BaseModel):
+    feed: CommunityActivityFeed
+    items: list[CommunityActivityItem]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class CommunityPublicLevel(BaseModel):

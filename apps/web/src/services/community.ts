@@ -1,4 +1,8 @@
 import type {
+  CommunityActivityFeed,
+  CommunityActivityListResponse,
+  CommunityActivityPreferenceResponse,
+  CommunityActivityPreferenceUpdateRequest,
   CommunityBoardListResponse,
   CommunityBookmarkListResponse,
   CommunityBoardCode,
@@ -14,7 +18,10 @@ import type {
   CommunityGroupRole,
   CommunityGroupUpdateRequest,
   CommunityHomeResponse,
+  CommunityNotificationKind,
   CommunityNotificationListResponse,
+  CommunityNotificationPreferencesResponse,
+  CommunityNotificationPreferencesUpdateRequest,
   CommunityNotificationReadResponse,
   CommunityMuteRequest,
   CommunityOwnProfileResponse,
@@ -50,6 +57,8 @@ export function createCommunityIdempotencyKey(
     | "post-unbookmark"
     | "notification-read"
     | "notifications-read-all"
+    | "notification-preferences"
+    | "activity-preferences"
     | "profile-update"
     | "privacy-update"
     | "follow"
@@ -282,14 +291,76 @@ export function createCommunityReport(
 
 export function listCommunityNotifications(
   token: string,
-  options: { cursor?: string; limit?: number; unreadOnly?: boolean } = {},
+  options: {
+    cursor?: string;
+    limit?: number;
+    unreadOnly?: boolean;
+    kind?: CommunityNotificationKind;
+  } = {},
 ): Promise<CommunityNotificationListResponse> {
   const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.unreadOnly) params.set("unread_only", "true");
+  if (options.kind) params.set("kind", options.kind);
   return apiRequest<CommunityNotificationListResponse>(
     `/community/notifications?${params.toString()}`,
     {},
+    token,
+  );
+}
+
+export function getCommunityNotificationPreferences(
+  token: string,
+): Promise<CommunityNotificationPreferencesResponse> {
+  return apiRequest<CommunityNotificationPreferencesResponse>(
+    "/community/notifications/preferences",
+    {},
+    token,
+  );
+}
+
+export function updateCommunityNotificationPreferences(
+  payload: CommunityNotificationPreferencesUpdateRequest,
+  token: string,
+): Promise<CommunityNotificationPreferencesResponse> {
+  return apiRequest<CommunityNotificationPreferencesResponse>(
+    "/community/notifications/preferences",
+    { method: "PUT", body: JSON.stringify(payload) },
+    token,
+  );
+}
+
+export function listCommunityActivity(
+  feed: CommunityActivityFeed,
+  token?: string,
+  options: { cursor?: string; limit?: number } = {},
+): Promise<CommunityActivityListResponse> {
+  const params = new URLSearchParams({ feed, limit: String(options.limit ?? 20) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  return apiRequest<CommunityActivityListResponse>(
+    `/community/activity?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function getCommunityActivityPreferences(
+  token: string,
+): Promise<CommunityActivityPreferenceResponse> {
+  return apiRequest<CommunityActivityPreferenceResponse>(
+    "/community/activity/preferences",
+    {},
+    token,
+  );
+}
+
+export function updateCommunityActivityPreferences(
+  payload: CommunityActivityPreferenceUpdateRequest,
+  token: string,
+): Promise<CommunityActivityPreferenceResponse> {
+  return apiRequest<CommunityActivityPreferenceResponse>(
+    "/community/activity/preferences",
+    { method: "PUT", body: JSON.stringify(payload) },
     token,
   );
 }

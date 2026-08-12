@@ -21,6 +21,7 @@ from password_detective.db.models.community import (
     CommunityInteractionPolicy,
     CommunityNotification,
     CommunityNotificationKind,
+    CommunityNotificationPreference,
     CommunityNotificationSource,
     CommunityPost,
     CommunityPostBookmark,
@@ -37,6 +38,11 @@ from password_detective.db.models.community import (
 from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.community.activity_service import (
+    record_comment_published,
+    record_post_published,
+    record_user_followed,
+)
 from password_detective.modules.community.boards import get_board_by_code, require_board_post_access
 from password_detective.modules.community.group_service import (
     can_user_view_post,
@@ -60,6 +66,9 @@ from password_detective.modules.community.schemas import (
     CommunityHomeResponse,
     CommunityMuteRequest,
     CommunityNotificationListResponse,
+    CommunityNotificationPreferenceItem,
+    CommunityNotificationPreferencesResponse,
+    CommunityNotificationPreferencesUpdateRequest,
     CommunityNotificationReadResponse,
     CommunityNotificationResponse,
     CommunityOwnProfileResponse,
@@ -274,6 +283,7 @@ def create_post(
     db.add(post)
     db.flush()
     increment_group_post_count(db, post.group_id, 1)
+    record_post_published(db, post)
     _sync_mention_notifications(
         db,
         text=f"{post.title}\n{post.content}",
@@ -433,6 +443,7 @@ def create_comment(
     )
     db.add(comment)
     db.flush()
+    record_comment_published(db, comment, post)
     _sync_mention_notifications(
         db,
         text=comment.content,
@@ -441,6 +452,18 @@ def create_comment(
         source_id=comment.id,
         post_id=post.id,
         comment_id=comment.id,
+    )
+    reply_recipient_id = parent.author_id if parent is not None else post.author_id
+    _create_notification(
+        db,
+        recipient_id=reply_recipient_id,
+        actor_id=principal.user.id,
+        kind=CommunityNotificationKind.REPLY,
+        source_type=CommunityNotificationSource.COMMENT,
+        source_id=comment.id,
+        post_id=post.id,
+        comment_id=comment.id,
+        preview=comment.content,
     )
     post.reply_count += 1
     post.last_activity_at = now
@@ -770,6 +793,7 @@ def list_notifications(
     cursor: str | None,
     limit: int,
     unread_only: bool,
+    kind: CommunityNotificationKind | None = None,
 ) -> CommunityNotificationListResponse:
     conditions = [
         CommunityNotification.recipient_id == principal.user.id,
@@ -777,6 +801,8 @@ def list_notifications(
     ]
     if unread_only:
         conditions.append(CommunityNotification.read_at.is_(None))
+    if kind is not None:
+        conditions.append(CommunityNotification.kind == kind)
     if cursor is not None:
         created_at, record_id = _decode_cursor(cursor)
         conditions.append(
@@ -800,6 +826,7 @@ def list_notifications(
             select(func.count(CommunityNotification.id)).where(
                 CommunityNotification.recipient_id == principal.user.id,
                 CommunityNotification.read_at.is_(None),
+                _notification_visibility_condition(principal.user.id),
             )
         )
         or 0
@@ -1053,7 +1080,21 @@ def set_follow(
         )
     )
     if followed and existing is None:
-        db.add(CommunityUserFollow(follower_id=principal.user.id, followed_id=target.id))
+        follow = CommunityUserFollow(follower_id=principal.user.id, followed_id=target.id)
+        db.add(follow)
+        db.flush()
+        record_user_followed(db, follow)
+        _create_notification(
+            db,
+            recipient_id=target.id,
+            actor_id=principal.user.id,
+            kind=CommunityNotificationKind.FOLLOW,
+            source_type=CommunityNotificationSource.USER,
+            source_id=follow.id,
+            post_id=None,
+            comment_id=None,
+            preview=f"{principal.user.username} 关注了你",
+        )
     elif not followed and existing is not None:
         db.delete(existing)
     db.flush()
@@ -1526,18 +1567,135 @@ def _sync_mention_notifications(
     for recipient in recipients:
         if recipient.id in existing:
             continue
-        db.add(
-            CommunityNotification(
-                recipient_id=recipient.id,
-                actor_id=actor_id,
-                kind=CommunityNotificationKind.MENTION,
-                source_type=source_type,
-                source_id=source_id,
-                post_id=post_id,
-                comment_id=comment_id,
-                preview=preview,
-            )
+        _create_notification(
+            db,
+            recipient_id=recipient.id,
+            actor_id=actor_id,
+            kind=CommunityNotificationKind.MENTION,
+            source_type=source_type,
+            source_id=source_id,
+            post_id=post_id,
+            comment_id=comment_id,
+            preview=preview,
         )
+
+
+def get_notification_preferences(
+    db: Session, *, principal: Principal
+) -> CommunityNotificationPreferencesResponse:
+    stored = {
+        item.kind: item
+        for item in db.scalars(
+            select(CommunityNotificationPreference).where(
+                CommunityNotificationPreference.user_id == principal.user.id
+            )
+        ).all()
+    }
+    return CommunityNotificationPreferencesResponse(
+        items=[
+            CommunityNotificationPreferenceItem(
+                kind=kind,
+                in_app_enabled=stored[kind].in_app_enabled if kind in stored else True,
+                email_digest_enabled=(
+                    stored[kind].email_digest_enabled if kind in stored else False
+                ),
+            )
+            for kind in CommunityNotificationKind
+        ]
+    )
+
+
+def update_notification_preferences(
+    db: Session,
+    *,
+    payload: CommunityNotificationPreferencesUpdateRequest,
+    principal: Principal,
+) -> CommunityNotificationPreferencesResponse:
+    kinds = [item.kind for item in payload.items]
+    if len(kinds) != len(set(kinds)):
+        raise AppError(
+            "community.notification_preference_duplicate",
+            "通知偏好类型不能重复",
+            status_code=422,
+        )
+    stored = {
+        item.kind: item
+        for item in db.scalars(
+            select(CommunityNotificationPreference).where(
+                CommunityNotificationPreference.user_id == principal.user.id,
+                CommunityNotificationPreference.kind.in_(kinds),
+            )
+        ).all()
+    }
+    for item in payload.items:
+        preference = stored.get(item.kind)
+        if preference is None:
+            preference = CommunityNotificationPreference(
+                user_id=principal.user.id, kind=item.kind
+            )
+            db.add(preference)
+        preference.in_app_enabled = item.in_app_enabled
+        preference.email_digest_enabled = item.email_digest_enabled
+    db.commit()
+    return get_notification_preferences(db, principal=principal)
+
+
+def _create_notification(
+    db: Session,
+    *,
+    recipient_id: str,
+    actor_id: str,
+    kind: CommunityNotificationKind,
+    source_type: CommunityNotificationSource,
+    source_id: str,
+    post_id: str | None,
+    comment_id: str | None,
+    preview: str,
+) -> None:
+    if recipient_id == actor_id or not _notification_enabled(db, recipient_id, kind):
+        return
+    if kind not in {
+        CommunityNotificationKind.GROUP_DECISION,
+        CommunityNotificationKind.GROUP_ROLE_CHANGE,
+    }:
+        try:
+            _require_not_blocked(db, actor_id=actor_id, target_id=recipient_id)
+        except AppError:
+            return
+    existing = db.scalar(
+        select(CommunityNotification.id).where(
+            CommunityNotification.recipient_id == recipient_id,
+            CommunityNotification.kind == kind,
+            CommunityNotification.source_type == source_type,
+            CommunityNotification.source_id == source_id,
+        )
+    )
+    if existing is not None:
+        return
+    db.add(
+        CommunityNotification(
+            recipient_id=recipient_id,
+            actor_id=actor_id,
+            kind=kind,
+            source_type=source_type,
+            source_id=source_id,
+            post_id=post_id,
+            comment_id=comment_id,
+            preview=_notification_preview(preview),
+        )
+    )
+
+
+def _notification_enabled(
+    db: Session, recipient_id: str, kind: CommunityNotificationKind
+) -> bool:
+    preference = db.scalar(
+        select(CommunityNotificationPreference).where(
+            CommunityNotificationPreference.user_id == recipient_id,
+            CommunityNotificationPreference.kind == kind,
+        )
+    )
+    return preference is None or preference.in_app_enabled
 
 
 def _mention_allowed(db: Session, *, actor_id: str, recipient_id: str) -> bool:

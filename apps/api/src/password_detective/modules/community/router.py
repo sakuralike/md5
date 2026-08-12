@@ -16,12 +16,21 @@ from password_detective.core.idempotency import (
 )
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
-from password_detective.db.models.community import CommunityGroupRole
+from password_detective.db.models.community import (
+    CommunityActivityFeed,
+    CommunityGroupRole,
+    CommunityNotificationKind,
+)
 from password_detective.modules.auth.context import ClientContext, get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
     get_current_principal,
     get_optional_principal,
+)
+from password_detective.modules.community.activity_service import (
+    get_activity_preferences,
+    list_activity,
+    update_activity_preferences,
 )
 from password_detective.modules.community.group_service import (
     change_member_role,
@@ -34,6 +43,9 @@ from password_detective.modules.community.group_service import (
     update_group,
 )
 from password_detective.modules.community.schemas import (
+    CommunityActivityListResponse,
+    CommunityActivityPreferenceResponse,
+    CommunityActivityPreferenceUpdateRequest,
     CommunityBoardListResponse,
     CommunityBookmarkListResponse,
     CommunityCommentCreateRequest,
@@ -49,6 +61,8 @@ from password_detective.modules.community.schemas import (
     CommunityHomeResponse,
     CommunityMuteRequest,
     CommunityNotificationListResponse,
+    CommunityNotificationPreferencesResponse,
+    CommunityNotificationPreferencesUpdateRequest,
     CommunityNotificationReadResponse,
     CommunityOwnProfileResponse,
     CommunityPostCreateRequest,
@@ -70,6 +84,7 @@ from password_detective.modules.community.service import (
     create_report,
     delete_comment,
     delete_post,
+    get_notification_preferences,
     get_own_profile,
     get_post,
     get_public_profile,
@@ -89,6 +104,7 @@ from password_detective.modules.community.service import (
     set_post_bookmark,
     set_post_like,
     update_comment,
+    update_notification_preferences,
     update_post,
     update_privacy_preferences,
     update_public_profile,
@@ -624,6 +640,7 @@ def community_notifications(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
     unread_only: bool = False,
+    kind: CommunityNotificationKind | None = None,
 ) -> CommunityNotificationListResponse:
     return list_notifications(
         db,
@@ -631,7 +648,53 @@ def community_notifications(
         cursor=cursor,
         limit=limit,
         unread_only=unread_only,
+        kind=kind,
     )
+
+
+@router.get("/notifications/preferences", response_model=CommunityNotificationPreferencesResponse)
+def community_notification_preferences(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> CommunityNotificationPreferencesResponse:
+    return get_notification_preferences(db, principal=principal)
+
+
+@router.put("/notifications/preferences", response_model=CommunityNotificationPreferencesResponse)
+def community_notification_preferences_update(
+    payload: CommunityNotificationPreferencesUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> CommunityNotificationPreferencesResponse:
+    return update_notification_preferences(db, payload=payload, principal=principal)
+
+
+@router.get("/activity", response_model=CommunityActivityListResponse)
+def community_activity(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    feed: CommunityActivityFeed = CommunityActivityFeed.LATEST,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> CommunityActivityListResponse:
+    return list_activity(db, feed=feed, principal=principal, cursor=cursor, limit=limit)
+
+
+@router.get("/activity/preferences", response_model=CommunityActivityPreferenceResponse)
+def community_activity_preferences(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> CommunityActivityPreferenceResponse:
+    return get_activity_preferences(db, principal=principal)
+
+
+@router.put("/activity/preferences", response_model=CommunityActivityPreferenceResponse)
+def community_activity_preferences_update(
+    payload: CommunityActivityPreferenceUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> CommunityActivityPreferenceResponse:
+    return update_activity_preferences(db, payload=payload, principal=principal)
 
 
 @router.post(

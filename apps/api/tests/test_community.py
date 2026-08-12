@@ -914,3 +914,146 @@ def test_bookmarks_are_private_paginated_and_allow_removed_cleanup(client):
                 CommunityPostBookmark.post_id == first["id"],
             )
         ) is None
+
+
+
+def test_activity_feeds_and_reply_follow_notifications(client):
+    author = register_and_login(
+        client, username="activity_author", email="activity-author@example.com"
+    )
+    follower = register_and_login(
+        client, username="activity_follower", email="activity-follower@example.com"
+    )
+
+    followed = client.put(
+        "/api/v1/community/users/activity_author/follow",
+        headers=headers(follower, "activity-follow-001"),
+    )
+    assert followed.status_code == 200
+
+    post = client.post(
+        "/api/v1/community/posts",
+        json={**post_payload(), "title": "社区动态合成验证主题"},
+        headers=headers(author, "activity-post-001"),
+    )
+    assert post.status_code == 201
+    post_id = post.json()["id"]
+
+    comment = client.post(
+        f"/api/v1/community/posts/{post_id}/comments",
+        json={"content": "这是用于验证回复通知的合成评论。", "rules_accepted": True},
+        headers=headers(follower, "activity-comment-001"),
+    )
+    assert comment.status_code == 201
+
+    latest = client.get("/api/v1/community/activity?feed=latest&limit=10")
+    assert latest.status_code == 200
+    latest_kinds = [item["kind"] for item in latest.json()["items"]]
+    assert "post_published" in latest_kinds
+    assert "comment_published" in latest_kinds
+    assert "user_followed" in latest_kinds
+
+    following = client.get(
+        "/api/v1/community/activity?feed=following&limit=10",
+        headers={"Authorization": f"Bearer {follower['access_token']}"},
+    )
+    assert following.status_code == 200
+    assert all(
+        item["actor"]["username"] == "activity_author"
+        for item in following.json()["items"]
+    )
+    assert any(item["kind"] == "post_published" for item in following.json()["items"])
+
+    anonymous_following = client.get("/api/v1/community/activity?feed=following")
+    assert anonymous_following.status_code == 401
+
+    author_notifications = client.get(
+        "/api/v1/community/notifications?kind=reply",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert author_notifications.status_code == 200
+    assert [item["kind"] for item in author_notifications.json()["items"]] == ["reply"]
+    assert author_notifications.json()["items"][0]["post_id"] == post_id
+
+    follow_notifications = client.get(
+        "/api/v1/community/notifications?kind=follow",
+        headers={"Authorization": f"Bearer {author['access_token']}"},
+    )
+    assert follow_notifications.status_code == 200
+    assert follow_notifications.json()["items"][0]["post_id"] is None
+    assert (
+        follow_notifications.json()["items"][0]["actor"]["username"]
+        == "activity_follower"
+    )
+
+
+def test_activity_and_notification_preferences_only_affect_future_events(client):
+    target = register_and_login(
+        client, username="preference_target", email="preference-target@example.com"
+    )
+    actor = register_and_login(
+        client, username="preference_actor", email="preference-actor@example.com"
+    )
+
+    preferences = client.get(
+        "/api/v1/community/notifications/preferences",
+        headers={"Authorization": f"Bearer {target['access_token']}"},
+    )
+    assert preferences.status_code == 200
+    assert {item["kind"] for item in preferences.json()["items"]} >= {
+        "mention",
+        "reply",
+        "follow",
+    }
+
+    updated = client.put(
+        "/api/v1/community/notifications/preferences",
+        json={
+            "items": [
+                {
+                    "kind": "follow",
+                    "in_app_enabled": False,
+                    "email_digest_enabled": True,
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {target['access_token']}"},
+    )
+    assert updated.status_code == 200
+    follow_preference = next(
+        item for item in updated.json()["items"] if item["kind"] == "follow"
+    )
+    assert follow_preference == {
+        "kind": "follow",
+        "in_app_enabled": False,
+        "email_digest_enabled": True,
+    }
+
+    activity_preferences = client.put(
+        "/api/v1/community/activity/preferences",
+        json={"share_group_joins": False, "share_follows": False},
+        headers={"Authorization": f"Bearer {actor['access_token']}"},
+    )
+    assert activity_preferences.status_code == 200
+    assert activity_preferences.json()["share_follows"] is False
+
+    followed = client.put(
+        "/api/v1/community/users/preference_target/follow",
+        headers=headers(actor, "preference-follow-001"),
+    )
+    assert followed.status_code == 200
+
+    target_notifications = client.get(
+        "/api/v1/community/notifications?kind=follow",
+        headers={"Authorization": f"Bearer {target['access_token']}"},
+    )
+    assert target_notifications.status_code == 200
+    assert target_notifications.json()["items"] == []
+
+    latest = client.get("/api/v1/community/activity?feed=latest&limit=20")
+    assert latest.status_code == 200
+    assert not any(
+        item["kind"] == "user_followed"
+        and item["actor"]["username"] == "preference_actor"
+        for item in latest.json()["items"]
+    )

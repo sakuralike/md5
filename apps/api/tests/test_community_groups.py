@@ -77,6 +77,17 @@ def test_public_group_join_is_idempotent_and_member_can_post(client):
     assert replay.status_code == 200
     assert replay.json()["group"]["member_count"] == 2
 
+    activity = client.get(
+        "/api/v1/community/activity?feed=groups",
+        headers={"Authorization": f"Bearer {member['access_token']}"},
+    )
+    assert activity.status_code == 200
+    joined_events = [
+        item for item in activity.json()["items"] if item["kind"] == "group_joined"
+    ]
+    assert len(joined_events) == 1
+    assert joined_events[0]["group_slug"] == "public-lab"
+
     post = client.post(
         "/api/v1/community/posts",
         json={
@@ -131,6 +142,16 @@ def test_approval_group_requires_owner_decision(client):
     )
     assert detail.status_code == 200
     assert any(item["username"] == "approval_member" for item in detail.json()["members"])
+
+    activity = client.get(
+        "/api/v1/community/activity?feed=groups",
+        headers={"Authorization": f"Bearer {member['access_token']}"},
+    )
+    assert activity.status_code == 200
+    assert any(
+        item["kind"] == "group_joined" and item["group_slug"] == "approval-lab"
+        for item in activity.json()["items"]
+    )
 
 
 def test_private_group_never_leaks_to_non_members(client):

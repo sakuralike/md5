@@ -188,11 +188,39 @@ class CommunityModerationAction(StrEnum):
 
 class CommunityNotificationKind(StrEnum):
     MENTION = "mention"
+    REPLY = "reply"
+    FOLLOW = "follow"
+    LIKE_SUMMARY = "like_summary"
+    GROUP_APPLICATION = "group_application"
+    GROUP_DECISION = "group_decision"
+    GROUP_ROLE_CHANGE = "group_role_change"
 
 
 class CommunityNotificationSource(StrEnum):
     POST = "post"
     COMMENT = "comment"
+    USER = "user"
+    GROUP = "group"
+
+
+class CommunityActivityKind(StrEnum):
+    POST_PUBLISHED = "post_published"
+    COMMENT_PUBLISHED = "comment_published"
+    GROUP_JOINED = "group_joined"
+    USER_FOLLOWED = "user_followed"
+
+
+class CommunityActivitySource(StrEnum):
+    POST = "post"
+    COMMENT = "comment"
+    GROUP_MEMBERSHIP = "group_membership"
+    USER_FOLLOW = "user_follow"
+
+
+class CommunityActivityFeed(StrEnum):
+    LATEST = "latest"
+    FOLLOWING = "following"
+    GROUPS = "groups"
 
 
 class CommunityPost(Base):
@@ -424,8 +452,11 @@ class CommunityNotification(Base):
         Enum(CommunityNotificationSource, native_enum=False, length=16), index=True
     )
     source_id: Mapped[str] = mapped_column(String(36))
-    post_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    post_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_posts.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     comment_id: Mapped[str | None] = mapped_column(
         String(36),
@@ -437,6 +468,85 @@ class CommunityNotification(Base):
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityNotificationPreference(Base):
+    __tablename__ = "community_notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "kind", name="uq_community_notification_preference"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[CommunityNotificationKind] = mapped_column(
+        Enum(CommunityNotificationKind, native_enum=False, length=24), index=True
+    )
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_digest_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityActivityPreference(Base):
+    __tablename__ = "community_activity_preferences"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    share_group_joins: Mapped[bool] = mapped_column(Boolean, default=True)
+    share_follows: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityActivityEvent(Base):
+    __tablename__ = "community_activity_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "kind", "source_type", "source_id", name="uq_community_activity_source"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    kind: Mapped[CommunityActivityKind] = mapped_column(
+        Enum(CommunityActivityKind, native_enum=False, length=24), index=True
+    )
+    source_type: Mapped[CommunityActivitySource] = mapped_column(
+        Enum(CommunityActivitySource, native_enum=False, length=24), index=True
+    )
+    source_id: Mapped[str] = mapped_column(String(36))
+    post_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_comments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_groups.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    preview: Mapped[str] = mapped_column(String(180))
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )

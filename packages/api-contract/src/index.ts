@@ -1391,8 +1391,26 @@ export type CommunityReportReason = "spam" | "harassment" | "privacy" | "unsafe"
 export type CommunityReportStatus = "open" | "resolved" | "dismissed";
 export type CommunityReportDecision = "dismiss" | "remove_content" | "remove_and_lock";
 export type CommunityModerationAction = "lock" | "unlock" | "pin" | "unpin" | "remove" | "restore";
-export type CommunityNotificationKind = "mention";
-export type CommunityNotificationSource = "post" | "comment";
+export type CommunityNotificationKind =
+  | "mention"
+  | "reply"
+  | "follow"
+  | "like_summary"
+  | "group_application"
+  | "group_decision"
+  | "group_role_change";
+export type CommunityNotificationSource = "post" | "comment" | "user" | "group";
+export type CommunityActivityFeed = "latest" | "following" | "groups";
+export type CommunityActivityKind =
+  | "post_published"
+  | "comment_published"
+  | "group_joined"
+  | "user_followed";
+export type CommunityActivitySource =
+  | "post"
+  | "comment"
+  | "group_membership"
+  | "user_follow";
 
 export type CommunityBoardStatus = "active" | "inactive";
 export type CommunityGroupVisibility = "public" | "approval" | "private";
@@ -1600,7 +1618,7 @@ export interface CommunityNotificationResponse {
   kind: CommunityNotificationKind;
   source_type: CommunityNotificationSource;
   source_id: string;
-  post_id: string;
+  post_id: string | null;
   comment_id: string | null;
   preview: string;
   actor: CommunityAuthor;
@@ -1618,6 +1636,53 @@ export interface CommunityNotificationListResponse {
 export interface CommunityNotificationReadResponse {
   message: string;
   unread_count: number;
+}
+
+export interface CommunityNotificationPreferenceItem {
+  kind: CommunityNotificationKind;
+  in_app_enabled: boolean;
+  email_digest_enabled: boolean;
+}
+
+export interface CommunityNotificationPreferencesResponse {
+  items: CommunityNotificationPreferenceItem[];
+}
+
+export interface CommunityNotificationPreferencesUpdateRequest {
+  items: CommunityNotificationPreferenceItem[];
+}
+
+export interface CommunityActivityPreferenceResponse {
+  share_group_joins: boolean;
+  share_follows: boolean;
+}
+
+export interface CommunityActivityPreferenceUpdateRequest {
+  share_group_joins: boolean;
+  share_follows: boolean;
+}
+
+export interface CommunityActivityItem {
+  id: string;
+  kind: CommunityActivityKind;
+  source_type: CommunityActivitySource;
+  source_id: string;
+  actor: CommunityAuthor;
+  preview: string;
+  post_id: string | null;
+  post_title: string | null;
+  comment_id: string | null;
+  group_slug: string | null;
+  group_name: string | null;
+  target_username: string | null;
+  created_at: string;
+}
+
+export interface CommunityActivityListResponse {
+  feed: CommunityActivityFeed;
+  items: CommunityActivityItem[];
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 export type CommunityRelationVisibility = "public" | "private";

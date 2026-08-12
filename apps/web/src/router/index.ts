@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import AccountActivityPage from "../pages/AccountActivityPage.vue";
 import AccountPrivacyPage from "../pages/AccountPrivacyPage.vue";
 import CommunityPage from "../pages/CommunityPage.vue";
+import CommunityActivityPage from "../pages/CommunityActivityPage.vue";
 import CommunityBookmarksPage from "../pages/CommunityBookmarksPage.vue";
 import CommunityHomePage from "../pages/CommunityHomePage.vue";
 import CommunityGroupsPage from "../pages/CommunityGroupsPage.vue";
@@ -34,6 +35,7 @@ const router = createRouter({
     { path: "/verify-email", component: VerifyEmailPage },
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
     { path: "/community", component: CommunityHomePage },
+    { path: "/community/activity", component: CommunityActivityPage },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },
     { path: "/community/groups", component: CommunityGroupsPage },
     { path: "/community/groups/:slug", component: CommunityGroupPage },

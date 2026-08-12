@@ -16,17 +16,23 @@ vi.mock("../stores/auth", () => ({
 
 vi.mock("../services/community", () => ({
   createCommunityIdempotencyKey: vi.fn(() => "synthetic-idempotency-key"),
+  getCommunityNotificationPreferences: vi.fn(() => new Promise(() => undefined)),
   listCommunityNotifications: vi.fn(() => new Promise(() => undefined)),
   markAllCommunityNotificationsRead: vi.fn(),
   markCommunityNotificationRead: vi.fn(),
+  updateCommunityNotificationPreferences: vi.fn(),
 }));
 
 describe("CommunityNotificationsPage", () => {
-  it("renders the mention inbox and read controls", async () => {
+  it("renders notification filters, preferences, and read controls", async () => {
     const html = await renderToString(createSSRApp(CommunityNotificationsPage));
 
     expect(html).toContain("社区通知中心");
-    expect(html).toContain("提及我的内容");
+    expect(html).toContain("通知类型筛选");
+    expect(html).toContain("通知接收偏好");
+    expect(html).toContain("提及");
+    expect(html).toContain("回复");
+    expect(html).toContain("关注");
     expect(html).toContain("未读 0");
     expect(html).toContain("全部已读");
     expect(html).toContain("通知仅保存最小化摘要");

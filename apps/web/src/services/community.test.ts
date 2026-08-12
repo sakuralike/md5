@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCommunityPost,
   deleteCommunityComment,
+  getCommunityActivityPreferences,
   getCommunityHome,
+  getCommunityNotificationPreferences,
   getCommunityPost,
+  listCommunityActivity,
   listCommunityComments,
   listCommunityNotifications,
   markAllCommunityNotificationsRead,
@@ -12,6 +15,8 @@ import {
   setCommunityCommentLike,
   setCommunityPostBookmark,
   setCommunityPostLike,
+  updateCommunityActivityPreferences,
+  updateCommunityNotificationPreferences,
 } from "./community";
 
 function jsonResponse(body: unknown): Response {
@@ -45,6 +50,64 @@ describe("web community service", () => {
     expect(commentsUrl.pathname).toContain("/community/posts/post%2Fwith%20space/comments");
     expect(commentsUrl.searchParams.get("cursor")).toBe("cursor-value");
     expect(commentsUrl.searchParams.get("limit")).toBe("10");
+  });
+
+  it("encodes activity feeds, notification filters, and preference updates", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ items: [], unread_count: 0 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await listCommunityActivity("following", "access-token", {
+      cursor: "activity-cursor",
+      limit: 12,
+    });
+    await listCommunityNotifications("access-token", { kind: "reply", limit: 9 });
+    await getCommunityActivityPreferences("access-token");
+    await updateCommunityActivityPreferences(
+      { share_group_joins: false, share_follows: true },
+      "access-token",
+    );
+    await getCommunityNotificationPreferences("access-token");
+    await updateCommunityNotificationPreferences(
+      {
+        items: [
+          { kind: "follow", in_app_enabled: false, email_digest_enabled: true },
+        ],
+      },
+      "access-token",
+    );
+
+    const activityUrl = new URL(String(fetchMock.mock.calls[0]?.[0]), "http://synthetic.local");
+    expect(activityUrl.searchParams.get("feed")).toBe("following");
+    expect(activityUrl.searchParams.get("cursor")).toBe("activity-cursor");
+    expect(activityUrl.searchParams.get("limit")).toBe("12");
+    expect((fetchMock.mock.calls[0]?.[1]?.headers as Headers).get("Authorization")).toBe(
+      "Bearer access-token",
+    );
+
+    const notificationUrl = new URL(
+      String(fetchMock.mock.calls[1]?.[0]),
+      "http://synthetic.local",
+    );
+    expect(notificationUrl.searchParams.get("kind")).toBe("reply");
+    expect(notificationUrl.searchParams.get("limit")).toBe("9");
+
+    const activityUpdate = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    expect(activityUpdate.method).toBe("PUT");
+    expect(activityUpdate.body).toBe(
+      JSON.stringify({ share_group_joins: false, share_follows: true }),
+    );
+    const notificationUpdate = fetchMock.mock.calls[5]?.[1] as RequestInit;
+    expect(notificationUpdate.method).toBe("PUT");
+    expect(notificationUpdate.body).toBe(
+      JSON.stringify({
+        items: [
+          { kind: "follow", in_app_enabled: false, email_digest_enabled: true },
+        ],
+      }),
+    );
   });
 
   it("keeps idempotency and authorization headers on writes", async () => {

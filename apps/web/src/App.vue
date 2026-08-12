@@ -112,6 +112,7 @@ onBeforeUnmount(releaseCustomBackground);
       <nav class="nav" aria-label="主导航">
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/community">社区</RouterLink>
+        <RouterLink to="/community/activity">社区动态</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/community/notifications">社区通知</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/community/bookmarks">我的收藏</RouterLink>
         <RouterLink v-if="auth.isAuthenticated" to="/community/settings">社区资料</RouterLink>

@@ -794,3 +794,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 数据迁移 | `20260812_0032_community_boards_groups.py` | Alembic 前滚/降级/重新前滚纳入本轮统一门禁 | 本地 SQLite 验证；目标 MySQL 待部署验证 |
 
 本切片完成 COMMUNITY-45～54 的本地实现和自动化。下一开发轮次进入 WP5-I7 动态信息流与社区通知中心；动态、通知和后续搜索不得绕过本轮建立的板块状态、群组成员资格与私密内容可见性。
+
+
+## 2026-08-12 WP5-I7 第 1 个开发切片：社区动态与通知偏好
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| COMMUNITY-55～61 动态信息流 | `CommunityActivityEvent`、`activity_service.py`、`GET /community/activity`、`CommunityActivityPage.vue` | 动态流/偏好后端测试、群组动态断言、页面渲染和服务请求测试 | 本地实现完成；目标 MySQL 迁移和真实浏览器回归待部署 |
+| COMMUNITY-69～72 通知扩展 | 回复/提及/关注通知、业务唯一键、类型筛选、可空内容引用 | 通知类型过滤、未读、偏好关闭未来事件和越权测试 | 当前三类通知完成；点赞、群组、私信和治理通知待后续 |
+| COMMUNITY-73 通知偏好 | `community_notification_preferences`、GET/PUT API、Web 偏好矩阵 | API 偏好持久化和 Web 渲染/请求测试 | 站内偏好生效；邮件摘要只保存策略，尚无实际投递任务 |
+| COMMUNITY-76 屏蔽过滤 | 通知创建和动态读取复用社交屏蔽边界 | 屏蔽/静音既有测试及动态专项测试 | 普通互动不旁路屏蔽；治理通知类型已预留但尚未生成 |
+| 数据迁移 | `20260812_0033_community_activity_notifications.py` | Alembic 往返和统一门禁 | 本地 SQLite 验证待本轮统一门禁；目标 MySQL 待部署 |
+
+下一开发切片继续 WP5-I7，优先实现点赞摘要、群组治理通知与 Outbox 重放，再接入邮件摘要实际投递和实时未读增强。

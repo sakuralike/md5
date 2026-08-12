@@ -400,10 +400,12 @@
 |---|---|---|---|
 | COMMUNITY-14～31 | 社区首页、帖子、评论、统一可见性 | `test_community.py` 首页聚合、版本冲突、删除占位、两级回复和评论游标；三个独立页面渲染测试、详情治理渲染覆盖；Web typecheck/lint/Vitest | 部分实现：生命周期、评论游标、独立首页/详情/发布页和详情治理已落地；草稿、热门规则、提及通知、回复数重建和 Playwright 仍待开发 |
 | COMMUNITY-32～35 | 点赞、收藏、可重建计数、失效引用清理 | 关系唯一约束、幂等重放、投影计数、私有收藏与不可见内容负向测试 | 本地编码和自动化完成，目标 MySQL/浏览器回归待部署 |
-| COMMUNITY-36 | 点赞摘要通知 | Outbox 重试、聚合窗口、通知偏好和屏蔽关系测试 | 留待 WP5-I7，当前未编码 |
+| COMMUNITY-36 | 点赞摘要通知 | Outbox 重试、聚合窗口、通知偏好和屏蔽关系测试 | WP5-I7 通知类型和偏好已预留，聚合生成仍未编码 |
 | COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | `test_community_profiles.py`、关系页面渲染测试和统一门禁 | 本地已实现；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | `test_community_groups.py`、`test_community_board_admin.py`、群组与管理配置页面渲染测试、Alembic 往返和统一门禁 | 本地代码与自动化已完成；目标 MySQL/浏览器部署回归待验证 |
-| COMMUNITY-55～76 | 动态、搜索和通知中心 | Outbox 重放、搜索重建、通知去重、屏蔽过滤、SSE 降级测试 | 已规划，未编码 |
+| COMMUNITY-55～61 | 动态信息流 | `test_activity_feeds_and_reply_follow_notifications`、偏好未来事件测试、群组动态断言、Web 页面/服务测试 | 本地编码完成；目标 MySQL/浏览器部署回归待验证 |
+| COMMUNITY-62～68 | 社区搜索 | Provider、权限过滤、索引重放与重建测试 | 已规划，未编码 |
+| COMMUNITY-69～76 | 通知中心 | 通知去重、类型过滤、屏蔽、偏好、已读和 Web 页面测试 | 提及/回复/关注和站内/邮件偏好子集已实现；点赞、群组、私信/治理、邮件投递与 SSE 待后续 |
 | COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
 
 详细验收标准、数据模型、API 和迭代顺序见 `项目文档/密码侦探社社区完整功能开发计划-v1.0.md`；上述条目不计入当前完成度，直至代码、迁移、自动化和目标环境证据齐备。
@@ -486,3 +488,15 @@
 | COMMUNITY-42 静音视图过滤 | `CommunityUserMute`、当前用户隐藏作者集合 | `test_block_and_mute_filter_existing_posts_from_read_paths` | 已通过本地测试 |
 | COMMUNITY-43～44 计数投影和用户名策略 | 关注/粉丝投影重建、禁用用户过滤、认证用户名不可变 | 关系测试、`test_username_cannot_change_after_registration` | 已通过本地测试 |
 | Web 路径 | 公开主页、关系列表、社区设置及资料链接 | `CommunityProfilePage.test.ts`、`CommunityRelationsPage.test.ts`、`CommunitySettingsPage.test.ts` | 已通过本地 Vitest；目标浏览器回归待部署 |
+
+
+## 2026-08-12 WP5-I7 第 1 个开发切片：动态与通知偏好
+
+| 需求 | 代码证据 | 自动化证据 | 状态 |
+|---|---|---|---|
+| COMMUNITY-55～59 三类动态和游标 | `CommunityActivityEvent`、`GET /community/activity`、读取时过滤 | `test_activity_feeds_and_reply_follow_notifications`、群组加入动态断言 | 本地通过 |
+| COMMUNITY-60 未来事件偏好 | `CommunityActivityPreference`、GET/PUT 偏好 API | `test_activity_and_notification_preferences_only_affect_future_events` | 本地通过 |
+| COMMUNITY-61 最小摘要和失效 | 180 字摘要、源引用、内容/账号/群组状态过滤 | 动态与既有私密群组负向测试 | 本地通过 |
+| COMMUNITY-69～72 回复/提及/关注 | 通知类型扩展、唯一业务键、类型过滤、已读 API | 通知分类、去重、未读、越权和 Web 测试 | 当前子集通过 |
+| COMMUNITY-73 偏好 | 通知偏好表、GET/PUT API、Web 偏好矩阵 | 后端持久化与 Web service/render 测试 | 站内生效；邮件投递待实现 |
+| COMMUNITY-76 屏蔽边界 | 通知写入和动态读取复用 block/mute | 社交关系和动态专项测试 | 普通互动通过；治理通知待生成后补测 |
