@@ -9,6 +9,7 @@ from password_detective.db.models.community import (
     CommunityComment,
     CommunityContentStatus,
     CommunityPost,
+    CommunityPostRevision,
     CommunityReport,
     CommunityReportStatus,
 )
@@ -389,3 +390,111 @@ def test_admin_can_pin_remove_and_restore_post(client):
     assert restored.status_code == 200
     assert restored.json()["post"]["status"] == "published"
     assert client.get(f"/api/v1/community/posts/{created['id']}").status_code == 200
+
+
+
+def test_author_post_lifecycle_uses_versions_revisions_and_placeholder_delete(client):
+    author = register_and_login(
+        client,
+        username="lifecycle_author",
+        email="lifecycle-author@example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "community-lifecycle-create-001"),
+    ).json()
+
+    updated = client.patch(
+        f"/api/v1/community/posts/{created['id']}",
+        json={
+            **post_payload(),
+            "title": "更新后的合成测试恢复排障记录",
+            "content": "这是更新后的合成测试内容，只描述授权范围、校验步骤和可回滚的安全处理方式。",
+            "expected_version": 1,
+        },
+        headers=headers(author, "community-lifecycle-update-001"),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 2
+    assert updated.json()["edited_at"] is not None
+
+    stale = client.patch(
+        f"/api/v1/community/posts/{created['id']}",
+        json={
+            **post_payload(),
+            "expected_version": 1,
+        },
+        headers=headers(author, "community-lifecycle-update-002"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "community.edit_conflict"
+
+    with client.app.state.database.session_factory() as db:
+        revision = db.scalar(
+            select(CommunityPostRevision).where(
+                CommunityPostRevision.post_id == created["id"],
+                CommunityPostRevision.version == 1,
+            )
+        )
+        assert revision is not None
+        assert revision.title_snapshot == post_payload()["title"]
+
+    deleted = client.delete(
+        f"/api/v1/community/posts/{created['id']}?expected_version=2",
+        headers=headers(author, "community-lifecycle-delete-001"),
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["version"] == 3
+    assert deleted.json()["title"] == "[主题已由作者删除]"
+    assert client.get(f"/api/v1/community/posts/{created['id']}").json()["content"].startswith(
+        "该主题已由作者删除"
+    )
+
+
+def test_comment_cursor_and_nested_reply_metadata(client):
+    author = register_and_login(
+        client,
+        username="cursor_author",
+        email="cursor-author@example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json=post_payload(),
+        headers=headers(author, "community-cursor-post-001"),
+    ).json()
+    first = client.post(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        json={"content": "第一条合成评论用于验证游标顺序。", "rules_accepted": True},
+        headers=headers(author, "community-cursor-comment-001"),
+    ).json()["comments"][0]
+    second = client.post(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        json={
+            "content": "第二条回复用于验证嵌套关系和游标分页。",
+            "parent_id": first["id"],
+            "rules_accepted": True,
+        },
+        headers=headers(author, "community-cursor-comment-002"),
+    ).json()["comments"][-1]
+    assert second["root_id"] == first["id"]
+    assert second["reply_to_user_id"] == first["author"]["user_id"]
+
+    page_one = client.get(f"/api/v1/community/posts/{created['id']}/comments?limit=1")
+    assert page_one.status_code == 200
+    assert page_one.json()["has_more"] is True
+    assert page_one.json()["items"][0]["id"] == first["id"]
+    page_two = client.get(
+        f"/api/v1/community/posts/{created['id']}/comments",
+        params={"limit": 1, "cursor": page_one.json()["next_cursor"]},
+    )
+    assert page_two.status_code == 200
+    assert page_two.json()["items"][0]["id"] == second["id"]
+    assert page_two.json()["has_more"] is False
+
+
+def test_community_home_returns_boards_and_post_summary(client):
+    response = client.get("/api/v1/community/home?page_size=5")
+    assert response.status_code == 200
+    assert len(response.json()["boards"]) == 4
+    assert response.json()["posts"]["page_size"] == 5

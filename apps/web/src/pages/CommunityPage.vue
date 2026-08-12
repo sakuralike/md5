@@ -2,6 +2,7 @@
 import type {
   CommunityBoard,
   CommunityBoardCode,
+  CommunityCommentResponse,
   CommunityPostDetail,
   CommunityPostSummary,
   CommunityReportReason,
@@ -27,9 +28,14 @@ import {
   createCommunityIdempotencyKey,
   createCommunityPost,
   createCommunityReport,
+  deleteCommunityComment,
+  deleteCommunityPost,
   getCommunityPost,
   listCommunityBoards,
+  listCommunityComments,
   listCommunityPosts,
+  updateCommunityComment,
+  updateCommunityPost,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
@@ -38,8 +44,10 @@ const boards = ref<CommunityBoard[]>([]);
 const posts = ref<CommunityPostSummary[]>([]);
 const selectedBoard = ref<CommunityBoardCode | undefined>();
 const selectedPost = ref<CommunityPostDetail | null>(null);
+const nextCommentCursor = ref<string | null>(null);
 const loading = ref(true);
 const detailLoading = ref(false);
+const commentsLoading = ref(false);
 const submitting = ref(false);
 const error = ref("");
 const success = ref("");
@@ -47,6 +55,15 @@ const title = ref("");
 const content = ref("");
 const comment = ref("");
 const rulesAccepted = ref(false);
+const commentRulesAccepted = ref(false);
+const replyParent = ref<CommunityCommentResponse | null>(null);
+const editingPost = ref(false);
+const editTitle = ref("");
+const editContent = ref("");
+const editingCommentId = ref<string | null>(null);
+const editCommentContent = ref("");
+const postDeleteArmed = ref(false);
+const commentDeleteArmed = ref<string | null>(null);
 const reportTarget = ref<{ type: "post" | "comment"; commentId: string | null } | null>(null);
 const reportReason = ref<CommunityReportReason>("other");
 const reportDetails = ref("");
@@ -57,6 +74,12 @@ const selectedBoardName = computed(() => {
 });
 const canPublish = computed(
   () => auth.isAuthenticated && auth.user?.email_verified && rulesAccepted.value,
+);
+const canComment = computed(
+  () => auth.isAuthenticated && auth.user?.email_verified && commentRulesAccepted.value,
+);
+const isSelectedPostAuthor = computed(
+  () => Boolean(auth.user && selectedPost.value?.author.user_id === auth.user.id),
 );
 
 onMounted(async () => {
@@ -91,17 +114,42 @@ async function loadPosts(): Promise<void> {
   }
 }
 
+async function refreshSelectedPost(postId: string): Promise<void> {
+  const [detail, commentPage] = await Promise.all([
+    getCommunityPost(postId),
+    listCommunityComments(postId),
+  ]);
+  selectedPost.value = { ...detail, comments: commentPage.items };
+  nextCommentCursor.value = commentPage.next_cursor;
+}
+
 async function openPost(post: CommunityPostSummary): Promise<void> {
   detailLoading.value = true;
   error.value = "";
   try {
-    selectedPost.value = await getCommunityPost(post.id);
-    reportTarget.value = null;
-    reportDetails.value = "";
+    await refreshSelectedPost(post.id);
+    resetDetailForms();
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "主题详情加载失败";
   } finally {
     detailLoading.value = false;
+  }
+}
+
+async function loadMoreComments(): Promise<void> {
+  if (!selectedPost.value || !nextCommentCursor.value || commentsLoading.value) return;
+  commentsLoading.value = true;
+  try {
+    const page = await listCommunityComments(selectedPost.value.id, nextCommentCursor.value);
+    selectedPost.value = {
+      ...selectedPost.value,
+      comments: [...selectedPost.value.comments, ...page.items],
+    };
+    nextCommentCursor.value = page.next_cursor;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "更多回复加载失败";
+  } finally {
+    commentsLoading.value = false;
   }
 }
 
@@ -124,7 +172,7 @@ async function submitPost(): Promise<void> {
     title.value = "";
     content.value = "";
     rulesAccepted.value = false;
-    selectedPost.value = created;
+    await refreshSelectedPost(created.id);
     success.value = "主题已发布，感谢你分享合成数据场景下的实践。";
     await loadPosts();
   } catch (caught) {
@@ -134,19 +182,91 @@ async function submitPost(): Promise<void> {
   }
 }
 
+function beginPostEdit(): void {
+  if (!selectedPost.value) return;
+  editingPost.value = true;
+  editTitle.value = selectedPost.value.title;
+  editContent.value = selectedPost.value.content;
+  postDeleteArmed.value = false;
+}
+
+async function savePostEdit(): Promise<void> {
+  if (!selectedPost.value || !isSelectedPostAuthor.value) return;
+  submitting.value = true;
+  error.value = "";
+  try {
+    const postId = selectedPost.value.id;
+    await updateCommunityPost(
+      postId,
+      {
+        title: editTitle.value.trim(),
+        content: editContent.value.trim(),
+        rules_accepted: true,
+        expected_version: selectedPost.value.version,
+      },
+      auth.accessToken,
+      createCommunityIdempotencyKey("post-update"),
+    );
+    await refreshSelectedPost(postId);
+    editingPost.value = false;
+    success.value = "主题修改已保存。";
+    await loadPosts();
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题修改失败";
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function removePost(): Promise<void> {
+  if (!selectedPost.value || !isSelectedPostAuthor.value) return;
+  if (!postDeleteArmed.value) {
+    postDeleteArmed.value = true;
+    return;
+  }
+  submitting.value = true;
+  error.value = "";
+  try {
+    const postId = selectedPost.value.id;
+    await deleteCommunityPost(
+      postId,
+      selectedPost.value.version,
+      auth.accessToken,
+      createCommunityIdempotencyKey("post-delete"),
+    );
+    await refreshSelectedPost(postId);
+    editingPost.value = false;
+    postDeleteArmed.value = false;
+    success.value = "主题正文已删除并保留结构占位。";
+    await loadPosts();
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题删除失败";
+  } finally {
+    submitting.value = false;
+  }
+}
+
 async function submitComment(): Promise<void> {
-  if (!selectedPost.value || !canPublish.value || comment.value.trim().length < 2) return;
+  if (!selectedPost.value || !canComment.value || comment.value.trim().length < 2) return;
   submitting.value = true;
   error.value = "";
   success.value = "";
   try {
-    selectedPost.value = await createCommunityComment(
-      selectedPost.value.id,
-      { content: comment.value.trim(), parent_id: null, rules_accepted: true },
+    const postId = selectedPost.value.id;
+    await createCommunityComment(
+      postId,
+      {
+        content: comment.value.trim(),
+        parent_id: replyParent.value?.id ?? null,
+        rules_accepted: true,
+      },
       auth.accessToken,
       createCommunityIdempotencyKey("comment"),
     );
     comment.value = "";
+    commentRulesAccepted.value = false;
+    replyParent.value = null;
+    await refreshSelectedPost(postId);
     success.value = "回复已发布。";
     await loadPosts();
   } catch (caught) {
@@ -156,6 +276,63 @@ async function submitComment(): Promise<void> {
   }
 }
 
+function beginCommentEdit(item: CommunityCommentResponse): void {
+  editingCommentId.value = item.id;
+  editCommentContent.value = item.content;
+  commentDeleteArmed.value = null;
+}
+
+async function saveCommentEdit(item: CommunityCommentResponse): Promise<void> {
+  if (!selectedPost.value || item.author.user_id !== auth.user?.id) return;
+  submitting.value = true;
+  error.value = "";
+  try {
+    const postId = selectedPost.value.id;
+    await updateCommunityComment(
+      item.id,
+      {
+        content: editCommentContent.value.trim(),
+        rules_accepted: true,
+        expected_version: item.version,
+      },
+      auth.accessToken,
+      createCommunityIdempotencyKey("comment-update"),
+    );
+    await refreshSelectedPost(postId);
+    editingCommentId.value = null;
+    success.value = "回复修改已保存。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "回复修改失败";
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function removeComment(item: CommunityCommentResponse): Promise<void> {
+  if (!selectedPost.value || item.author.user_id !== auth.user?.id) return;
+  if (commentDeleteArmed.value !== item.id) {
+    commentDeleteArmed.value = item.id;
+    return;
+  }
+  submitting.value = true;
+  error.value = "";
+  try {
+    const postId = selectedPost.value.id;
+    await deleteCommunityComment(
+      item.id,
+      item.version,
+      auth.accessToken,
+      createCommunityIdempotencyKey("comment-delete"),
+    );
+    await refreshSelectedPost(postId);
+    commentDeleteArmed.value = null;
+    success.value = "回复正文已删除并保留结构占位。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "回复删除失败";
+  } finally {
+    submitting.value = false;
+  }
+}
 
 function beginReport(type: "post" | "comment", commentId: string | null = null): void {
   reportTarget.value = { type, commentId };
@@ -195,6 +372,17 @@ async function submitReport(): Promise<void> {
   } finally {
     submitting.value = false;
   }
+}
+
+function resetDetailForms(): void {
+  reportTarget.value = null;
+  reportDetails.value = "";
+  replyParent.value = null;
+  commentRulesAccepted.value = false;
+  editingPost.value = false;
+  editingCommentId.value = null;
+  postDeleteArmed.value = false;
+  commentDeleteArmed.value = null;
 }
 
 function reportReasonLabel(reason: CommunityReportReason): string {
@@ -334,17 +522,60 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
               <CardDescription>{{ selectedPost.author.username }} · {{ formatDate(selectedPost.created_at) }}</CardDescription>
             </CardHeader>
             <CardContent class="space-y-5">
-              <div class="space-y-3">
-                <p class="whitespace-pre-wrap break-words text-sm leading-7">{{ selectedPost.content }}</p>
-                <Button
-                  v-if="auth.isAuthenticated && auth.user?.email_verified"
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  @click="beginReport('post')"
-                >
-                  举报主题
-                </Button>
+              <div class="space-y-4">
+                <div v-if="editingPost" class="space-y-3 rounded-lg border bg-muted/30 p-4">
+                  <div class="space-y-2">
+                    <Label for="community-edit-title">编辑主题标题</Label>
+                    <Input id="community-edit-title" v-model="editTitle" :maxlength="120" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="community-edit-content">编辑主题内容</Label>
+                    <Textarea id="community-edit-content" v-model="editContent" class="min-h-32" :maxlength="10000" />
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      :disabled="submitting || editTitle.trim().length < 4 || editContent.trim().length < 20"
+                      @click="savePostEdit"
+                    >
+                      保存修改
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" @click="editingPost = false">取消编辑</Button>
+                  </div>
+                </div>
+                <p v-else class="whitespace-pre-wrap break-words text-sm leading-7">{{ selectedPost.content }}</p>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Badge v-if="selectedPost.edited_at" variant="outline">已编辑 · v{{ selectedPost.version }}</Badge>
+                  <Button
+                    v-if="isSelectedPostAuthor && !selectedPost.title.startsWith('[主题已由作者删除]')"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    @click="beginPostEdit"
+                  >
+                    编辑主题
+                  </Button>
+                  <Button
+                    v-if="isSelectedPostAuthor && !selectedPost.title.startsWith('[主题已由作者删除]')"
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    :disabled="submitting"
+                    @click="removePost"
+                  >
+                    {{ postDeleteArmed ? "再次点击确认删除" : "删除主题" }}
+                  </Button>
+                  <Button
+                    v-if="auth.isAuthenticated && auth.user?.email_verified"
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    @click="beginReport('post')"
+                  >
+                    举报主题
+                  </Button>
+                </div>
               </div>
               <div class="space-y-3 border-t pt-4">
                 <div class="flex items-center justify-between">
@@ -354,21 +585,82 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
                 <div v-if="selectedPost.comments.length === 0" class="text-sm text-muted-foreground">还没有回复。</div>
                 <div v-for="item in selectedPost.comments" :key="item.id" class="rounded-lg bg-muted/50 p-3">
                   <div class="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{{ item.author.username }} · {{ roleLabel(item.author.role) }}</span>
+                    <span>
+                      {{ item.author.username }} · {{ roleLabel(item.author.role) }}
+                      <span v-if="item.reply_to_user_id"> · 回复用户</span>
+                    </span>
                     <span>{{ formatDate(item.created_at) }}</span>
                   </div>
-                  <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{{ item.content }}</p>
-                  <Button
-                    v-if="auth.isAuthenticated && auth.user?.email_verified"
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    class="mt-2"
-                    @click="beginReport('comment', item.id)"
-                  >
-                    举报回复
-                  </Button>
+                  <div v-if="editingCommentId === item.id" class="mt-3 space-y-3">
+                    <Label :for="`community-edit-comment-${item.id}`">编辑回复</Label>
+                    <Textarea
+                      :id="`community-edit-comment-${item.id}`"
+                      v-model="editCommentContent"
+                      :maxlength="2000"
+                    />
+                    <div class="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        :disabled="submitting || editCommentContent.trim().length < 2"
+                        @click="saveCommentEdit(item)"
+                      >
+                        保存回复
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" @click="editingCommentId = null">取消</Button>
+                    </div>
+                  </div>
+                  <p v-else class="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{{ item.content }}</p>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      v-if="auth.isAuthenticated && auth.user?.email_verified && !selectedPost.is_locked"
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      @click="replyParent = item"
+                    >
+                      回复
+                    </Button>
+                    <Button
+                      v-if="item.author.user_id === auth.user?.id && !item.content.startsWith('该回复已由作者删除')"
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      @click="beginCommentEdit(item)"
+                    >
+                      编辑
+                    </Button>
+                    <Button
+                      v-if="item.author.user_id === auth.user?.id && !item.content.startsWith('该回复已由作者删除')"
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      :disabled="submitting"
+                      @click="removeComment(item)"
+                    >
+                      {{ commentDeleteArmed === item.id ? "再次确认删除" : "删除" }}
+                    </Button>
+                    <Button
+                      v-if="auth.isAuthenticated && auth.user?.email_verified"
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      @click="beginReport('comment', item.id)"
+                    >
+                      举报回复
+                    </Button>
+                  </div>
                 </div>
+                <Button
+                  v-if="nextCommentCursor"
+                  type="button"
+                  variant="outline"
+                  class="w-full"
+                  :disabled="commentsLoading"
+                  @click="loadMoreComments"
+                >
+                  {{ commentsLoading ? "加载中…" : "加载更多回复" }}
+                </Button>
               </div>
               <div v-if="reportTarget" class="space-y-4 rounded-lg border bg-muted/30 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
@@ -411,9 +703,20 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
                 </Button>
               </div>
               <div v-if="auth.isAuthenticated && auth.user?.email_verified && !selectedPost.is_locked" class="space-y-3 border-t pt-4">
-                <Label for="community-comment">写回复</Label>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <Label for="community-comment">{{ replyParent ? `回复 ${replyParent.author.username}` : "写回复" }}</Label>
+                  <Button v-if="replyParent" type="button" size="sm" variant="ghost" @click="replyParent = null">取消定向回复</Button>
+                </div>
                 <Textarea id="community-comment" v-model="comment" placeholder="分享可复现、合法授权的经验…" :maxlength="2000" />
-                <Button :disabled="submitting || comment.trim().length < 2" @click="submitComment">{{ submitting ? "发布中…" : "发布回复" }}</Button>
+                <div class="flex items-start gap-3">
+                  <Checkbox id="community-comment-rules" v-model="commentRulesAccepted" />
+                  <Label for="community-comment-rules" class="text-sm font-normal leading-5">
+                    我确认回复不包含真实密码、令牌、密钥或个人信息。
+                  </Label>
+                </div>
+                <Button :disabled="submitting || comment.trim().length < 2 || !commentRulesAccepted" @click="submitComment">
+                  {{ submitting ? "发布中…" : "发布回复" }}
+                </Button>
               </div>
               <p v-else-if="selectedPost.is_locked" class="text-sm text-muted-foreground">该主题已锁定，暂不接受新回复。</p>
               <p v-else class="text-sm text-muted-foreground">登录并完成邮箱验证后即可参与回复。</p>
@@ -432,7 +735,7 @@ function roleLabel(role: CommunityPostSummary["author"]["role"]): string {
               </div>
               <div class="space-y-2">
                 <Label for="community-content">主题内容</Label>
-                <Textarea id="community-content" v-model="content" class="min-h-32" placeholder="请描述背景、已授权范围、复现步骤和结果…" :maxlength="5000" />
+                <Textarea id="community-content" v-model="content" class="min-h-32" placeholder="请描述背景、已授权范围、复现步骤和结果…" :maxlength="10000" />
               </div>
               <div class="flex items-start gap-3">
                 <Checkbox id="community-rules" v-model="rulesAccepted" />

@@ -18,6 +18,11 @@ vi.mock("../services/community", () => ({
   createCommunityPost: vi.fn(),
   createCommunityComment: vi.fn(),
   createCommunityReport: vi.fn(),
+  listCommunityComments: vi.fn(),
+  updateCommunityPost: vi.fn(),
+  deleteCommunityPost: vi.fn(),
+  updateCommunityComment: vi.fn(),
+  deleteCommunityComment: vi.fn(),
   createCommunityIdempotencyKey: vi.fn(),
 }));
 
@@ -31,5 +36,6 @@ describe("CommunityPage", () => {
     expect(html).toContain("请勿发布真实密码、令牌或个人信息");
     expect(html).toContain("发布新主题");
     expect(html).toContain("内容举报");
+    expect(html).toContain("发布新主题");
   });
 });

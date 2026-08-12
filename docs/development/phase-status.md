@@ -673,7 +673,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 规划范围 | 计划文档 | 当前状态 | 下一入口 |
 |---|---|---|---|
-| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 已规划，未编码 | 独立首页/详情/发布页、评论游标分页、编辑与作者删除 |
+| 论坛首页、帖子与评论重构 | `项目文档/密码侦探社社区完整功能开发计划-v1.0.md` WP5-I3 | 进行中：生命周期与游标首切片已编码 | 独立首页/详情/发布路由拆分、移动端浏览器旅程与目标环境迁移 |
 | 点赞、收藏、关注、粉丝、公开主页 | 同上 WP5-I4～I5 | 已规划，未编码 | 事实关系表、可重建计数、隐私偏好、屏蔽和静音 |
 | 可配置板块和社区群组 | 同上 WP5-I6 | 已规划，未编码 | 固定板块兼容迁移、群组成员与角色治理 |
 | 动态、通知和社区搜索 | 同上 WP5-I7～I8 | 已规划，未编码 | 事务事件/Outbox、可见性统一、MySQL `ngram` 能力预检 |
@@ -681,3 +681,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 统一验收 | 同上 WP5-I11 | 已规划，未执行 | E2E、性能、可访问性、目标 MySQL/Redis/SSE/密钥轮换和回滚 |
 
 规划结论：COMMUNITY-14～93 已进入批准的后续开发范围，但不得因计划存在而计入代码完成度。开发顺序从 WP5-I3 开始，每轮通过统一门禁后提交，并使用 GitHub Git Data API 同步远端。
+
+
+## 2026-08-12 WP5-I3 第 1 个开发切片：内容生命周期与评论游标
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 社区首页聚合 | `GET /api/v1/community/home`、`CommunityHomeResponse` | `test_community_home_returns_boards_and_post_summary` | 已提供板块与首屏主题摘要；公告、热门规则和稳定主题游标仍待后续 |
+| 主题生命周期 | `version`、`edited_at`、`deleted_by_author_at`、`community_post_revisions`、作者 PATCH/DELETE | `test_author_post_lifecycle_uses_versions_revisions_and_placeholder_delete` | 作者权限、编辑冲突、修订快照、删除占位和最小审计已实现；草稿仍未实现 |
+| 评论与回复 | `root_id`、`reply_to_user_id`、评论游标 GET、作者 PATCH/DELETE | `test_comment_cursor_and_nested_reply_metadata` | 两级关系、独立分页、编辑/删除服务已实现；提及通知和回复数投影重建仍待后续 |
+| Web 兼容交互 | `/community` 增加主题/回复编辑、两次确认删除、定向回复和加载更多 | Web typecheck、ESLint、Vitest | 保持现有入口兼容；独立首页/详情/发布页及移动端浏览器 E2E 仍属于 WP5-I3 后续切片 |
+| 数据迁移 | `20260812_0028_community_content_lifecycle.py` | 统一门禁执行 Alembic 前滚/降级/重新前滚 | 本地 SQLite 门禁覆盖；目标 MySQL 迁移仍需部署验证 |
+
+本切片不能等同于 WP5-I3 全部完成；下一切片继续拆分独立路由和页面，并补移动端浏览器主旅程。

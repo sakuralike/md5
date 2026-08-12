@@ -1,30 +1,41 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import base64
+import json
+from datetime import UTC, datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
+from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
     CommunityBoardCode,
     CommunityComment,
     CommunityContentStatus,
     CommunityPost,
+    CommunityPostRevision,
     CommunityReport,
     CommunityReportStatus,
 )
 from password_detective.db.models.user import User
+from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.community.schemas import (
     CommunityAuthor,
     CommunityBoard,
     CommunityBoardListResponse,
     CommunityCommentCreateRequest,
+    CommunityCommentListResponse,
     CommunityCommentResponse,
+    CommunityCommentUpdateRequest,
+    CommunityHomeResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
     CommunityPostListResponse,
     CommunityPostSummary,
+    CommunityPostUpdateRequest,
     CommunityReportCreateRequest,
     CommunityReportResponse,
 )
@@ -86,39 +97,41 @@ def list_posts(
 
 
 def get_post(db: Session, post_id: str) -> CommunityPostDetail:
-    post = db.scalar(
-        select(CommunityPost).where(
-            CommunityPost.id == post_id,
-            CommunityPost.status == CommunityContentStatus.PUBLISHED,
-        )
-    )
-    if post is None:
-        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
-    comments = db.scalars(
-        select(CommunityComment)
-        .where(
-            CommunityComment.post_id == post.id,
-            CommunityComment.status == CommunityContentStatus.PUBLISHED,
-        )
-        .order_by(CommunityComment.created_at.asc())
-        .limit(200)
-    ).all()
+    post = _get_published_post(db, post_id)
+    comments = _list_comment_models(db, post.id, cursor=None, limit=50)[0]
     authors = _load_authors(
         db,
         [post.author_id, *(comment.author_id for comment in comments)],
     )
-    return CommunityPostDetail(
-        id=post.id,
-        board_code=post.board_code,
-        title=post.title,
-        content=post.content,
-        author=authors[post.author_id],
-        is_pinned=post.is_pinned,
-        is_locked=post.is_locked,
-        reply_count=post.reply_count,
-        last_activity_at=post.last_activity_at,
-        created_at=post.created_at,
-        comments=[_comment_response(comment, authors[comment.author_id]) for comment in comments],
+    return _post_detail(post, authors, comments)
+
+
+def list_home(
+    db: Session,
+    *,
+    board_code: CommunityBoardCode | None,
+    page_size: int,
+) -> CommunityHomeResponse:
+    return CommunityHomeResponse(
+        boards=list_boards(db).items,
+        posts=list_posts(db, board_code=board_code, page=1, page_size=page_size),
+    )
+
+
+def list_comments(
+    db: Session,
+    *,
+    post_id: str,
+    cursor: str | None,
+    limit: int,
+) -> CommunityCommentListResponse:
+    post = _get_published_post(db, post_id)
+    comments, next_cursor = _list_comment_models(db, post.id, cursor=cursor, limit=limit)
+    authors = _load_authors(db, [comment.author_id for comment in comments])
+    return CommunityCommentListResponse(
+        items=[_comment_response(comment, authors[comment.author_id]) for comment in comments],
+        next_cursor=next_cursor,
+        has_more=next_cursor is not None,
     )
 
 
@@ -141,6 +154,95 @@ def create_post(
     return get_post(db, post.id)
 
 
+
+def update_post(
+    db: Session,
+    *,
+    post_id: str,
+    payload: CommunityPostUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityPostDetail:
+    _require_publish_access(principal, payload.rules_accepted)
+    post = _get_published_post(db, post_id)
+    _require_author(post.author_id, principal.user.id)
+    _require_version(post.version, payload.expected_version)
+    now = utc_now()
+    db.add(
+        CommunityPostRevision(
+            post_id=post.id,
+            editor_id=principal.user.id,
+            version=post.version,
+            title_snapshot=post.title,
+            content_snapshot=post.content,
+            reason="author_edit",
+        )
+    )
+    post.title = payload.title
+    post.content = payload.content
+    previous_version = post.version
+    post.version += 1
+    post.edited_at = now
+    post.last_activity_at = now
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.post.update",
+        target_type="community_post",
+        target_id=post.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"previous_version": previous_version, "current_version": post.version},
+    )
+    db.commit()
+    return get_post(db, post.id)
+
+
+def delete_post(
+    db: Session,
+    *,
+    post_id: str,
+    expected_version: int,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityPostDetail:
+    post = _get_published_post(db, post_id)
+    _require_author(post.author_id, principal.user.id)
+    _require_version(post.version, expected_version)
+    now = utc_now()
+    db.add(
+        CommunityPostRevision(
+            post_id=post.id,
+            editor_id=principal.user.id,
+            version=post.version,
+            title_snapshot=post.title,
+            content_snapshot=post.content,
+            reason="author_delete",
+        )
+    )
+    post.title = "[主题已由作者删除]"
+    post.content = "该主题已由作者删除，原文不再公开展示。"
+    post.deleted_by_author_at = now
+    post.edited_at = now
+    previous_version = post.version
+    post.version += 1
+    post.last_activity_at = now
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.post.delete_by_author",
+        target_type="community_post",
+        target_id=post.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"previous_version": previous_version, "current_version": post.version},
+    )
+    db.commit()
+    return get_post(db, post.id)
+
+
 def create_comment(
     db: Session,
     *,
@@ -159,26 +261,31 @@ def create_comment(
         raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
     if post.is_locked:
         raise AppError("community.post_locked", "该主题已锁定，暂不能回复", status_code=409)
-    if payload.parent_id is not None:
-        parent = db.scalar(
+    parent = (
+        db.scalar(
             select(CommunityComment).where(
                 CommunityComment.id == payload.parent_id,
                 CommunityComment.post_id == post.id,
                 CommunityComment.status == CommunityContentStatus.PUBLISHED,
             )
         )
-        if parent is None:
-            raise AppError(
-                "community.comment_parent_not_found",
-                "被回复的评论不存在",
-                status_code=404,
-            )
+        if payload.parent_id is not None
+        else None
+    )
+    if payload.parent_id is not None and parent is None:
+        raise AppError(
+            "community.comment_parent_not_found",
+            "被回复的评论不存在",
+            status_code=404,
+        )
     now = utc_now()
     db.add(
         CommunityComment(
             post_id=post.id,
             author_id=principal.user.id,
             parent_id=payload.parent_id,
+            root_id=(parent.root_id or parent.id) if parent is not None else None,
+            reply_to_user_id=parent.author_id if parent is not None else None,
             content=payload.content,
         )
     )
@@ -186,6 +293,69 @@ def create_comment(
     post.last_activity_at = now
     db.commit()
     return get_post(db, post.id)
+
+
+
+def update_comment(
+    db: Session,
+    *,
+    comment_id: str,
+    payload: CommunityCommentUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityPostDetail:
+    _require_publish_access(principal, payload.rules_accepted)
+    comment = _get_published_comment(db, comment_id)
+    _require_author(comment.author_id, principal.user.id)
+    _require_version(comment.version, payload.expected_version)
+    comment.content = payload.content
+    previous_version = comment.version
+    comment.version += 1
+    comment.edited_at = utc_now()
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.comment.update",
+        target_type="community_comment",
+        target_id=comment.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"previous_version": previous_version, "current_version": comment.version},
+    )
+    db.commit()
+    return get_post(db, comment.post_id)
+
+
+def delete_comment(
+    db: Session,
+    *,
+    comment_id: str,
+    expected_version: int,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityPostDetail:
+    comment = _get_published_comment(db, comment_id)
+    _require_author(comment.author_id, principal.user.id)
+    _require_version(comment.version, expected_version)
+    comment.content = "该回复已由作者删除，原文不再公开展示。"
+    comment.deleted_by_author_at = utc_now()
+    previous_version = comment.version
+    comment.version += 1
+    comment.edited_at = comment.deleted_by_author_at
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.comment.delete_by_author",
+        target_type="community_comment",
+        target_id=comment.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"previous_version": previous_version, "current_version": comment.version},
+    )
+    db.commit()
+    return get_post(db, comment.post_id)
 
 
 def create_report(
@@ -279,7 +449,7 @@ def _load_authors(db: Session, author_ids: list[str]) -> dict[str, CommunityAuth
         return {}
     users = db.scalars(select(User).where(User.id.in_(unique_ids))).all()
     return {
-        user.id: CommunityAuthor(username=user.username, role=user.role)
+        user.id: CommunityAuthor(user_id=user.id, username=user.username, role=user.role)
         for user in users
     }
 
@@ -296,6 +466,8 @@ def _post_summary(post: CommunityPost, author: CommunityAuthor) -> CommunityPost
         is_pinned=post.is_pinned,
         is_locked=post.is_locked,
         reply_count=post.reply_count,
+        version=post.version,
+        edited_at=post.edited_at,
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
     )
@@ -307,7 +479,126 @@ def _comment_response(
     return CommunityCommentResponse(
         id=comment.id,
         parent_id=comment.parent_id,
+        root_id=comment.root_id,
+        reply_to_user_id=comment.reply_to_user_id,
         content=comment.content,
+        version=comment.version,
+        edited_at=comment.edited_at,
         author=author,
         created_at=comment.created_at,
+    )
+
+
+
+def _get_published_post(db: Session, post_id: str) -> CommunityPost:
+    post = db.scalar(
+        select(CommunityPost).where(
+            CommunityPost.id == post_id,
+            CommunityPost.status == CommunityContentStatus.PUBLISHED,
+        )
+    )
+    if post is None:
+        raise AppError("community.post_not_found", "社区主题不存在", status_code=404)
+    return post
+
+
+def _get_published_comment(db: Session, comment_id: str) -> CommunityComment:
+    comment = db.scalar(
+        select(CommunityComment).where(
+            CommunityComment.id == comment_id,
+            CommunityComment.status == CommunityContentStatus.PUBLISHED,
+        )
+    )
+    if comment is None:
+        raise AppError("community.comment_not_found", "社区回复不存在", status_code=404)
+    return comment
+
+
+def _require_author(author_id: str, user_id: str) -> None:
+    if author_id != user_id:
+        raise AppError("community.author_only", "只有作者可以修改或删除该内容", status_code=403)
+
+
+def _require_version(actual: int, expected: int) -> None:
+    if actual != expected:
+        raise AppError(
+            "community.edit_conflict",
+            "内容已被更新，请刷新后再编辑",
+            status_code=409,
+            details={"expected_version": expected, "current_version": actual},
+        )
+
+
+def _encode_cursor(created_at: datetime, record_id: str) -> str:
+    payload = {"created_at": created_at.isoformat(), "id": record_id}
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        created_at = datetime.fromisoformat(str(payload["created_at"]))
+        record_id = str(payload["id"])
+        if not record_id:
+            raise ValueError
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        return created_at, record_id
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError("community.invalid_cursor", "分页游标无效", status_code=422) from exc
+
+
+def _list_comment_models(
+    db: Session,
+    post_id: str,
+    *,
+    cursor: str | None,
+    limit: int,
+) -> tuple[list[CommunityComment], str | None]:
+    conditions = [
+        CommunityComment.post_id == post_id,
+        CommunityComment.status == CommunityContentStatus.PUBLISHED,
+    ]
+    if cursor is not None:
+        created_at, record_id = _decode_cursor(cursor)
+        conditions.append(
+            or_(
+                CommunityComment.created_at > created_at,
+                (CommunityComment.created_at == created_at)
+                & (CommunityComment.id > record_id),
+            )
+        )
+    comments = db.scalars(
+        select(CommunityComment)
+        .where(*conditions)
+        .order_by(CommunityComment.created_at.asc(), CommunityComment.id.asc())
+        .limit(limit + 1)
+    ).all()
+    has_more = len(comments) > limit
+    items = comments[:limit]
+    next_cursor = _encode_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
+    return items, next_cursor
+
+
+def _post_detail(
+    post: CommunityPost,
+    authors: dict[str, CommunityAuthor],
+    comments: list[CommunityComment],
+) -> CommunityPostDetail:
+    return CommunityPostDetail(
+        id=post.id,
+        board_code=post.board_code,
+        title=post.title,
+        content=post.content,
+        author=authors[post.author_id],
+        is_pinned=post.is_pinned,
+        is_locked=post.is_locked,
+        reply_count=post.reply_count,
+        version=post.version,
+        edited_at=post.edited_at,
+        last_activity_at=post.last_activity_at,
+        created_at=post.created_at,
+        comments=[_comment_response(comment, authors[comment.author_id]) for comment in comments],
     )

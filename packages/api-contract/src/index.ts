@@ -1404,6 +1404,7 @@ export interface CommunityBoardListResponse {
 }
 
 export interface CommunityAuthor {
+  user_id: string;
   username: string;
   role: UserRole;
 }
@@ -1415,10 +1416,23 @@ export interface CommunityPostCreateRequest {
   rules_accepted: boolean;
 }
 
+export interface CommunityPostUpdateRequest {
+  title: string;
+  content: string;
+  rules_accepted: boolean;
+  expected_version: number;
+}
+
 export interface CommunityCommentCreateRequest {
   content: string;
   parent_id?: string | null;
   rules_accepted: boolean;
+}
+
+export interface CommunityCommentUpdateRequest {
+  content: string;
+  rules_accepted: boolean;
+  expected_version: number;
 }
 
 export interface CommunityPostSummary {
@@ -1430,6 +1444,8 @@ export interface CommunityPostSummary {
   is_pinned: boolean;
   is_locked: boolean;
   reply_count: number;
+  version: number;
+  edited_at: string | null;
   last_activity_at: string;
   created_at: string;
 }
@@ -1439,14 +1455,26 @@ export interface CommunityPostListResponse {
   page: number;
   page_size: number;
   total: number;
+  next_cursor?: string | null;
+  has_more?: boolean;
 }
 
 export interface CommunityCommentResponse {
   id: string;
   parent_id: string | null;
+  root_id: string | null;
+  reply_to_user_id: string | null;
   content: string;
   author: CommunityAuthor;
+  version: number;
+  edited_at: string | null;
   created_at: string;
+}
+
+export interface CommunityCommentListResponse {
+  items: CommunityCommentResponse[];
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 export interface CommunityPostDetail {
@@ -1458,9 +1486,16 @@ export interface CommunityPostDetail {
   is_pinned: boolean;
   is_locked: boolean;
   reply_count: number;
+  version: number;
+  edited_at: string | null;
   last_activity_at: string;
   created_at: string;
   comments: CommunityCommentResponse[];
+}
+
+export interface CommunityHomeResponse {
+  boards: CommunityBoard[];
+  posts: CommunityPostListResponse;
 }
 
 export interface CommunityReportCreateRequest {

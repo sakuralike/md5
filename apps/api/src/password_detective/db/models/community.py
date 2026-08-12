@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -72,6 +72,11 @@ class CommunityPost(Base):
     is_pinned: Mapped[bool] = mapped_column(default=False, index=True)
     is_locked: Mapped[bool] = mapped_column(default=False, index=True)
     reply_count: Mapped[int] = mapped_column(Integer, default=0)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_author_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_activity_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
@@ -80,6 +85,28 @@ class CommunityPost(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityPostRevision(Base):
+    __tablename__ = "community_post_revisions"
+    __table_args__ = (
+        UniqueConstraint("post_id", "version", name="uq_community_post_revision_version"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    post_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), index=True
+    )
+    editor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    title_snapshot: Mapped[str] = mapped_column(String(120))
+    content_snapshot: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(String(64), default="author_edit")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
     )
 
 
@@ -96,11 +123,25 @@ class CommunityComment(Base):
     parent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("community_comments.id", ondelete="SET NULL"), nullable=True
     )
+    root_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_comments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reply_to_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[CommunityContentStatus] = mapped_column(
         Enum(CommunityContentStatus, native_enum=False, length=16),
         default=CommunityContentStatus.PUBLISHED,
         index=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_author_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
