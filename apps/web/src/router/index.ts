@@ -22,6 +22,7 @@ import ReputationPage from "../pages/ReputationPage.vue";
 import SecurityPage from "../pages/SecurityPage.vue";
 import SubmissionsPage from "../pages/SubmissionsPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
+import UserCenterPage from "../pages/UserCenterPage.vue";
 import VerifyEmailPage from "../pages/VerifyEmailPage.vue";
 
 const router = createRouter({
@@ -34,6 +35,7 @@ const router = createRouter({
     { path: "/reset-password", component: ResetPasswordPage },
     { path: "/verify-email", component: VerifyEmailPage },
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
+    { path: "/user-center", component: UserCenterPage, meta: { requiresAuth: true } },
     { path: "/community", component: CommunityHomePage },
     { path: "/community/activity", component: CommunityActivityPage },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },
@@ -67,7 +69,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     { path: "/community/legacy", component: CommunityPage },
-    { path: "/account/profile", redirect: "/security" },
+    { path: "/account/profile", redirect: "/user-center" },
     { path: "/account/activity", component: AccountActivityPage, meta: { requiresAuth: true } },
     { path: "/account/privacy", component: AccountPrivacyPage, meta: { requiresAuth: true } },
     { path: "/submissions", component: SubmissionsPage, meta: { requiresAuth: true } },

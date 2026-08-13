@@ -32,6 +32,7 @@ const maxFileSizeBytes =
     ? configuredMaxFileSize
     : DEFAULT_MAX_ARCHIVE_SIZE_BYTES;
 const selectedFile = ref<File | null>(null);
+const searchMode = ref<"file" | "manual">("file");
 const fingerprints = ref<ArchiveFingerprint[]>([]);
 const manualFingerprint = ref("");
 const progress = ref(0);
@@ -259,210 +260,199 @@ function statusLabel(status: CandidateStatus): string {
 </script>
 
 <template>
-  <section class="hero compact-hero">
-    <div class="panel">
-      <div class="eyebrow">M2 核心查询 · 文件始终留在本地</div>
-      <h1>计算压缩包指纹，精确寻找可信候选。</h1>
-      <p class="lead">
-        浏览器按块计算整个文件的 SHA-256 与 MD5，只向服务端发送完整指纹；
-        不上传压缩包内容，也不提供猜密或暴力破解能力。
-      </p>
-    </div>
-    <aside class="panel stack privacy-card">
-      <strong>授权使用提醒</strong>
-      <span>仅处理本人拥有、本人创建或已获明确授权的压缩包。</span>
-      <span>匿名查询只显示匹配和状态；完整密码需要登录、配额与审计。</span>
-    </aside>
+  <section class="mx-auto flex max-w-4xl flex-col items-center px-4 py-8 text-center sm:py-12">
+    <div class="eyebrow">TRUSTED ARCHIVE LAB · LOCAL FIRST</div>
+    <h1 class="mt-4 max-w-3xl bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
+      计算压缩包指纹，精确寻找可信候选。
+    </h1>
+    <p class="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+      浏览器按块计算整个文件的 SHA-256 与 MD5，只向服务端发送完整指纹；
+      不上传压缩包内容，也不提供猜密或暴力破解能力。
+    </p>
   </section>
 
-  <section class="workspace-grid">
-    <article class="panel stack">
-      <div>
-        <span class="badge">步骤 1</span>
-        <h2>本地计算文件指纹</h2>
-        <p class="muted">支持大文件分块读取；计算可取消，不会一次性载入整个文件。当前建议上限 {{ formatBytes(maxFileSizeBytes) }}。</p>
+  <section class="mx-auto grid max-w-4xl gap-6 px-4" data-testid="home-search-workspace">
+    <div class="flex justify-center">
+      <div class="inline-flex rounded-full border border-border/70 bg-card/60 p-1 shadow-sm backdrop-blur-xl" role="tablist" aria-label="查询方式">
+        <Button
+          type="button"
+          variant="ghost"
+          role="tab"
+          :aria-selected="searchMode === 'file'"
+          :class="searchMode === 'file' ? 'rounded-full bg-background text-primary shadow-sm' : 'rounded-full text-muted-foreground'"
+          @click="searchMode = 'file'"
+        >
+          本地文件查询
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          role="tab"
+          :aria-selected="searchMode === 'manual'"
+          :class="searchMode === 'manual' ? 'rounded-full bg-background text-primary shadow-sm' : 'rounded-full text-muted-foreground'"
+          @click="searchMode = 'manual'"
+        >
+          手工指纹查询
+        </Button>
       </div>
-      <label class="drop-zone" :class="{ disabled: calculating }">
-        <Input type="file" :disabled="calculating" @change="onFileSelected" />
-        <strong>{{ selectedFile?.name ?? "选择 ZIP、7z 或其他压缩包" }}</strong>
-        <span v-if="selectedFile" class="muted">{{ formatBytes(selectedFile.size) }}</span>
-        <span v-else class="muted">文件内容仅由当前浏览器读取</span>
-      </label>
-      <div v-if="calculating" class="stack compact-stack" aria-live="polite">
-        <progress :value="progress" max="100">{{ progress }}%</progress>
-        <div class="actions">
-          <span>{{ progress }}%</span>
-          <Button class="button secondary" type="button" @click="cancelCalculation">取消</Button>
-        </div>
-      </div>
-      <p v-if="elapsedMs !== null" class="success">
-        本地计算完成，用时 {{ elapsedMs }} ms。文件内容未上传。
-      </p>
+    </div>
 
-      <div class="divider"><span>或手工输入完整指纹</span></div>
-      <div class="field">
-        <label for="manual-fingerprint">MD5 / SHA-1 / SHA-256 / SHA-512</label>
+    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-4 shadow-xl backdrop-blur-xl sm:p-6">
+      <div v-if="searchMode === 'file'" class="grid gap-4">
+        <label
+          class="flex min-h-16 cursor-pointer items-center gap-3 rounded-full border border-dashed border-primary/40 bg-background/75 px-5 py-3 text-left transition hover:border-primary hover:bg-primary/5"
+          :class="{ 'pointer-events-none opacity-60': calculating }"
+        >
+          <Input type="file" class="sr-only" :disabled="calculating" @change="onFileSelected" />
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">↑</span>
+          <span class="min-w-0 flex-1">
+            <strong class="block truncate text-sm sm:text-base">{{ selectedFile?.name ?? "选择 ZIP、7z 或其他压缩包" }}</strong>
+            <span class="mt-1 block truncate text-xs text-muted-foreground">{{ selectedFile ? formatBytes(selectedFile.size) : `文件内容仅由当前浏览器读取 · 上限 ${formatBytes(maxFileSizeBytes)}` }}</span>
+          </span>
+          <span class="hidden rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground sm:inline-flex">选择文件</span>
+        </label>
+        <div v-if="calculating" class="grid gap-2 px-3" aria-live="polite">
+          <progress class="h-2 w-full accent-primary" :value="progress" max="100">{{ progress }}%</progress>
+          <div class="flex items-center justify-between text-sm text-muted-foreground">
+            <span>正在本地计算 {{ progress }}%</span>
+            <Button variant="outline" size="sm" type="button" @click="cancelCalculation">取消</Button>
+          </div>
+        </div>
+        <p v-if="elapsedMs !== null" class="text-sm text-emerald-600 dark:text-emerald-400">本地计算完成，用时 {{ elapsedMs }} ms。文件内容未上传。</p>
+      </div>
+
+      <div v-else class="grid gap-4">
+        <label for="manual-fingerprint" class="sr-only">MD5 / SHA-1 / SHA-256 / SHA-512</label>
         <Textarea
           id="manual-fingerprint"
           v-model="manualFingerprint"
+          class="min-h-28 rounded-3xl bg-background/75 px-5 py-4"
           rows="3"
           placeholder="粘贴完整十六进制文件指纹"
           @keydown.ctrl.enter="searchManual"
         />
+        <p class="px-3 text-xs text-muted-foreground">支持 MD5、SHA-1、SHA-256、SHA-512；按 Ctrl + Enter 可直接查询。</p>
       </div>
-      <Button class="button" type="button" :disabled="searching" @click="searchManual">
-        {{ searching ? "查询中…" : "识别并精确查询" }}
-      </Button>
-    </article>
 
-    <article class="panel stack" aria-live="polite">
-      <div>
-        <span class="badge">步骤 2</span>
-        <h2>精确查询结果</h2>
+      <div class="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <Button
+          v-if="searchMode === 'manual'"
+          class="min-w-44 rounded-full px-6"
+          type="button"
+          :disabled="searching"
+          @click="searchManual"
+        >
+          {{ searching ? "查询中…" : "识别并精确查询" }}
+        </Button>
+        <Button v-else-if="primaryFingerprint" variant="outline" class="rounded-full px-6" type="button" :disabled="searching" @click="search">
+          {{ searching ? "查询中…" : "重新查询" }}
+        </Button>
+        <span class="text-xs text-muted-foreground">隐私优先 · 本地计算 · 精确匹配</span>
       </div>
-      <p v-if="!primaryFingerprint" class="empty-state">选择文件或输入完整指纹后开始查询。</p>
+    </div>
+  </section>
+
+  <section class="mx-auto mt-8 max-w-4xl px-4" aria-live="polite">
+    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-5 shadow-lg backdrop-blur-xl sm:p-7">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <span class="badge">查询结果</span>
+          <h2 class="mt-3 text-2xl font-semibold tracking-tight">精确查询结果</h2>
+        </div>
+        <div class="rounded-full bg-muted/70 px-3 py-1 text-xs text-muted-foreground">服务端只接收指纹</div>
+      </div>
+      <p v-if="!primaryFingerprint" class="mt-6 rounded-2xl bg-muted/50 px-4 py-5 text-center text-sm text-muted-foreground">选择文件或输入完整指纹后开始查询。</p>
       <template v-else>
-        <div class="fingerprint-list">
-          <div v-for="item in fingerprints" :key="item.algorithm" class="fingerprint-row">
-            <strong>{{ item.algorithm.toUpperCase() }}</strong>
-            <code>{{ item.digest }}</code>
+        <div class="mt-6 grid gap-2 rounded-2xl bg-muted/40 p-4">
+          <div v-for="item in fingerprints" :key="item.algorithm" class="grid gap-1 border-b border-border/50 pb-2 last:border-0 last:pb-0 sm:grid-cols-[7rem_1fr] sm:items-center">
+            <strong class="text-xs uppercase tracking-widest text-muted-foreground">{{ item.algorithm }}</strong>
+            <code class="break-all text-xs text-foreground">{{ item.digest }}</code>
           </div>
         </div>
-        <p v-if="searching" class="muted">正在检查精确匹配…</p>
+        <p v-if="searching" class="mt-5 text-sm text-muted-foreground">正在检查精确匹配…</p>
         <template v-else-if="searchResult">
-          <div v-if="!searchResult.matched" class="empty-state">
-            <strong>暂无社区匹配</strong>
-            <span>你可以在本地确认密码有效后，提交一条待验证贡献。</span>
+          <div v-if="!searchResult.matched" class="mt-5 rounded-2xl border border-dashed border-border bg-muted/30 p-5">
+            <strong class="block text-lg">暂无社区匹配</strong>
+            <span class="mt-2 block text-sm text-muted-foreground">你可以在本地确认密码有效后，提交一条待验证贡献。</span>
           </div>
-          <div v-else-if="searchResult.archive" class="stack compact-stack">
-            <div class="result-heading">
-              <span class="status-dot" aria-hidden="true"></span>
-              <strong>发现 {{ searchResult.archive.candidate_count }} 条可见候选</strong>
-            </div>
-            <div class="actions">
-              <span class="badge">
-                已验证 {{ searchResult.archive.status_counts.verified ?? 0 }}
-              </span>
-              <span class="badge">
-                待验证 {{ searchResult.archive.status_counts.pending ?? 0 }}
-              </span>
-              <span v-if="searchResult.archive.optional_format" class="badge">
-                {{ searchResult.archive.optional_format.toUpperCase() }}
-              </span>
+          <div v-else-if="searchResult.archive" class="mt-5 grid gap-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm font-semibold">发现 {{ searchResult.archive.candidate_count }} 条可见候选</span>
+              <span class="badge">已验证 {{ searchResult.archive.status_counts.verified ?? 0 }}</span>
+              <span class="badge">待验证 {{ searchResult.archive.status_counts.pending ?? 0 }}</span>
+              <span v-if="searchResult.archive.optional_format" class="badge">{{ searchResult.archive.optional_format.toUpperCase() }}</span>
             </div>
             <template v-if="auth.isAuthenticated">
-              <div
-                v-for="candidate in searchResult.archive.candidates"
-                :key="candidate.id"
-                class="candidate-card"
-              >
-                <div>
+              <div v-for="candidate in searchResult.archive.candidates" :key="candidate.id" class="rounded-2xl border border-border/70 bg-background/60 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
                   <strong>{{ candidate.masked_secret }}</strong>
                   <span class="status-text">{{ statusLabel(candidate.status) }}</span>
                 </div>
-                <small>
-                  贡献 {{ candidate.submission_count }} 条 · 独立成功
-                  {{ candidate.success_evidence_count }} 条 · 独立失败
-                  {{ candidate.failure_evidence_count }} 条
-                </small>
-                <div class="actions">
-                  <Button
-                    class="button secondary"
-                    type="button"
-                    :disabled="Boolean(feedbackCandidateId)"
-                    :aria-pressed="candidate.my_feedback === 'success'"
-                    @click="submitFeedback(candidate.id, 'success')"
-                  >
-                    {{
-                      feedbackCandidateId === candidate.id
-                        ? "记录中…"
-                        : candidate.my_feedback === "success"
-                          ? "已反馈成功"
-                          : "本地验证成功"
-                    }}
+                <small class="mt-2 block text-muted-foreground">贡献 {{ candidate.submission_count }} 条 · 独立成功 {{ candidate.success_evidence_count }} 条 · 独立失败 {{ candidate.failure_evidence_count }} 条</small>
+                <div class="mt-4 flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" type="button" :disabled="Boolean(feedbackCandidateId)" :aria-pressed="candidate.my_feedback === 'success'" @click="submitFeedback(candidate.id, 'success')">
+                    {{ feedbackCandidateId === candidate.id ? "记录中…" : candidate.my_feedback === "success" ? "已反馈成功" : "本地验证成功" }}
                   </Button>
-                  <Button
-                    class="button secondary"
-                    type="button"
-                    :disabled="Boolean(feedbackCandidateId)"
-                    :aria-pressed="candidate.my_feedback === 'failure'"
-                    @click="submitFeedback(candidate.id, 'failure')"
-                  >
+                  <Button variant="outline" size="sm" type="button" :disabled="Boolean(feedbackCandidateId)" :aria-pressed="candidate.my_feedback === 'failure'" @click="submitFeedback(candidate.id, 'failure')">
                     {{ candidate.my_feedback === "failure" ? "已反馈失败" : "本地验证失败" }}
                   </Button>
-                  <RouterLink
-                    class="button secondary"
-                    :to="{ path: '/trust-cases', query: { kind: 'report', candidate_id: candidate.id } }"
-                  >
-                    举报候选
-                  </RouterLink>
+                  <Button variant="ghost" size="sm" as-child><RouterLink :to="{ path: '/trust-cases', query: { kind: 'report', candidate_id: candidate.id } }">举报候选</RouterLink></Button>
                 </div>
-                <small class="muted">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
+                <small class="mt-3 block text-muted-foreground">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
               </div>
-              <Button
-                v-if="hasVerifiedCandidate"
-                class="button"
-                type="button"
-                :disabled="revealing"
-                @click="reveal"
-              >
-                {{ revealing ? "安全揭示中…" : "揭示最高可信候选" }}
-              </Button>
-              <p v-else class="muted">候选尚未满足独立验证门槛，暂不可揭示。</p>
+              <Button v-if="hasVerifiedCandidate" class="w-full rounded-full sm:w-auto" type="button" :disabled="revealing" @click="reveal">{{ revealing ? "安全揭示中…" : "揭示最高可信候选" }}</Button>
+              <p v-else class="text-sm text-muted-foreground">候选尚未满足独立验证门槛，暂不可揭示。</p>
             </template>
-            <div v-else class="empty-state">
-              <span>登录后可查看遮挡候选，并在配额允许时揭示已验证密码。</span>
-              <RouterLink class="button" to="/login">登录继续</RouterLink>
+            <div v-else class="flex flex-col gap-3 rounded-2xl bg-muted/40 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <span class="text-sm text-muted-foreground">登录后可查看遮挡候选，并在配额允许时揭示已验证密码。</span>
+              <Button class="rounded-full" as-child><RouterLink to="/login">登录继续</RouterLink></Button>
             </div>
           </div>
         </template>
       </template>
-
-      <div v-if="revealedPassword" class="reveal-box">
-        <span>本次揭示结果</span>
-        <code>{{ revealedPassword }}</code>
-        <div class="actions">
-          <Button class="button" type="button" @click="copyRevealedPassword">复制</Button>
-          <Button class="button secondary" type="button" @click="clearRevealedPassword">
-            从页面清除
-          </Button>
+      <div v-if="revealedPassword" class="mt-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+        <span class="text-sm text-muted-foreground">本次揭示结果</span>
+        <code class="mt-2 block break-all text-lg font-semibold">{{ revealedPassword }}</code>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <Button type="button" @click="copyRevealedPassword">复制</Button>
+          <Button variant="outline" type="button" @click="clearRevealedPassword">从页面清除</Button>
         </div>
       </div>
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="notice" class="success">{{ notice }}</p>
-    </article>
+      <p v-if="error" class="mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{{ error }}</p>
+      <p v-if="notice" class="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">{{ notice }}</p>
+    </div>
   </section>
 
-  <section v-if="searchResult && !searchResult.matched" class="panel contribution-panel stack">
-    <div>
-      <span class="badge">步骤 3</span>
-      <h2>贡献已在本地验证的解压密码</h2>
-      <p class="muted">
-        密码将通过服务端认证加密保存；数据库仅使用密钥化标签去重，不建立明文索引。
-      </p>
-    </div>
-    <template v-if="auth.isAuthenticated">
-      <div class="field">
-        <label for="candidate-password">解压密码</label>
-        <Input
-          id="candidate-password"
-          v-model="candidatePassword"
-          type="password"
-          autocomplete="off"
-          maxlength="512"
-        />
+  <section v-if="searchResult && !searchResult.matched" class="mx-auto mt-6 max-w-4xl px-4">
+    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-5 shadow-lg backdrop-blur-xl sm:p-7">
+      <div>
+        <span class="badge">下一步</span>
+        <h2 class="mt-3 text-2xl font-semibold">贡献已在本地验证的解压密码</h2>
+        <p class="mt-2 text-sm leading-6 text-muted-foreground">密码将通过服务端认证加密保存；数据库仅使用密钥化标签去重，不建立明文索引。</p>
       </div>
-      <label class="authorization-check">
-        <Checkbox v-model="authorizationConfirmed" />
-        <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
-      </label>
-      <Button class="button" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">
-        {{ submitting ? "提交中…" : "提交待验证贡献" }}
-      </Button>
-    </template>
-    <div v-else class="empty-state">
-      <span>贡献需要登录，以记录授权声明、证据来源和待结算积分。</span>
-      <RouterLink class="button" to="/login">登录后贡献</RouterLink>
+      <template v-if="auth.isAuthenticated">
+        <div class="mt-5 grid gap-4">
+          <div class="grid gap-2">
+            <label for="candidate-password" class="text-sm font-medium">解压密码</label>
+            <Input id="candidate-password" v-model="candidatePassword" type="password" autocomplete="off" maxlength="512" />
+          </div>
+          <label class="flex items-start gap-3 text-sm text-muted-foreground">
+            <Checkbox v-model="authorizationConfirmed" class="mt-0.5" />
+            <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
+          </label>
+          <Button class="w-full rounded-full sm:w-fit" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">{{ submitting ? "提交中…" : "提交待验证贡献" }}</Button>
+        </div>
+      </template>
+      <div v-else class="mt-5 flex flex-col gap-3 rounded-2xl bg-muted/40 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <span class="text-sm text-muted-foreground">贡献需要登录，以记录授权声明、证据来源和待结算积分。</span>
+        <Button class="rounded-full" as-child><RouterLink to="/login">登录后贡献</RouterLink></Button>
+      </div>
     </div>
+  </section>
+
+  <section class="mx-auto grid max-w-4xl gap-4 px-4 py-10 sm:grid-cols-3">
+    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">◌</span><h2 class="mt-4 font-semibold">本地计算</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">文件内容留在浏览器，只提交用于检索的完整指纹。</p></div>
+    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">✦</span><h2 class="mt-4 font-semibold">可信候选</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">社区验证、反馈与信誉事件共同决定候选可信度。</p></div>
+    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">↗</span><h2 class="mt-4 font-semibold">授权协作</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">仅处理本人拥有或已获明确授权的压缩包。</p></div>
   </section>
 </template>

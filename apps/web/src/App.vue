@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
+import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "./stores/auth";
@@ -112,18 +113,6 @@ onBeforeUnmount(releaseCustomBackground);
       <nav class="nav" aria-label="主导航">
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/community">社区</RouterLink>
-        <RouterLink to="/community/activity">社区动态</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/community/notifications">社区通知</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/community/bookmarks">我的收藏</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/community/settings">社区资料</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/submissions">我的贡献</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/reputation">积分信誉</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/trust-cases">举报申诉</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/security">账号安全</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/account/activity">活动记录</RouterLink>
-        <RouterLink v-if="auth.isAuthenticated" to="/account/privacy">隐私中心</RouterLink>
-        <RouterLink v-if="!auth.isAuthenticated" to="/login">登录</RouterLink>
-        <RouterLink v-if="!auth.isAuthenticated" class="nav-primary" to="/register">注册</RouterLink>
       </nav>
 
       <div class="topbar-actions">
@@ -182,9 +171,20 @@ onBeforeUnmount(releaseCustomBackground);
           </section>
         </div>
 
-        <Button v-if="auth.isAuthenticated" class="button secondary logout-button" @click="auth.logout()">
-          退出
-        </Button>
+        <div v-if="!auth.isAuthenticated" class="flex items-center gap-2">
+          <Button variant="ghost" size="sm" as-child>
+            <RouterLink to="/login">登录</RouterLink>
+          </Button>
+          <Button size="sm" as-child>
+            <RouterLink to="/register">注册</RouterLink>
+          </Button>
+        </div>
+        <UserAccountMenu
+          v-else-if="auth.user"
+          :user="auth.user"
+          :busy="auth.busy"
+          @logout="auth.logout()"
+        />
       </div>
     </header>
 

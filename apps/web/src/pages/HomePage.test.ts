@@ -29,10 +29,11 @@ describe("HomePage", () => {
     const html = await renderToString(app);
 
     expect(html).toContain("计算压缩包指纹，精确寻找可信候选");
-    expect(html).toContain("本地计算文件指纹");
-    expect(html).toContain("手工输入完整指纹");
+    expect(html).toContain("本地文件查询");
+    expect(html).toContain("手工指纹查询");
     expect(html).toContain("精确查询结果");
     expect(html).toContain("选择文件或输入完整指纹后开始查询");
     expect(html).toContain('type="file"');
+    expect(html).toContain('data-testid="home-search-workspace"');
   });
 });

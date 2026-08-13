@@ -826,3 +826,12 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 通知公共服务 | `notification_service.py` 统一摘要裁剪、偏好、屏蔽、去重和刷新逻辑 | 社区与群组测试集 | 已消除主社区服务与群组服务之间的通知循环依赖；本切片无需新迁移 |
 
 本切片收口点赞摘要和群组治理站内通知。WP5-I7 后续范围仍包括可靠 Outbox/重放、邮件摘要实际投递和 SSE/实时未读增强；这些能力不应与本轮同步数据库写入混为同一交付状态。
+
+
+## 2026-08-13：Web 账户入口与首页布局切片
+
+- 状态：本地实现完成。
+- 交付：登录后导航仅保留首页/社区；头像点击下拉账户菜单；独立 `/user-center` 用户中心；首页按 `1.html` 的简白渐变、胶囊导航、玻璃面板和能力卡片重排。
+- 证据：`apps/web/src/components/UserAccountMenu.vue`、`apps/web/src/pages/UserCenterPage.vue`、`apps/web/src/router/index.ts`、`apps/web/src/pages/HomePage.vue`。
+- 自动化：Web typecheck、lint、Vitest（27 文件/46 测试）和 build 已通过。
+- 待验证：目标服务器部署后的真实浏览器视觉回归，重点检查头像菜单在窄屏下的定位、用户中心数据加载失败提示和首页文件选择/查询交互。
