@@ -88,6 +88,7 @@ def _list_item(
 ) -> AdminUserListItem:
     return AdminUserListItem(
         id=user.id,
+        uid=user.id,
         username=user.username,
         masked_email=_mask_email(user.email),
         email_verified=user.email_verified,
@@ -273,10 +274,10 @@ def _consume_admin_governance_grant(
         session_family_id=principal.session_family_id,
         expected_purpose=ReauthenticationPurpose.ADMIN_USER_GOVERNANCE,
     )
-    if not grant.mfa_verified:
+    if principal.user.totp_enabled and not grant.mfa_verified:
         raise AppError(
             "auth.mfa_reauthentication_required",
-            "管理员危险操作需要完成 TOTP 再认证",
+            "该管理员已启用 TOTP，危险操作需要完成验证码再认证",
             status_code=403,
         )
 

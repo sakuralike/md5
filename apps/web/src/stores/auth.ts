@@ -19,6 +19,7 @@ import { apiRequest } from "../services/api";
 import { loginBrowser, resendEmailVerification } from "../services/auth";
 
 const STORAGE_KEY = "password_detective_session_v2";
+const REMEMBERED_LOGIN_KEY = "password_detective_remembered_login_v1";
 
 interface StoredSession {
   accessToken: string;
@@ -34,6 +35,20 @@ function readStoredSession(): StoredSession | null {
     sessionStorage.removeItem(STORAGE_KEY);
     return null;
   }
+}
+
+function readRememberedLogin(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(REMEMBERED_LOGIN_KEY)?.trim() ?? "";
+}
+
+function persistRememberedLogin(loginName: string, enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  if (enabled) {
+    window.localStorage.setItem(REMEMBERED_LOGIN_KEY, loginName.trim());
+    return;
+  }
+  window.localStorage.removeItem(REMEMBERED_LOGIN_KEY);
 }
 
 export const useAuthStore = defineStore("auth", () => {
@@ -79,6 +94,7 @@ export const useAuthStore = defineStore("auth", () => {
     loginName: string,
     password: string,
     totpCode?: string,
+    rememberLogin = false,
   ): Promise<void> {
     busy.value = true;
     error.value = "";
@@ -89,6 +105,7 @@ export const useAuthStore = defineStore("auth", () => {
         ...(totpCode ? { totp_code: totpCode } : {}),
       };
       const tokens = await loginBrowser(payload);
+      persistRememberedLogin(loginName, rememberLogin);
       persist(tokens);
       await router.push("/");
     } catch (caught) {
@@ -200,6 +217,7 @@ export const useAuthStore = defineStore("auth", () => {
     busy,
     error,
     isAuthenticated,
+    getRememberedLogin: readRememberedLogin,
     login,
     register,
     refresh,

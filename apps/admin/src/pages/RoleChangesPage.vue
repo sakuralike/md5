@@ -171,7 +171,7 @@ onMounted(() => void loadRequests());
             <Input v-model="currentPassword" type="password" autocomplete="current-password" />
           </Label>
           <Label class="grid gap-2">
-            TOTP 动态码
+            TOTP 动态码（已启用时填写）
             <Input
               v-model="totpCode"
               inputmode="numeric"

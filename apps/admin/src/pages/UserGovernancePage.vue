@@ -234,8 +234,8 @@ async function refreshSelectedUser(userId: string): Promise<void> {
 
 async function submitAction(): Promise<void> {
   if (!selected.value || !actionMode.value) return;
-  if (!actionReason.value || !currentPassword.value || !totpCode.value) {
-    actionError.value = "请选择原因并填写当前密码和 TOTP 验证码";
+  if (!actionReason.value || !currentPassword.value) {
+    actionError.value = "请选择原因并填写当前密码";
     return;
   }
 
@@ -246,7 +246,10 @@ async function submitAction(): Promise<void> {
   const mode = actionMode.value;
   try {
     const grant = await reauthenticateAdmin(
-      { currentPassword: currentPassword.value, totpCode: totpCode.value },
+      {
+        currentPassword: currentPassword.value,
+        ...(totpCode.value ? { totpCode: totpCode.value } : {}),
+      },
       auth.accessToken,
     );
     const idempotencyKey = `admin-${mode}-${createClientId()}`;
@@ -320,7 +323,7 @@ onMounted(() => void loadUsers());
         </div>
         <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">用户治理工作台</h1>
         <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          管理员可查看用户治理统计，并在当前密码、TOTP、原因码、一次性再认证和幂等门禁下停用账号、恢复账号或撤销活跃会话。
+          管理员可查看用户治理统计，并在当前密码、可选 TOTP、原因码、一次性再认证和幂等门禁下停用账号、恢复账号或撤销活跃会话。
         </p>
       </div>
       <Button variant="outline" :disabled="loading" @click="loadUsers">
@@ -339,7 +342,7 @@ onMounted(() => void loadUsers());
           <Label for="user-query">搜索用户</Label>
           <div class="relative">
             <Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <Input id="user-query" v-model="queryFilter" class="pl-9" placeholder="用户名、用户 ID 或邮箱" @keyup.enter="applyFilters" />
+            <Input id="user-query" v-model="queryFilter" class="pl-9" placeholder="用户名、邮箱或 UID" @keyup.enter="applyFilters" />
           </div>
         </div>
         <div class="space-y-2">
@@ -392,6 +395,7 @@ onMounted(() => void loadUsers());
             <TableCell>
               <div class="font-medium text-slate-950">{{ item.username }}</div>
               <div class="text-xs text-slate-500">{{ item.masked_email }}</div>
+              <div class="mt-1 break-all font-mono text-xs text-muted-foreground">UID：{{ item.uid ?? item.id }}</div>
             </TableCell>
             <TableCell><Badge :variant="statusVariant(item.status)">{{ statusLabels[item.status] }}</Badge></TableCell>
             <TableCell class="text-slate-600">{{ roleLabels[item.role] }}</TableCell>
@@ -430,10 +434,12 @@ onMounted(() => void loadUsers());
               <div>
                 <h2 class="text-lg font-semibold text-slate-950">{{ selected.username }}</h2>
                 <p class="mt-1 text-sm text-slate-500">{{ selected.masked_email }}</p>
+                <p class="mt-1 break-all font-mono text-xs text-muted-foreground">UID：{{ selected.uid ?? selected.id }}</p>
               </div>
               <Badge :variant="statusVariant(selected.status)">{{ statusLabels[selected.status] }}</Badge>
             </div>
             <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt class="text-muted-foreground">用户 UID</dt><dd class="break-all font-mono text-xs text-foreground">{{ selected.uid ?? selected.id }}</dd></div>
               <div><dt class="text-slate-500">角色</dt><dd class="font-medium text-slate-900">{{ roleLabels[selected.role] }}</dd></div>
               <div><dt class="text-slate-500">MFA</dt><dd class="font-medium text-slate-900">{{ selected.totp_enabled ? "已启用" : "未启用" }}</dd></div>
               <div><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900">{{ formatDate(selected.created_at) }}</dd></div>
@@ -468,7 +474,7 @@ onMounted(() => void loadUsers());
               <div>
                 <h3 class="font-semibold text-rose-950">受控治理操作</h3>
                 <p class="mt-1 text-sm leading-6 text-rose-800">
-                  每次操作都需要当前密码和 TOTP，凭据不会保存；管理员自身、其他管理员和服务账号受保护。
+                  每次操作都需要当前密码；账号已启用 TOTP 时还需动态验证码，凭据不会保存；管理员自身、其他管理员和服务账号受保护。
                 </p>
               </div>
             </div>
@@ -508,7 +514,7 @@ onMounted(() => void loadUsers());
                   <Input id="admin-current-password" v-model="currentPassword" type="password" autocomplete="current-password" />
                 </div>
                 <div class="space-y-2">
-                  <Label for="admin-totp-code">TOTP 验证码</Label>
+                  <Label for="admin-totp-code">TOTP 验证码（已启用时填写）</Label>
                   <Input id="admin-totp-code" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" />
                 </div>
               </div>

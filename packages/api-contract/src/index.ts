@@ -3,6 +3,7 @@ export type UserStatus = "active" | "locked" | "disabled";
 
 export interface User {
   id: string;
+  uid?: string;
   username: string;
   email: string;
   email_verified: boolean;
@@ -1217,6 +1218,7 @@ export interface AdminAuditLogListResponse {
 
 export interface AdminUserListItem {
   id: string;
+  uid?: string;
   username: string;
   masked_email: string;
   email_verified: boolean;

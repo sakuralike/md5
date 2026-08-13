@@ -42,7 +42,7 @@ export function getAdminUser(userId: string, token: string): Promise<AdminUserDe
 
 export interface AdminReauthenticationInput {
   currentPassword: string;
-  totpCode: string;
+  totpCode?: string;
   purpose?: "admin_user_governance" | "admin_settings_governance";
 }
 
@@ -69,7 +69,7 @@ export function reauthenticateAdmin(
       method: "POST",
       body: JSON.stringify({
         current_password: input.currentPassword,
-        totp_code: input.totpCode,
+        ...(input.totpCode ? { totp_code: input.totpCode } : {}),
         ...(input.purpose ? { purpose: input.purpose } : {}),
       }),
     },

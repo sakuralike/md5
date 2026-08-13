@@ -78,6 +78,19 @@ def test_register_hashes_password_and_rejects_duplicate(client):
     assert duplicate.json()["code"] == "auth.account_conflict"
 
 
+def test_user_response_exposes_uid_and_email_password_login(client):
+    registered = register(client)
+    assert registered.status_code == 201
+    assert registered.json()["uid"] == registered.json()["id"]
+
+    email_login = login(client, login_name=REGISTER_PAYLOAD["email"])
+    assert email_login.status_code == 200
+    body = email_login.json()
+    assert body["user"]["email"] == REGISTER_PAYLOAD["email"]
+    assert body["user"]["uid"] == body["user"]["id"]
+    assert body["user"]["totp_enabled"] is False
+
+
 def test_login_refresh_rotation_and_reuse_detection(client):
     assert register(client).status_code == 201
     login_response = login(client)

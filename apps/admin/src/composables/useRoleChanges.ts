@@ -37,7 +37,7 @@ type ReviewRoleChangeRequest = (
   idempotencyKey: string,
 ) => Promise<RoleChangeMutationResponse>;
 type ReauthenticateAdmin = (
-  input: { currentPassword: string; totpCode: string },
+  input: { currentPassword: string; totpCode?: string },
   token: string,
 ) => Promise<{ reauth_token: string }>;
 
@@ -159,11 +159,17 @@ export function useRoleChanges(dependencies: RoleChangesDependencies) {
   }
 
   async function grant(): Promise<string> {
-    if (!currentPassword.value || !/^\d{6}$/.test(totpCode.value)) {
-      throw new Error("角色治理需要当前密码和 6 位数字 TOTP 动态码");
+    if (!currentPassword.value) {
+      throw new Error("角色治理需要当前密码");
+    }
+    if (totpCode.value && !/^\d{6,8}$/.test(totpCode.value)) {
+      throw new Error("TOTP 动态码必须为 6 至 8 位数字");
     }
     const response = await dependencies.reauthenticateAdmin(
-      { currentPassword: currentPassword.value, totpCode: totpCode.value },
+      {
+        currentPassword: currentPassword.value,
+        ...(totpCode.value ? { totpCode: totpCode.value } : {}),
+      },
       dependencies.accessToken(),
     );
     return response.reauth_token;

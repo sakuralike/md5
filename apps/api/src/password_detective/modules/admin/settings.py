@@ -174,9 +174,11 @@ def _consume_settings_grant(db: Session, *, token: str, principal: Principal) ->
         session_family_id=principal.session_family_id,
         expected_purpose=ReauthenticationPurpose.ADMIN_SETTINGS_GOVERNANCE,
     )
-    if not grant.mfa_verified:
+    if principal.user.totp_enabled and not grant.mfa_verified:
         raise AppError(
-            "auth.mfa_reauthentication_required", "配置发布需要完成 TOTP 再认证", status_code=403
+            "auth.mfa_reauthentication_required",
+            "该管理员已启用 TOTP，配置发布需要完成验证码再认证",
+            status_code=403,
         )
 
 

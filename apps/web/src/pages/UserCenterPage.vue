@@ -89,6 +89,7 @@ onMounted(load);
             <div>
               <p class="text-2xl font-bold tracking-tight">{{ user?.username }}</p>
               <p class="text-sm text-muted-foreground">{{ user?.email }}</p>
+              <p class="mt-1 font-mono text-xs text-muted-foreground">UID：{{ user?.uid ?? user?.id ?? "—" }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
               <Badge variant="secondary">{{ user?.role === "admin" ? "管理员" : "社区成员" }}</Badge>
@@ -99,7 +100,11 @@ onMounted(load);
             </div>
           </div>
           <Separator />
-          <div class="grid gap-4 sm:grid-cols-3">
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <span class="text-xs text-muted-foreground">用户 UID</span>
+              <strong class="mt-1 block break-all font-mono text-xs">{{ user?.uid ?? user?.id ?? "—" }}</strong>
+            </div>
             <div>
               <span class="text-xs text-muted-foreground">注册时间</span>
               <strong class="mt-1 block text-sm">{{ user ? formatDate(user.created_at) : "—" }}</strong>

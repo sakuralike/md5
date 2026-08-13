@@ -14,6 +14,7 @@ vi.mock("../stores/auth", () => ({
   useAuthStore: () => ({
     busy: false,
     error: "",
+    getRememberedLogin: () => "",
     login: vi.fn(),
   }),
 }));
@@ -26,6 +27,8 @@ describe("LoginPage", () => {
     expect(html).toContain("用户名或邮箱");
     expect(html).toContain("账号密码");
     expect(html).toContain("TOTP 验证码");
+    expect(html).toContain("记住登录账号");
+    expect(html).toContain("不会保存明文密码");
     expect(html).toContain('data-testid="user-login-form"');
     expect(html).toContain("flex flex-col gap-5");
     expect(html).toContain("从本地指纹开始，找到可信答案");

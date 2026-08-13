@@ -45,10 +45,10 @@ def _consume_governance_grant(db: Session, token: str, principal: Principal) -> 
         session_family_id=principal.session_family_id,
         expected_purpose=ReauthenticationPurpose.ADMIN_USER_GOVERNANCE,
     )
-    if not grant.mfa_verified:
+    if principal.user.totp_enabled and not grant.mfa_verified:
         raise AppError(
             "auth.mfa_reauthentication_required",
-            "角色治理需要完成 TOTP 再认证",
+            "该管理员已启用 TOTP，角色治理需要完成验证码再认证",
             status_code=403,
         )
 

@@ -117,6 +117,7 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    uid: str
     username: str
     email: EmailStr
     email_verified: bool

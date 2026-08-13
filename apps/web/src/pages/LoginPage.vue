@@ -4,18 +4,26 @@ import { RouterLink } from "vue-router";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
-const loginName = ref("");
+const rememberedLogin = auth.getRememberedLogin();
+const loginName = ref(rememberedLogin);
 const password = ref("");
 const totpCode = ref("");
+const rememberLogin = ref(Boolean(rememberedLogin));
 
 async function submit(): Promise<void> {
   try {
-    await auth.login(loginName.value, password.value, totpCode.value || undefined);
+    await auth.login(
+      loginName.value,
+      password.value,
+      totpCode.value || undefined,
+      rememberLogin.value,
+    );
   } catch {
     // 统一错误已由会话状态展示。
   }
@@ -69,6 +77,13 @@ async function submit(): Promise<void> {
               maxlength="8"
               placeholder="6～8 位数字"
             />
+          </div>
+          <div class="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-3">
+            <Checkbox id="remember-login" v-model="rememberLogin" class="mt-0.5" />
+            <div class="grid gap-1">
+              <Label for="remember-login" class="cursor-pointer font-medium">记住登录账号</Label>
+              <p class="text-xs leading-5 text-muted-foreground">仅保存用户名或邮箱；密码由浏览器密码管理器处理，本站不会保存明文密码。</p>
+            </div>
           </div>
           <Button type="submit" class="h-11 w-full" :disabled="auth.busy">
             {{ auth.busy ? "登录中…" : "登录" }}

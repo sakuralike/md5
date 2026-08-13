@@ -229,8 +229,8 @@ def test_admin_totp_enrollment_and_login_enforcement(client):
         db.commit()
 
     before_setup = client.get("/api/v1/admin/access-check", headers=headers)
-    assert before_setup.status_code == 403
-    assert before_setup.json()["code"] == "auth.totp_setup_required"
+    assert before_setup.status_code == 200
+    assert before_setup.json()["mfa"] == "not_verified"
 
     setup = client.post("/api/v1/admin/totp/setup", headers=headers)
     assert setup.status_code == 200

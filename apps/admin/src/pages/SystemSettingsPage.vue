@@ -293,13 +293,16 @@ async function createDraft(): Promise<void> {
 }
 
 async function acquireSettingsGrant(): Promise<string> {
-  if (!currentPassword.value || totpCode.value.length !== 6) {
-    throw new Error("发布或回滚前必须输入当前密码与 6 位 TOTP 动态码");
+  if (!currentPassword.value) {
+    throw new Error("发布或回滚前必须输入当前密码");
+  }
+  if (totpCode.value && !/^\d{6,8}$/.test(totpCode.value)) {
+    throw new Error("TOTP 动态码必须为 6 至 8 位数字");
   }
   const response = await reauthenticateAdmin(
     {
       currentPassword: currentPassword.value,
-      totpCode: totpCode.value,
+      ...(totpCode.value ? { totpCode: totpCode.value } : {}),
       purpose: "admin_settings_governance",
     },
     auth.accessToken,
@@ -733,7 +736,7 @@ onMounted(() => {
               <Input id="settings-password" v-model="currentPassword" type="password" autocomplete="current-password" />
             </div>
             <div class="space-y-2">
-              <Label for="settings-totp">TOTP 动态码</Label>
+              <Label for="settings-totp">TOTP 动态码（已启用时填写）</Label>
               <Input id="settings-totp" v-model="totpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
             </div>
           </div>

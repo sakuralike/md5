@@ -164,6 +164,7 @@ def test_admin_user_governance_list_and_detail(client):
     assert body["total"] == 1
     item = body["items"][0]
     assert item["id"] == target_id
+    assert item["uid"] == target_id
     assert item["username"] == target_registration["username"]
     assert item["masked_email"].startswith("u***@s***.")
     assert target_registration["email"] not in listed.text
@@ -173,10 +174,28 @@ def test_admin_user_governance_list_and_detail(client):
     assert item["active_session_count"] >= 1
     assert item["last_active_at"] is not None
 
+    uid_search = client.get(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        params={"query": target_id, "page": 1, "page_size": 10},
+    )
+    assert uid_search.status_code == 200
+    assert uid_search.json()["total"] == 1
+    assert uid_search.json()["items"][0]["uid"] == target_id
+
+    username_search = client.get(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        params={"query": target_registration["username"], "page": 1, "page_size": 10},
+    )
+    assert username_search.status_code == 200
+    assert username_search.json()["items"][0]["uid"] == target_id
+
     detail = client.get(f"/api/v1/admin/users/{target_id}", headers=admin_headers)
     assert detail.status_code == 200
     detail_body = detail.json()
     assert detail_body["id"] == target_id
+    assert detail_body["uid"] == target_id
     assert detail_body["points_balance"] == 33
     assert detail_body["reputation_event_count"] == 1
     assert detail_body["pending_privacy_export_count"] == 1
@@ -210,3 +229,36 @@ def test_admin_user_governance_validates_filters_and_pagination(client):
         params={"page_size": 101},
     )
     assert invalid_page_size.status_code == 422
+
+
+def test_admin_can_login_and_reauthenticate_without_enabling_totp(client):
+    registration, _ = _register_and_login(client, "no_totp_admin")
+    with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == registration["username"]))
+        assert user is not None
+        user.role = UserRole.ADMIN
+        db.commit()
+        user_id = user.id
+
+    admin_login = client.post(
+        "/api/v1/admin/auth/login",
+        headers={"Origin": "http://testserver"},
+        json={"login": registration["email"], "password": PASSWORD},
+    )
+    assert admin_login.status_code == 200
+    body = admin_login.json()
+    assert body["user"]["uid"] == user_id
+    assert body["user"]["totp_enabled"] is False
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+
+    access = client.get("/api/v1/admin/access-check", headers=headers)
+    assert access.status_code == 200
+    assert access.json()["mfa"] == "not_verified"
+
+    reauth = client.post(
+        "/api/v1/admin/auth/reauthenticate",
+        headers=headers,
+        json={"current_password": PASSWORD},
+    )
+    assert reauth.status_code == 200
+    assert reauth.json()["reauth_token"].startswith("reauth_")

@@ -203,7 +203,11 @@ def admin_logout(
 def access_check(
     principal: Annotated[Principal, Depends(require_admin_mfa)],
 ) -> dict[str, str]:
-    return {"status": "authorized", "role": principal.user.role.value, "mfa": "verified"}
+    return {
+        "status": "authorized",
+        "role": principal.user.role.value,
+        "mfa": "verified" if principal.mfa_verified else "not_verified",
+    }
 
 
 @router.post(

@@ -20,8 +20,9 @@ describe("UserGovernancePage", () => {
     const html = await renderToString(createSSRApp(UserGovernancePage));
 
     expect(html).toContain("用户治理工作台");
-    expect(html).toContain("用户名、用户 ID 或邮箱");
+    expect(html).toContain("用户名、邮箱或 UID");
     expect(html).toContain("一次性再认证");
     expect(html).toContain("原因码");
+    expect(html).toContain("可选 TOTP");
   });
 });

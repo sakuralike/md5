@@ -58,6 +58,11 @@ class User(Base):
     )
 
     @property
+    def uid(self) -> str:
+        """对外展示的稳定用户标识，与主键保持一致。"""
+        return self.id
+
+    @property
     def email_verified(self) -> bool:
         return self.email_verified_at is not None
 

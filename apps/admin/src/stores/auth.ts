@@ -1,5 +1,4 @@
 import {
-  ApiError,
   isPrivilegedRole,
   type BrowserTokenResponse,
   type User,
@@ -10,6 +9,7 @@ import { useRouter } from "vue-router";
 import { apiRequest } from "../services/api";
 
 const STORAGE_KEY = "password_detective_admin_session_v2";
+const REMEMBERED_LOGIN_KEY = "password_detective_admin_remembered_login_v1";
 
 interface StoredAdminSession {
   accessToken: string;
@@ -32,6 +32,20 @@ function readStoredSession(): StoredAdminSession | null {
     sessionStorage.removeItem(STORAGE_KEY);
     return null;
   }
+}
+
+function readRememberedLogin(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(REMEMBERED_LOGIN_KEY)?.trim() ?? "";
+}
+
+function persistRememberedLogin(loginName: string, enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  if (enabled) {
+    window.localStorage.setItem(REMEMBERED_LOGIN_KEY, loginName.trim());
+    return;
+  }
+  window.localStorage.removeItem(REMEMBERED_LOGIN_KEY);
 }
 
 export const useAdminAuthStore = defineStore("admin-auth", () => {
@@ -69,7 +83,12 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
-  async function login(loginName: string, password: string, totpCode?: string): Promise<void> {
+  async function login(
+    loginName: string,
+    password: string,
+    totpCode?: string,
+    rememberLogin = false,
+  ): Promise<void> {
     busy.value = true;
     error.value = "";
     try {
@@ -84,16 +103,12 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
       if (!isPrivilegedRole(tokens.user.role)) {
         throw new Error("该账号没有管理端访问权限");
       }
-      try {
-        await apiRequest<{ status: string }>("/admin/access-check", {}, tokens.access_token);
-      } catch (caught) {
-        if (caught instanceof ApiError && caught.body.code === "auth.totp_setup_required") {
-          persist(tokens, true);
-          await router.push("/totp-setup");
-          return;
-        }
-        throw caught;
-      }
+      await apiRequest<{ status: string; mfa: string }>(
+        "/admin/access-check",
+        {},
+        tokens.access_token,
+      );
+      persistRememberedLogin(loginName, rememberLogin);
       persist(tokens);
       await router.push("/");
     } catch (caught) {
@@ -143,6 +158,7 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
     error,
     enrollmentOnly,
     isAuthenticated,
+    getRememberedLogin: readRememberedLogin,
     login,
     beginTotpSetup,
     confirmTotpSetup,
