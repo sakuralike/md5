@@ -664,8 +664,8 @@ onMounted(() => {
       </div>
     </section>
 
-    <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-      <div class="space-y-6">
+    <div class="grid min-w-0 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div class="min-w-0 space-y-6">
         <section id="version-history" class="glass-panel scroll-mt-6 p-6">
           <div class="mb-5 flex items-start justify-between gap-4">
             <div>

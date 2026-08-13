@@ -55,6 +55,7 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("用户等级与权益");
     expect(html).toContain("新增等级");
     expect(html).toContain("用户等级横向列表");
+    expect(html).toContain("grid min-w-0 gap-6 xl:grid-cols-[1.05fr_0.95fr]");
     expect(html).toContain("snap-x gap-4 overflow-x-auto");
     expect(html).toContain("发布与回滚门禁");
     expect(html).toContain("一次性再认证");
