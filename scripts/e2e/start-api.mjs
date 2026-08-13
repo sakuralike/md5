@@ -34,6 +34,8 @@ const environment = {
   APP_SECRET_KEY: "synthetic-playwright-secret-key-2026",
   DATABASE_URL: "sqlite:///./.local/playwright/password-detective-e2e.db",
   RATE_LIMIT_BACKEND: "memory",
+  WEB_LOGIN_RATE_LIMIT: "100",
+  ADMIN_LOGIN_RATE_LIMIT: "100",
   NOTIFICATION_BACKEND: "memory",
   AUTO_CREATE_TABLES: "true",
   BROWSER_COOKIE_SECURE: "false",

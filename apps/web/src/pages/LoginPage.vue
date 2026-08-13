@@ -89,12 +89,12 @@ async function submit(): Promise<void> {
             {{ auth.busy ? "登录中…" : "登录" }}
           </Button>
           <div class="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <RouterLink class="text-primary underline-offset-4 hover:underline" to="/forgot-password">
+            <RouterLink class="text-primary underline decoration-1 underline-offset-4 hover:decoration-2" to="/forgot-password">
               忘记密码？
             </RouterLink>
             <span>
               还没有账号？
-              <RouterLink class="text-primary underline-offset-4 hover:underline" to="/register">立即注册</RouterLink>
+              <RouterLink class="text-primary underline decoration-1 underline-offset-4 hover:decoration-2" to="/register">立即注册</RouterLink>
             </span>
           </div>
         </form>

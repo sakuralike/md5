@@ -26,6 +26,12 @@ async function login(page: Page, account: AccountCredentials, totpCode?: string)
   await expect(page).toHaveURL(/\/$/u);
 }
 
+async function logout(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /打开 .* 的账户菜单/u }).click();
+  await page.getByRole("menuitem", { name: "退出登录" }).click();
+  await expect(page).toHaveURL(/\/login$/u);
+}
+
 
 test("Web 撤销其他登录会话并在修改密码后收口剩余会话", async ({ page }) => {
   const browserErrors = observeBrowserErrors(page);
@@ -73,7 +79,7 @@ test("Web 完成 TOTP 绑定、登录门禁、验证登录与停用闭环", asyn
   await expect(page.getByText("TOTP 已启用", { exact: true })).toBeVisible();
   await expect(page.getByText("已启用", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "退出" }).click();
+  await logout(page);
   await page.getByLabel("用户名或邮箱").fill(account.username);
   await page.getByLabel("账号密码").fill(account.password);
   await page.getByRole("button", { name: "登录", exact: true }).click();

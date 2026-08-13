@@ -22,6 +22,8 @@ test("Web 登录页形成桌面视觉、键盘顺序与错误提示门禁", asyn
   await page.keyboard.press("Tab");
   await expect(totpInput).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("checkbox", { name: "记住登录账号" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(submitButton).toBeFocused();
 
   await loginInput.fill("synthetic_visual_invalid");

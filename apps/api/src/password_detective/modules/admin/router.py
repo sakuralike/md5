@@ -133,7 +133,15 @@ def require_user_governance_admin(
 @router.post(
     "/auth/login",
     response_model=BrowserTokenResponse,
-    dependencies=[Depends(rate_limit("admin.auth.login", limit=10, window_seconds=60))],
+    dependencies=[
+        Depends(
+            rate_limit(
+                "admin.auth.login",
+                limit=get_settings().admin_login_rate_limit,
+                window_seconds=60,
+            )
+        )
+    ],
 )
 def admin_login(
     payload: LoginRequest,

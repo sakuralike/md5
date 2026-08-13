@@ -10,7 +10,7 @@
     --card-foreground: 229 35% 18%;
     --popover: 0 0% 100%;
     --popover-foreground: 229 35% 18%;
-    --primary: 269 82% 61%;
+    --primary: 269 72% 48%;
     --primary-foreground: 0 0% 100%;
     --secondary: 270 60% 96%;
     --secondary-foreground: 269 55% 34%;
@@ -22,7 +22,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 270 30% 88%;
     --input: 270 30% 88%;
-    --ring: 269 82% 61%;
+    --ring: 269 72% 48%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -372,7 +372,7 @@ select {
 }
 
 .nav a.router-link-active {
-  color: hsl(var(--accent));
+  color: hsl(var(--primary));
   font-weight: 700;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 5px 16px rgba(78, 104, 148, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.72);

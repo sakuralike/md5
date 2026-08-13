@@ -22,3 +22,19 @@ def test_browser_session_lifetimes_remain_operator_configurable():
 
     assert settings.access_token_ttl_minutes == 720
     assert settings.refresh_token_ttl_days == 180
+
+def test_login_rate_limits_keep_secure_defaults_and_allow_controlled_overrides(monkeypatch):
+    monkeypatch.delenv("WEB_LOGIN_RATE_LIMIT", raising=False)
+    monkeypatch.delenv("ADMIN_LOGIN_RATE_LIMIT", raising=False)
+
+    defaults = Settings(_env_file=None)
+    overridden = Settings(
+        _env_file=None,
+        web_login_rate_limit=100,
+        admin_login_rate_limit=80,
+    )
+
+    assert defaults.web_login_rate_limit == 10
+    assert defaults.admin_login_rate_limit == 10
+    assert overridden.web_login_rate_limit == 100
+    assert overridden.admin_login_rate_limit == 80

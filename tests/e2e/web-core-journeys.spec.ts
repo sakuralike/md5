@@ -16,6 +16,7 @@ async function loginSeededWeb(page: Page): Promise<void> {
 }
 
 async function searchManualFingerprint(page: Page, fingerprint: string): Promise<void> {
+  await page.getByRole("tab", { name: "手工指纹查询" }).click();
   await page.getByLabel("MD5 / SHA-1 / SHA-256 / SHA-512").fill(fingerprint);
   await page.getByRole("button", { name: "识别并精确查询" }).click();
 }

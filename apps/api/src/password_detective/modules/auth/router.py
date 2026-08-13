@@ -77,7 +77,15 @@ router = APIRouter(tags=["认证与账号"])
 @router.post(
     "/web/auth/login",
     response_model=BrowserTokenResponse,
-    dependencies=[Depends(rate_limit("web.auth.login", limit=10, window_seconds=60))],
+    dependencies=[
+        Depends(
+            rate_limit(
+                "web.auth.login",
+                limit=get_settings().web_login_rate_limit,
+                window_seconds=60,
+            )
+        )
+    ],
 )
 def web_login(
     payload: LoginRequest,

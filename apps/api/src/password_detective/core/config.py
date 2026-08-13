@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=1800, ge=30, le=86400)
     redis_url: str = "redis://localhost:6379/0"
     rate_limit_backend: Literal["memory", "redis"] = "memory"
+    web_login_rate_limit: int = Field(default=10, ge=1, le=1000)
+    admin_login_rate_limit: int = Field(default=10, ge=1, le=1000)
     rate_limit_namespace: str = "password-detective"
     notification_backend: Literal["memory", "log", "webhook", "smtp"] = "memory"
     notification_webhook_url: str = ""

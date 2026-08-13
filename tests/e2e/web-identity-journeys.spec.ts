@@ -85,7 +85,7 @@ test("Web 邮箱待验证、一次性验证、重放拒绝与已验证状态形�
 test("Web 刷新令牌轮换后拒绝旧令牌重放并撤销令牌族", async ({ page, request }) => {
   const browserErrors = observeBrowserErrors(page);
   await bootstrapSeededSession(page, required("E2E_WEB_REFRESH_TOKEN"));
-  await expect(page.getByRole("link", { name: "账号安全" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /打开 .* 的账户菜单/u })).toBeVisible();
   const initialCookie = (await page.context().cookies(`${apiBaseUrl}/web/auth/refresh`)).find(
     (cookie) => cookie.name === "pd_web_refresh",
   );

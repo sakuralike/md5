@@ -281,7 +281,7 @@ function statusLabel(status: CandidateStatus): string {
 </script>
 
 <template>
-  <section class="mx-auto flex max-w-4xl flex-col items-center px-4 py-8 text-center sm:py-12">
+  <section class="mx-auto flex min-w-0 w-full max-w-4xl flex-col items-center px-4 py-8 text-center sm:py-12">
     <div class="eyebrow">TRUSTED ARCHIVE LAB · LOCAL FIRST</div>
     <h1 class="mt-4 max-w-3xl bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
       计算压缩包指纹，精确寻找可信候选。
@@ -292,9 +292,9 @@ function statusLabel(status: CandidateStatus): string {
     </p>
   </section>
 
-  <section class="mx-auto grid max-w-4xl gap-6 px-4" data-testid="home-search-workspace">
-    <div class="flex justify-center">
-      <div class="inline-flex rounded-full border border-border/70 bg-card/60 p-1 shadow-sm backdrop-blur-xl" role="tablist" aria-label="查询方式">
+  <section class="mx-auto grid min-w-0 w-full max-w-4xl gap-6 px-4" data-testid="home-search-workspace">
+    <div class="flex w-full min-w-0 justify-center">
+      <div class="flex w-full min-w-0 max-w-full flex-wrap justify-center rounded-full border border-border/70 bg-card/60 p-1 shadow-sm backdrop-blur-xl" role="tablist" aria-label="查询方式">
         <Button
           type="button"
           variant="ghost"
@@ -318,13 +318,13 @@ function statusLabel(status: CandidateStatus): string {
       </div>
     </div>
 
-    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-4 shadow-xl backdrop-blur-xl sm:p-6">
+    <div class="min-w-0 rounded-[2rem] border border-border/70 bg-card/70 p-4 shadow-xl backdrop-blur-xl sm:p-6">
       <div v-if="searchMode === 'file'" class="grid gap-4">
         <label
-          class="flex min-h-16 cursor-pointer items-center gap-3 rounded-full border border-dashed border-primary/40 bg-background/75 px-5 py-3 text-left transition hover:border-primary hover:bg-primary/5"
+          class="flex min-w-0 min-h-16 cursor-pointer items-center gap-3 rounded-full border border-dashed border-primary/40 bg-background/75 px-5 py-3 text-left transition hover:border-primary hover:bg-primary/5"
           :class="{ 'pointer-events-none opacity-60': calculating }"
         >
-          <Input type="file" class="sr-only" :disabled="calculating" @change="onFileSelected" />
+          <Input type="file" class="!absolute !h-px !w-px !overflow-hidden !p-0 !opacity-0" :disabled="calculating" @change="onFileSelected" />
           <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">↑</span>
           <span class="min-w-0 flex-1">
             <strong class="block truncate text-sm sm:text-base">{{ selectedFile?.name ?? "选择 ZIP、7z 或其他压缩包" }}</strong>
