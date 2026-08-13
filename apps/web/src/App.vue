@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
+import type { PublicSiteConfig } from "@password-detective/api-contract";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getPublicSiteConfig } from "./services/site";
 import { useAuthStore } from "./stores/auth";
 
 type BackgroundPreset = "frost" | "grid" | "aurora" | "halo" | "custom";
@@ -14,6 +16,27 @@ interface BackgroundOption {
 }
 
 const auth = useAuthStore();
+const siteConfig = ref<PublicSiteConfig>({
+  site_name: "密码侦探社",
+  site_logo_url: "",
+  navigation: [
+    { label: "首页", path: "/", enabled: true, requires_auth: false },
+    { label: "社区", path: "/community", enabled: true, requires_auth: false },
+  ],
+});
+const visibleNavigation = computed(() =>
+  siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
+);
+
+async function loadSiteConfig(): Promise<void> {
+  try {
+    siteConfig.value = await getPublicSiteConfig();
+    document.title = siteConfig.value.site_name;
+  } catch {
+    // 公共配置不可用时继续使用内置安全默认值。
+  }
+}
+
 const backgroundOptions: BackgroundOption[] = [
   { id: "frost", name: "冰川白", description: "清透蓝白光晕" },
   { id: "grid", name: "数据网格", description: "极简科技网格" },
@@ -68,6 +91,7 @@ function releaseCustomBackground(): void {
   }
 }
 
+onMounted(loadSiteConfig);
 onBeforeUnmount(releaseCustomBackground);
 </script>
 
@@ -96,8 +120,9 @@ onBeforeUnmount(releaseCustomBackground);
     </div>
 
     <header class="topbar">
-      <RouterLink class="brand" to="/" aria-label="密码侦探社首页">
-        <span class="brand-mark" aria-hidden="true">
+      <RouterLink class="brand" to="/" :aria-label="`${siteConfig.site_name}首页`">
+        <img v-if="siteConfig.site_logo_url" :src="siteConfig.site_logo_url" alt="" class="h-11 w-11 rounded-2xl object-contain shadow-sm" />
+        <span v-else class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" role="img">
             <path d="m15.5 15.5 4 4" />
             <circle cx="10.5" cy="10.5" r="5.5" />
@@ -105,14 +130,13 @@ onBeforeUnmount(releaseCustomBackground);
           </svg>
         </span>
         <span class="brand-copy">
-          <strong>密码侦探社</strong>
+          <strong>{{ siteConfig.site_name }}</strong>
           <small>TRUSTED ARCHIVE LAB</small>
         </span>
       </RouterLink>
 
       <nav class="nav" aria-label="主导航">
-        <RouterLink to="/">首页</RouterLink>
-        <RouterLink to="/community">社区</RouterLink>
+        <RouterLink v-for="item in visibleNavigation" :key="item.path" :to="item.path">{{ item.label }}</RouterLink>
       </nav>
 
       <div class="topbar-actions">
@@ -193,7 +217,7 @@ onBeforeUnmount(releaseCustomBackground);
     </main>
 
     <footer class="site-footer">
-      <span>密码侦探社 · 隐私优先的压缩包指纹协作平台</span>
+      <span>{{ siteConfig.site_name }} · 隐私优先的压缩包指纹协作平台</span>
       <span class="system-status"><i aria-hidden="true"></i> 本地计算模式</span>
     </footer>
   </div>

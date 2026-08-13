@@ -8,15 +8,18 @@ import {
   type SettingVersionDetail,
   type SettingVersionSummary,
   type SettingVersionStatus,
+  type SiteNavigationItem,
   type UserLevelDefinition,
 } from "@password-detective/api-contract";
 import {
   ArrowDownUp,
   CheckCircle2,
   FileClock,
+  Globe2,
   History,
   KeyRound,
   MailCheck,
+  Navigation,
   Plus,
   RefreshCw,
   Rocket,
@@ -106,7 +109,15 @@ const defaultUserLevels: UserLevelDefinition[] = [
   },
 ];
 
+const defaultNavigation: SiteNavigationItem[] = [
+  { label: "首页", path: "/", enabled: true, requires_auth: false },
+  { label: "社区", path: "/community", enabled: true, requires_auth: false },
+];
+
 const defaultSnapshot: OperationalSettingsSnapshot = {
+  site_name: "密码侦探社",
+  site_logo_url: "",
+  site_navigation: defaultNavigation,
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,
@@ -148,6 +159,9 @@ const reasonLabels: Record<SettingChangeReasonCode, string> = {
   rollback: "版本回滚",
 };
 const settingLabels: Record<keyof OperationalSettingsSnapshot, string> = {
+  site_name: "前端网站名",
+  site_logo_url: "前端 Logo",
+  site_navigation: "导航按钮",
   daily_reveal_quota: "每日明文查看配额",
   reauthentication_ttl_minutes: "再认证有效期（分钟）",
   privacy_deletion_grace_hours: "账号删除宽限期（小时）",
@@ -226,13 +240,38 @@ function normalizedSnapshot(): OperationalSettingsSnapshot {
   return snapshot;
 }
 
+function addNavigationItem(): void {
+  if (form.value.site_navigation.length >= 8) return;
+  let sequence = form.value.site_navigation.length + 1;
+  let path = `/page-${sequence}`;
+  while (form.value.site_navigation.some((item) => item.path === path)) {
+    sequence += 1;
+    path = `/page-${sequence}`;
+  }
+  form.value.site_navigation.push({
+    label: `导航 ${sequence}`,
+    path,
+    enabled: true,
+    requires_auth: false,
+  });
+}
+
+function removeNavigationItem(index: number): void {
+  if (form.value.site_navigation.length <= 1) return;
+  form.value.site_navigation.splice(index, 1);
+}
+
 function formatDifferenceValue(
-  value: number | string | UserLevelDefinition[] | null,
+  value: number | string | UserLevelDefinition[] | SiteNavigationItem[] | null,
 ): string {
   if (value === null) return "未设置";
   if (!Array.isArray(value)) return String(value);
   return value
-    .map((item) => `${item.name}(${item.min_growth_points}成长值/${item.daily_reveal_quota}次)`)
+    .map((item) =>
+      "path" in item
+        ? `${item.label}(${item.path}${item.enabled ? "" : "，停用"}${item.requires_auth ? "，登录可见" : ""})`
+        : `${item.name}(${item.min_growth_points}成长值/${item.daily_reveal_quota}次)`,
+    )
     .join("；");
 }
 
@@ -414,7 +453,7 @@ onMounted(() => {
           </div>
           <h1 class="text-3xl font-semibold tracking-tight text-slate-950">系统配置治理工作台</h1>
           <p class="text-sm leading-6 text-slate-600">
-            通过不可变版本完成草稿、差异预览、发布与回滚；发布操作要求管理员 MFA 和一次性再认证，并记录最小披露审计事件。
+            通过不可变版本完成草稿、差异预览、发布与回滚；已启用 TOTP 的管理员需完成动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
           </p>
         </div>
         <Button variant="outline" :disabled="loading || emailLoading" @click="refreshPage">
@@ -430,7 +469,71 @@ onMounted(() => {
       {{ success }}
     </div>
 
-    <section class="glass-panel overflow-hidden p-6 sm:p-8" aria-labelledby="email-delivery-title">
+    <div class="grid gap-6 xl:grid-cols-[230px_minmax(0,1fr)]">
+      <aside class="h-fit rounded-3xl border border-border/70 bg-card/80 p-4 shadow-lg backdrop-blur-xl xl:sticky xl:top-6">
+        <div class="border-b border-border/70 px-2 pb-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">SETTING PANEL</p>
+          <h2 class="mt-2 text-lg font-semibold text-foreground">后台设置导航</h2>
+          <p class="mt-1 text-xs leading-5 text-muted-foreground">采用主题后台常见的分区设置结构，配置仍通过草稿、差异与发布门禁生效。</p>
+        </div>
+        <nav class="mt-3 space-y-1" aria-label="系统设置分区">
+          <Button variant="ghost" class="w-full justify-start" as-child><a href="#site-appearance"><Globe2 class="mr-2 size-4" />站点外观</a></Button>
+          <Button variant="ghost" class="w-full justify-start" as-child><a href="#email-delivery"><MailCheck class="mr-2 size-4" />邮件投递</a></Button>
+          <Button variant="ghost" class="w-full justify-start" as-child><a href="#version-history"><History class="mr-2 size-4" />版本历史</a></Button>
+          <Button variant="ghost" class="w-full justify-start" as-child><a href="#operational-policy"><Settings2 class="mr-2 size-4" />运行策略</a></Button>
+          <Button variant="ghost" class="w-full justify-start" as-child><a href="#publish-gate"><ShieldCheck class="mr-2 size-4" />发布门禁</a></Button>
+        </nav>
+        <div class="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">修改后先创建不可变草稿，再在右侧完成差异确认与发布。</div>
+      </aside>
+
+      <div class="min-w-0 space-y-6">
+        <section id="site-appearance" class="glass-panel scroll-mt-6 overflow-hidden p-6 sm:p-8" aria-labelledby="site-appearance-title">
+          <div class="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-3xl">
+              <div class="flex items-center gap-2 text-sm font-medium text-primary"><Globe2 class="size-4" />前端展示</div>
+              <h2 id="site-appearance-title" class="mt-2 text-2xl font-semibold tracking-tight text-foreground">站点外观与导航</h2>
+              <p class="mt-2 text-sm leading-6 text-muted-foreground">设置 Web 前端 Logo、网站名和导航栏按钮。仅允许站内路径，避免主导航成为不受控外链入口。</p>
+            </div>
+            <Badge variant="outline">随配置版本发布</Badge>
+          </div>
+
+          <div class="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div class="space-y-5">
+              <div class="grid gap-5 sm:grid-cols-2">
+                <div class="space-y-2"><Label for="site-name">网站名</Label><Input id="site-name" v-model="form.site_name" maxlength="32" placeholder="密码侦探社" /><p class="text-xs text-muted-foreground">用于导航栏品牌、浏览器标题与页脚。</p></div>
+                <div class="space-y-2"><Label for="site-logo-url">Logo 地址</Label><Input id="site-logo-url" v-model="form.site_logo_url" maxlength="500" placeholder="/logo.svg 或 https://…" /><p class="text-xs text-muted-foreground">支持站内绝对路径或 HTTP(S) 图片地址；留空使用默认图标。</p></div>
+              </div>
+              <div class="space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 class="flex items-center gap-2 font-semibold text-foreground"><Navigation class="size-4 text-primary" />导航按钮</h3><p class="mt-1 text-xs text-muted-foreground">最多 8 项，可控制启用状态以及是否仅登录用户可见。</p></div>
+                  <Button type="button" variant="outline" size="sm" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button>
+                </div>
+                <div class="space-y-3">
+                  <div v-for="(item, index) in form.site_navigation" :key="`${index}-${item.path}`" class="grid gap-3 rounded-2xl border border-border/70 bg-muted/25 p-4 md:grid-cols-[1fr_1.3fr_auto] md:items-end">
+                    <div class="space-y-2"><Label :for="`nav-label-${index}`">按钮名称</Label><Input :id="`nav-label-${index}`" v-model="item.label" maxlength="20" /></div>
+                    <div class="space-y-2"><Label :for="`nav-path-${index}`">站内路径</Label><Input :id="`nav-path-${index}`" v-model="item.path" maxlength="120" placeholder="/community" /></div>
+                    <Button type="button" variant="ghost" size="icon" :disabled="form.site_navigation.length <= 1" :aria-label="`删除导航 ${item.label}`" @click="removeNavigationItem(index)"><Trash2 class="size-4 text-destructive" /></Button>
+                    <div class="flex flex-wrap gap-5 md:col-span-3">
+                      <label class="flex items-center gap-2 text-sm text-foreground"><Checkbox v-model:checked="item.enabled" />启用</label>
+                      <label class="flex items-center gap-2 text-sm text-foreground"><Checkbox v-model:checked="item.requires_auth" />仅登录用户可见</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-border/70 bg-muted/25 p-5">
+              <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">实时预览</p>
+              <div class="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <img v-if="form.site_logo_url" :src="form.site_logo_url" alt="Logo 预览" class="size-12 rounded-xl object-contain" />
+                <div v-else class="grid size-12 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">密</div>
+                <div class="min-w-0"><p class="truncate font-semibold text-foreground">{{ form.site_name || "未命名站点" }}</p><p class="text-xs text-muted-foreground">Web 品牌预览</p></div>
+              </div>
+              <div class="mt-4 flex flex-wrap gap-2"><Badge v-for="item in form.site_navigation.filter((entry) => entry.enabled)" :key="item.path" variant="secondary">{{ item.label }}</Badge></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="email-delivery" class="glass-panel scroll-mt-6 overflow-hidden p-6 sm:p-8" aria-labelledby="email-delivery-title">
       <div class="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div class="max-w-3xl">
           <div class="flex items-center gap-2 text-sm font-medium text-primary">
@@ -518,7 +621,7 @@ onMounted(() => {
 
     <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
       <div class="space-y-6">
-        <section class="glass-panel p-6">
+        <section id="version-history" class="glass-panel scroll-mt-6 p-6">
           <div class="mb-5 flex items-start justify-between gap-4">
             <div>
               <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
@@ -556,7 +659,7 @@ onMounted(() => {
           </Table>
         </section>
 
-        <section class="glass-panel p-6">
+        <section id="operational-policy" class="glass-panel scroll-mt-6 p-6">
           <div class="mb-5">
             <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
               <Save class="size-5 text-sky-600" />配置草稿编辑器
@@ -723,7 +826,7 @@ onMounted(() => {
           <div v-else class="py-10 text-center text-sm text-slate-500">暂无可预览版本。</div>
         </section>
 
-        <section class="glass-panel p-6">
+        <section id="publish-gate" class="glass-panel scroll-mt-6 p-6">
           <div class="mb-5">
             <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
               <ShieldCheck class="size-5 text-sky-600" />发布与回滚门禁
@@ -760,6 +863,8 @@ onMounted(() => {
             当前版本 {{ shortId(currentVersion?.id ?? null) }} 发布后会原子更新系统配置投影，历史快照保持不可变，回滚也会创建一个新版本而不是改写旧记录。
           </p>
         </section>
+      </div>
+    </div>
       </div>
     </div>
   </section>

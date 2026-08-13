@@ -3,6 +3,14 @@ import { createSSRApp, defineComponent } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import HomePage from "./HomePage.vue";
 
+vi.mock("../services/site", () => ({
+  getHomeDiscovery: vi.fn().mockResolvedValue({
+    hot_hashes: [],
+    contribution_leaders: [],
+    points_leaders: [],
+  }),
+}));
+
 vi.mock("../stores/auth", () => ({
   useAuthStore: () => ({
     isAuthenticated: false,
@@ -35,5 +43,8 @@ describe("HomePage", () => {
     expect(html).toContain("选择文件或输入完整指纹后开始查询");
     expect(html).toContain('type="file"');
     expect(html).toContain('data-testid="home-search-workspace"');
+    expect(html).toContain("热门哈希值");
+    expect(html).toContain("用户贡献排行榜");
+    expect(html).toContain("用户积分排行榜");
   });
 });

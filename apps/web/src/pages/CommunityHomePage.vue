@@ -50,7 +50,7 @@ async function loadHome(): Promise<void> {
       auth.isAuthenticated ? auth.accessToken : undefined,
     );
     boards.value = response.boards;
-      posts.value = response.posts.items;
+    posts.value = response.posts.items;
     groups.value = (await listCommunityGroups(auth.isAuthenticated ? auth.accessToken : undefined)).items;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "社区首页加载失败";
@@ -97,15 +97,15 @@ function formatDate(value: string): string {
       <AlertDescription>{{ error }}</AlertDescription>
     </Alert>
 
-    <div class="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <Card class="h-fit border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
+    <div class="space-y-6">
+      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
         <CardHeader>
           <CardTitle>社区板块</CardTitle>
           <CardDescription>选择讨论边界。</CardDescription>
         </CardHeader>
-        <CardContent class="space-y-2">
+        <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Button
-            class="w-full justify-start"
+            class="h-auto min-h-20 w-full justify-start whitespace-normal border border-border/60 px-4 py-3 text-left"
             :variant="selectedBoard ? 'ghost' : 'secondary'"
             @click="selectBoard()"
           >
@@ -114,7 +114,7 @@ function formatDate(value: string): string {
           <Button
             v-for="board in boards"
             :key="board.code"
-            class="h-auto w-full justify-start whitespace-normal py-3 text-left"
+            class="h-auto min-h-20 w-full justify-start whitespace-normal border border-border/60 px-4 py-3 text-left"
             :variant="selectedBoard === board.code ? 'secondary' : 'ghost'"
             @click="selectBoard(board.code)"
           >
@@ -126,7 +126,7 @@ function formatDate(value: string): string {
         </CardContent>
       </Card>
 
-      <Card class="h-fit border-card/80 bg-card/70 shadow-lg backdrop-blur-xl lg:col-span-2">
+      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
         <CardHeader class="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>社区群组</CardTitle>

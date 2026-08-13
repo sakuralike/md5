@@ -43,6 +43,9 @@ describe("SystemSettingsPage", () => {
     const html = await renderToString(createSSRApp(SystemSettingsPage));
 
     expect(html).toContain("系统配置治理工作台");
+    expect(html).toContain("后台设置导航");
+    expect(html).toContain("站点外观与导航");
+    expect(html).toContain("导航按钮");
     expect(html).toContain("SMTP 邮件投递");
     expect(html).toContain("不可变版本历史");
     expect(html).toContain("版本差异预览");

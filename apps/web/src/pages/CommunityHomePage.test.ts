@@ -33,5 +33,7 @@ describe("CommunityHomePage", () => {
     expect(html).toContain("社区板块");
     expect(html).toContain("发布新主题");
     expect(html).toContain("点击主题进入独立详情页");
+    expect(html).toContain("sm:grid-cols-2 lg:grid-cols-5");
+    expect(html).not.toContain("lg:grid-cols-[260px_minmax(0,1fr)]");
   });
 });

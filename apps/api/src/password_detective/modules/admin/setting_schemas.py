@@ -17,6 +17,34 @@ class SettingChangeReasonCode(StrEnum):
     ROLLBACK = "rollback"
 
 
+class SiteNavigationItem(BaseModel):
+    label: str = Field(min_length=1, max_length=20)
+    path: str = Field(min_length=1, max_length=120)
+    enabled: bool = True
+    requires_auth: bool = False
+
+    @field_validator("label", "path")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        if not value.startswith("/") or value.startswith("//"):
+            raise ValueError("导航路径必须是站内绝对路径")
+        if any(character in value for character in ("\\", "<", ">", '"', "'")):
+            raise ValueError("导航路径包含不允许的字符")
+        return value
+
+
+def default_site_navigation() -> list[SiteNavigationItem]:
+    return [
+        SiteNavigationItem(label="首页", path="/"),
+        SiteNavigationItem(label="社区", path="/community"),
+    ]
+
+
 class UserLevelDefinition(BaseModel):
     code: str = Field(min_length=2, max_length=32, pattern=r"^[a-z][a-z0-9_]*$")
     name: str = Field(min_length=2, max_length=64)
@@ -67,6 +95,11 @@ def default_user_levels() -> list[UserLevelDefinition]:
 
 
 class OperationalSettingsSnapshot(BaseModel):
+    site_name: str = Field(default="密码侦探社", min_length=2, max_length=32)
+    site_logo_url: str = Field(default="", max_length=500)
+    site_navigation: list[SiteNavigationItem] = Field(
+        default_factory=default_site_navigation, min_length=1, max_length=8
+    )
     daily_reveal_quota: int = Field(ge=1, le=1000)
     reauthentication_ttl_minutes: int = Field(ge=1, le=15)
     privacy_deletion_grace_hours: int = Field(ge=1, le=720)
@@ -75,6 +108,31 @@ class OperationalSettingsSnapshot(BaseModel):
     user_levels: list[UserLevelDefinition] = Field(
         default_factory=default_user_levels, min_length=1, max_length=20
     )
+
+    @field_validator("site_name", "site_logo_url")
+    @classmethod
+    def normalize_site_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("site_logo_url")
+    @classmethod
+    def validate_logo_url(cls, value: str) -> str:
+        if not value:
+            return value
+        if value.startswith("/") and not value.startswith("//"):
+            return value
+        if value.startswith(("https://", "http://")):
+            return value
+        raise ValueError("Logo 地址必须是站内路径或 HTTP(S) 地址")
+
+    @model_validator(mode="after")
+    def validate_site_navigation(self) -> OperationalSettingsSnapshot:
+        paths = [item.path for item in self.site_navigation]
+        if len(paths) != len(set(paths)):
+            raise ValueError("导航按钮路径不能重复")
+        if not any(item.enabled for item in self.site_navigation):
+            raise ValueError("至少需要启用一个导航按钮")
+        return self
 
     @model_validator(mode="after")
     def validate_user_levels(self) -> OperationalSettingsSnapshot:
@@ -119,8 +177,8 @@ class SettingVersionRollbackRequest(BaseModel):
 
 class SettingDifference(BaseModel):
     key: str
-    previous: int | str | list[UserLevelDefinition] | None
-    current: int | str | list[UserLevelDefinition]
+    previous: int | str | list[UserLevelDefinition] | list[SiteNavigationItem] | None
+    current: int | str | list[UserLevelDefinition] | list[SiteNavigationItem]
 
 
 class SettingVersionSummary(BaseModel):

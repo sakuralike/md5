@@ -237,9 +237,7 @@ def test_level_rules_publish_rebuilds_profiles_and_rejects_invalid_thresholds(cl
     )
     assert created.status_code == 201
     draft = created.json()["version"]
-    level_difference = next(
-        item for item in draft["differences"] if item["key"] == "user_levels"
-    )
+    level_difference = next(item for item in draft["differences"] if item["key"] == "user_levels")
     assert level_difference["current"] == levels
 
     published = client.post(
@@ -280,3 +278,89 @@ def test_level_rules_publish_rebuilds_profiles_and_rejects_invalid_thresholds(cl
         },
     )
     assert invalid.status_code == 422
+
+
+def test_site_brand_and_navigation_validation_are_versioned(client):
+    headers, _, secret = _admin_session(client, "site_brand")
+    snapshot = _snapshot(20)
+    snapshot.update(
+        {
+            "site_name": "合成侦探站",
+            "site_logo_url": "/assets/synthetic-logo.svg",
+            "site_navigation": [
+                {
+                    "label": "首页",
+                    "path": "/",
+                    "enabled": True,
+                    "requires_auth": False,
+                },
+                {
+                    "label": "社区",
+                    "path": "/community",
+                    "enabled": True,
+                    "requires_auth": False,
+                },
+                {
+                    "label": "用户中心",
+                    "path": "/account",
+                    "enabled": True,
+                    "requires_auth": True,
+                },
+            ],
+        }
+    )
+    created = client.post(
+        "/api/v1/admin/settings/versions",
+        headers={**headers, "Idempotency-Key": "settings-site-brand-create"},
+        json={
+            "expected_base_version_id": None,
+            "reason_code": "product_policy",
+            "snapshot": snapshot,
+        },
+    )
+    assert created.status_code == 201
+    draft = created.json()["version"]
+    assert {item["key"] for item in draft["differences"]} >= {
+        "site_name",
+        "site_logo_url",
+        "site_navigation",
+    }
+
+    published = client.post(
+        f"/api/v1/admin/settings/versions/{draft['id']}/publish",
+        headers={**headers, "Idempotency-Key": "settings-site-brand-publish"},
+        json={
+            "expected_published_version_id": None,
+            "reason_code": "product_policy",
+            "reauth_token": _reauth(client, headers, secret),
+        },
+    )
+    assert published.status_code == 200
+    config = client.get("/api/v1/site/config")
+    assert config.status_code == 200
+    assert config.json()["site_name"] == "合成侦探站"
+    assert [item["path"] for item in config.json()["navigation"]] == [
+        "/",
+        "/community",
+        "/account",
+    ]
+
+    invalid = dict(snapshot)
+    invalid["site_navigation"] = [
+        {
+            "label": "外部入口",
+            "path": "https://synthetic.example.com",
+            "enabled": True,
+            "requires_auth": False,
+        }
+    ]
+    rejected = client.post(
+        "/api/v1/admin/settings/versions",
+        headers={**headers, "Idempotency-Key": "settings-site-brand-invalid"},
+        json={
+            "expected_base_version_id": draft["id"],
+            "reason_code": "product_policy",
+            "snapshot": invalid,
+        },
+    )
+    assert rejected.status_code == 422

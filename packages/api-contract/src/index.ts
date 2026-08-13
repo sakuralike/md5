@@ -1371,7 +1371,45 @@ export interface EmailDeliveryTestResponse {
   provider_message_id: string;
 }
 
+export interface SiteNavigationItem {
+  label: string;
+  path: string;
+  enabled: boolean;
+  requires_auth: boolean;
+}
+
+export interface PublicSiteConfig {
+  site_name: string;
+  site_logo_url: string;
+  navigation: SiteNavigationItem[];
+}
+
+export interface HotHashSummary {
+  algorithm: FingerprintAlgorithm;
+  digest: string;
+  like_count: number;
+  comment_count: number;
+  useful_vote_count: number;
+  heat_score: number;
+}
+
+export interface UserRankingSummary {
+  rank: number;
+  uid: string;
+  username: string;
+  score: number;
+}
+
+export interface HomeDiscoveryResponse {
+  hot_hashes: HotHashSummary[];
+  contribution_leaders: UserRankingSummary[];
+  points_leaders: UserRankingSummary[];
+}
+
 export interface OperationalSettingsSnapshot {
+  site_name: string;
+  site_logo_url: string;
+  site_navigation: SiteNavigationItem[];
   daily_reveal_quota: number;
   reauthentication_ttl_minutes: number;
   privacy_deletion_grace_hours: number;
@@ -1382,8 +1420,8 @@ export interface OperationalSettingsSnapshot {
 
 export interface SettingDifference {
   key: keyof OperationalSettingsSnapshot;
-  previous: number | string | UserLevelDefinition[] | null;
-  current: number | string | UserLevelDefinition[];
+  previous: number | string | UserLevelDefinition[] | SiteNavigationItem[] | null;
+  current: number | string | UserLevelDefinition[] | SiteNavigationItem[];
 }
 
 export interface SettingVersionSummary {

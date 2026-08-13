@@ -15,6 +15,12 @@ vi.mock("./api", () => ({
 
 const mockedApiRequest = vi.mocked(apiRequest);
 const snapshot = {
+  site_name: "密码侦探社",
+  site_logo_url: "",
+  site_navigation: [
+    { label: "首页", path: "/", enabled: true, requires_auth: false },
+    { label: "社区", path: "/community", enabled: true, requires_auth: false },
+  ],
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,

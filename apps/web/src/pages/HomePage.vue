@@ -8,8 +8,9 @@ import type {
   CandidateFeedbackResponse,
   CandidateStatus,
   FeedbackOutcome,
+  HomeDiscoveryResponse,
 } from "@password-detective/api-contract";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   DEFAULT_MAX_ARCHIVE_SIZE_BYTES,
   normalizeManualFingerprint,
 } from "../services/fingerprint";
+import { getHomeDiscovery } from "../services/site";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
@@ -49,6 +51,25 @@ const candidatePassword = ref("");
 const authorizationConfirmed = ref(false);
 const revealedPassword = ref("");
 const abortController = ref<AbortController | null>(null);
+const discovery = ref<HomeDiscoveryResponse>({
+  hot_hashes: [],
+  contribution_leaders: [],
+  points_leaders: [],
+});
+const discoveryLoading = ref(true);
+
+async function loadDiscovery(): Promise<void> {
+  discoveryLoading.value = true;
+  try {
+    discovery.value = await getHomeDiscovery();
+  } catch {
+    discovery.value = { hot_hashes: [], contribution_leaders: [], points_leaders: [] };
+  } finally {
+    discoveryLoading.value = false;
+  }
+}
+
+onMounted(loadDiscovery);
 
 const primaryFingerprint = computed(
   () => fingerprints.value.find((item) => item.algorithm === "sha256") ?? fingerprints.value[0],
@@ -453,6 +474,50 @@ function statusLabel(status: CandidateStatus): string {
         <span class="text-sm text-muted-foreground">贡献需要登录，以记录授权声明、证据来源和待结算积分。</span>
         <Button class="rounded-full" as-child><RouterLink to="/login">登录后贡献</RouterLink></Button>
       </div>
+    </div>
+  </section>
+
+  <section class="mx-auto grid max-w-6xl gap-5 px-4 py-10 lg:grid-cols-3" aria-label="站点发现与排行榜">
+    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">DISCOVERY</p><h2 class="mt-2 text-xl font-semibold">热门哈希值</h2></div>
+        <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span>
+      </div>
+      <div v-if="discoveryLoading" class="mt-5 space-y-3"><div v-for="index in 5" :key="index" class="h-14 animate-pulse rounded-2xl bg-muted" /></div>
+      <div v-else-if="discovery.hot_hashes.length" class="mt-5 space-y-2">
+        <RouterLink v-for="(item, index) in discovery.hot_hashes" :key="`${item.algorithm}-${item.digest}`" :to="`/hash/${item.algorithm}/${item.digest}`" class="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/55 p-3 transition hover:border-primary/30 hover:bg-primary/5">
+          <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{{ index + 1 }}</span>
+          <span class="min-w-0 flex-1"><strong class="block truncate font-mono text-sm">{{ item.digest }}</strong><small class="text-muted-foreground">{{ item.algorithm.toUpperCase() }} · 热度 {{ item.heat_score }}</small></span>
+          <span class="text-xs text-muted-foreground">赞 {{ item.like_count }}</span>
+        </RouterLink>
+      </div>
+      <p v-else class="mt-5 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">暂无可排行的哈希互动数据。</p>
+    </div>
+
+    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+      <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">CONTRIBUTORS</p><h2 class="mt-2 text-xl font-semibold">用户贡献排行榜</h2></div><span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span></div>
+      <div v-if="discoveryLoading" class="mt-5 space-y-3"><div v-for="index in 5" :key="index" class="h-14 animate-pulse rounded-2xl bg-muted" /></div>
+      <ol v-else-if="discovery.contribution_leaders.length" class="mt-5 space-y-2">
+        <li v-for="item in discovery.contribution_leaders" :key="item.uid" class="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/55 p-3">
+          <span class="flex size-8 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent-foreground">{{ item.rank }}</span>
+          <RouterLink class="min-w-0 flex-1 truncate font-medium hover:text-primary" :to="`/community/users/${item.username}`">{{ item.username }}</RouterLink>
+          <span class="text-sm font-semibold">{{ item.score }} 次</span>
+        </li>
+      </ol>
+      <p v-else class="mt-5 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">暂无有效贡献排行数据。</p>
+    </div>
+
+    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+      <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">POINTS</p><h2 class="mt-2 text-xl font-semibold">用户积分排行榜</h2></div><span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span></div>
+      <div v-if="discoveryLoading" class="mt-5 space-y-3"><div v-for="index in 5" :key="index" class="h-14 animate-pulse rounded-2xl bg-muted" /></div>
+      <ol v-else-if="discovery.points_leaders.length" class="mt-5 space-y-2">
+        <li v-for="item in discovery.points_leaders" :key="item.uid" class="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/55 p-3">
+          <span class="flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ item.rank }}</span>
+          <RouterLink class="min-w-0 flex-1 truncate font-medium hover:text-primary" :to="`/community/users/${item.username}`">{{ item.username }}</RouterLink>
+          <span class="text-sm font-semibold">{{ item.score }} 分</span>
+        </li>
+      </ol>
+      <p v-else class="mt-5 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">暂无已结算积分排行数据。</p>
     </div>
   </section>
 
