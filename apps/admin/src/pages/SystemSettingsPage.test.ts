@@ -52,6 +52,8 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("不可变版本历史");
     expect(html).toContain("版本差异预览");
     expect(html).toContain("用户等级与权益");
+    expect(html).toContain('id="user-levels"');
+    expect(html).toContain("创建不可变草稿");
     expect(html).toContain("新增等级");
     expect(html).toContain("用户等级横向列表");
     expect(html).toContain('data-layout="stacked-settings-regions"');

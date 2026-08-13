@@ -20,7 +20,7 @@ const auth = useAdminAuthStore();
     >
       跳到主要内容
     </a>
-    <header class="sticky top-0 z-40 px-3 pt-3 sm:px-5">
+    <header class="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5">
       <div class="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center gap-3 rounded-2xl border border-card/80 bg-card/70 px-4 py-3 shadow-lg backdrop-blur-2xl sm:px-5 lg:flex-nowrap">
         <RouterLink class="flex min-w-0 items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" to="/">
           <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-accent text-lg text-primary-foreground shadow-md" aria-hidden="true">🛡️</span>
@@ -50,7 +50,7 @@ const auth = useAdminAuthStore();
 
     <main
       id="main-content"
-      class="mx-auto min-h-[calc(100vh-5.5rem)] w-full max-w-screen-2xl px-4 py-7 sm:px-6 lg:py-10"
+      class="mx-auto min-h-screen w-full max-w-screen-2xl px-4 pb-7 pt-28 sm:px-6 sm:pb-8 sm:pt-32 lg:pb-10"
       :class="auth.isAuthenticated ? 'lg:pl-[18rem] lg:pr-8' : 'lg:px-8'"
       tabindex="-1"
     >

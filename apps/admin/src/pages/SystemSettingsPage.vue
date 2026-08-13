@@ -13,6 +13,7 @@ import {
 } from "@password-detective/api-contract";
 import {
   ArrowDownUp,
+  BadgeCheck,
   CheckCircle2,
   FileClock,
   Globe2,
@@ -269,8 +270,21 @@ function removeUserLevel(index: number): void {
 }
 
 function normalizedSnapshot(): OperationalSettingsSnapshot {
-  const snapshot = structuredClone(form.value);
+  // ref.value 是 Vue Reactive Proxy，不能直接传给 structuredClone；手动构造
+  // 纯数据快照，确保创建不可变草稿在旧浏览器和非安全上下文也能正常发起请求。
+  const snapshot: OperationalSettingsSnapshot = {
+    site_name: form.value.site_name.trim(),
+    site_logo_url: form.value.site_logo_url.trim(),
+    site_navigation: form.value.site_navigation.map((item) => ({ ...item })),
+    daily_reveal_quota: Number(form.value.daily_reveal_quota),
+    reauthentication_ttl_minutes: Number(form.value.reauthentication_ttl_minutes),
+    privacy_deletion_grace_hours: Number(form.value.privacy_deletion_grace_hours),
+    desktop_min_client_version: form.value.desktop_min_client_version.trim(),
+    desktop_update_download_cache_seconds: Number(form.value.desktop_update_download_cache_seconds),
+    user_levels: form.value.user_levels.map((level) => ({ ...level })),
+  };
   snapshot.user_levels.sort((left, right) => left.min_growth_points - right.min_growth_points);
+  snapshot.user_levels[0].min_growth_points = 0;
   return snapshot;
 }
 
@@ -730,18 +744,16 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="mt-6 space-y-4 border-t border-border/70 pt-5">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 class="font-semibold text-foreground">用户等级与权益</h3>
-                <p class="mt-1 text-sm text-muted-foreground">
-                  成长值门槛必须唯一并按升序排列；首级门槛固定为 0。发布后会重建全部用户等级投影。
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" @click="addUserLevel">
-                <Plus class="mr-2 size-4" />新增等级
-              </Button>
+        </section>
+
+        <section id="user-levels" class="glass-panel scroll-mt-28 p-6">
+          <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950"><BadgeCheck class="size-5 text-sky-600" />用户等级与权益</h2>
+              <p class="mt-1 text-sm text-slate-500">成长值门槛必须唯一并按升序排列；首级门槛固定为 0。发布后会重建全部用户等级投影。</p>
             </div>
+            <Button type="button" variant="outline" size="sm" @click="addUserLevel"><Plus class="mr-2 size-4" />新增等级</Button>
+          </div>
 
             <div class="flex snap-x gap-4 overflow-x-auto pb-3" aria-label="用户等级横向列表" tabindex="0">
               <article
@@ -809,9 +821,8 @@ onMounted(() => {
               </div>
               </article>
             </div>
-          </div>
 
-          <Button class="mt-5" :disabled="mutationBusy" @click="createDraft">
+          <Button type="button" class="mt-5" :disabled="mutationBusy" @click="createDraft">
             <Save class="mr-2 size-4" />创建不可变草稿
           </Button>
         </section>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  BadgeCheck,
   Globe2,
   History,
   MailCheck,
@@ -39,6 +40,7 @@ const systemSettingsSections: readonly SystemSettingsSectionItem[] = [
   { label: "邮件投递", to: "/settings#email-delivery", icon: MailCheck },
   { label: "版本历史", to: "/settings#version-history", icon: History },
   { label: "运行策略", to: "/settings#operational-policy", icon: Settings2 },
+  { label: "用户等级与权益", to: "/settings#user-levels", icon: BadgeCheck },
   { label: "发布门禁", to: "/settings#publish-gate", icon: ShieldCheck },
 ];
 
