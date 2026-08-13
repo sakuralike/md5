@@ -44,7 +44,6 @@ describe("SystemSettingsPage", () => {
     const html = await renderToString(createSSRApp(SystemSettingsPage));
 
     expect(html).toContain("系统配置治理工作台");
-    expect(html).toContain("后台设置导航");
     expect(html).toContain("站点外观与导航");
     expect(html).toContain("导航按钮");
     expect(html).toContain("上传 Logo 图片");
@@ -55,7 +54,9 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("用户等级与权益");
     expect(html).toContain("新增等级");
     expect(html).toContain("用户等级横向列表");
-    expect(html).toContain("grid min-w-0 gap-6 xl:grid-cols-[1.05fr_0.95fr]");
+    expect(html).toContain('data-layout="stacked-settings-regions"');
+    expect(html).not.toContain("xl:grid-cols-[1.05fr_0.95fr]");
+    expect(html).not.toContain("系统配置分区");
     expect(html).toContain("snap-x gap-4 overflow-x-auto");
     expect(html).toContain("发布与回滚门禁");
     expect(html).toContain("一次性再认证");

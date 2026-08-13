@@ -503,25 +503,8 @@ onMounted(() => {
       {{ success }}
     </div>
 
-    <div class="grid gap-6 xl:grid-cols-[230px_minmax(0,1fr)]">
-      <aside class="h-fit rounded-3xl border border-border/70 bg-card/80 p-4 shadow-lg backdrop-blur-xl xl:sticky xl:top-6">
-        <div class="border-b border-border/70 px-2 pb-4">
-          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">SETTING PANEL</p>
-          <h2 class="mt-2 text-lg font-semibold text-foreground">系统配置分区</h2>
-          <p class="mt-1 text-xs leading-5 text-muted-foreground">当前页保留配置分区目录；全局管理功能请使用左侧固定的后台设置导航。</p>
-        </div>
-        <nav class="mt-3 space-y-1" aria-label="系统设置分区">
-          <Button variant="ghost" class="w-full justify-start" as-child><a href="#site-appearance"><Globe2 class="mr-2 size-4" />站点外观</a></Button>
-          <Button variant="ghost" class="w-full justify-start" as-child><a href="#email-delivery"><MailCheck class="mr-2 size-4" />邮件投递</a></Button>
-          <Button variant="ghost" class="w-full justify-start" as-child><a href="#version-history"><History class="mr-2 size-4" />版本历史</a></Button>
-          <Button variant="ghost" class="w-full justify-start" as-child><a href="#operational-policy"><Settings2 class="mr-2 size-4" />运行策略</a></Button>
-          <Button variant="ghost" class="w-full justify-start" as-child><a href="#publish-gate"><ShieldCheck class="mr-2 size-4" />发布门禁</a></Button>
-        </nav>
-        <div class="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">修改后先创建不可变草稿，再在右侧完成差异确认与发布。</div>
-      </aside>
-
-      <div class="min-w-0 space-y-6">
-        <section id="site-appearance" class="glass-panel scroll-mt-6 overflow-hidden p-6 sm:p-8" aria-labelledby="site-appearance-title">
+    <div class="min-w-0 space-y-6">
+        <section id="site-appearance" class="glass-panel scroll-mt-28 overflow-hidden p-6 sm:p-8" aria-labelledby="site-appearance-title">
           <div class="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-start lg:justify-between">
             <div class="max-w-3xl">
               <div class="flex items-center gap-2 text-sm font-medium text-primary"><Globe2 class="size-4" />前端展示</div>
@@ -578,7 +561,7 @@ onMounted(() => {
           </div>
         </section>
 
-        <section id="email-delivery" class="glass-panel scroll-mt-6 overflow-hidden p-6 sm:p-8" aria-labelledby="email-delivery-title">
+        <section id="email-delivery" class="glass-panel scroll-mt-28 overflow-hidden p-6 sm:p-8" aria-labelledby="email-delivery-title">
       <div class="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div class="max-w-3xl">
           <div class="flex items-center gap-2 text-sm font-medium text-primary">
@@ -664,9 +647,9 @@ onMounted(() => {
       </div>
     </section>
 
-    <div class="grid min-w-0 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <div class="min-w-0 space-y-6" data-layout="stacked-settings-regions">
       <div class="min-w-0 space-y-6">
-        <section id="version-history" class="glass-panel scroll-mt-6 p-6">
+        <section id="version-history" class="glass-panel scroll-mt-28 p-6">
           <div class="mb-5 flex items-start justify-between gap-4">
             <div>
               <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
@@ -704,7 +687,7 @@ onMounted(() => {
           </Table>
         </section>
 
-        <section id="operational-policy" class="glass-panel scroll-mt-6 p-6">
+        <section id="operational-policy" class="glass-panel scroll-mt-28 p-6">
           <div class="mb-5">
             <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
               <Save class="size-5 text-sky-600" />配置草稿编辑器
@@ -873,7 +856,7 @@ onMounted(() => {
           <div v-else class="py-10 text-center text-sm text-slate-500">暂无可预览版本。</div>
         </section>
 
-        <section id="publish-gate" class="glass-panel scroll-mt-6 p-6">
+        <section id="publish-gate" class="glass-panel scroll-mt-28 p-6">
           <div class="mb-5">
             <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
               <ShieldCheck class="size-5 text-sky-600" />发布与回滚门禁
@@ -912,7 +895,6 @@ onMounted(() => {
         </section>
       </div>
     </div>
-      </div>
     </div>
   </section>
 </template>
