@@ -473,8 +473,8 @@ onMounted(() => {
       <aside class="h-fit rounded-3xl border border-border/70 bg-card/80 p-4 shadow-lg backdrop-blur-xl xl:sticky xl:top-6">
         <div class="border-b border-border/70 px-2 pb-4">
           <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">SETTING PANEL</p>
-          <h2 class="mt-2 text-lg font-semibold text-foreground">后台设置导航</h2>
-          <p class="mt-1 text-xs leading-5 text-muted-foreground">采用主题后台常见的分区设置结构，配置仍通过草稿、差异与发布门禁生效。</p>
+          <h2 class="mt-2 text-lg font-semibold text-foreground">系统配置分区</h2>
+          <p class="mt-1 text-xs leading-5 text-muted-foreground">当前页保留配置分区目录；全局管理功能请使用左侧固定的后台设置导航。</p>
         </div>
         <nav class="mt-3 space-y-1" aria-label="系统设置分区">
           <Button variant="ghost" class="w-full justify-start" as-child><a href="#site-appearance"><Globe2 class="mr-2 size-4" />站点外观</a></Button>

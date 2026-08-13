@@ -1,22 +1,10 @@
 <script setup lang="ts">
+import AdminSettingsNavigation from "@/components/AdminSettingsNavigation.vue";
 import { Button } from "@/components/ui/button";
+import { dashboardNavigationItem } from "@/lib/adminNavigation";
 import { useAdminAuthStore } from "./stores/auth";
 
 const auth = useAdminAuthStore();
-
-const navigationItems = [
-  { to: "/", label: "仪表盘" },
-  { to: "/candidates", label: "候选审核" },
-  { to: "/trust-cases", label: "举报申诉" },
-  { to: "/community", label: "社区治理" },
-  { to: "/community/settings", label: "社区配置" },
-  { to: "/risk-alerts", label: "风险告警" },
-  { to: "/desktop-releases", label: "桌面发布" },
-  { to: "/audit", label: "审计日志" },
-  { to: "/users", label: "用户治理" },
-  { to: "/role-changes", label: "角色审批" },
-  { to: "/settings", label: "系统配置" },
-] as const;
 </script>
 
 <template>
@@ -43,23 +31,28 @@ const navigationItems = [
         </RouterLink>
 
         <div v-if="auth.isAuthenticated" class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 lg:flex-nowrap">
-          <nav class="order-2 flex w-full gap-1 overflow-x-auto pb-1 lg:order-none lg:ml-4 lg:w-auto lg:flex-1 lg:justify-end lg:pb-0" aria-label="管理导航">
+          <nav class="ml-auto flex items-center gap-1" aria-label="管理主导航">
             <RouterLink
-              v-for="item in navigationItems"
-              :key="item.to"
-              :to="item.to"
-              class="shrink-0 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              active-class="bg-card text-primary shadow-sm"
+              :to="dashboardNavigationItem.path"
+              class="rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              exact-active-class="bg-card text-primary shadow-sm"
             >
-              {{ item.label }}
+              {{ dashboardNavigationItem.label }}
             </RouterLink>
           </nav>
+          <AdminSettingsNavigation />
           <Button class="shrink-0 rounded-full border-card/80 bg-card/70" variant="outline" size="sm" @click="auth.logout()">退出</Button>
         </div>
       </div>
     </header>
 
-    <main id="main-content" class="mx-auto min-h-[calc(100vh-5.5rem)] w-full max-w-screen-2xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10" tabindex="-1">
+
+    <main
+      id="main-content"
+      class="mx-auto min-h-[calc(100vh-5.5rem)] w-full max-w-screen-2xl px-4 py-7 sm:px-6 lg:py-10"
+      :class="auth.isAuthenticated ? 'lg:pl-72 lg:pr-8' : 'lg:px-8'"
+      tabindex="-1"
+    >
       <RouterView />
     </main>
   </div>

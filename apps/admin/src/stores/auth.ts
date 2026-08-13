@@ -6,7 +6,7 @@ import {
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { apiRequest } from "../services/api";
+import { apiRequest, setAccessTokenRefreshHandler } from "../services/api";
 
 const STORAGE_KEY = "password_detective_admin_session_v2";
 const REMEMBERED_LOGIN_KEY = "password_detective_admin_remembered_login_v1";
@@ -119,6 +119,25 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
     }
   }
 
+  async function refresh(): Promise<string | null> {
+    try {
+      const tokens = await apiRequest<BrowserTokenResponse>("/admin/auth/refresh", {
+        method: "POST",
+      });
+      if (!isPrivilegedRole(tokens.user.role)) {
+        clear();
+        return null;
+      }
+      persist(tokens);
+      return tokens.access_token;
+    } catch {
+      clear();
+      return null;
+    }
+  }
+
+  setAccessTokenRefreshHandler(refresh);
+
   async function beginTotpSetup(): Promise<TotpSetupResponse> {
     return apiRequest<TotpSetupResponse>(
       "/admin/totp/setup",
@@ -160,6 +179,7 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
     isAuthenticated,
     getRememberedLogin: readRememberedLogin,
     login,
+    refresh,
     beginTotpSetup,
     confirmTotpSetup,
     logout,

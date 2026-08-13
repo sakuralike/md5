@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
+import { allAdminNavigationItems } from "@/lib/adminNavigation";
 import { getAdminDashboardSummary } from "../services/dashboard";
 import { useAdminAuthStore } from "../stores/auth";
 
@@ -179,22 +180,35 @@ onMounted(loadSummary);
       </section>
     </div>
 
-    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-      <RouterLink class="rounded-2xl border border-white/70 bg-white/70 p-5 text-inherit shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-md" to="/candidates">
-        <span class="text-xs font-semibold text-emerald-700">M4 已接入</span><h2 class="mt-2 font-semibold text-slate-950">候选审核</h2><p class="mt-2 text-sm leading-6 text-slate-500">查看证据时间线并执行可审计状态处置。</p>
-      </RouterLink>
-      <RouterLink class="rounded-2xl border border-white/70 bg-white/70 p-5 text-inherit shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-md" to="/risk-alerts">
-        <span class="text-xs font-semibold text-amber-700">M4 已接入</span><h2 class="mt-2 font-semibold text-slate-950">风险告警</h2><p class="mt-2 text-sm leading-6 text-slate-500">处理失败激增告警、分派和通知回放。</p>
-      </RouterLink>
-      <RouterLink class="rounded-2xl border border-white/70 bg-white/70 p-5 text-inherit shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-md" to="/desktop-releases">
-        <span class="text-xs font-semibold text-sky-700">M3 已接入</span><h2 class="mt-2 font-semibold text-slate-950">桌面发布</h2><p class="mt-2 text-sm leading-6 text-slate-500">管理发布草稿、制品校验、发布与撤回。</p>
-      </RouterLink>
-      <RouterLink class="rounded-2xl border border-white/70 bg-white/70 p-5 text-inherit shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-md" to="/audit">
-        <span class="text-xs font-semibold text-violet-700">N2 已接入</span><h2 class="mt-2 font-semibold text-slate-950">审计查询</h2><p class="mt-2 text-sm leading-6 text-slate-500">筛选脱敏审计日志，查看详情并导出受限 CSV。</p>
-      </RouterLink>
-      <RouterLink class="rounded-2xl border border-white/70 bg-white/70 p-5 text-inherit shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-md" to="/users">
-        <span class="text-xs font-semibold text-violet-700">N2 本轮接入</span><h2 class="mt-2 font-semibold text-slate-950">用户治理</h2><p class="mt-2 text-sm leading-6 text-slate-500">管理员查看账号状态、MFA 与只读治理统计。</p>
-      </RouterLink>
-    </div>
+    <section class="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-sm shadow-slate-200/70 backdrop-blur-xl md:p-8" aria-labelledby="admin-paths-title">
+      <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Internal routes</p>
+          <h2 id="admin-paths-title" class="mt-2 text-2xl font-semibold text-slate-950">全部管理功能站内路径</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-600">集中展示管理端已注册功能及站内地址，可直接进入对应工作台。</p>
+        </div>
+        <span class="text-sm font-medium text-slate-500">共 {{ allAdminNavigationItems.length }} 个入口</span>
+      </div>
+
+      <div class="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <RouterLink
+          v-for="item in allAdminNavigationItems"
+          :key="item.path"
+          :to="item.path"
+          class="group rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 text-inherit transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+        >
+          <div class="flex items-start gap-3">
+            <span class="rounded-xl bg-white p-2 text-sky-700 shadow-sm transition group-hover:bg-sky-50">
+              <component :is="item.icon" class="size-4" aria-hidden="true" />
+            </span>
+            <span class="min-w-0">
+              <span class="block font-semibold text-slate-950">{{ item.label }}</span>
+              <span class="mt-1 block font-mono text-xs font-medium text-sky-700">{{ item.path }}</span>
+              <span class="mt-2 block text-xs leading-5 text-slate-500">{{ item.description }}</span>
+            </span>
+          </div>
+        </RouterLink>
+      </div>
+    </section>
   </section>
 </template>

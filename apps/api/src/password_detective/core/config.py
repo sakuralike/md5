@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     app_env: str = "local"
     app_debug: bool = False
     app_secret_key: str = "local-development-secret-key-change-me"
-    access_token_ttl_minutes: int = Field(default=15, ge=5, le=60)
-    refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
+    access_token_ttl_minutes: int = Field(default=120, ge=5, le=1440)
+    refresh_token_ttl_days: int = Field(default=90, ge=1, le=365)
     account_token_ttl_minutes: int = Field(default=30, ge=5, le=1440)
     reauthentication_ttl_minutes: int = Field(default=5, ge=1, le=15)
     candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)

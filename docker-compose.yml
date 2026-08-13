@@ -37,6 +37,8 @@ services:
       APP_DEBUG: "false"
       APP_SECRET_KEY: ${APP_SECRET_KEY:-}
       APP_SECRET_KEY_FILE: ${APP_SECRET_KEY_FILE:-}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-120}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-90}
       DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
       DATABASE_URL_FILE: ${DATABASE_URL_FILE:-}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
@@ -97,6 +99,8 @@ services:
       APP_ENV: integration
       APP_SECRET_KEY: ${APP_SECRET_KEY:-}
       APP_SECRET_KEY_FILE: ${APP_SECRET_KEY_FILE:-}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-120}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-90}
       DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
       DATABASE_URL_FILE: ${DATABASE_URL_FILE:-}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
@@ -149,6 +153,8 @@ services:
       APP_ENV: integration
       APP_SECRET_KEY: ${APP_SECRET_KEY:-}
       APP_SECRET_KEY_FILE: ${APP_SECRET_KEY_FILE:-}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-120}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-90}
       DATABASE_URL: mysql+pymysql://password_detective:${MYSQL_PASSWORD:-password_detective_local}@mysql:3306/password_detective
       DATABASE_URL_FILE: ${DATABASE_URL_FILE:-}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}

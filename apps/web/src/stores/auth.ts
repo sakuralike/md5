@@ -15,7 +15,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import * as accountApi from "../services/account";
-import { apiRequest } from "../services/api";
+import { apiRequest, setAccessTokenRefreshHandler } from "../services/api";
 import { loginBrowser, resendEmailVerification } from "../services/auth";
 
 const STORAGE_KEY = "password_detective_session_v2";
@@ -133,18 +133,20 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  async function refresh(): Promise<boolean> {
+  async function refresh(): Promise<string | null> {
     try {
       const tokens = await apiRequest<BrowserTokenResponse>("/web/auth/refresh", {
         method: "POST",
       });
       persist(tokens);
-      return true;
+      return tokens.access_token;
     } catch {
       clear();
-      return false;
+      return null;
     }
   }
+
+  setAccessTokenRefreshHandler(refresh);
 
   async function logout(): Promise<void> {
     try {
