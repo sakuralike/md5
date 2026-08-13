@@ -15,6 +15,7 @@ import CommunityRelationsPage from "../pages/CommunityRelationsPage.vue";
 import CommunitySettingsPage from "../pages/CommunitySettingsPage.vue";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage.vue";
 import HomePage from "../pages/HomePage.vue";
+import HashDetailPage from "../pages/HashDetailPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import RegisterPage from "../pages/RegisterPage.vue";
 import ResetPasswordPage from "../pages/ResetPasswordPage.vue";
@@ -29,6 +30,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", component: HomePage },
+    { path: "/hash/:algorithm/:digest", component: HashDetailPage },
     { path: "/login", component: LoginPage, meta: { guestOnly: true } },
     { path: "/register", component: RegisterPage, meta: { guestOnly: true } },
     { path: "/forgot-password", component: ForgotPasswordPage, meta: { guestOnly: true } },

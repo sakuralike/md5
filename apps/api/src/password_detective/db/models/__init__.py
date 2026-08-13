@@ -65,6 +65,13 @@ from password_detective.db.models.desktop_verification import (
     VerificationReceipt,
 )
 from password_detective.db.models.evidence_correlation import EvidenceCorrelationAssessment
+from password_detective.db.models.hash_detail import (
+    HashComment,
+    HashCommentLike,
+    HashLike,
+    HashVote,
+    HashVoteOutcome,
+)
 from password_detective.db.models.idempotency_record import IdempotencyRecord, IdempotencyStatus
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
@@ -184,6 +191,11 @@ __all__ = [
     "DesktopReleaseStatus",
     "EvidenceCorrelationAssessment",
     "FingerprintAlgorithm",
+    "HashComment",
+    "HashCommentLike",
+    "HashLike",
+    "HashVote",
+    "HashVoteOutcome",
     "IdempotencyRecord",
     "IdempotencyStatus",
     "InstallationStatus",

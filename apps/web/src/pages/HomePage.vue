@@ -374,6 +374,9 @@ function statusLabel(status: CandidateStatus): string {
           <div v-if="!searchResult.matched" class="mt-5 rounded-2xl border border-dashed border-border bg-muted/30 p-5">
             <strong class="block text-lg">暂无社区匹配</strong>
             <span class="mt-2 block text-sm text-muted-foreground">你可以在本地确认密码有效后，提交一条待验证贡献。</span>
+            <Button variant="outline" size="sm" class="mt-4" as-child>
+              <RouterLink :to="{ path: `/hash/${searchResult.query.algorithm}/${searchResult.query.digest}` }">打开哈希详情页</RouterLink>
+            </Button>
           </div>
           <div v-else-if="searchResult.archive" class="mt-5 grid gap-4">
             <div class="flex flex-wrap items-center gap-2">
@@ -381,6 +384,9 @@ function statusLabel(status: CandidateStatus): string {
               <span class="badge">已验证 {{ searchResult.archive.status_counts.verified ?? 0 }}</span>
               <span class="badge">待验证 {{ searchResult.archive.status_counts.pending ?? 0 }}</span>
               <span v-if="searchResult.archive.optional_format" class="badge">{{ searchResult.archive.optional_format.toUpperCase() }}</span>
+              <Button variant="ghost" size="sm" as-child>
+                <RouterLink :to="{ path: `/hash/${searchResult.query.algorithm}/${searchResult.query.digest}` }">查看哈希详情</RouterLink>
+              </Button>
             </div>
             <template v-if="auth.isAuthenticated">
               <div v-for="candidate in searchResult.archive.candidates" :key="candidate.id" class="rounded-2xl border border-border/70 bg-background/60 p-4">

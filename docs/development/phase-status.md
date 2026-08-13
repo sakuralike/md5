@@ -835,3 +835,15 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 - 证据：`apps/web/src/components/UserAccountMenu.vue`、`apps/web/src/pages/UserCenterPage.vue`、`apps/web/src/router/index.ts`、`apps/web/src/pages/HomePage.vue`。
 - 自动化：Web typecheck、lint、Vitest（27 文件/46 测试）和 build 已通过。
 - 待验证：目标服务器部署后的真实浏览器视觉回归，重点检查头像菜单在窄屏下的定位、用户中心数据加载失败提示和首页文件选择/查询交互。
+
+
+## 2026-08-13 哈希值详情页互动切片
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态与剩余风险 |
+|---|---|---|---|
+| 每条哈希值独立详情页 | `apps/web/src/pages/HashDetailPage.vue`、`/hash/:algorithm/:digest`、`GET /api/v1/hashes/{algorithm}/{digest}` | `HashDetailPage.test.ts`、归档核心 API 测试 | 本地实现完成；目标服务器迁移和浏览器回归待执行 |
+| 哈希点赞与评价投票 | `hash_likes`、`hash_votes`、PUT/DELETE like、PUT vote | `test_hash_detail_supports_like_vote_comment_and_comment_like` | 本地实现完成；投票为详情评价，不替代候选证据反馈 |
+| 哈希评论与评论点赞 | `hash_comments`、`hash_comment_likes`、评论 API | 同上 | 已实现首版；分页、编辑/删除、举报、通知联动列入下一切片 |
+| 未匹配哈希访问 | 详情服务对未建立档案的合法摘要返回空档案详情 | `test_hash_detail_can_open_unmatched_hash` | 已实现；不会因浏览自动创建数据库档案 |
+
+本轮完成哈希详情页的首个可用闭环。下一轮优先处理评论分页/回复与举报、通知联动，再进行目标服务器迁移和真实浏览器回归。

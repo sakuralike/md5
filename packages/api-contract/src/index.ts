@@ -239,6 +239,40 @@ export interface ArchiveSearchResponse {
   archive: ArchiveSearchResult | null;
 }
 
+export type HashVoteOutcome = "useful" | "not_useful";
+
+export interface HashCommentResponse {
+  id: string;
+  parent_id: string | null;
+  content: string;
+  author: CommunityAuthor;
+  like_count: number;
+  viewer_has_liked: boolean;
+  created_at: string;
+}
+
+export interface HashInteractionResponse {
+  algorithm: FingerprintAlgorithm;
+  digest: string;
+  like_count: number;
+  viewer_has_liked: boolean;
+  vote_counts: Record<string, number>;
+  viewer_vote: HashVoteOutcome | null;
+}
+
+export interface HashDetailResponse extends HashInteractionResponse {
+  matched: boolean;
+  archive: ArchiveSearchResult | null;
+  comments: HashCommentResponse[];
+}
+
+export interface HashCommentCreateRequest {
+  content: string;
+  parent_id?: string | null;
+  rules_accepted: boolean;
+}
+
+
 export interface ArchiveSubmissionRequest {
   fingerprints: ArchiveFingerprint[];
   password: string;

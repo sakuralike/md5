@@ -71,9 +71,7 @@ def test_submission_encrypts_secret_and_creates_pending_evidence(client):
         assert db.query(Submission).count() == 1
         ledger = db.scalar(select(PointsLedger))
         assert ledger is not None and ledger.status == PointsLedgerStatus.PENDING
-        audit = db.scalar(
-            select(AuditLog).where(AuditLog.action == "archive.submission_created")
-        )
+        audit = db.scalar(select(AuditLog).where(AuditLog.action == "archive.submission_created"))
         assert audit is not None
         assert _submission_payload()["password"] not in str(audit.details)
 
@@ -114,7 +112,6 @@ def test_duplicate_candidate_merges_new_submission_evidence(client):
         assert db.query(Submission).count() == 2
 
 
-
 def test_search_sorts_mixed_sqlite_timestamps_without_timezone_error(client):
     headers = _register_and_login(client)
     first = client.post(
@@ -142,6 +139,7 @@ def test_search_sorts_mixed_sqlite_timestamps_without_timezone_error(client):
     )
     assert response.status_code == 200
     assert response.json()["archive"]["candidates"][0]["id"] == first["candidate_id"]
+
 
 def test_search_visibility_and_fingerprint_validation(client):
     missing = client.get("/api/v1/archives/search", params={"fingerprint": "c" * 64})
@@ -216,9 +214,7 @@ def test_reveal_requires_verified_candidate_enforces_quota_and_audits(client):
             )
         db.commit()
 
-    reveal = client.post(
-        f"/api/v1/archives/{created['archive_id']}/reveal", headers=headers
-    )
+    reveal = client.post(f"/api/v1/archives/{created['archive_id']}/reveal", headers=headers)
     assert reveal.status_code == 200
     assert reveal.json()["password"] == "Synthetic-ZIP-Password!"
     assert reveal.json()["remaining_daily_quota"] == 0
@@ -229,9 +225,7 @@ def test_reveal_requires_verified_candidate_enforces_quota_and_audits(client):
     assert exceeded.json()["code"] == "archive.daily_reveal_quota_exceeded"
     with client.app.state.database.session_factory() as db:
         audits = list(
-            db.scalars(
-                select(AuditLog).where(AuditLog.action == "archive.password_revealed")
-            )
+            db.scalars(select(AuditLog).where(AuditLog.action == "archive.password_revealed"))
         )
         assert len(audits) == default_level_quota
         assert all("Synthetic-ZIP-Password!" not in str(item.details) for item in audits)
@@ -251,3 +245,68 @@ def test_my_submissions_returns_status_without_secret(client):
     assert body["items"][0]["candidate_status"] == "pending"
     assert body["items"][0]["fingerprints"][0]["digest"] in {MD5, SHA256}
     assert "Synthetic-ZIP-Password!" not in response.text
+
+
+def test_hash_detail_supports_like_vote_comment_and_comment_like(client):
+    headers = _register_and_login(client)
+    submission = client.post(
+        "/api/v1/archives/submissions",
+        json=_submission_payload(),
+        headers={**headers, "Idempotency-Key": "hash-detail-submission-0001"},
+    )
+    assert submission.status_code == 201
+
+    detail_url = f"/api/v1/hashes/sha256/{SHA256}"
+    detail = client.get(detail_url, headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["digest"] == SHA256
+    assert detail.json()["comments"] == []
+
+    liked = client.put(
+        f"{detail_url}/like",
+        headers={**headers, "Idempotency-Key": "hash-detail-like-0001"},
+    )
+    assert liked.status_code == 200
+    assert liked.json()["like_count"] == 1
+    assert liked.json()["viewer_has_liked"] is True
+
+    voted = client.put(
+        f"{detail_url}/vote",
+        json={"outcome": "useful"},
+        headers={**headers, "Idempotency-Key": "hash-detail-vote-0001"},
+    )
+    assert voted.status_code == 200
+    assert voted.json()["vote_counts"]["useful"] == 1
+    assert voted.json()["viewer_vote"] == "useful"
+
+    comment = client.post(
+        f"{detail_url}/comments",
+        json={"content": "Synthetic verification note", "rules_accepted": True},
+        headers={**headers, "Idempotency-Key": "hash-detail-comment-0001"},
+    )
+    assert comment.status_code == 201
+    comment_body = comment.json()
+    assert len(comment_body["comments"]) == 1
+    comment_id = comment_body["comments"][0]["id"]
+
+    comment_like = client.put(
+        f"{detail_url}/comments/{comment_id}/like",
+        headers={**headers, "Idempotency-Key": "hash-detail-comment-like-0001"},
+    )
+    assert comment_like.status_code == 200
+    assert comment_like.json()["comments"][0]["like_count"] == 1
+
+    unliked = client.delete(
+        f"{detail_url}/like",
+        headers={**headers, "Idempotency-Key": "hash-detail-unlike-0001"},
+    )
+    assert unliked.status_code == 200
+    assert unliked.json()["like_count"] == 0
+
+
+def test_hash_detail_can_open_unmatched_hash(client):
+    response = client.get(f"/api/v1/hashes/sha256/{'c' * 64}")
+    assert response.status_code == 200
+    assert response.json()["matched"] is False
+    assert response.json()["archive"] is None
+    assert response.json()["comments"] == []
