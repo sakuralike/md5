@@ -364,3 +364,64 @@ def test_site_brand_and_navigation_validation_are_versioned(client):
         },
     )
     assert rejected.status_code == 422
+
+def test_admin_can_upload_and_serve_content_addressed_site_logo(client) -> None:
+    headers, _, _ = _admin_session(client, "logo")
+    payload = b"\x89PNG\r\n\x1a\n" + b"synthetic-logo-payload"
+
+    uploaded = client.post(
+        "/api/v1/admin/settings/logo",
+        headers={**headers, "Content-Type": "image/png"},
+        content=payload,
+    )
+    assert uploaded.status_code == 201
+    body = uploaded.json()
+    assert body["url"].startswith("/api/v1/site/assets/logo/")
+    assert body["content_type"] == "image/png"
+    assert body["size_bytes"] == len(payload)
+    assert len(body["sha256"]) == 64
+
+    duplicate = client.post(
+        "/api/v1/admin/settings/logo",
+        headers={**headers, "Content-Type": "image/png"},
+        content=payload,
+    )
+    assert duplicate.status_code == 201
+    assert duplicate.json()["url"] == body["url"]
+
+    public_asset = client.get(body["url"])
+    assert public_asset.status_code == 200
+    assert public_asset.content == payload
+    assert public_asset.headers["content-type"].startswith("image/png")
+    assert public_asset.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert public_asset.headers["x-content-type-options"] == "nosniff"
+
+    with client.app.state.database.session_factory() as db:
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "admin.settings.site_logo_uploaded",
+                AuditLog.target_id == body["sha256"],
+            )
+        )
+        assert audit is not None
+        assert audit.details["content_type"] == "image/png"
+        assert audit.details["size_bytes"] == len(payload)
+
+
+def test_site_logo_upload_rejects_type_and_signature_mismatch(client) -> None:
+    headers, _, _ = _admin_session(client, "logoinvalid")
+    response = client.post(
+        "/api/v1/admin/settings/logo",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"\x89PNG\r\n\x1a\nsynthetic-mismatch",
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "admin.site_logo_signature_invalid"
+
+    unsupported = client.post(
+        "/api/v1/admin/settings/logo",
+        headers={**headers, "Content-Type": "image/svg+xml"},
+        content=b"<svg></svg>",
+    )
+    assert unsupported.status_code == 415
+    assert unsupported.json()["code"] == "admin.site_logo_content_type_invalid"

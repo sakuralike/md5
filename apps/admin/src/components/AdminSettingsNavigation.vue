@@ -16,6 +16,10 @@ import {
   type AdminNavigationItem,
 } from "@/lib/adminNavigation";
 
+const props = withDefaults(defineProps<{ mode?: "desktop" | "mobile" }>(), {
+  mode: "desktop",
+});
+
 function itemsForGroup(
   group: (typeof adminNavigationGroups)[number],
 ): readonly AdminNavigationItem[] {
@@ -25,7 +29,8 @@ function itemsForGroup(
 
 <template>
   <aside
-    class="fixed bottom-4 left-4 top-24 2xl:left-[calc((100vw-1536px)/2+1rem)] z-30 hidden w-64 overflow-y-auto rounded-3xl border border-border/80 bg-card/90 p-4 shadow-xl backdrop-blur-2xl lg:block"
+    v-if="props.mode === 'desktop'"
+    class="fixed left-4 top-24 z-30 hidden h-[calc(100vh-7rem)] w-64 overscroll-contain overflow-y-auto rounded-3xl border border-border/80 bg-card/95 p-4 shadow-xl backdrop-blur-2xl lg:block 2xl:left-[calc((100vw-1536px)/2+1rem)]"
     aria-label="后台设置导航"
   >
     <div class="border-b border-border/70 px-2 pb-4">
@@ -56,7 +61,7 @@ function itemsForGroup(
     </div>
   </aside>
 
-  <div class="lg:hidden">
+  <div v-else class="lg:hidden">
     <Sheet>
       <SheetTrigger as-child>
         <Button variant="outline" size="sm" class="rounded-full">

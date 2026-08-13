@@ -26,6 +26,7 @@ from password_detective.core.notifications import NotificationGateway
 from password_detective.core.rate_limit import rate_limit
 from password_detective.core.security import hash_refresh_token
 from password_detective.core.time import utc_now
+from password_detective.db.audit import write_audit_log
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.role_change_request import (
     RoleChangeRequestStatus as RoleChangeWorkflowStatus,
@@ -69,6 +70,7 @@ from password_detective.modules.admin.setting_schemas import (
     SettingVersionMutationResponse,
     SettingVersionPublishRequest,
     SettingVersionRollbackRequest,
+    SiteLogoUploadResponse,
 )
 from password_detective.modules.admin.settings import (
     create_setting_version,
@@ -115,6 +117,7 @@ from password_detective.modules.auth.service import (
     rotate_refresh_token,
 )
 from password_detective.modules.auth.totp import begin_totp_setup, confirm_totp_setup, disable_totp
+from password_detective.modules.site.assets import store_site_logo
 
 router = APIRouter(prefix="/admin", tags=["管理端"])
 
@@ -549,6 +552,43 @@ def admin_role_change_request_reject(
         db=db,
         principal=principal,
         idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/settings/logo",
+    response_model=SiteLogoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("admin.settings.logo_upload", limit=20, window_seconds=3600))],
+)
+async def admin_site_logo_upload(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SiteLogoUploadResponse:
+    stored = await store_site_logo(request, settings)
+    context = get_client_context(request)
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="admin.settings.site_logo_uploaded",
+        target_type="site_asset",
+        target_id=stored.sha256,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "content_type": stored.content_type,
+            "size_bytes": stored.size_bytes,
+        },
+    )
+    db.commit()
+    return SiteLogoUploadResponse(
+        url=stored.url,
+        content_type=stored.content_type,
+        size_bytes=stored.size_bytes,
+        sha256=stored.sha256,
     )
 
 

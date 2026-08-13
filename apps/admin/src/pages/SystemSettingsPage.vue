@@ -17,6 +17,7 @@ import {
   FileClock,
   Globe2,
   History,
+  ImageUp,
   KeyRound,
   MailCheck,
   Navigation,
@@ -62,6 +63,7 @@ import {
   publishSettingVersion,
   rollbackSettingVersion,
   sendEmailDeliveryTest,
+  uploadSiteLogo,
 } from "../services/settings";
 import { reauthenticateAdmin } from "../services/users";
 import { useAdminAuthStore } from "../stores/auth";
@@ -145,6 +147,9 @@ const emailTestBusy = ref(false);
 const emailRecipient = ref("");
 const emailMessage = ref("");
 const emailError = ref("");
+const logoUploadBusy = ref(false);
+const logoUploadError = ref("");
+const logoUploadMessage = ref("");
 
 const statusLabels: Record<SettingVersionStatus, string> = {
   draft: "草稿",
@@ -207,6 +212,35 @@ function clearCredentials(): void {
 
 function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
   form.value = structuredClone(snapshot);
+}
+
+async function handleLogoUpload(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+
+  logoUploadError.value = "";
+  logoUploadMessage.value = "";
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    logoUploadError.value = "Logo 仅支持 PNG、JPEG 或 WebP 图片";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    logoUploadError.value = "Logo 图片不能超过 2 MB";
+    return;
+  }
+
+  logoUploadBusy.value = true;
+  try {
+    const uploaded = await uploadSiteLogo(file, auth.accessToken);
+    form.value.site_logo_url = uploaded.url;
+    logoUploadMessage.value = "图片已上传并写入当前配置表单，请创建草稿并发布后生效。";
+  } catch (value) {
+    logoUploadError.value = describeError(value);
+  } finally {
+    logoUploadBusy.value = false;
+  }
 }
 
 function addUserLevel(): void {
@@ -501,7 +535,18 @@ onMounted(() => {
             <div class="space-y-5">
               <div class="grid gap-5 sm:grid-cols-2">
                 <div class="space-y-2"><Label for="site-name">网站名</Label><Input id="site-name" v-model="form.site_name" maxlength="32" placeholder="密码侦探社" /><p class="text-xs text-muted-foreground">用于导航栏品牌、浏览器标题与页脚。</p></div>
-                <div class="space-y-2"><Label for="site-logo-url">Logo 地址</Label><Input id="site-logo-url" v-model="form.site_logo_url" maxlength="500" placeholder="/logo.svg 或 https://…" /><p class="text-xs text-muted-foreground">支持站内绝对路径或 HTTP(S) 图片地址；留空使用默认图标。</p></div>
+                <div class="space-y-2"><Label for="site-logo-url">Logo 地址</Label><Input id="site-logo-url" v-model="form.site_logo_url" maxlength="500" placeholder="/api/v1/site/assets/logo/… 或 https://…" /><p class="text-xs text-muted-foreground">可直接填写站内路径或 HTTP(S) 图片地址；留空使用默认图标。</p></div>
+                <div class="space-y-2 sm:col-span-2">
+                  <Label for="site-logo-file">上传 Logo 图片</Label>
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Input id="site-logo-file" type="file" accept="image/png,image/jpeg,image/webp" :disabled="logoUploadBusy" class="sm:max-w-md" @change="handleLogoUpload" />
+                    <Badge variant="outline" class="w-fit"><ImageUp class="mr-1 size-3.5" />PNG / JPEG / WebP · 最大 2 MB</Badge>
+                  </div>
+                  <p class="text-xs leading-5 text-muted-foreground">文件按内容哈希持久化并生成站内地址；上传完成后仍需创建草稿并发布配置。</p>
+                  <p v-if="logoUploadBusy" class="text-xs text-primary">正在上传并校验图片…</p>
+                  <p v-if="logoUploadMessage" class="text-xs text-emerald-700">{{ logoUploadMessage }}</p>
+                  <p v-if="logoUploadError" class="text-xs text-destructive">{{ logoUploadError }}</p>
+                </div>
               </div>
               <div class="space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -715,11 +760,12 @@ onMounted(() => {
               </Button>
             </div>
 
-            <article
-              v-for="(level, index) in form.user_levels"
-              :key="`${level.code}-${index}`"
-              class="rounded-xl border border-border/80 bg-background/70 p-4"
-            >
+            <div class="flex snap-x gap-4 overflow-x-auto pb-3" aria-label="用户等级横向列表" tabindex="0">
+              <article
+                v-for="(level, index) in form.user_levels"
+                :key="`${level.code}-${index}`"
+                class="w-80 shrink-0 snap-start rounded-xl border border-border/80 bg-background/70 p-4 sm:w-96"
+              >
               <div class="mb-4 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                   <Badge variant="outline">第 {{ index + 1 }} 级</Badge>
@@ -736,7 +782,7 @@ onMounted(() => {
                   <Trash2 class="size-4 text-destructive" />
                 </Button>
               </div>
-              <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-2">
                   <Label :for="`level-code-${index}`">等级代码</Label>
                   <Input :id="`level-code-${index}`" v-model="level.code" placeholder="senior" />
@@ -765,7 +811,7 @@ onMounted(() => {
                     max="1000"
                   />
                 </div>
-                <div class="space-y-2 sm:col-span-2">
+                  <div class="col-span-2 space-y-2">
                   <Label :for="`level-description-${index}`">等级说明</Label>
                   <Input
                     :id="`level-description-${index}`"
@@ -778,7 +824,8 @@ onMounted(() => {
                   <Label :for="`level-submit-${index}`">允许提交档案</Label>
                 </div>
               </div>
-            </article>
+              </article>
+            </div>
           </div>
 
           <Button class="mt-5" :disabled="mutationBusy" @click="createDraft">

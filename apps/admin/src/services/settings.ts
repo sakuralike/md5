@@ -6,6 +6,7 @@ import {
   type SettingVersionDetail,
   type SettingVersionListResponse,
   type SettingVersionMutationResponse,
+  type SiteLogoUploadResponse,
 } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
@@ -120,6 +121,17 @@ export function sendEmailDeliveryTest(
     {
       method: "POST",
       body: JSON.stringify({ recipient }),
+    },
+    token,
+  );
+}
+export function uploadSiteLogo(file: File, token: string): Promise<SiteLogoUploadResponse> {
+  return apiRequest<SiteLogoUploadResponse>(
+    "/admin/settings/logo",
+    {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
     },
     token,
   );

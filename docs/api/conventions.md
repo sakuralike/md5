@@ -300,3 +300,11 @@ Admin `/role-changes` 工作台提供状态筛选、分页、加载/空/错误�
 ## 可观测性指标接口
 
 `GET /metrics` 返回 Prometheus 文本格式，生产环境由网络策略限制抓取来源。HTTP 指标标签只允许方法、规范化路由模板和状态码；未匹配路径统一使用 `__unmatched__`。指标不得包含请求号、完整指纹、用户或对象标识、密码、令牌、Cookie、异常正文和自由文本。Worker 可用性通过 Redis 中 90 秒 TTL 的心跳存在性判断，队列积压只导出默认 Celery 队列长度。
+
+## 站点 Logo 文件接口（2026-08-13）
+
+- `POST /api/v1/admin/settings/logo` 使用原始二进制请求体，不使用 multipart；请求 `Content-Type` 仅允许 `image/png`、`image/jpeg`、`image/webp`，默认上限 2 MB。
+- 服务端校验文件签名与声明媒体类型一致，以 SHA-256 内容摘要生成不可变资源名；成功返回 `url`、`content_type`、`size_bytes` 和 `sha256`。
+- 该接口要求已登录管理员；若管理员账号已启用 TOTP，则会沿用管理端 MFA 准入。上传写入 `admin.settings.site_logo_uploaded` 审计事件。
+- `GET /api/v1/site/assets/logo/{sha256}.{ext}` 为公开只读资源；只接受 64 位小写十六进制摘要与允许的扩展名，返回一年 `immutable` 缓存。
+- 文件上传与配置发布分离：上传成功不代表站点配置已生效，调用方仍需走系统配置版本草稿与发布 API。

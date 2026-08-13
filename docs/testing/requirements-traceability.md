@@ -500,3 +500,13 @@
 | COMMUNITY-69～72 回复/提及/关注 | 通知类型扩展、唯一业务键、类型过滤、已读 API | 通知分类、去重、未读、越权和 Web 测试 | 当前子集通过 |
 | COMMUNITY-73 偏好 | 通知偏好表、GET/PUT API、Web 偏好矩阵 | 后端持久化与 Web service/render 测试 | 站内生效；邮件投递待实现 |
 | COMMUNITY-76 屏蔽边界 | 通知写入和动态读取复用 block/mute | 社交关系和动态专项测试 | 普通互动通过；治理通知待生成后补测 |
+
+## 2026-08-13 后台 Logo 与设置布局追踪
+
+| 需求 | 代码证据 | 自动化证据 | 状态 |
+|---|---|---|---|
+| Logo 图片上传 | `site/assets.py`、`POST /admin/settings/logo`、`uploadSiteLogo` | `test_admin_can_upload_and_serve_content_addressed_site_logo`、`settings.test.ts` | 已实现 |
+| 文件安全与公开读取 | 类型/签名/大小校验、哈希文件名、公开 FileResponse、不可变缓存 | 类型不匹配与 SVG 拒绝测试、公开响应头断言 | 已实现 |
+| 后台设置导航修复 | `App.vue` 将桌面侧栏移出模糊顶栏，`AdminSettingsNavigation.vue` 桌面/移动模式 | `App.test.ts` 固定视口定位和主内容留白断言 | 已实现 |
+| 等级权益横向布局 | `SystemSettingsPage.vue` 横向 flex、snap、overflow 列表 | `SystemSettingsPage.test.ts` 横向列表语义与类名断言 | 已实现 |
+| 容器持久化 | `site-asset-data`、`SITE_ASSET_STORAGE_PATH`、Nginx 3 MB 限制 | Compose 配置校验与目标部署冒烟 | 待本轮服务器验证 |

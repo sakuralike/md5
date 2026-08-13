@@ -215,6 +215,13 @@ class SettingVersionMutationResponse(BaseModel):
     request_id: str | None
 
 
+class SiteLogoUploadResponse(BaseModel):
+    url: str
+    content_type: Literal["image/png", "image/jpeg", "image/webp"]
+    size_bytes: int
+    sha256: str
+
+
 class EmailDeliverySettingsResponse(BaseModel):
     backend: Literal["memory", "log", "webhook", "smtp"]
     enabled: bool

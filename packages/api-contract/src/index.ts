@@ -1458,6 +1458,13 @@ export interface SettingVersionMutationResponse {
   request_id: string | null;
 }
 
+export interface SiteLogoUploadResponse {
+  url: string;
+  content_type: "image/png" | "image/jpeg" | "image/webp";
+  size_bytes: number;
+  sha256: string;
+}
+
 
 export type CommunityBoardCode = string;
 export type CommunityContentStatus = "published" | "removed";

@@ -40,17 +40,18 @@ const auth = useAdminAuthStore();
               {{ dashboardNavigationItem.label }}
             </RouterLink>
           </nav>
-          <AdminSettingsNavigation />
+          <AdminSettingsNavigation mode="mobile" />
           <Button class="shrink-0 rounded-full border-card/80 bg-card/70" variant="outline" size="sm" @click="auth.logout()">退出</Button>
         </div>
       </div>
     </header>
 
+    <AdminSettingsNavigation v-if="auth.isAuthenticated" mode="desktop" />
 
     <main
       id="main-content"
       class="mx-auto min-h-[calc(100vh-5.5rem)] w-full max-w-screen-2xl px-4 py-7 sm:px-6 lg:py-10"
-      :class="auth.isAuthenticated ? 'lg:pl-72 lg:pr-8' : 'lg:px-8'"
+      :class="auth.isAuthenticated ? 'lg:pl-[18rem] lg:pr-8' : 'lg:px-8'"
       tabindex="-1"
     >
       <RouterView />

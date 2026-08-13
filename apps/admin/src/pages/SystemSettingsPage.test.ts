@@ -32,6 +32,7 @@ vi.mock("../services/settings", () => ({
   createSettingVersion: vi.fn(),
   publishSettingVersion: vi.fn(),
   rollbackSettingVersion: vi.fn(),
+  uploadSiteLogo: vi.fn(),
 }));
 
 vi.mock("../services/users", () => ({
@@ -46,11 +47,15 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("后台设置导航");
     expect(html).toContain("站点外观与导航");
     expect(html).toContain("导航按钮");
+    expect(html).toContain("上传 Logo 图片");
+    expect(html).toContain("image/png,image/jpeg,image/webp");
     expect(html).toContain("SMTP 邮件投递");
     expect(html).toContain("不可变版本历史");
     expect(html).toContain("版本差异预览");
     expect(html).toContain("用户等级与权益");
     expect(html).toContain("新增等级");
+    expect(html).toContain("用户等级横向列表");
+    expect(html).toContain("snap-x gap-4 overflow-x-auto");
     expect(html).toContain("发布与回滚门禁");
     expect(html).toContain("一次性再认证");
   });

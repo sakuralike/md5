@@ -42,7 +42,9 @@ describe("App", () => {
     expect(html).toContain("角色审批");
     expect(html).toContain("社区配置");
     expect(html).toContain("系统配置");
-    expect(html).toContain("fixed bottom-4 left-4 top-24");
+    expect(html).toContain("fixed left-4 top-24");
+    expect(html).toContain("h-[calc(100vh-7rem)]");
+    expect(html).toContain("lg:pl-[18rem]");
     expect(html).toContain("focus-visible:ring-2");
     expect(html).toContain("bg-gradient-to-br from-primary to-accent");
     expect(html).toContain("backdrop-blur-2xl");

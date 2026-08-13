@@ -7,6 +7,7 @@ import {
   publishSettingVersion,
   rollbackSettingVersion,
   sendEmailDeliveryTest,
+  uploadSiteLogo,
 } from "./settings";
 
 vi.mock("./api", () => ({
@@ -57,6 +58,22 @@ describe("admin settings service", () => {
       {
         method: "POST",
         body: JSON.stringify({ recipient: "operator@synthetic.example.com" }),
+      },
+      "synthetic-admin-token",
+    );
+  });
+
+  it("uploads a validated logo file as a raw image body", async () => {
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "brand.png", {
+      type: "image/png",
+    });
+    await uploadSiteLogo(file, "synthetic-admin-token");
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      "/admin/settings/logo",
+      {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: file,
       },
       "synthetic-admin-token",
     );
