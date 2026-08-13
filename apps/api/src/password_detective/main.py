@@ -31,6 +31,7 @@ from password_detective.modules.archives.hash_router import router as hash_route
 from password_detective.modules.archives.router import router as archives_router
 from password_detective.modules.auth.router import router as auth_router
 from password_detective.modules.community.admin_router import admin_router as community_admin_router
+from password_detective.modules.community.boards import ensure_seed_boards
 from password_detective.modules.community.router import router as community_router
 from password_detective.modules.desktop_updates.router import (
     admin_router as desktop_updates_admin_router,
@@ -77,6 +78,8 @@ def create_app(
     async def lifespan(app: FastAPI):
         if resolved_settings.auto_create_tables:
             database.create_tables()
+        with database.session_factory() as db:
+            ensure_seed_boards(db)
         yield
         rate_limiter.close()
         database.dispose()

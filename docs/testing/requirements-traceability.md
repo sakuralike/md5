@@ -402,7 +402,7 @@
 | COMMUNITY-32～35 | 点赞、收藏、可重建计数、失效引用清理 | 关系唯一约束、幂等重放、投影计数、私有收藏与不可见内容负向测试 | 本地编码和自动化完成，目标 MySQL/浏览器回归待部署 |
 | COMMUNITY-36 | 点赞摘要通知 | Outbox 重试、聚合窗口、通知偏好和屏蔽关系测试 | WP5-I7 通知类型和偏好已预留，聚合生成仍未编码 |
 | COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | `test_community_profiles.py`、关系页面渲染测试和统一门禁 | 本地已实现；目标 MySQL/浏览器部署回归待验证 |
-| COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | `test_community_groups.py`、`test_community_board_admin.py`、群组与管理配置页面渲染测试、Alembic 往返和统一门禁 | 本地代码与自动化已完成；目标 MySQL/浏览器部署回归待验证 |
+| COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | `test_community_groups.py`、`test_community_board_admin.py`、`test_community_board_seeding.py`、群组与管理配置页面渲染测试、Alembic 往返和统一门禁 | 本地代码与自动化已完成；默认板块已覆盖启动期与双实例并发初始化；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-55～61 | 动态信息流 | `test_activity_feeds_and_reply_follow_notifications`、偏好未来事件测试、群组动态断言、Web 页面/服务测试 | 本地编码完成；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-62～68 | 社区搜索 | Provider、权限过滤、索引重放与重建测试 | 已规划，未编码 |
 | COMMUNITY-69～76 | 通知中心 | 通知去重、类型过滤、屏蔽、偏好、已读和 Web 页面测试 | 提及/回复/关注和站内/邮件偏好子集已实现；点赞、群组、私信/治理、邮件投递与 SSE 待后续 |

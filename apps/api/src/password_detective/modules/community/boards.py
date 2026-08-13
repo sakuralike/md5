@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from threading import Lock
+from weakref import WeakSet
+
+from sqlalchemy import insert, select
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from password_detective.core.errors import AppError
+from password_detective.core.ids import new_id
+from password_detective.core.time import utc_now
 from password_detective.db.models.community import CommunityBoard, CommunityBoardStatus
 from password_detective.db.models.user import UserRole
 
@@ -22,24 +31,61 @@ ROLE_RANK: dict[UserRole, int] = {
     UserRole.SERVICE: -1,
 }
 
+_SEED_LOCK = Lock()
+_SEEDED_BINDS: WeakSet[Engine | Connection] = WeakSet()
+
+
+def _seed_board_rows() -> list[dict[str, object]]:
+    now = utc_now()
+    return [
+        {
+            "id": new_id(),
+            "code": code,
+            "name": name,
+            "description": description,
+            "sort_order": sort_order,
+            "minimum_role": UserRole.USER.value,
+            "status": CommunityBoardStatus.ACTIVE,
+            "is_read_only": False,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for code, name, description, sort_order in SEED_BOARDS
+    ]
+
+
+def _insert_seed_boards(db: Session, rows: list[dict[str, object]]) -> None:
+    dialect_name = db.get_bind().dialect.name
+    if dialect_name == "sqlite":
+        statement = sqlite_insert(CommunityBoard).values(rows).on_conflict_do_nothing()
+        db.execute(statement)
+        return
+    if dialect_name in {"mysql", "mariadb"}:
+        statement = mysql_insert(CommunityBoard).values(rows)
+        db.execute(statement.on_duplicate_key_update(code=statement.inserted.code))
+        return
+
+    for row in rows:
+        try:
+            with db.begin_nested():
+                db.execute(insert(CommunityBoard).values(row))
+        except IntegrityError:
+            continue
+
 
 def ensure_seed_boards(db: Session) -> None:
-    existing = set(db.scalars(select(CommunityBoard.code)).all())
-    for code, name, description, sort_order in SEED_BOARDS:
-        if code not in existing:
-            db.add(
-                CommunityBoard(
-                    code=code,
-                    name=name,
-                    description=description,
-                    sort_order=sort_order,
-                    minimum_role=UserRole.USER.value,
-                    status=CommunityBoardStatus.ACTIVE,
-                    is_read_only=False,
-                )
-            )
-    if len(existing) < len(SEED_BOARDS):
-        db.commit()
+    """Insert the default board catalog once per process with database-level idempotency."""
+    bind = db.get_bind()
+    with _SEED_LOCK:
+        if bind in _SEEDED_BINDS:
+            return
+        try:
+            _insert_seed_boards(db, _seed_board_rows())
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        _SEEDED_BINDS.add(bind)
 
 
 def get_board_by_code(db: Session, code: str, *, include_inactive: bool = False) -> CommunityBoard:
