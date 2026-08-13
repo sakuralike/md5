@@ -24,6 +24,15 @@
 - `pwsh ./scripts/check.ps1 -SkipInstall`：通过；后端测试 189 项通过、1 项跳过，覆盖率 89.52%，前端 lint/typecheck/test/build 通过，迁移往返通过。
 - `pnpm e2e`：16/31 通过、15/31 失败；社区移动端主旅程通过，剩余失败属于导航契约、MFA、视觉/无障碍等后续 R1 项，不再出现此前的 `community_boards.code` 并发唯一约束错误。
 
+## Staging 部署证据
+
+- 候选提交：`d5d3800ff825`，远端分支 `codex/m5-entry-gates` 已同步。
+- 部署根目录：`/opt/password-detective-staging`；制品 SHA-256：`ad82dbe35839a21cc13adc3622fc1ebda92fc247a94585b942dbe2c6d750fa3e`。
+- 运行镜像：`password-detective-api:d5d3800ff825`、`password-detective-web:d5d3800ff825`、`password-detective-admin:d5d3800ff825`；API 2 实例、Worker 3 实例均运行。
+- 数据库迁移：MySQL 当前版本 `20260813_0034 (head)`。
+- 目标环境冒烟：`GET /api/v1/health/ready` 返回 HTTP 200 且 database/rate_limit 均为 `ok`；Web/Admin 根页面均返回 HTTP 200；`GET /api/v1/community/boards` 返回 4 个默认板块：`general`、`recovery_guides`、`security`、`verification`。
+- 部署编排首轮在完成滚动更新后因远端临时脚本 CRLF 尾部解析返回 127；随后已补执行 HA 拓扑启动并复核 API 2、Worker 3、健康检查和 HTTP 冒烟，当前服务状态正常。
+
 ## 交付边界
 
-本轮不宣称全量浏览器门禁或生产放行完成。推送后仍需在 Staging 执行数据库迁移、镜像构建/滚动更新、API/Web/Admin 健康检查和社区真实 HTTP 冒烟。
+本轮不宣称全量浏览器门禁或生产放行完成；`pnpm e2e` 仍为 16/31 通过、15/31 失败。Staging 部署和短时真实 HTTP 冒烟已完成，后续仍需处理 MFA、导航契约、视觉/无障碍等浏览器门禁。
