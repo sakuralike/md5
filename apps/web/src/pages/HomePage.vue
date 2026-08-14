@@ -76,7 +76,6 @@ const primaryFingerprint = computed(
 );
 const canSubmit = computed(
   () =>
-    auth.isAuthenticated &&
     fingerprints.value.length > 0 &&
     candidatePassword.value.length > 0 &&
     authorizationConfirmed.value,
@@ -183,13 +182,16 @@ async function submitContribution(): Promise<void> {
         headers: { "Idempotency-Key": `web-submission-${createClientId()}` },
         body: JSON.stringify(payload),
       },
-      auth.accessToken,
+      auth.accessToken || undefined,
     );
     candidatePassword.value = "";
     authorizationConfirmed.value = false;
-    const successMessage = result.evidence_merged
-      ? "已合并为该候选的新贡献证据，积分等待验证后结算。"
-      : "贡献已安全保存，候选当前为待验证状态。";
+    const confirmationMessage = `需至少 ${result.required_success_confirmations} 名不同登录用户确认正确后进入总哈希池。`;
+    const successMessage = result.submitter_kind === "guest"
+      ? `游客贡献已进入待验证池，${confirmationMessage}`
+      : result.evidence_merged
+        ? `已合并为该候选的新网页贡献，${confirmationMessage}`
+        : `网页贡献已进入待验证池，${confirmationMessage}`;
     await search();
     notice.value = successMessage;
   } catch (caught) {
@@ -289,6 +291,9 @@ function statusLabel(status: CandidateStatus): string {
     <p class="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
       浏览器按块计算整个文件的 SHA-256 与 MD5，只向服务端发送完整指纹；
       不上传压缩包内容，也不提供猜密或暴力破解能力。
+    </p>
+    <p class="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+      网页提交统一进入待验证池，至少 4 名不同登录用户确认正确后进入总哈希池。
     </p>
   </section>
 
@@ -457,22 +462,20 @@ function statusLabel(status: CandidateStatus): string {
         <h2 class="mt-3 text-2xl font-semibold">贡献已在本地验证的解压密码</h2>
         <p class="mt-2 text-sm leading-6 text-muted-foreground">密码将通过服务端认证加密保存；数据库仅使用密钥化标签去重，不建立明文索引。</p>
       </div>
-      <template v-if="auth.isAuthenticated">
-        <div class="mt-5 grid gap-4">
-          <div class="grid gap-2">
-            <label for="candidate-password" class="text-sm font-medium">解压密码</label>
-            <Input id="candidate-password" v-model="candidatePassword" type="password" autocomplete="off" maxlength="512" />
-          </div>
-          <label class="flex items-start gap-3 text-sm text-muted-foreground">
-            <Checkbox v-model="authorizationConfirmed" class="mt-0.5" />
-            <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
-          </label>
-          <Button class="w-full rounded-full sm:w-fit" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">{{ submitting ? "提交中…" : "提交待验证贡献" }}</Button>
+      <div class="mt-5 grid gap-4">
+        <div class="rounded-2xl border border-border/60 bg-muted/35 p-4 text-sm leading-6 text-muted-foreground">
+          <strong class="text-foreground">网页提交统一进入待验证池。</strong> 游客和登录用户提交后，需至少 4 名不同登录用户确认正确才会进入总哈希池；登录用户通过桌面端完成有效签名验证成功时可直接进入总哈希池。
+          <span v-if="!auth.isAuthenticated" class="mt-2 block">游客提交不记录个人贡献历史或积分；<RouterLink class="font-medium text-primary hover:underline" to="/login">登录后提交</RouterLink>可保留贡献记录。</span>
         </div>
-      </template>
-      <div v-else class="mt-5 flex flex-col gap-3 rounded-2xl bg-muted/40 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <span class="text-sm text-muted-foreground">贡献需要登录，以记录授权声明、证据来源和待结算积分。</span>
-        <Button class="rounded-full" as-child><RouterLink to="/login">登录后贡献</RouterLink></Button>
+        <div class="grid gap-2">
+          <label for="candidate-password" class="text-sm font-medium">解压密码</label>
+          <Input id="candidate-password" v-model="candidatePassword" type="password" autocomplete="off" maxlength="512" />
+        </div>
+        <label class="flex items-start gap-3 text-sm text-muted-foreground">
+          <Checkbox v-model="authorizationConfirmed" class="mt-0.5" />
+          <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
+        </label>
+        <Button class="w-full rounded-full sm:w-fit" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">{{ submitting ? "提交中…" : auth.isAuthenticated ? "提交网页待验证贡献" : "以游客身份提交待验证贡献" }}</Button>
       </div>
     </div>
   </section>

@@ -114,13 +114,17 @@ def _transition(
 
 def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client):
     _, owner = _register_and_login(client, "manual_owner")
-    _, verifier_one = _register_and_login(client, "manual_verifier_one")
-    _, verifier_two = _register_and_login(client, "manual_verifier_two")
+    verifiers = [
+        _register_and_login(client, f"manual_verifier_{index}")[1]
+        for index in range(1, 5)
+    ]
     admin = _admin_headers(client, "manual_admin")
     created = _submit(client, owner, "1001")
     candidate_id = created["candidate_id"]
-    _feedback(client, verifier_one, candidate_id, "manual-1")
-    verified = _feedback(client, verifier_two, candidate_id, "manual-2")
+    verified = None
+    for index, headers in enumerate(verifiers, start=1):
+        verified = _feedback(client, headers, candidate_id, f"manual-{index}")
+    assert verified is not None
     assert verified.json()["candidate_status"] == "verified"
 
     quarantine = _transition(
@@ -136,13 +140,13 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
     assert adjustment == {
         "rule_version": "reward-compensation-v1",
         "direction": "invalidate",
-        "affected_users": 3,
-        "points_entries": 3,
-        "reputation_events": 3,
-        "points_amount": -3,
-        "reputation_amount": -7,
+        "affected_users": 5,
+        "points_entries": 5,
+        "reputation_events": 5,
+        "points_amount": -5,
+        "reputation_amount": -11,
     }
-    for headers in (owner, verifier_one, verifier_two):
+    for headers in (owner, *verifiers):
         profile = client.get("/api/v1/me/trust-profile", headers=headers).json()
         assert profile["points"]["available"] == 0
         assert profile["reputation_score"] == 50
@@ -160,7 +164,7 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
 
     detail = client.get(f"/api/v1/admin/candidates/{candidate_id}", headers=admin)
     assert detail.status_code == 200
-    assert len(detail.json()["reward_adjustments"]) == 3
+    assert len(detail.json()["reward_adjustments"]) == 5
     assert {item["direction"] for item in detail.json()["reward_adjustments"]} == {
         "invalidate"
     }
@@ -180,11 +184,11 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
     assert restore.json()["reward_adjustment"] == {
         "rule_version": "reward-compensation-v1",
         "direction": "restore",
-        "affected_users": 3,
-        "points_entries": 3,
-        "reputation_events": 3,
-        "points_amount": 3,
-        "reputation_amount": 7,
+        "affected_users": 5,
+        "points_entries": 5,
+        "reputation_events": 5,
+        "points_amount": 5,
+        "reputation_amount": 11,
     }
 
     reject = _transition(
@@ -196,13 +200,13 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
         reason_code="manual.policy_violation",
     )
     assert reject.status_code == 200
-    assert reject.json()["reward_adjustment"]["points_amount"] == -3
-    assert reject.json()["reward_adjustment"]["reputation_amount"] == -7
+    assert reject.json()["reward_adjustment"]["points_amount"] == -5
+    assert reject.json()["reward_adjustment"]["reputation_amount"] == -11
 
     with client.app.state.database.session_factory() as db:
-        assert db.scalar(select(func.count(RewardAdjustmentEvent.id))) == 9
-        assert db.scalar(select(func.count(PointsLedger.id))) == 12
-        assert db.scalar(select(func.count(ReputationEvent.id))) == 12
+        assert db.scalar(select(func.count(RewardAdjustmentEvent.id))) == 15
+        assert db.scalar(select(func.count(PointsLedger.id))) == 20
+        assert db.scalar(select(func.count(ReputationEvent.id))) == 20
         original_point_events = list(
             db.scalars(
                 select(PointsLedger).where(
@@ -212,8 +216,8 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
                 )
             )
         )
-        assert len(original_point_events) == 3
-        assert sum(item.amount for item in original_point_events) == 3
+        assert len(original_point_events) == 5
+        assert sum(item.amount for item in original_point_events) == 5
         growth_adjustments = list(
             db.scalars(
                 select(UserGrowthEvent).where(
@@ -221,8 +225,8 @@ def test_manual_quarantine_restores_and_reinvalidates_rewards_append_only(client
                 )
             )
         )
-        assert len(growth_adjustments) == 9
-        assert sum(item.amount for item in growth_adjustments) == -150
+        assert len(growth_adjustments) == 15
+        assert sum(item.amount for item in growth_adjustments) == -200
 
 
 def test_manual_first_verification_settles_original_rewards(client):
@@ -255,23 +259,26 @@ def test_manual_first_verification_settles_original_rewards(client):
 
 def test_automatic_quarantine_and_reverification_reconcile_rewards(client):
     _, owner = _register_and_login(client, "auto_owner")
-    _, verifier_one = _register_and_login(client, "auto_verifier_one")
-    _, verifier_two = _register_and_login(client, "auto_verifier_two")
-    _, verifier_three = _register_and_login(client, "auto_verifier_three")
+    verifiers = [
+        _register_and_login(client, f"auto_verifier_{index}")[1]
+        for index in range(1, 5)
+    ]
     created = _submit(client, owner, "1003")
     candidate_id = created["candidate_id"]
-    _feedback(client, verifier_one, candidate_id, "auto-one-success")
-    _feedback(client, verifier_two, candidate_id, "auto-two-success")
+    for index, headers in enumerate(verifiers, start=1):
+        verified = _feedback(client, headers, candidate_id, f"auto-{index}-success")
+    assert verified.json()["candidate_status"] == "verified"
 
-    _feedback(client, verifier_one, candidate_id, "auto-one-failure", "failure")
-    _feedback(client, verifier_two, candidate_id, "auto-two-failure", "failure")
-    quarantined = _feedback(
-        client, verifier_three, candidate_id, "auto-three-failure", "failure"
-    )
+    for index, headers in enumerate(verifiers[:3], start=1):
+        quarantined = _feedback(
+            client, headers, candidate_id, f"auto-{index}-failure", "failure"
+        )
     assert quarantined.json()["candidate_status"] == "quarantined"
 
-    _feedback(client, verifier_one, candidate_id, "auto-one-restored", "success")
-    restored = _feedback(client, verifier_two, candidate_id, "auto-two-restored", "success")
+    for index, headers in enumerate(verifiers[:3], start=1):
+        restored = _feedback(
+            client, headers, candidate_id, f"auto-{index}-restored", "success"
+        )
     assert restored.json()["candidate_status"] == "verified"
 
     with client.app.state.database.session_factory() as db:
@@ -285,7 +292,7 @@ def test_automatic_quarantine_and_reverification_reconcile_rewards(client):
                 .order_by(RewardAdjustmentEvent.created_at, RewardAdjustmentEvent.id)
             )
         )
-        assert len(adjustments) == 6
+        assert len(adjustments) == 10
         assert sum(item.points_amount for item in adjustments) == 0
         assert sum(item.reputation_amount for item in adjustments) == 0
         assert {item.direction.value for item in adjustments} == {"invalidate", "restore"}
@@ -296,5 +303,5 @@ def test_automatic_quarantine_and_reverification_reconcile_rewards(client):
                 )
             )
         )
-        assert len(growth_adjustments) == 6
+        assert len(growth_adjustments) == 10
         assert sum(item.amount for item in growth_adjustments) == 0

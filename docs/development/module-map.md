@@ -10,7 +10,7 @@
 | Core | `apps/api/src/password_detective/core/` | 配置、令牌、Argon2id、错误、request_id、Redis 限流、数据库幂等、统一通知网关、`notification-webhook-v1` HTTPS/HMAC 签名、浏览器 Cookie、TOTP 秘钥加密、候选秘密保险库、递归日志脱敏 | 生产 KMS 适配器、通知凭据轮换、指标导出与清理任务 |
 | Auth | `apps/api/src/password_detective/modules/auth/` | 注册、邮箱验证、密码重置、登录、刷新轮换、重放检测、退出、会话、TOTP 服务、可选身份解析 | M2 个人资料扩展与风险策略 |
 | Archives | `apps/api/src/password_detective/modules/archives/` | 完整指纹精确查询、可见性分层、幂等贡献、重复候选合并、揭示配额、证据计数、个人贡献列表和不保存完整指纹的查询遥测 | 高风险揭示二次验证、遥测保留/归档和规模查询优化 |
-| Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v2` 聚合、Web/桌面证据统一接入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
+| Verification | `apps/api/src/password_detective/modules/verification/` | 当前有效反馈、不可变证据历史、`verification-v3` 聚合、Web 待验证池与可信桌面成功直入、自动状态事件、首次验证结算、自动奖励校正和风险检测接入点 | 跨候选图谱、动态信誉权重和处罚规则 |
 | Admin | `apps/api/src/password_detective/modules/admin/` | 独立浏览器登录、RBAC、TOTP/MFA、真实仪表盘、审计中心、用户处置、受控角色变更双人复核，以及不可变配置草稿、差异预览、再认证发布、运行时投影和新版本回滚 | 角色层级配置化、紧急撤权、批量资源上限、审计保留/归档和大规模异步导出 |
 | Moderation | `apps/api/src/password_detective/modules/moderation/` | MFA 候选筛选、最小披露详情、证据/状态/奖励校正时间线、`moderation-v1` 人工状态转换、人工首次验证结算、校正汇总、持久化幂等和审计 | 候选合并/删除、案件编排、危险操作再次确认与批量处置资源限制 |
 | Community | `apps/api/src/password_detective/modules/community/` | 固定分区、请求/启动期原子幂等种子初始化、公开主题/回复、邮箱验证与规则确认、纯文本安全展示、用户举报、重复待处理举报阻断、MFA 举报队列、内容移除、主题锁定/置顶/下架/恢复、可配置板块/群组治理、动态、通知 Outbox、SSE 游标补偿、限流、幂等和审计 | 邮件摘要真实投递、Admin Outbox 失败查询/受控重放、社区搜索、私信和批量治理 |

@@ -60,8 +60,8 @@ class VerificationRule:
 
 
 ACTIVE_RULE = VerificationRule(
-    version="verification-v2",
-    independent_success_required=2,
+    version="verification-v3",
+    independent_success_required=4,
     maximum_failure_weight_for_verification=2.0,
     independent_failure_quarantine=3,
     failure_weight_quarantine=3.0,
@@ -162,6 +162,7 @@ def apply_candidate_evidence(
     principal: Principal,
     context: ClientContext,
     installation_id_hash: str | None = None,
+    promote_verified_on_success: bool = False,
 ) -> EvidenceMutation:
     """Upsert one account's current evidence and append history for material changes."""
 
@@ -186,7 +187,12 @@ def apply_candidate_evidence(
             or feedback.installation_id_hash != installation_id_hash
         )
     )
-    changed = created or feedback.outcome != outcome or desktop_upgrade
+    trusted_success_upgrade = (
+        promote_verified_on_success
+        and outcome == FeedbackOutcome.SUCCESS
+        and candidate.status in {CandidateStatus.PENDING, CandidateStatus.QUARANTINED}
+    )
+    changed = created or feedback.outcome != outcome or desktop_upgrade or trusted_success_upgrade
 
     if feedback is None:
         feedback = CandidateFeedback(
@@ -253,6 +259,8 @@ def apply_candidate_evidence(
         candidate=candidate,
         totals=totals,
         trigger_evidence=evidence_event,
+        trusted_desktop_success=promote_verified_on_success
+        and outcome == FeedbackOutcome.SUCCESS,
     )
     from password_detective.modules.risk_alerts.detection import detect_failure_surge
 
@@ -347,6 +355,7 @@ def _apply_automatic_transition(
     candidate: PasswordCandidate,
     totals: EvidenceTotals,
     trigger_evidence: VerificationEvidenceEvent,
+    trusted_desktop_success: bool = False,
 ) -> None:
     rule = ACTIVE_RULE
     should_quarantine = (
@@ -360,7 +369,13 @@ def _apply_automatic_transition(
 
     next_status = candidate.status
     reason_code: str | None = None
-    if should_quarantine and candidate.status in {
+    if trusted_desktop_success and candidate.status in {
+        CandidateStatus.PENDING,
+        CandidateStatus.QUARANTINED,
+    }:
+        next_status = CandidateStatus.VERIFIED
+        reason_code = "automatic.desktop_verified_success"
+    elif should_quarantine and candidate.status in {
         CandidateStatus.PENDING,
         CandidateStatus.VERIFIED,
     }:
@@ -377,7 +392,9 @@ def _apply_automatic_transition(
         float(rule.independent_success_required),
         1.0,
     )
-    candidate.confidence_score = max(0.0, min(1.0, confidence))
+    candidate.confidence_score = (
+        1.0 if trusted_desktop_success else max(0.0, min(1.0, confidence))
+    )
     if next_status == candidate.status:
         return
 

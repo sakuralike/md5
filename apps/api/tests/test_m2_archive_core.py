@@ -58,6 +58,9 @@ def test_submission_encrypts_secret_and_creates_pending_evidence(client):
     assert body["candidate_created"] is True
     assert body["candidate_status"] == "pending"
     assert body["pending_points"] == 1
+    assert body["submitter_kind"] == "authenticated"
+    assert body["pool_status"] == "pending_verification"
+    assert body["required_success_confirmations"] == 4
 
     with client.app.state.database.session_factory() as db:
         archive = db.get(Archive, body["archive_id"])
@@ -74,6 +77,40 @@ def test_submission_encrypts_secret_and_creates_pending_evidence(client):
         audit = db.scalar(select(AuditLog).where(AuditLog.action == "archive.submission_created"))
         assert audit is not None
         assert _submission_payload()["password"] not in str(audit.details)
+
+
+def test_guest_web_submission_enters_pending_pool_without_points(client):
+    headers = {
+        "Idempotency-Key": "guest-archive-submission-0001",
+        "User-Agent": "SyntheticGuestBrowser/1.0",
+    }
+    first = client.post(
+        "/api/v1/archives/submissions", json=_submission_payload(), headers=headers
+    )
+    retry = client.post(
+        "/api/v1/archives/submissions", json=_submission_payload(), headers=headers
+    )
+
+    assert first.status_code == retry.status_code == 201
+    assert first.json() == retry.json()
+    body = first.json()
+    assert body["candidate_status"] == "pending"
+    assert body["submitter_kind"] == "guest"
+    assert body["pool_status"] == "pending_verification"
+    assert body["required_success_confirmations"] == 4
+    assert body["pending_points"] == 0
+
+    with client.app.state.database.session_factory() as db:
+        archive = db.get(Archive, body["archive_id"])
+        submission = db.get(Submission, body["submission_id"])
+        audit = db.scalar(select(AuditLog).where(AuditLog.action == "archive.submission_created"))
+        assert archive is not None and archive.created_by is None
+        assert submission is not None and submission.user_id is None
+        assert db.query(Submission).count() == 1
+        assert db.query(PointsLedger).count() == 0
+        assert audit is not None and audit.actor_id is None
+        assert audit.details["authenticated"] is False
+        assert audit.details["pool_status"] == "pending_verification"
 
 
 def test_idempotent_retry_does_not_duplicate_submission(client):

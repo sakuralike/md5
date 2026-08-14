@@ -292,6 +292,9 @@ export interface ArchiveSubmissionResponse {
   candidate_created: boolean;
   evidence_merged: boolean;
   pending_points: number;
+  submitter_kind: "guest" | "authenticated";
+  pool_status: "pending_verification" | "global";
+  required_success_confirmations: number;
   created_at: string;
 }
 

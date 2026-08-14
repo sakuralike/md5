@@ -46,5 +46,7 @@ describe("HomePage", () => {
     expect(html).toContain("热门哈希值");
     expect(html).toContain("用户贡献排行榜");
     expect(html).toContain("用户积分排行榜");
+    expect(html).toContain("网页提交统一进入待验证池");
+    expect(html).not.toContain("贡献需要登录");
   });
 });

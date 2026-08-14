@@ -51,13 +51,13 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
 | `GET` | `/archives/search?fingerprint=...` | 可选 | 只接受完整 MD5/SHA-1/SHA-256/SHA-512 十六进制指纹；匿名仅返回匹配和状态元数据，登录用户可见遮挡候选 |
-| `POST` | `/archives/submissions` | 必需 | 必须声明有权提交、提供 `Idempotency-Key`；重复候选合并提交证据，不重复保存秘密 |
+| `POST` | `/archives/submissions` | 可选 | 游客与登录用户均须声明有权提交并提供 `Idempotency-Key`；Web 提交统一进入待验证池，游客不绑定用户、不生成积分；重复候选合并提交记录，不重复保存秘密 |
 | `POST` | `/archives/{archive_id}/reveal` | 必需 | 仅揭示 `verified` 候选；执行每日配额；响应使用 `Cache-Control: no-store` |
 | `GET` | `/me/submissions` | 必需 | 返回当前用户贡献及 pending/后续状态，不返回候选密码明文或密文 |
 | `POST` | `/candidates/{candidate_id}/feedback` | 必需 | `success/failure`；同一账号仅一个当前有效反馈；修改追加历史；必须提供 `Idempotency-Key` |
 | `GET` | `/me/feedback` | 必需 | 分页返回当前用户反馈修订历史、规则版本和候选当前状态 |
 
-候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `correlation-v1` 先构建候选内关联组，再由 `verification-v2` 聚合：共享安装标识哈希或 IP 网段的传递关联反馈，在成功/失败两个结果维度内分别最多保留组内最高单条权重；两个独立成功且有效失败权重低于阈值时自动验证，三个独立失败或有效失败权重达到阈值时自动隔离。每次材料变化追加 `evidence_correlation_assessments` 聚合快照，所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
+候选密码使用 AES-GCM 密文保存，并用独立 HMAC 标签去重。反馈按 `correlation-v1` 先构建候选内关联组，再由 `verification-v3` 聚合：共享安装标识哈希或 IP 网段的传递关联反馈，在成功/失败两个结果维度内分别最多保留组内最高单条权重；Web 候选至少需要 4 个独立登录用户成功组且有效失败权重低于阈值才自动验证，已登录且通过安装实例、挑战、防重放、版本、时钟与 ECDSA 签名校验的桌面成功回执可直接验证，三个独立失败或有效失败权重达到阈值时仍自动隔离。每次材料变化追加 `evidence_correlation_assessments` 聚合快照，所有自动状态变化写入 `record_state_events`。揭示审计只记录用户、档案、候选标识和结果，不记录秘密、密文或 nonce。当前每日揭示配额由 `DAILY_REVEAL_QUOTA` 配置；正式产品参数确定后同步更新规格和验收用例。
 
 ### 高风险用户操作再认证
 
@@ -98,7 +98,7 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 
 回执规范载荷版本为 `desktop-receipt-v1`。客户端按固定顺序生成 UTF-8 `key=value` 行，时间统一为毫秒精度 UTC `Z`，末尾保留换行。签名覆盖挑战 ID/nonce、安装与账号、候选、档案指纹、候选密码 SHA-256 摘要、验证结果、压缩格式、客户端版本和验证时间。服务端只持久化候选摘要的 HMAC，不保存客户端提交的原始无盐摘要。
 
-桌面端是不可信证据来源：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。有效回执仍进入 `verification-v2` 证据聚合，并接受候选内账号、安装和 IP 关联传递分组与动态限权；该分析不扩展为跨候选身份图谱。档案文件名、目录列表、文件内容和候选密码不得上传。
+桌面端仍是不可信执行环境：签名只能证明某安装私钥生成了回执，不能证明客户端代码未被修改。`verification-v3` 将“已登录账号 + 已注册安装实例 + 一次性挑战 + 防重放 + 版本/时钟窗口 + ECDSA 验签全部通过”的成功回执定义为可信通道证据，可直接把候选置为 `verified`；该候选仍接受后续失败激增、隔离、人工审核以及候选内关联分析。档案文件名、目录列表、文件内容和候选密码不得上传。
 
 最低版本拒绝使用 `426 desktop.client_version_unsupported`，并在 `details` 中返回可供客户端展示的版本信息：
 

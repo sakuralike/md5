@@ -16,7 +16,11 @@ from password_detective.db.models.desktop_verification import (
     VerificationReceipt,
 )
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
-from password_detective.db.models.verification import CandidateFeedback, VerificationSource
+from password_detective.db.models.verification import (
+    CandidateFeedback,
+    RecordStateEvent,
+    VerificationSource,
+)
 from password_detective.modules.desktop_verification.schemas import ReceiptRequest
 from password_detective.modules.desktop_verification.service import build_canonical_receipt_payload
 
@@ -188,8 +192,10 @@ def test_signed_receipt_is_accepted_once_and_becomes_desktop_evidence(client):
     payload = _receipt_payload(challenge.json(), private_key)
     accepted = client.post("/api/v1/desktop/receipts", headers=verifier, json=payload)
     assert accepted.status_code == 200
-    assert accepted.json()["candidate_status"] == "pending"
+    assert accepted.json()["candidate_status"] == "verified"
     assert accepted.json()["snapshot"]["independent_success_count"] == 1
+    assert accepted.json()["snapshot"]["needs_more_independent_success"] == 3
+    assert accepted.json()["snapshot"]["rule_version"] == "verification-v3"
 
     replay = client.post("/api/v1/desktop/receipts", headers=verifier, json=payload)
     assert replay.status_code == 409
@@ -206,6 +212,9 @@ def test_signed_receipt_is_accepted_once_and_becomes_desktop_evidence(client):
         assert installation is not None and installation.receipt_count == 1
         feedback = db.scalar(select(CandidateFeedback))
         assert feedback is not None
+        state_event = db.scalar(select(RecordStateEvent))
+        assert state_event is not None
+        assert state_event.reason_code == "automatic.desktop_verified_success"
         assert feedback.source == VerificationSource.DESKTOP_RECEIPT
         assert feedback.installation_id_hash is not None
 
@@ -312,7 +321,7 @@ def test_installation_cannot_switch_accounts_or_replace_public_key(client):
     assert replaced.json()["code"] == "desktop.installation_key_mismatch"
 
 
-def test_two_independent_signed_receipts_can_verify_candidate(client):
+def test_additional_signed_receipt_keeps_directly_verified_candidate(client):
     owner, _ = _register_and_login(client, "state_owner")
     first, _ = _register_and_login(client, "state_first")
     second, _ = _register_and_login(client, "state_second")
@@ -336,6 +345,7 @@ def test_two_independent_signed_receipts_can_verify_candidate(client):
             json=_receipt_payload(challenge, private_key),
         )
         assert accepted.status_code == 200
+        assert accepted.json()["candidate_status"] == "verified"
 
     assert accepted.json()["candidate_status"] == "verified"
     assert accepted.json()["snapshot"]["independent_success_count"] == 2

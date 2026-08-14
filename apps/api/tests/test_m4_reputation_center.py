@@ -128,14 +128,23 @@ def test_daily_login_growth_is_idempotent_and_level_endpoints_are_private(client
 
 def test_first_verification_settles_points_and_reputation_once(client):
     _, owner = _register_and_login(client, "owner")
-    _, verifier_one = _register_and_login(client, "verifier_one")
-    _, verifier_two = _register_and_login(client, "verifier_two")
+    verifiers = [
+        _register_and_login(client, f"verifier_{index}")[1] for index in range(1, 5)
+    ]
+    verifier_one = verifiers[0]
     created = _create_candidate(client, owner, "0001")
 
-    first = _feedback(client, verifier_one, created["candidate_id"], "0001")
-    assert first.json()["candidate_status"] == "pending"
-    second = _feedback(client, verifier_two, created["candidate_id"], "0002")
-    assert second.json()["candidate_status"] == "verified"
+    responses = [
+        _feedback(client, headers, created["candidate_id"], f"000{index}")
+        for index, headers in enumerate(verifiers, start=1)
+    ]
+    assert all(response.status_code == 200 for response in responses)
+    assert [response.json()["candidate_status"] for response in responses] == [
+        "pending",
+        "pending",
+        "pending",
+        "verified",
+    ]
 
     owner_profile = client.get("/api/v1/me/trust-profile", headers=owner).json()
     assert owner_profile["reputation_score"] == 53
@@ -168,13 +177,13 @@ def test_first_verification_settles_points_and_reputation_once(client):
 
     replay = client.post(
         f"/api/v1/candidates/{created['candidate_id']}/feedback",
-        headers={**verifier_two, "Idempotency-Key": "reputation-feedback-0002"},
+        headers={**verifiers[-1], "Idempotency-Key": "reputation-feedback-0004"},
         json={"outcome": "success"},
     )
     assert replay.status_code == 200
     with client.app.state.database.session_factory() as db:
-        assert len(list(db.scalars(select(ReputationEvent)))) == 3
-        assert len(list(db.scalars(select(UserGrowthEvent)))) == 6
+        assert len(list(db.scalars(select(ReputationEvent)))) == 5
+        assert len(list(db.scalars(select(UserGrowthEvent)))) == 10
 
 
 def test_reputation_projection_is_bounded_and_reference_idempotent(client):

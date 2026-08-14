@@ -209,7 +209,7 @@ def test_correlation_group_caps_success_and_failure_weights_independently():
 def test_correlation_assessments_are_persisted_and_exposed_without_raw_signals(client):
     owner_registration, owner_headers = _register_and_login(client, "owner")
     voter_registrations = [
-        _register_and_login(client, f"voter_{index}")[0] for index in range(1, 4)
+        _register_and_login(client, f"voter_{index}")[0] for index in range(1, 6)
     ]
     candidate_id = _create_candidate(client, owner_headers)
 
@@ -225,7 +225,11 @@ def test_correlation_assessments_are_persisted_and_exposed_without_raw_signals(c
             assert voter is not None
             context = ClientContext(
                 request_id=f"correlation-request-{index}",
-                ip_prefix="203.0.113.0/24" if index < 3 else "198.51.100.0/24",
+                ip_prefix=(
+                    "203.0.113.0/24"
+                    if index < 3
+                    else f"198.51.{index - 3}.0/24"
+                ),
                 user_agent="synthetic-correlation-test",
             )
             mutation = apply_candidate_evidence(
@@ -253,12 +257,12 @@ def test_correlation_assessments_are_persisted_and_exposed_without_raw_signals(c
                 )
             )
         )
-        assert len(assessments) == 3
+        assert len(assessments) == 5
         latest = max(assessments, key=lambda item: item.created_at)
         assert latest.correlated_group_count == 1
         assert latest.downweighted_feedback_count == 1
-        assert latest.raw_success_weight == 3.0
-        assert latest.effective_success_weight == 2.0
+        assert latest.raw_success_weight == 5.0
+        assert latest.effective_success_weight == 4.0
 
         owner = db.scalar(select(User).where(User.username == owner_registration["username"]))
         assert owner is not None
@@ -272,12 +276,12 @@ def test_correlation_assessments_are_persisted_and_exposed_without_raw_signals(c
     snapshot = body["correlation_snapshot"]
     assert snapshot == {
         "rule_version": "correlation-v1",
-        "feedback_count": 3,
-        "independent_group_count": 2,
+        "feedback_count": 5,
+        "independent_group_count": 4,
         "correlated_group_count": 1,
         "downweighted_feedback_count": 1,
-        "raw_success_weight": 3.0,
-        "effective_success_weight": 2.0,
+        "raw_success_weight": 5.0,
+        "effective_success_weight": 4.0,
         "raw_failure_weight": 0.0,
         "effective_failure_weight": 0.0,
     }
@@ -286,7 +290,7 @@ def test_correlation_assessments_are_persisted_and_exposed_without_raw_signals(c
     )
     assert correlated_group["shared_signals"] == ["ip_prefix"]
     assert len(correlated_group["user_ids"]) == 2
-    assert len(body["correlation_assessments"]) == 3
+    assert len(body["correlation_assessments"]) == 5
     serialized = str(body)
     assert "203.0.113.0/24" not in serialized
     assert "198.51.100.0/24" not in serialized

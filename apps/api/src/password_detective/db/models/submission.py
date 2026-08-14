@@ -24,8 +24,8 @@ class Submission(Base):
     candidate_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("password_candidates.id", ondelete="CASCADE"), index=True
     )
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source: Mapped[SubmissionSource] = mapped_column(
         Enum(SubmissionSource, native_enum=False, length=16), default=SubmissionSource.WEB

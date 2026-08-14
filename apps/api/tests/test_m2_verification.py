@@ -67,49 +67,66 @@ def _feedback(
     )
 
 
-def test_two_independent_success_feedbacks_verify_and_settle_points(client):
+def _verify_with_four(client, candidate_id: str, key_prefix: str):
+    response = None
+    account_prefix = "".join(character for character in key_prefix if character.isalnum())[:12]
+    for index in range(1, 5):
+        headers = _register_and_login(client, f"{account_prefix}_{index}")
+        response = _feedback(
+            client,
+            headers,
+            candidate_id,
+            "success",
+            f"{key_prefix}-feedback-000{index}",
+        )
+        assert response.status_code == 200
+        assert response.json()["candidate_status"] == ("verified" if index == 4 else "pending")
+    assert response is not None
+    return response
+
+
+def test_four_independent_success_feedbacks_verify_and_settle_points(client):
     owner = _register_and_login(client, "owner")
-    verifier_one = _register_and_login(client, "verifier_one")
-    verifier_two = _register_and_login(client, "verifier_two")
+    verifiers = [
+        _register_and_login(client, f"verifier_{index}") for index in range(1, 5)
+    ]
     created = _create_candidate(client, owner)
+    assert created["submitter_kind"] == "authenticated"
+    assert created["pool_status"] == "pending_verification"
+    assert created["required_success_confirmations"] == 4
 
-    first = _feedback(
-        client,
-        verifier_one,
-        created["candidate_id"],
-        "success",
-        "verification-feedback-0001",
-    )
-    assert first.status_code == 200
-    assert first.json()["candidate_status"] == "pending"
-    assert first.json()["snapshot"]["independent_success_count"] == 1
-    assert first.json()["snapshot"]["needs_more_independent_success"] == 1
+    responses = []
+    for index, headers in enumerate(verifiers, start=1):
+        response = _feedback(
+            client,
+            headers,
+            created["candidate_id"],
+            "success",
+            f"verification-feedback-000{index}",
+        )
+        assert response.status_code == 200
+        assert response.json()["candidate_status"] == (
+            "verified" if index == 4 else "pending"
+        )
+        assert response.json()["snapshot"]["independent_success_count"] == index
+        assert response.json()["snapshot"]["needs_more_independent_success"] == 4 - index
+        assert response.json()["snapshot"]["rule_version"] == "verification-v3"
+        responses.append(response)
 
-    second = _feedback(
-        client,
-        verifier_two,
-        created["candidate_id"],
-        "success",
-        "verification-feedback-0002",
-    )
-    assert second.status_code == 200
-    assert second.json()["candidate_status"] == "verified"
-    assert second.json()["snapshot"]["independent_success_count"] == 2
-    assert second.json()["snapshot"]["rule_version"] == "verification-v2"
-
+    verified = responses[-1]
     cached = _feedback(
         client,
-        verifier_two,
+        verifiers[-1],
         created["candidate_id"],
         "success",
-        "verification-feedback-0002",
+        "verification-feedback-0004",
     )
     assert cached.status_code == 200
-    assert cached.json() == second.json()
+    assert cached.json() == verified.json()
 
     unchanged = _feedback(
         client,
-        verifier_two,
+        verifiers[-1],
         created["candidate_id"],
         "success",
         "verification-feedback-unchanged-0001",
@@ -121,21 +138,21 @@ def test_two_independent_success_feedbacks_verify_and_settle_points(client):
     with client.app.state.database.session_factory() as db:
         candidate = db.get(PasswordCandidate, created["candidate_id"])
         assert candidate is not None and candidate.status == CandidateStatus.VERIFIED
-        assert db.query(CandidateFeedback).count() == 2
-        assert db.query(VerificationEvidenceEvent).count() == 2
+        assert db.query(CandidateFeedback).count() == 4
+        assert db.query(VerificationEvidenceEvent).count() == 4
         transitions = list(db.scalars(select(RecordStateEvent)))
         assert len(transitions) == 1
         assert transitions[0].previous_status == CandidateStatus.PENDING
         assert transitions[0].next_status == CandidateStatus.VERIFIED
+        assert transitions[0].reason_code == "automatic.success_threshold_reached"
         ledgers = list(db.scalars(select(PointsLedger)))
-        assert len(ledgers) == 3
-        assert sum(item.amount for item in ledgers if item.status == PointsLedgerStatus.POSTED) == 3
+        assert len(ledgers) == 5
+        assert sum(item.amount for item in ledgers if item.status == PointsLedgerStatus.POSTED) == 5
         assert all(item.settled_at is not None for item in ledgers)
 
     reveal = client.post(f"/api/v1/archives/{created['archive_id']}/reveal", headers=owner)
     assert reveal.status_code == 200
     assert reveal.json()["password"] == "Synthetic-Verification-Candidate!"
-
 
 def test_feedback_change_keeps_one_current_record_and_append_only_history(client):
     owner = _register_and_login(client, "history_owner")
@@ -201,29 +218,13 @@ def test_feedback_change_keeps_one_current_record_and_append_only_history(client
 
 def test_three_independent_failures_quarantine_verified_candidate_and_pause_reveal(client):
     owner = _register_and_login(client, "quarantine_owner")
-    success_one = _register_and_login(client, "quarantine_success_one")
-    success_two = _register_and_login(client, "quarantine_success_two")
     failure_headers = [
         _register_and_login(client, f"quarantine_failure_{index}") for index in range(1, 4)
     ]
     created = _create_candidate(client, owner, "verify-submission-quarantine-0001")
 
-    assert (
-        _feedback(
-            client,
-            success_one,
-            created["candidate_id"],
-            "success",
-            "verification-quarantine-success-0001",
-        ).status_code
-        == 200
-    )
-    verified = _feedback(
-        client,
-        success_two,
-        created["candidate_id"],
-        "success",
-        "verification-quarantine-success-0002",
+    verified = _verify_with_four(
+        client, created["candidate_id"], "verification-quarantine-success"
     )
     assert verified.json()["candidate_status"] == "verified"
 
@@ -256,26 +257,11 @@ def test_three_independent_failures_quarantine_verified_candidate_and_pause_reve
 
 def test_first_contributor_posts_and_duplicate_submission_points_reverse(client):
     owner = _register_and_login(client, "points_owner")
-    verifier_one = _register_and_login(client, "points_verifier_one")
-    verifier_two = _register_and_login(client, "points_verifier_two")
     created = _create_candidate(client, owner, "verify-submission-points-0001")
     duplicate = _create_candidate(client, owner, "verify-submission-points-0002")
     assert duplicate["candidate_id"] == created["candidate_id"]
 
-    _feedback(
-        client,
-        verifier_one,
-        created["candidate_id"],
-        "success",
-        "verification-points-feedback-0001",
-    )
-    _feedback(
-        client,
-        verifier_two,
-        created["candidate_id"],
-        "success",
-        "verification-points-feedback-0002",
-    )
+    _verify_with_four(client, created["candidate_id"], "verification-points")
 
     with client.app.state.database.session_factory() as db:
         submissions = list(
@@ -293,23 +279,8 @@ def test_first_contributor_posts_and_duplicate_submission_points_reverse(client)
 
 def test_submission_after_first_verification_is_immediately_non_rewardable(client):
     owner = _register_and_login(client, "late_owner")
-    verifier_one = _register_and_login(client, "late_verify_one")
-    verifier_two = _register_and_login(client, "late_verify_two")
     created = _create_candidate(client, owner, "verify-submission-late-points-0001")
-    _feedback(
-        client,
-        verifier_one,
-        created["candidate_id"],
-        "success",
-        "verification-late-points-feedback-0001",
-    )
-    _feedback(
-        client,
-        verifier_two,
-        created["candidate_id"],
-        "success",
-        "verification-late-points-feedback-0002",
-    )
+    _verify_with_four(client, created["candidate_id"], "verification-late-points")
 
     late = _create_candidate(client, owner, "verify-submission-late-points-0002")
     assert late["candidate_status"] == "verified"

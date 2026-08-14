@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -82,6 +83,9 @@ class SubmissionResponse(BaseModel):
     candidate_created: bool
     evidence_merged: bool
     pending_points: int
+    submitter_kind: Literal["guest", "authenticated"]
+    pool_status: Literal["pending_verification", "global"]
+    required_success_confirmations: int
     created_at: datetime
 
 

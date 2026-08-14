@@ -57,10 +57,29 @@ test("Web 对未匹配指纹提交授权贡献并刷新为待验证候选", asyn
 
   await page.getByLabel("解压密码").fill(password);
   await page.getByText("我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。", { exact: true }).click();
-  await page.getByRole("button", { name: "提交待验证贡献" }).click();
+  await page.getByRole("button", { name: "提交网页待验证贡献" }).click();
 
-  await expect(page.getByText("贡献已安全保存，候选当前为待验证状态。", { exact: true })).toBeVisible();
+  await expect(page.getByText("网页贡献已进入待验证池，需至少 4 名不同登录用户确认正确后进入总哈希池。", { exact: true })).toBeVisible();
   await expect(page.getByText("发现 1 条可见候选")).toBeVisible();
+  await expect(page.getByText("待验证 1")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(password);
+  expectNoBrowserErrors(browserErrors);
+});
+
+test("Web 游客可提交授权贡献但只进入待验证池", async ({ page }) => {
+  const browserErrors = observeBrowserErrors(page);
+  const fingerprint = "9".repeat(64);
+  const password = "Synthetic-Guest-Contribution-2026!";
+
+  await page.goto("/");
+  await searchManualFingerprint(page, fingerprint);
+  await expect(page.getByText("暂无社区匹配")).toBeVisible();
+
+  await page.getByLabel("解压密码").fill(password);
+  await page.getByText("我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。", { exact: true }).click();
+  await page.getByRole("button", { name: "以游客身份提交待验证贡献" }).click();
+
+  await expect(page.getByText("游客贡献已进入待验证池，需至少 4 名不同登录用户确认正确后进入总哈希池。", { exact: true })).toBeVisible();
   await expect(page.getByText("待验证 1")).toBeVisible();
   await expect(page.locator("body")).not.toContainText(password);
   expectNoBrowserErrors(browserErrors);

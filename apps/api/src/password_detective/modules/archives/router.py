@@ -11,6 +11,7 @@ from password_detective.core.idempotency import (
     acquire_idempotency,
     complete_idempotency,
     payload_digest,
+    private_owner_key,
     require_idempotency_key,
 )
 from password_detective.core.rate_limit import rate_limit
@@ -72,14 +73,22 @@ def submit(
     response: Response,
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
-    principal: Annotated[Principal, Depends(get_current_principal)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> SubmissionResponse:
     request_hash = payload_digest(payload.model_dump(mode="json"))
+    context = get_client_context(request)
+    owner_key = (
+        principal.user.id
+        if principal is not None
+        else private_owner_key(
+            f"guest:{context.ip_prefix or 'unknown'}:{context.user_agent or 'unknown'}"
+        )
+    )
     lease = acquire_idempotency(
         db,
         scope="archives.submissions",
-        owner_key=principal.user.id,
+        owner_key=owner_key,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
     )
@@ -92,7 +101,7 @@ def submit(
             settings,
             payload=payload,
             principal=principal,
-            context=get_client_context(request),
+            context=context,
             idempotency_key=idempotency_key,
         )
         complete_idempotency(

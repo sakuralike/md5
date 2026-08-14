@@ -132,7 +132,8 @@
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
 | Web 已验证查询、揭示、配额与页面清除 | `apps/web/src/pages/HomePage.vue`、`tests/e2e/support/seed_api.py` | `tests/e2e/web-core-journeys.spec.ts`：已验证查询、揭示最高可信候选、剩余配额和页面清除 | Chromium 本地闭环完成；复制、过期会话和目标环境未验收 |
-| Web 授权贡献与待验证结果刷新 | `apps/web/src/pages/HomePage.vue`、`createContribution` | `tests/e2e/web-core-journeys.spec.ts`：未匹配指纹、授权声明、贡献提交、待验证候选刷新 | Chromium 本地闭环完成；重复贡献、本人贡献历史和目标环境未验收 |
+| Web 授权贡献与待验证结果刷新 | `apps/web/src/pages/HomePage.vue`、`createContribution`、`modules/archives` | `test_m2_archive_core.py` 覆盖游客提交/幂等/无积分，`HomePage.test.ts` 覆盖游客入口与四人规则提示，`tests/e2e/web-core-journeys.spec.ts` 覆盖登录贡献与待验证候选刷新 | 游客与登录用户 Web 提交统一待验证；目标环境游客提交与晋级链路纳入本轮部署验收 |
+| `verification-v3` 晋级门禁 | `modules/verification`、`modules/desktop_verification`、Alembic `20260814_0037` | `test_m2_verification.py` 覆盖前三人保持 pending、第四名独立用户晋级；`test_m3_desktop_verification.py` 覆盖签名桌面成功直入 verified | 本地 API 全量通过；目标 MySQL 迁移、游客入口与桌面直入纳入本轮部署验收 |
 | Web 候选举报与本人案件时间线 | `apps/web/src/pages/HomePage.vue`、`apps/web/src/pages/TrustCasesPage.vue`、`createTrustCaseReport` | `tests/e2e/web-core-journeys.spec.ts`：候选跳转、举报提交、待处理案件时间线 | Chromium 本地闭环完成；候选申诉、账号申诉、Admin 处置和通知送达未验收 |
 | Web 核心旅程敏感数据控制 | `playwright.config.ts`、`tests/e2e/support/seed_api.py`、`tests/e2e/web-core-journeys.spec.ts` | E2E typecheck、ESLint、浏览器错误断言；种子候选密码加密写入 | 本地策略完成；远端 CI `31292352350` 通过，目标环境仍需复核 |
 ## WP3 第 3 次开发迭代追踪增量（2026-08-09）

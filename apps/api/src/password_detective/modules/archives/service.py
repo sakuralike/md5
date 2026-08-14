@@ -43,6 +43,7 @@ from password_detective.modules.reputation.levels import (
     require_submission_entitlement,
 )
 from password_detective.modules.verification.service import (
+    ACTIVE_RULE,
     has_ever_been_verified,
     summarize_feedbacks,
 )
@@ -274,11 +275,13 @@ def create_submission(
     settings: Settings,
     *,
     payload: SubmissionRequest,
-    principal: Principal,
+    principal: Principal | None,
     context: ClientContext,
     idempotency_key: str,
 ) -> SubmissionResponse:
-    require_submission_entitlement(db, user_id=principal.user.id)
+    user_id = principal.user.id if principal is not None else None
+    if user_id is not None:
+        require_submission_entitlement(db, user_id=user_id)
     fingerprints = normalize_fingerprints(payload.fingerprints)
     predicates = [
         and_(
@@ -299,7 +302,7 @@ def create_submission(
     archive_created = not archive_ids
     if archive_created:
         archive = Archive(
-            created_by=principal.user.id,
+            created_by=user_id,
             optional_size=payload.optional_size,
             optional_format=payload.optional_format,
         )
@@ -349,7 +352,7 @@ def create_submission(
 
     submission = Submission(
         candidate_id=candidate.id,
-        user_id=principal.user.id,
+        user_id=user_id,
         source=SubmissionSource.WEB,
         authorization_version=payload.authorization_version,
         idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest(),
@@ -358,12 +361,12 @@ def create_submission(
     db.add(submission)
     db.flush()
 
-    pending_points = settings.submission_pending_points
-    if settings.submission_pending_points:
+    pending_points = settings.submission_pending_points if user_id is not None else 0
+    if user_id is not None and settings.submission_pending_points:
         already_verified = has_ever_been_verified(db, candidate.id)
         db.add(
             PointsLedger(
-                user_id=principal.user.id,
+                user_id=user_id,
                 amount=settings.submission_pending_points,
                 event_type="submission.pending",
                 reference_id=submission.id,
@@ -379,7 +382,7 @@ def create_submission(
             pending_points = 0
     write_audit_log(
         db,
-        actor_id=principal.user.id,
+        actor_id=user_id,
         action="archive.submission_created",
         target_type="password_candidate",
         target_id=candidate.id,
@@ -392,6 +395,13 @@ def create_submission(
             "fingerprint_algorithms": [item.algorithm.value for item in fingerprints],
             "candidate_created": candidate_created,
             "authorization_version": payload.authorization_version,
+            "authenticated": principal is not None,
+            "pool_status": (
+                "global"
+                if candidate.status == CandidateStatus.VERIFIED
+                else "pending_verification"
+            ),
+            "required_success_confirmations": ACTIVE_RULE.independent_success_required,
         },
     )
     try:
@@ -413,6 +423,13 @@ def create_submission(
         candidate_created=candidate_created,
         evidence_merged=not candidate_created,
         pending_points=pending_points,
+        submitter_kind="authenticated" if principal is not None else "guest",
+        pool_status=(
+            "global"
+            if candidate.status == CandidateStatus.VERIFIED
+            else "pending_verification"
+        ),
+        required_success_confirmations=ACTIVE_RULE.independent_success_required,
         created_at=submission.created_at,
     )
 

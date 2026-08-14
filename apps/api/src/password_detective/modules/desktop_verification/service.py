@@ -319,6 +319,7 @@ def submit_receipt(
         principal=principal,
         context=context,
         installation_id_hash=_installation_correlation_hash(settings, installation.id),
+        promote_verified_on_success=True,
     )
     receipt = VerificationReceipt(
         challenge_id=challenge.id,
