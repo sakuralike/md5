@@ -81,6 +81,18 @@ def test_desktop_announcement_crud_publish_public_and_archive(client):
         assert stored.status.value == "archived"
 
 
+def test_desktop_announcement_allows_image_link_without_action_label(client):
+    headers = _admin_headers(client)
+    payload = _announcement_payload()
+    payload["action_label"] = None
+    created = client.post(
+        "/api/v1/admin/desktop-announcements", headers=headers, json=payload
+    )
+    assert created.status_code == 201
+    assert created.json()["action_label"] is None
+    assert created.json()["action_url"] == "https://synthetic.example/guide"
+
+
 def test_desktop_announcement_rejects_invalid_window_and_action_url(client):
     headers = _admin_headers(client)
     payload = _announcement_payload()

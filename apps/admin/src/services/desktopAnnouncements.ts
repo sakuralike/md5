@@ -36,7 +36,6 @@ export function buildDesktopAnnouncementPayload(
   if (!title) throw new Error("请填写公告标题");
   if (!content) throw new Error("请填写公告正文");
   if (actionUrl && !/^https?:\/\//i.test(actionUrl)) throw new Error("跳转地址必须使用 HTTP(S)");
-  if (actionUrl && !actionLabel) throw new Error("配置跳转地址时必须填写按钮文字");
   const imageUrls = draft.imageUrlsText
     .split(/\r?\n/)
     .map((item) => item.trim())

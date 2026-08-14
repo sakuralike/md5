@@ -66,8 +66,6 @@ class DesktopAnnouncementWriteRequest(BaseModel):
     def validate_window(self):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValueError("结束时间必须晚于开始时间")
-        if self.action_url and not self.action_label:
-            raise ValueError("配置跳转地址时必须填写按钮文字")
         return self
 
 

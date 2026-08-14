@@ -22,6 +22,8 @@ describe("DesktopAnnouncementsPage", () => {
     expect(html).toContain("桌面端公告管理");
     expect(html).toContain("新建公告草稿");
     expect(html).toContain("正在加载公告");
+    expect(html).toContain("图片点击链接（可选）");
+    expect(html).toContain("点击公告图片时打开");
     expect(html).not.toContain("synthetic-admin-token");
   });
 });

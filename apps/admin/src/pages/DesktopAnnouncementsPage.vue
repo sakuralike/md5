@@ -241,11 +241,11 @@ function statusLabel(status: DesktopAnnouncement["status"]): string {
                 <div class="flex items-center justify-between gap-2 p-2"><span class="truncate text-xs text-muted-foreground">{{ url }}</span><Button type="button" variant="ghost" size="sm" :disabled="selected?.status === 'archived'" @click="removeImage(url)">移除</Button></div>
               </div>
             </div>
-            <Textarea v-model="draft.imageUrlsText" class="min-h-20" placeholder="也可以手动填写 HTTP(S) 图片地址；每行一条" />
+            <Textarea v-model="draft.imageUrlsText" class="min-h-20" placeholder="也可以手动填写 HTTP(S) 或已上传图片地址；每行一条" />
           </div>
           <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2"><Label for="announcement-action-label">按钮文字（可选）</Label><Input id="announcement-action-label" v-model="draft.actionLabel" maxlength="64" /></div>
-            <div class="space-y-2"><Label for="announcement-action-url">按钮地址（可选）</Label><Input id="announcement-action-url" v-model="draft.actionUrl" placeholder="https://synthetic.example" /></div>
+            <div class="space-y-2"><Label for="announcement-action-label">图片链接说明（可选）</Label><Input id="announcement-action-label" v-model="draft.actionLabel" maxlength="64" placeholder="例如：查看活动详情" /></div>
+            <div class="space-y-2"><Label for="announcement-action-url">图片点击链接（可选）</Label><Input id="announcement-action-url" v-model="draft.actionUrl" placeholder="https://synthetic.example/notice" /><p class="text-xs text-muted-foreground">桌面端用户点击公告图片时打开；留空则图片仅展示。</p></div>
           </div>
           <div class="grid gap-4 sm:grid-cols-2"><div class="space-y-2"><Label for="announcement-starts">开始时间（可选）</Label><Input id="announcement-starts" v-model="draft.startsAt" type="datetime-local" /></div><div class="space-y-2"><Label for="announcement-ends">结束时间（可选）</Label><Input id="announcement-ends" v-model="draft.endsAt" type="datetime-local" /></div></div>
           <div class="flex flex-wrap gap-2"><Button type="submit" :disabled="busy || uploadBusy || selected?.status === 'archived'">{{ busy ? "处理中…" : "保存草稿" }}</Button><Button v-if="selected && selected.status !== 'published' && selected.status !== 'archived'" type="button" variant="secondary" :disabled="busy || uploadBusy" @click="publish">发布公告</Button><Button v-if="selected && selected.status !== 'archived'" type="button" variant="outline" :disabled="busy || uploadBusy" @click="archive">归档</Button></div>
