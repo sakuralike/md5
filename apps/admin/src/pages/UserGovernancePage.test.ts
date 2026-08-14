@@ -8,6 +8,7 @@ vi.mock("../stores/auth", () => ({
 }));
 
 vi.mock("../services/users", () => ({
+  createAdminUser: vi.fn(),
   listAdminUsers: vi.fn(),
   getAdminUser: vi.fn(),
   reauthenticateAdmin: vi.fn(),
@@ -19,8 +20,10 @@ describe("UserGovernancePage", () => {
   it("renders the guarded governance workbench", async () => {
     const html = await renderToString(createSSRApp(UserGovernancePage));
 
-    expect(html).toContain("用户治理工作台");
+    expect(html).toContain("用户审批工作台");
+    expect(html).toContain("手动创建用户");
     expect(html).toContain("用户名、邮箱或 UID");
+    expect(html).toContain("用户等级与权益");
     expect(html).toContain("一次性再认证");
     expect(html).toContain("原因码");
     expect(html).toContain("可选 TOTP");

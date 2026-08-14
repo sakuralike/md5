@@ -31,10 +31,22 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         return true;
     }
 
-    public Task<DesktopAnnouncementListResponse> GetAnnouncementsAsync(
+    public async Task<DesktopAnnouncementListResponse> GetAnnouncementsAsync(
         string serverBaseUrl,
-        CancellationToken cancellationToken = default) =>
-        GetAsync<DesktopAnnouncementListResponse>(serverBaseUrl, "desktop/announcements", cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var refresh = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            BuildUri(serverBaseUrl, $"desktop/announcements?limit=10&refresh={refresh}"));
+        request.Headers.CacheControl = new CacheControlHeaderValue
+        {
+            NoCache = true,
+            NoStore = true,
+        };
+        request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
+        return await SendAsync<DesktopAnnouncementListResponse>(request, cancellationToken);
+    }
 
     public Task<TrustProfileResponse> GetTrustProfileAsync(
         string serverBaseUrl,
@@ -204,10 +216,18 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         {
             throw new ArgumentException("服务地址必须是有效的 HTTP(S) 地址。", nameof(serverBaseUrl));
         }
-        var normalized = baseUri.AbsoluteUri.EndsWith('/')
-            ? baseUri
-            : new Uri(baseUri.AbsoluteUri + "/");
-        return new Uri(normalized, relativePath);
+        var builder = new UriBuilder(baseUri)
+        {
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+        var path = builder.Path.TrimEnd('/');
+        if (!path.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
+        {
+            path = $"{path}/api/v1";
+        }
+        builder.Path = $"{path}/";
+        return new Uri(builder.Uri, relativePath);
     }
 
     public void Dispose()

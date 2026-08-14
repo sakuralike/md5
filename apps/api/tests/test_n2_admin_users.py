@@ -6,6 +6,7 @@ import pyotp
 from sqlalchemy import select
 
 from password_detective.core.time import utc_now
+from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.privacy_request import (
     PrivacyDeletionRequest,
@@ -266,3 +267,81 @@ def test_admin_without_totp_can_access_and_reauthenticate(client):
     setup = client.post("/api/v1/admin/totp/setup", headers=headers)
     assert setup.status_code == 200
     assert setup.json()["secret"]
+
+
+def test_admin_can_create_non_privileged_user_without_exposing_password(client):
+    admin_headers, admin_id = _privileged_headers(
+        client,
+        suffix="create_admin",
+        role=UserRole.ADMIN,
+    )
+    payload = {
+        "username": "Manual_Created_User",
+        "email": "manual-created@synthetic.example.com",
+        "password": "SyntheticManualCreate123!",
+        "role": "trusted_contributor",
+        "status": "disabled",
+        "email_verified": True,
+    }
+    response = client.post(
+        "/api/v1/admin/users",
+        headers={**admin_headers, "X-Request-ID": "synthetic-user-create-0001"},
+        json=payload,
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["username"] == "manual_created_user"
+    assert body["masked_email"].startswith("m***@s***.")
+    assert body["role"] == "trusted_contributor"
+    assert body["status"] == "disabled"
+    assert body["email_verified"] is True
+    assert "password" not in response.text.lower()
+
+    with client.app.state.database.session_factory() as db:
+        created = db.get(User, body["id"])
+        assert created is not None
+        assert created.account_password_hash != payload["password"]
+        assert created.email_verified_at is not None
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "admin.user.created",
+                AuditLog.target_id == created.id,
+            )
+        )
+        assert audit is not None
+        assert audit.actor_id == admin_id
+        assert audit.request_id == "synthetic-user-create-0001"
+        assert "password" not in str(audit.details).lower()
+
+
+def test_admin_user_create_rejects_conflicts_and_privileged_roles(client):
+    admin_headers, _ = _privileged_headers(
+        client,
+        suffix="create_conflict_admin",
+        role=UserRole.ADMIN,
+    )
+    payload = {
+        "username": "manual_duplicate",
+        "email": "manual-duplicate@synthetic.example.com",
+        "password": "SyntheticManualCreate123!",
+        "role": "user",
+        "status": "active",
+        "email_verified": False,
+    }
+    first = client.post("/api/v1/admin/users", headers=admin_headers, json=payload)
+    assert first.status_code == 201
+    duplicate = client.post("/api/v1/admin/users", headers=admin_headers, json=payload)
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "admin.user_conflict"
+
+    privileged = client.post(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        json={
+            **payload,
+            "username": "manual_admin",
+            "email": "manual-admin@synthetic.example.com",
+            "role": "admin",
+        },
+    )
+    assert privileged.status_code == 422

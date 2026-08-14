@@ -40,7 +40,6 @@ const systemSettingsSections: readonly SystemSettingsSectionItem[] = [
   { label: "邮件投递", to: "/settings#email-delivery", icon: MailCheck },
   { label: "版本历史", to: "/settings#version-history", icon: History },
   { label: "运行策略", to: "/settings#operational-policy", icon: Settings2 },
-  { label: "用户等级与权益", to: "/settings#user-levels", icon: BadgeCheck },
   { label: "发布门禁", to: "/settings#publish-gate", icon: ShieldCheck },
 ];
 
@@ -48,6 +47,14 @@ function itemsForGroup(
   group: (typeof adminNavigationGroups)[number],
 ): readonly AdminNavigationItem[] {
   return adminSettingsNavigationItems.filter((item) => item.group === group);
+}
+
+function sectionsForPath(path: string): readonly SystemSettingsSectionItem[] {
+  if (path === "/users") {
+    return [{ label: "用户等级与权益", to: "/users#user-levels", icon: BadgeCheck }];
+  }
+  if (path === "/settings") return systemSettingsSections;
+  return [];
 }
 </script>
 
@@ -81,12 +88,12 @@ function itemsForGroup(
             </RouterLink>
 
             <nav
-              v-if="item.path === '/settings'"
+              v-if="sectionsForPath(item.path).length > 0"
               class="ml-5 mt-1 space-y-1 border-l border-border/80 pl-3"
-              aria-label="系统配置二级导航"
+              :aria-label="`${item.label}二级导航`"
             >
               <RouterLink
-                v-for="section in systemSettingsSections"
+                v-for="section in sectionsForPath(item.path)"
                 :key="section.to"
                 :to="section.to"
                 class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -131,11 +138,11 @@ function itemsForGroup(
                 </SheetClose>
 
                 <nav
-                  v-if="item.path === '/settings'"
+                  v-if="sectionsForPath(item.path).length > 0"
                   class="ml-5 mt-1 space-y-1 border-l border-border/80 pl-3"
-                  aria-label="系统配置移动二级导航"
+                  :aria-label="`${item.label}移动二级导航`"
                 >
-                  <SheetClose v-for="section in systemSettingsSections" :key="section.to" as-child>
+                  <SheetClose v-for="section in sectionsForPath(item.path)" :key="section.to" as-child>
                     <RouterLink
                       :to="section.to"
                       class="flex items-center gap-2 rounded-lg px-2.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PublicSiteConfig } from "@password-detective/api-contract";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -219,6 +220,8 @@ onBeforeUnmount(releaseCustomBackground);
     <main id="main-content" class="main" tabindex="-1">
       <RouterView />
     </main>
+
+    <AnnouncementPopup />
 
     <footer class="site-footer">
       <span>{{ siteConfig.site_name }} · 隐私优先的压缩包指纹协作平台</span>

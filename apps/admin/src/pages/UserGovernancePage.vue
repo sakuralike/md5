@@ -3,6 +3,7 @@ import { createClientId } from "@/lib/clientId";
 import {
   ApiError,
   type AdminSessionRevocationReasonCode,
+  type AdminUserCreateRequest,
   type AdminUserDetail,
   type AdminUserListItem,
   type AdminUserStatusReasonCode,
@@ -18,9 +19,11 @@ import {
   Search,
   ShieldCheck,
   ShieldOff,
+  UserPlus,
   Users,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
+import UserLevelsManagement from "@/components/UserLevelsManagement.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +53,7 @@ import {
 } from "@/components/ui/table";
 import {
   changeAdminUserStatus,
+  createAdminUser,
   getAdminUser,
   listAdminUsers,
   reauthenticateAdmin,
@@ -85,6 +89,15 @@ const totpCode = ref("");
 const actionBusy = ref(false);
 const actionError = ref("");
 const actionSuccess = ref("");
+const createUsername = ref("");
+const createEmail = ref("");
+const createPassword = ref("");
+const createRole = ref<AdminUserCreateRequest["role"]>("user");
+const createStatus = ref<AdminUserCreateRequest["status"]>("active");
+const createEmailVerified = ref("true");
+const createBusy = ref(false);
+const createError = ref("");
+const createSuccess = ref("");
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const rangeLabel = computed(() => {
@@ -311,6 +324,38 @@ function statusVariant(status: UserStatus): "default" | "secondary" | "destructi
   return "secondary";
 }
 
+async function submitCreateUser(): Promise<void> {
+  if (!auth.accessToken) return;
+  createBusy.value = true;
+  createError.value = "";
+  createSuccess.value = "";
+  try {
+    const created = await createAdminUser(
+      {
+        username: createUsername.value.trim(),
+        email: createEmail.value.trim(),
+        password: createPassword.value,
+        role: createRole.value,
+        status: createStatus.value,
+        email_verified: createEmailVerified.value === "true",
+      },
+      auth.accessToken,
+    );
+    createSuccess.value = `用户 ${created.username} 已创建，初始密码不会在后台再次显示。`;
+    createUsername.value = "";
+    createEmail.value = "";
+    createPassword.value = "";
+    createRole.value = "user";
+    createStatus.value = "active";
+    createEmailVerified.value = "true";
+    await loadUsers();
+  } catch (value) {
+    createError.value = describeError(value);
+  } finally {
+    createBusy.value = false;
+  }
+}
+
 onMounted(() => void loadUsers());
 </script>
 
@@ -319,11 +364,11 @@ onMounted(() => void loadUsers());
     <header class="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
       <div>
         <div class="flex items-center gap-2 text-sm font-medium text-sky-700">
-          <Users class="h-4 w-4" /> N2 用户治理
+          <Users class="h-4 w-4" /> N2 用户审批
         </div>
-        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">用户治理工作台</h1>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">用户审批工作台</h1>
         <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          管理员可查看用户治理统计，并在当前密码、可选 TOTP、原因码、一次性再认证和幂等门禁下停用账号、恢复账号或撤销活跃会话。
+          管理员可手动创建普通、可信贡献者或版主账号，并在当前密码、可选 TOTP、原因码、一次性再认证和幂等门禁下停用账号、恢复账号或撤销活跃会话。
         </p>
       </div>
       <Button variant="outline" :disabled="loading" @click="loadUsers">
@@ -331,6 +376,72 @@ onMounted(() => void loadUsers());
         {{ loading ? "刷新中" : "刷新" }}
       </Button>
     </header>
+
+    <section class="scroll-mt-28 space-y-4 rounded-2xl border bg-card p-5 text-card-foreground shadow-sm">
+      <div class="flex items-start gap-3">
+        <span class="rounded-lg bg-primary/10 p-2 text-primary"><UserPlus class="h-5 w-5" /></span>
+        <div>
+          <h2 class="font-semibold">手动创建用户</h2>
+          <p class="mt-1 text-sm leading-6 text-muted-foreground">
+            可创建普通用户、可信贡献者或版主。管理员与服务账号仍必须走角色审批或受控运维流程。
+          </p>
+        </div>
+      </div>
+      <form class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" @submit.prevent="submitCreateUser">
+        <div class="space-y-2">
+          <Label for="create-username">用户名</Label>
+          <Input id="create-username" v-model="createUsername" minlength="3" maxlength="32" required autocomplete="off" />
+        </div>
+        <div class="space-y-2">
+          <Label for="create-email">邮箱</Label>
+          <Input id="create-email" v-model="createEmail" type="email" required autocomplete="off" />
+        </div>
+        <div class="space-y-2">
+          <Label for="create-password">初始密码</Label>
+          <Input id="create-password" v-model="createPassword" type="password" minlength="12" maxlength="128" required autocomplete="new-password" />
+        </div>
+        <div class="space-y-2">
+          <Label>账号角色</Label>
+          <Select v-model="createRole">
+            <SelectTrigger aria-label="新用户角色"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="user">普通用户</SelectItem>
+              <SelectItem value="trusted_contributor">可信贡献者</SelectItem>
+              <SelectItem value="moderator">版主</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="space-y-2">
+          <Label>初始状态</Label>
+          <Select v-model="createStatus">
+            <SelectTrigger aria-label="新用户状态"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">正常</SelectItem>
+              <SelectItem value="disabled">停用</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="space-y-2">
+          <Label>邮箱验证状态</Label>
+          <Select v-model="createEmailVerified">
+            <SelectTrigger aria-label="邮箱验证状态"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">已验证</SelectItem>
+              <SelectItem value="false">待验证</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="md:col-span-2 xl:col-span-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p v-if="createError" class="text-sm text-destructive" role="alert">{{ createError }}</p>
+            <p v-if="createSuccess" class="text-sm text-primary" role="status">{{ createSuccess }}</p>
+          </div>
+          <Button type="submit" :disabled="createBusy">
+            <UserPlus class="mr-2 h-4 w-4" />{{ createBusy ? "正在创建…" : "创建用户" }}
+          </Button>
+        </div>
+      </form>
+    </section>
 
     <div v-if="error" class="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
       {{ error }}
@@ -420,6 +531,8 @@ onMounted(() => void loadUsers());
         </div>
       </div>
     </section>
+
+    <UserLevelsManagement />
 
     <Sheet :open="detailOpen" @update:open="detailOpen = $event">
       <SheetContent side="right" class="w-full overflow-y-auto sm:max-w-2xl">

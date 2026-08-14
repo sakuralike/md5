@@ -16,6 +16,7 @@ namespace PasswordDetective.Desktop.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     public const string ClientVersion = "0.1.0";
+    public const string DefaultServerBaseUrl = "http://111.229.195.138:5173/api/v1/";
     private readonly IFileFingerprintService _fingerprintService;
     private readonly IArchiveVerificationService _archiveVerificationService;
     private readonly IInstallationIdentityService _identityService;
@@ -28,7 +29,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _selectedFile = string.Empty;
     private string _candidatePassword = string.Empty;
     private string _loginPassword = string.Empty;
-    private string _serverBaseUrl = "http://localhost:8000/api/v1/";
+    private string _serverBaseUrl = DefaultServerBaseUrl;
     private string _loginName = string.Empty;
     private string _totpCode = string.Empty;
     private string _candidateId = string.Empty;
@@ -331,8 +332,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            AnnouncementStatus = "公告暂不可用";
-            Status = $"公告刷新失败：{exception.Message}";
+            AnnouncementStatus = "公告暂不可用，请检查后端 API 地址";
+            Status = $"公告刷新失败：{exception.Message}。请确认地址可通过浏览器访问 /api/v1/desktop/announcements。";
         }
         finally { EndOperation(); }
     }

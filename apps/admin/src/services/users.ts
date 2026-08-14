@@ -1,7 +1,9 @@
 import {
   type AdminReauthenticationResponse,
+  type AdminUserCreateRequest,
   type AdminSessionRevocationReasonCode,
   type AdminUserDetail,
+  type AdminUserListItem,
   type AdminUserListResponse,
   type AdminUserSessionRevocationResponse,
   type AdminUserStatusChangeResponse,
@@ -27,6 +29,20 @@ function buildParams(filters: AdminUserFilters): URLSearchParams {
   params.set("page", String(filters.page ?? 1));
   params.set("page_size", String(filters.pageSize ?? 20));
   return params;
+}
+
+export function createAdminUser(
+  input: AdminUserCreateRequest,
+  token: string,
+): Promise<AdminUserListItem> {
+  return apiRequest<AdminUserListItem>(
+    "/admin/users",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    token,
+  );
 }
 
 export function listAdminUsers(

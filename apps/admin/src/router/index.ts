@@ -7,6 +7,7 @@ import CommunityNotificationOutboxPage from "../pages/CommunityNotificationOutbo
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import DesktopAnnouncementsPage from "../pages/DesktopAnnouncementsPage.vue";
+import HashPoolPage from "../pages/HashPoolPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
 import RoleChangesPage from "../pages/RoleChangesPage.vue";
@@ -33,6 +34,7 @@ const router = createRouter({
     { path: "/role-changes", component: RoleChangesPage, meta: { requiresAdmin: true } },
     { path: "/settings", component: SystemSettingsPage, meta: { requiresAdmin: true } },
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
+    { path: "/hash-pool", component: HashPoolPage, meta: { requiresAdmin: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
     { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },

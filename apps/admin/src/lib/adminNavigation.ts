@@ -1,5 +1,6 @@
 import {
   BellRing,
+  Database,
   FileCheck2,
   Flag,
   History,
@@ -37,6 +38,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "审核候选证据并执行状态处置。",
     group: "内容治理",
     icon: FileCheck2,
+  },
+  {
+    label: "总哈希池",
+    path: "/hash-pool",
+    description: "检索已验证候选及其存档哈希与证据摘要。",
+    group: "内容治理",
+    icon: Database,
   },
   {
     label: "举报申诉",
@@ -95,7 +103,7 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: History,
   },
   {
-    label: "用户治理",
+    label: "用户审批",
     path: "/users",
     description: "按用户名、邮箱或 UID 查找并治理账号。",
     group: "系统管理",

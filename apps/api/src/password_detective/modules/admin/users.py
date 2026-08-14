@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, and_, case, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from password_detective.core.errors import AppError
+from password_detective.core.security import hash_account_password
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
@@ -23,6 +25,7 @@ from password_detective.db.models.trust_case import TrustCase
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.admin.user_schemas import (
+    AdminUserCreateRequest,
     AdminUserDetail,
     AdminUserListItem,
     AdminUserListResponse,
@@ -101,6 +104,54 @@ def _list_item(
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
+
+
+def create_admin_user(
+    db: Session,
+    *,
+    payload: AdminUserCreateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminUserListItem:
+    username = payload.username.strip().lower()
+    email = str(payload.email).strip().lower()
+    existing = db.scalar(select(User.id).where(or_(User.username == username, User.email == email)))
+    if existing:
+        raise AppError("admin.user_conflict", "用户名或邮箱已被使用", status_code=409)
+
+    now = utc_now()
+    user = User(
+        username=username,
+        email=email,
+        email_verified_at=now if payload.email_verified else None,
+        account_password_hash=hash_account_password(payload.password),
+        role=payload.role,
+        status=payload.status,
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError("admin.user_conflict", "用户名或邮箱已被使用", status_code=409) from exc
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="admin.user.created",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "role": user.role.value,
+            "status": user.status.value,
+            "email_verified": user.email_verified,
+        },
+    )
+    db.commit()
+    db.refresh(user)
+    return _list_item(user)
 
 
 def list_admin_users(

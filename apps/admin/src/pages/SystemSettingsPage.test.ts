@@ -51,15 +51,12 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("SMTP 邮件投递");
     expect(html).toContain("不可变版本历史");
     expect(html).toContain("版本差异预览");
-    expect(html).toContain("用户等级与权益");
-    expect(html).toContain('id="user-levels"');
-    expect(html).toContain("创建不可变草稿");
-    expect(html).toContain("新增等级");
-    expect(html).toContain("用户等级横向列表");
+    expect(html).toContain("保存为不可变草稿");
+    expect(html).not.toContain("用户等级与权益");
+    expect(html).not.toContain('id="user-levels"');
     expect(html).toContain('data-layout="stacked-settings-regions"');
     expect(html).not.toContain("xl:grid-cols-[1.05fr_0.95fr]");
     expect(html).not.toContain("系统配置分区");
-    expect(html).toContain("snap-x gap-4 overflow-x-auto");
     expect(html).toContain("发布与回滚门禁");
     expect(html).toContain("一次性再认证");
   });

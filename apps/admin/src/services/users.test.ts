@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
 import {
   changeAdminUserStatus,
+  createAdminUser,
   listAdminUsers,
   reauthenticateAdmin,
   revokeAdminUserSessions,
@@ -107,4 +108,34 @@ describe("admin user service", () => {
       "synthetic-admin-token",
     );
   });
+  it("creates a user with an initial password only in the request body", async () => {
+    await createAdminUser(
+      {
+        username: "manual_user",
+        email: "manual-user@synthetic.example.com",
+        password: "SyntheticManualCreate123!",
+        role: "user",
+        status: "active",
+        email_verified: true,
+      },
+      "synthetic-admin-token",
+    );
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      "/admin/users",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username: "manual_user",
+          email: "manual-user@synthetic.example.com",
+          password: "SyntheticManualCreate123!",
+          role: "user",
+          status: "active",
+          email_verified: true,
+        }),
+      },
+      "synthetic-admin-token",
+    );
+  });
+
 });

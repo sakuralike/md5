@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import UserRole, UserStatus
+from password_detective.modules.auth.schemas import RegisterRequest
 from password_detective.modules.reputation.schemas import UserLevelProfileResponse
 
 
@@ -44,6 +45,16 @@ class AdminReauthenticationResponse(BaseModel):
         ReauthenticationPurpose.ADMIN_COMMUNITY_NOTIFICATION_OPS,
     ]
     expires_at: datetime
+
+
+class AdminUserCreateRequest(RegisterRequest):
+    role: Literal[
+        UserRole.USER,
+        UserRole.TRUSTED_CONTRIBUTOR,
+        UserRole.MODERATOR,
+    ] = UserRole.USER
+    status: Literal[UserStatus.ACTIVE, UserStatus.DISABLED] = UserStatus.ACTIVE
+    email_verified: bool = True
 
 
 class AdminUserStatusChangeRequest(BaseModel):

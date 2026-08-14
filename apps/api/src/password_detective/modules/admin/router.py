@@ -82,7 +82,9 @@ from password_detective.modules.admin.settings import (
 from password_detective.modules.admin.user_schemas import (
     AdminReauthenticationRequest,
     AdminReauthenticationResponse,
+    AdminUserCreateRequest,
     AdminUserDetail,
+    AdminUserListItem,
     AdminUserListResponse,
     AdminUserSessionRevocationRequest,
     AdminUserSessionRevocationResponse,
@@ -92,6 +94,7 @@ from password_detective.modules.admin.user_schemas import (
 from password_detective.modules.admin.users import (
     AdminUserFilters,
     change_admin_user_status,
+    create_admin_user,
     get_admin_user,
     list_admin_users,
     revoke_admin_user_sessions,
@@ -263,6 +266,26 @@ def admin_user_filters(
     query: Annotated[str | None, Query(max_length=128)] = None,
 ) -> AdminUserFilters:
     return AdminUserFilters(status=status, role=role, query=query)
+
+
+@router.post(
+    "/users",
+    response_model=AdminUserListItem,
+    status_code=201,
+    dependencies=[Depends(rate_limit("admin.users.create", limit=10, window_seconds=60))],
+)
+def admin_user_create(
+    payload: AdminUserCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> AdminUserListItem:
+    return create_admin_user(
+        db,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @router.get("/users", response_model=AdminUserListResponse)

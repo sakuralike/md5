@@ -13,7 +13,6 @@ import {
 } from "@password-detective/api-contract";
 import {
   ArrowDownUp,
-  BadgeCheck,
   CheckCircle2,
   FileClock,
   Globe2,
@@ -245,31 +244,6 @@ async function handleLogoUpload(event: Event): Promise<void> {
   } finally {
     logoUploadBusy.value = false;
   }
-}
-
-function addUserLevel(): void {
-  let sequence = form.value.user_levels.length + 1;
-  let code = `custom_${sequence}`;
-  while (form.value.user_levels.some((item) => item.code === code)) {
-    sequence += 1;
-    code = `custom_${sequence}`;
-  }
-  const previous = form.value.user_levels.at(-1);
-  form.value.user_levels.push({
-    code,
-    name: `自定义等级 ${sequence}`,
-    description: "请填写该等级的成长目标与用户权益。",
-    min_growth_points: (previous?.min_growth_points ?? 0) + 100,
-    daily_reveal_quota: previous?.daily_reveal_quota ?? form.value.daily_reveal_quota,
-    can_submit: true,
-  });
-}
-
-function removeUserLevel(index: number): void {
-  if (form.value.user_levels.length <= 1) return;
-  form.value.user_levels.splice(index, 1);
-  form.value.user_levels.sort((left, right) => left.min_growth_points - right.min_growth_points);
-  form.value.user_levels[0].min_growth_points = 0;
 }
 
 function normalizedSnapshot(): OperationalSettingsSnapshot {
@@ -754,88 +728,14 @@ onMounted(() => {
             </div>
           </div>
 
-        </section>
-
-        <section id="user-levels" class="glass-panel scroll-mt-28 p-6">
-          <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950"><BadgeCheck class="size-5 text-sky-600" />用户等级与权益</h2>
-              <p class="mt-1 text-sm text-slate-500">成长值门槛必须唯一并按升序排列；首级门槛固定为 0。发布后会重建全部用户等级投影。</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" @click="addUserLevel"><Plus class="mr-2 size-4" />新增等级</Button>
+          <div class="mt-5 flex justify-end">
+            <Button :disabled="mutationBusy" @click="createDraft">
+              <Save class="mr-2 size-4" />保存为不可变草稿
+            </Button>
           </div>
-
-            <div class="flex snap-x gap-4 overflow-x-auto pb-3" aria-label="用户等级横向列表" tabindex="0">
-              <article
-                v-for="(level, index) in form.user_levels"
-                :key="`${level.code}-${index}`"
-                class="w-80 shrink-0 snap-start rounded-xl border border-border/80 bg-background/70 p-4 sm:w-96"
-              >
-              <div class="mb-4 flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
-                  <Badge variant="outline">第 {{ index + 1 }} 级</Badge>
-                  <span class="text-sm font-medium text-foreground">{{ level.name }}</span>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  :disabled="form.user_levels.length <= 1"
-                  :aria-label="`删除等级 ${level.name}`"
-                  @click="removeUserLevel(index)"
-                >
-                  <Trash2 class="size-4 text-destructive" />
-                </Button>
-              </div>
-                <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-2">
-                  <Label :for="`level-code-${index}`">等级代码</Label>
-                  <Input :id="`level-code-${index}`" v-model="level.code" placeholder="senior" />
-                </div>
-                <div class="space-y-2">
-                  <Label :for="`level-name-${index}`">等级名称</Label>
-                  <Input :id="`level-name-${index}`" v-model="level.name" placeholder="资深侦探" />
-                </div>
-                <div class="space-y-2">
-                  <Label :for="`level-threshold-${index}`">成长值门槛</Label>
-                  <Input
-                    :id="`level-threshold-${index}`"
-                    v-model.number="level.min_growth_points"
-                    type="number"
-                    min="0"
-                    :disabled="index === 0"
-                  />
-                </div>
-                <div class="space-y-2">
-                  <Label :for="`level-quota-${index}`">每日揭示配额</Label>
-                  <Input
-                    :id="`level-quota-${index}`"
-                    v-model.number="level.daily_reveal_quota"
-                    type="number"
-                    min="1"
-                    max="1000"
-                  />
-                </div>
-                  <div class="col-span-2 space-y-2">
-                  <Label :for="`level-description-${index}`">等级说明</Label>
-                  <Input
-                    :id="`level-description-${index}`"
-                    v-model="level.description"
-                    placeholder="说明该等级的成长目标与权益"
-                  />
-                </div>
-                <div class="flex items-center gap-2">
-                  <Checkbox :id="`level-submit-${index}`" v-model="level.can_submit" />
-                  <Label :for="`level-submit-${index}`">允许提交档案</Label>
-                </div>
-              </div>
-              </article>
-            </div>
-
-          <Button type="button" class="mt-5" :disabled="mutationBusy" @click="createDraft">
-            <Save class="mr-2 size-4" />创建不可变草稿
-          </Button>
         </section>
+
+
       </div>
 
       <div class="space-y-6">

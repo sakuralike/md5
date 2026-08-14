@@ -669,6 +669,34 @@ export interface CandidateModerationListResponse {
   total: number;
 }
 
+export interface HashPoolOverview {
+  verified_candidates: number;
+  unique_archives: number;
+  unique_fingerprints: number;
+  pending_candidates: number;
+  quarantined_candidates: number;
+}
+
+export interface HashPoolItem {
+  candidate_id: string;
+  archive_id: string;
+  fingerprints: ArchiveFingerprint[];
+  confidence_score: number;
+  submission_count: number;
+  feedback_count: number;
+  last_verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HashPoolListResponse {
+  overview: HashPoolOverview;
+  items: HashPoolItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 export interface ModerationEvidenceSnapshot {
   rule_version: string;
   independent_success_count: number;
@@ -1254,6 +1282,15 @@ export interface AdminAuditLogListResponse {
   total: number;
 }
 
+
+export interface AdminUserCreateRequest {
+  username: string;
+  email: string;
+  password: string;
+  role: "user" | "trusted_contributor" | "moderator";
+  status: "active" | "disabled";
+  email_verified: boolean;
+}
 
 export interface AdminUserListItem {
   id: string;
