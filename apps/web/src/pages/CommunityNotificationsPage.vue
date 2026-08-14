@@ -4,7 +4,8 @@ import type {
   CommunityNotificationPreferenceItem,
   CommunityNotificationResponse,
 } from "@password-detective/api-contract";
-import { onMounted, ref } from "vue";
+import { storeToRefs } from "pinia";
+import { onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
@@ -21,6 +22,10 @@ import {
   updateCommunityNotificationPreferences,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
+import {
+  mergeCommunityNotificationItems,
+  useCommunityNotificationsStore,
+} from "../stores/communityNotifications";
 
 interface NotificationFilter {
   value: CommunityNotificationKind | null;
@@ -49,10 +54,11 @@ const notificationLabels: Record<CommunityNotificationKind, string> = {
 };
 
 const auth = useAuthStore();
+const notifications = useCommunityNotificationsStore();
+const { eventRevision, latestNotification, status, unreadCount } = storeToRefs(notifications);
 const items = ref<CommunityNotificationResponse[]>([]);
 const preferences = ref<CommunityNotificationPreferenceItem[]>([]);
 const selectedKind = ref<CommunityNotificationKind | null>(null);
-const unreadCount = ref(0);
 const nextCursor = ref<string | null>(null);
 const hasMore = ref(false);
 const busy = ref(false);
@@ -61,6 +67,7 @@ const markingAll = ref(false);
 const savingPreferences = ref(false);
 const markingIds = ref(new Set<string>());
 const error = ref("");
+const realtimeNotificationId = ref("");
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -92,18 +99,38 @@ function notificationLinkLabel(item: CommunityNotificationResponse): string {
   return "查看用户主页";
 }
 
+function matchesSelectedKind(item: CommunityNotificationResponse): boolean {
+  return selectedKind.value === null || item.kind === selectedKind.value;
+}
+
+function streamStatusLabel(): string {
+  if (status.value === "connected") return "实时连接正常";
+  if (status.value === "connecting") return "正在连接实时通知";
+  if (status.value === "reconnecting") return "实时通知重连中";
+  if (status.value === "offline") return "实时通知离线";
+  return "实时通知未连接";
+}
+
 async function load(reset = true): Promise<void> {
   if (reset) busy.value = true;
   else loadingMore.value = true;
   error.value = "";
+  const notificationRevision = eventRevision.value;
   try {
     const response = await listCommunityNotifications(auth.accessToken, {
       ...(reset || !nextCursor.value ? {} : { cursor: nextCursor.value }),
       limit: 20,
       ...(selectedKind.value ? { kind: selectedKind.value } : {}),
     });
-    items.value = reset ? response.items : [...items.value, ...response.items];
-    unreadCount.value = response.unread_count;
+    const realtimeItems = notificationRevision !== eventRevision.value
+      ? items.value.filter(matchesSelectedKind)
+      : [];
+    items.value = reset
+      ? mergeCommunityNotificationItems(response.items, realtimeItems)
+      : mergeCommunityNotificationItems(items.value, response.items);
+    if (notificationRevision === eventRevision.value) {
+      notifications.setUnreadCount(response.unread_count);
+    }
     nextCursor.value = response.next_cursor;
     hasMore.value = response.has_more;
   } catch (caught) {
@@ -116,6 +143,10 @@ async function load(reset = true): Promise<void> {
 
 async function selectKind(kind: CommunityNotificationKind | null): Promise<void> {
   selectedKind.value = kind;
+  items.value = [];
+  nextCursor.value = null;
+  hasMore.value = false;
+  realtimeNotificationId.value = "";
   await load();
 }
 
@@ -154,8 +185,11 @@ async function markRead(item: CommunityNotificationResponse): Promise<void> {
       auth.accessToken,
       createCommunityIdempotencyKey("notification-read"),
     );
-    item.read_at = new Date().toISOString();
-    unreadCount.value = response.unread_count;
+    const readAt = new Date().toISOString();
+    items.value = items.value.map((candidate) =>
+      candidate.id === item.id ? { ...candidate, read_at: readAt } : candidate,
+    );
+    notifications.setUnreadCount(response.unread_count);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "无法标记通知已读";
   } finally {
@@ -176,13 +210,20 @@ async function markAllRead(): Promise<void> {
     );
     const readAt = new Date().toISOString();
     items.value = items.value.map((item) => ({ ...item, read_at: item.read_at ?? readAt }));
-    unreadCount.value = response.unread_count;
+    notifications.setUnreadCount(response.unread_count);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "无法全部标记为已读";
   } finally {
     markingAll.value = false;
   }
 }
+
+watch(eventRevision, () => {
+  const notification = latestNotification.value;
+  if (!notification || !matchesSelectedKind(notification)) return;
+  items.value = mergeCommunityNotificationItems(items.value, [notification]);
+  realtimeNotificationId.value = notification.id;
+});
 
 onMounted(() => {
   void load();
@@ -203,6 +244,7 @@ onMounted(() => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <Badge :variant="unreadCount > 0 ? 'default' : 'secondary'">未读 {{ unreadCount }}</Badge>
+          <Badge variant="outline" aria-live="polite">{{ streamStatusLabel() }}</Badge>
           <Button variant="outline" :disabled="busy" @click="load()">
             {{ busy ? "刷新中…" : "刷新" }}
           </Button>
@@ -300,6 +342,7 @@ onMounted(() => {
                 <Badge :variant="item.read_at ? 'secondary' : 'default'">
                   {{ item.read_at ? "已读" : "未读" }}
                 </Badge>
+                <Badge v-if="item.id === realtimeNotificationId" variant="secondary">实时收到</Badge>
               </div>
               <p class="text-xs text-muted-foreground">{{ formatDate(item.created_at) }}</p>
             </div>

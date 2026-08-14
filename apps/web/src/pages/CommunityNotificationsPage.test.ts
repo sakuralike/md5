@@ -1,4 +1,5 @@
 import { renderToString } from "@vue/server-renderer";
+import { createPinia } from "pinia";
 import { createSSRApp } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import CommunityNotificationsPage from "./CommunityNotificationsPage.vue";
@@ -25,7 +26,9 @@ vi.mock("../services/community", () => ({
 
 describe("CommunityNotificationsPage", () => {
   it("renders notification filters, preferences, and read controls", async () => {
-    const html = await renderToString(createSSRApp(CommunityNotificationsPage));
+    const app = createSSRApp(CommunityNotificationsPage);
+    app.use(createPinia());
+    const html = await renderToString(app);
 
     expect(html).toContain("社区通知中心");
     expect(html).toContain("通知类型筛选");
@@ -35,6 +38,7 @@ describe("CommunityNotificationsPage", () => {
     expect(html).toContain("关注");
     expect(html).toContain("未读 0");
     expect(html).toContain("全部已读");
+    expect(html).toContain("实时通知未连接");
     expect(html).toContain("通知仅保存最小化摘要");
   });
 });

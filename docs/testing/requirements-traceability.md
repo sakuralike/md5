@@ -521,3 +521,15 @@
 | Web 全局未读入口 | `useCommunityNotificationStream.ts`、`App.vue`、`UserAccountMenu.vue` | Web Vitest、typecheck、真实 Chromium 旅程 | 已实现初始快照、实时未读、断线重连和用户会话游标；通知中心列表实时插入/分页合并待后续 |
 
 本切片只推进网页端；桌面端 UI 尚未设计冻结，不纳入本轮新增范围。上述本地证据不能替代真实 SMTP 送达、多实例 Redis、目标环境迁移和发布回滚证据。
+
+
+## 2026-08-14 WP5-I7 通知可靠性第二轮追踪
+
+| 需求 | 代码证据 | 自动化/验收证据 | 状态与剩余风险 |
+|---|---|---|---|
+| Web 通知共享状态 | `stores/communityNotifications.ts`、`useCommunityNotificationStream.ts` | Store 单元测试、Web typecheck/lint/Vitest | 全局账户菜单与通知中心共用未读数、连接状态和最新事件 |
+| 通知中心实时插入与去重 | `CommunityNotificationsPage.vue`、`mergeCommunityNotificationItems` | 去重、覆盖更新、稳定倒序测试；真实浏览器关注通知旅程 | 已实现类型筛选内实时插入和“实时收到”标识 |
+| 快照与 SSE 并发保护 | 加载前后 `eventRevision` 比较、实时项保留合并 | 统一门禁与 Staging 无刷新通知验收 | 已防止列表旧快照覆盖请求期间收到的新事件；复杂多标签页同步待后续 |
+| 已读状态全局同步 | 单条/全部已读后更新共享 Store | 页面操作与全局未读数验收 | 当前标签页闭环完成；跨标签广播待后续 |
+
+本切片仍不包含邮件摘要真实投递、Admin Outbox 失败查询/受控重放、Redis Pub/Sub 多实例优化和桌面端通知 UI。

@@ -1,19 +1,16 @@
-import type {
-  CommunityNotificationResponse,
-  CommunityNotificationStreamStatus,
-} from "@password-detective/api-contract";
-import { onBeforeUnmount, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
+import { onBeforeUnmount, watch } from "vue";
 import { listCommunityNotifications } from "../services/community";
 import { consumeCommunityNotificationStream } from "../services/communityNotificationStream";
 import { useAuthStore } from "../stores/auth";
+import { useCommunityNotificationsStore } from "../stores/communityNotifications";
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
 export function useCommunityNotificationStream() {
   const auth = useAuthStore();
-  const unreadCount = ref(0);
-  const status = ref<CommunityNotificationStreamStatus>("idle");
-  const latestNotification = ref<CommunityNotificationResponse | null>(null);
+  const notifications = useCommunityNotificationsStore();
+  const { unreadCount, status, latestNotification, eventRevision } = storeToRefs(notifications);
   let controller: AbortController | null = null;
   let generation = 0;
   let reconnectAttempt = 0;
@@ -27,12 +24,12 @@ export function useCommunityNotificationStream() {
     controller?.abort();
     controller = null;
     reconnectAttempt = 0;
-    status.value = "idle";
+    notifications.setStatus("idle");
   }
 
   async function refreshUnreadCount(): Promise<void> {
     if (!auth.isAuthenticated || !auth.accessToken) {
-      unreadCount.value = 0;
+      notifications.setUnreadCount(0);
       return;
     }
     try {
@@ -40,7 +37,7 @@ export function useCommunityNotificationStream() {
         limit: 1,
         unreadOnly: true,
       });
-      unreadCount.value = response.unread_count;
+      notifications.setUnreadCount(response.unread_count);
     } catch {
       // 实时连接仍会继续重试，避免全局导航因一次请求失败而中断。
     }
@@ -48,13 +45,16 @@ export function useCommunityNotificationStream() {
 
   async function start(): Promise<void> {
     stop();
-    if (!auth.isAuthenticated || !auth.accessToken || !auth.user) return;
+    if (!auth.isAuthenticated || !auth.accessToken || !auth.user) {
+      notifications.reset();
+      return;
+    }
     const currentGeneration = generation;
     const userId = auth.user.id;
     const token = auth.accessToken;
     controller = new AbortController();
     const activeController = controller;
-    status.value = navigator.onLine ? "connecting" : "offline";
+    notifications.setStatus(navigator.onLine ? "connecting" : "offline");
     await refreshUnreadCount();
     while (
       currentGeneration === generation &&
@@ -62,7 +62,7 @@ export function useCommunityNotificationStream() {
       auth.isAuthenticated
     ) {
       if (!navigator.onLine) {
-        status.value = "offline";
+        notifications.setStatus("offline");
         await delay(1_000, activeController.signal);
         continue;
       }
@@ -72,16 +72,15 @@ export function useCommunityNotificationStream() {
           lastEventId: sessionStorage.getItem(cursorKey(userId)),
           handlers: {
             onOpen: () => {
-              status.value = "connected";
+              notifications.setStatus("connected");
               reconnectAttempt = 0;
             },
             onReady: (payload) => {
-              unreadCount.value = payload.unread_count;
+              notifications.setUnreadCount(payload.unread_count);
               if (payload.event_id) sessionStorage.setItem(cursorKey(userId), payload.event_id);
             },
             onNotification: (payload) => {
-              unreadCount.value = payload.unread_count;
-              latestNotification.value = payload.notification;
+              notifications.receive(payload.notification, payload.unread_count);
               sessionStorage.setItem(cursorKey(userId), payload.event_id);
             },
           },
@@ -89,7 +88,7 @@ export function useCommunityNotificationStream() {
         if (!activeController.signal.aborted) throw new Error("通知实时连接已结束");
       } catch (error) {
         if (activeController.signal.aborted || currentGeneration !== generation) return;
-        status.value = navigator.onLine ? "reconnecting" : "offline";
+        notifications.setStatus(navigator.onLine ? "reconnecting" : "offline");
         reconnectAttempt += 1;
         const reconnectDelay = Math.min(
           MAX_RECONNECT_DELAY_MS,
@@ -106,7 +105,7 @@ export function useCommunityNotificationStream() {
   }
 
   function handleOffline(): void {
-    status.value = "offline";
+    notifications.setStatus("offline");
     controller?.abort();
     controller = null;
     if (auth.isAuthenticated) window.setTimeout(() => void start(), 0);
@@ -125,7 +124,7 @@ export function useCommunityNotificationStream() {
     window.removeEventListener("offline", handleOffline);
   });
 
-  return { unreadCount, status, latestNotification, refreshUnreadCount };
+  return { unreadCount, status, latestNotification, eventRevision, refreshUnreadCount };
 }
 
 function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
