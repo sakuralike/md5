@@ -19,7 +19,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(128), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("content_type", sa.String(16), nullable=False),
-        sa.Column("image_urls_json", sa.Text(), nullable=False, server_default="[]"),
+        sa.Column("image_urls_json", sa.Text(), nullable=False),
         sa.Column("action_label", sa.String(64), nullable=True),
         sa.Column("action_url", sa.String(2000), nullable=True),
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
