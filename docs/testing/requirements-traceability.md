@@ -539,8 +539,8 @@
 
 | 需求 | 实现证据 | 当前状态 | 未验证项 |
 |---|---|---|---|
-| 总哈希值池 | `apps/api/src/password_detective/modules/hash_pool/`、`apps/admin/src/pages/HashPoolPage.vue`、`GET /api/v1/admin/hash-pool` | 已实现并有 API/Admin 定向测试 | 真实浏览器和 Staging 数据量验证 |
-| 用户审批手动创建用户 | `AdminUserCreateRequest`、`POST /api/v1/admin/users`、`UserGovernancePage.vue` | 已实现并有服务/API/页面测试 | 目标环境权限和审计查询验证 |
+| 总哈希值池 | `apps/api/src/password_detective/modules/hash_pool/`、`apps/admin/src/pages/HashPoolPage.vue`、`GET /api/v1/admin/hash-pool` | 已实现，定向测试、统一门禁及 Staging 受保护路由冒烟通过 | 已登录真实浏览器和生产级数据量验证 |
+| 用户审批手动创建用户 | `AdminUserCreateRequest`、`POST /api/v1/admin/users`、`UserGovernancePage.vue` | 已实现并有服务/API/页面测试，Staging 页面制品已部署 | 已登录目标环境权限和审计查询验证 |
 | 用户等级与权益归属 | `UserLevelsManagement.vue`、`/users#user-levels` | 已移至用户审批，生成不可变草稿 | 发布门禁和真实浏览器滚动定位 |
-| Web 右下角公告弹窗 | `AnnouncementPopup.vue`、`services/announcements.ts` | 已实现并有 SSR/service 测试 | 浏览器 localStorage、图片和外链真实点击 |
-| 桌面公告读取 | `DesktopApiClient` 基址补全、no-cache 请求、默认代理地址 | 已实现并有 29 个 Windows 测试 | Release 包在目标 Windows 实机验证 |
+| Web 右下角公告弹窗 | `AnnouncementPopup.vue`、`services/announcements.ts` | 已实现并有 SSR/service 测试，Staging 公告接口返回已发布公告 | 浏览器 localStorage、图片和外链真实点击 |
+| 桌面公告读取 | `DesktopApiClient` 基址补全、no-cache 请求、默认代理地址 | 已实现并有 29 个 Windows 测试，公网代理公告接口 HTTP 200 | Release 包在目标 Windows 实机验证 |
