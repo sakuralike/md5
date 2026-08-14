@@ -378,9 +378,9 @@ onMounted(() => loadCases(true));
           v-for="item in cases"
           :key="item.id"
           type="button"
-          variant="outline"
-          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
-          :class="selected?.id === item.id ? 'border-primary bg-accent text-accent-foreground' : ''"
+          variant="secondary"
+          class="h-auto w-full justify-start whitespace-normal border border-transparent p-4 text-left"
+          :class="selected?.id === item.id ? 'border-primary ring-1 ring-primary/20' : ''"
           @click="openCase(item.id)"
         >
           <span class="grid w-full gap-2">

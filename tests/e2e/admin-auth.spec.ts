@@ -44,7 +44,7 @@ test("Admin 游客门禁、首次 TOTP 绑定和二次登录形成真实 API 闭
   await page.getByRole("button", { name: "登录管理端" }).click();
 
   await expect(page).toHaveURL(/\/$/u);
-  await expect(page.getByRole("link", { name: "仪表盘" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "仪表盘", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "真实指标仪表盘" })).toBeVisible();
   expectNoBrowserErrors(browserErrors);
 });

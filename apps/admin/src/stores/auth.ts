@@ -103,12 +103,17 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
       if (!isPrivilegedRole(tokens.user.role)) {
         throw new Error("该账号没有管理端访问权限");
       }
+      persistRememberedLogin(loginName, rememberLogin);
+      if (!tokens.user.totp_enabled) {
+        persist(tokens, true);
+        await router.push("/totp-setup");
+        return;
+      }
       await apiRequest<{ status: string; mfa: string }>(
         "/admin/access-check",
         {},
         tokens.access_token,
       );
-      persistRememberedLogin(loginName, rememberLogin);
       persist(tokens);
       await router.push("/");
     } catch (caught) {
@@ -128,7 +133,11 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
         clear();
         return null;
       }
-      persist(tokens);
+      const onlyForEnrollment = !tokens.user.totp_enabled;
+      persist(tokens, onlyForEnrollment);
+      if (onlyForEnrollment && router.currentRoute.value.path !== "/totp-setup") {
+        await router.push("/totp-setup");
+      }
       return tokens.access_token;
     } catch {
       clear();

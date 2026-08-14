@@ -433,9 +433,9 @@ onMounted(async () => {
           v-for="alert in alerts"
           :key="alert.id"
           type="button"
-          variant="outline"
-          class="h-auto w-full justify-start whitespace-normal p-4 text-left"
-          :class="selected?.id === alert.id ? 'border-destructive/60 bg-destructive/10' : ''"
+          variant="secondary"
+          class="h-auto w-full justify-start whitespace-normal border border-transparent p-4 text-left"
+          :class="selected?.id === alert.id ? 'border-destructive/60 ring-1 ring-destructive/20' : ''"
           @click="openAlert(alert.id)"
         >
           <span class="grid w-full gap-2">

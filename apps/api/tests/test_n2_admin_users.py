@@ -231,7 +231,7 @@ def test_admin_user_governance_validates_filters_and_pagination(client):
     assert invalid_page_size.status_code == 422
 
 
-def test_admin_can_login_and_reauthenticate_without_enabling_totp(client):
+def test_admin_without_totp_is_restricted_to_enrollment(client):
     registration, _ = _register_and_login(client, "no_totp_admin")
     with client.app.state.database.session_factory() as db:
         user = db.scalar(select(User).where(User.username == registration["username"]))
@@ -252,13 +252,17 @@ def test_admin_can_login_and_reauthenticate_without_enabling_totp(client):
     headers = {"Authorization": f"Bearer {body['access_token']}"}
 
     access = client.get("/api/v1/admin/access-check", headers=headers)
-    assert access.status_code == 200
-    assert access.json()["mfa"] == "not_verified"
+    assert access.status_code == 403
+    assert access.json()["code"] == "auth.totp_setup_required"
 
     reauth = client.post(
         "/api/v1/admin/auth/reauthenticate",
         headers=headers,
         json={"current_password": PASSWORD},
     )
-    assert reauth.status_code == 200
-    assert reauth.json()["reauth_token"].startswith("reauth_")
+    assert reauth.status_code == 403
+    assert reauth.json()["code"] == "auth.totp_setup_required"
+
+    setup = client.post("/api/v1/admin/totp/setup", headers=headers)
+    assert setup.status_code == 200
+    assert setup.json()["secret"]

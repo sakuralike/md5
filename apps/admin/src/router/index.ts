@@ -39,11 +39,16 @@ const router = createRouter({
   ],
 });
 
-function readSession(): { enrollmentOnly?: boolean } | null {
+interface RoutedAdminSession {
+  enrollmentOnly?: boolean;
+  user?: { totp_enabled?: boolean };
+}
+
+function readSession(): RoutedAdminSession | null {
   const raw = sessionStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as { enrollmentOnly?: boolean };
+    return JSON.parse(raw) as RoutedAdminSession;
   } catch {
     sessionStorage.removeItem(STORAGE_KEY);
     return null;
@@ -52,8 +57,13 @@ function readSession(): { enrollmentOnly?: boolean } | null {
 
 router.beforeEach((to) => {
   const session = readSession();
-  if (to.meta.requiresEnrollment && (!session || !session.enrollmentOnly)) return "/login";
-  if (to.meta.requiresAdmin && (!session || session.enrollmentOnly)) return "/login";
+  const enrollmentOnly = Boolean(
+    session && (session.enrollmentOnly || session.user?.totp_enabled === false),
+  );
+  if (to.meta.requiresEnrollment && (!session || !enrollmentOnly)) return "/login";
+  if (to.meta.requiresAdmin && (!session || enrollmentOnly)) {
+    return enrollmentOnly ? "/totp-setup" : "/login";
+  }
   return true;
 });
 

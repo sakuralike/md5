@@ -28,6 +28,7 @@ test.describe("Admin 移动端视觉与键盘门禁", () => {
     const loginInput = page.getByLabel("用户名或邮箱");
     const passwordInput = page.getByLabel("密码", { exact: true });
     const totpInput = page.getByLabel("动态验证码（已启用时必填）");
+    const rememberLogin = page.getByRole("checkbox", { name: "记住登录账号" });
     const submitButton = page.getByRole("button", { name: "登录管理端" });
 
     await expectPageVisualBaseline(page, testInfo, {
@@ -39,6 +40,8 @@ test.describe("Admin 移动端视觉与键盘门禁", () => {
     await expect(passwordInput).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(totpInput).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(rememberLogin).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(submitButton).toBeFocused();
     await expectNoSeriousAccessibilityViolations(page);

@@ -34,6 +34,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
+import { createLatestRequestGate } from "@/lib/latestRequestGate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -151,6 +152,8 @@ const emailError = ref("");
 const logoUploadBusy = ref(false);
 const logoUploadError = ref("");
 const logoUploadMessage = ref("");
+const versionRequests = createLatestRequestGate();
+const detailRequests = createLatestRequestGate();
 
 const statusLabels: Record<SettingVersionStatus, string> = {
   draft: "草稿",
@@ -324,23 +327,30 @@ function formatDifferenceValue(
 }
 
 async function loadDetail(versionId: string): Promise<void> {
+  const requestId = detailRequests.begin();
   detailLoading.value = true;
   resetMessages();
   try {
-    selected.value = await getSettingVersion(versionId, auth.accessToken);
-    useSnapshot(selected.value.snapshot);
+    const detail = await getSettingVersion(versionId, auth.accessToken);
+    if (!detailRequests.isCurrent(requestId)) return;
+    selected.value = detail;
+    useSnapshot(detail.snapshot);
   } catch (value) {
-    error.value = describeError(value);
+    if (detailRequests.isCurrent(requestId)) error.value = describeError(value);
   } finally {
-    detailLoading.value = false;
+    if (detailRequests.isCurrent(requestId)) detailLoading.value = false;
   }
 }
 
 async function loadVersions(preferredId?: string): Promise<void> {
+  const requestId = versionRequests.begin();
+  detailRequests.invalidate();
+  detailLoading.value = false;
   loading.value = true;
   resetMessages();
   try {
     const response = await listSettingVersions(auth.accessToken);
+    if (!versionRequests.isCurrent(requestId)) return;
     versions.value = response.items;
     publishedVersionId.value = response.published_version_id;
     const targetId = preferredId ?? selected.value?.id ?? response.published_version_id ?? response.items[0]?.id;
@@ -351,9 +361,9 @@ async function loadVersions(preferredId?: string): Promise<void> {
       useSnapshot(defaultSnapshot);
     }
   } catch (value) {
-    error.value = describeError(value);
+    if (versionRequests.isCurrent(requestId)) error.value = describeError(value);
   } finally {
-    loading.value = false;
+    if (versionRequests.isCurrent(requestId)) loading.value = false;
   }
 }
 
@@ -501,7 +511,7 @@ onMounted(() => {
           </div>
           <h1 class="text-3xl font-semibold tracking-tight text-slate-950">系统配置治理工作台</h1>
           <p class="text-sm leading-6 text-slate-600">
-            通过不可变版本完成草稿、差异预览、发布与回滚；已启用 TOTP 的管理员需完成动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
+            通过不可变版本完成草稿、差异预览、发布与回滚；所有管理员必须完成 TOTP 动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
           </p>
         </div>
         <Button variant="outline" :disabled="loading || emailLoading" @click="refreshPage">
