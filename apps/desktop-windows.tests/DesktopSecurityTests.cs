@@ -144,8 +144,9 @@ public sealed class DesktopSecurityTests : IDisposable
 
         var service = new ArchiveVerificationService();
         var valid = await service.VerifyAsync(validPath, "synthetic-password");
-        Assert.True(valid.Success);
+        Assert.False(valid.Success);
         Assert.True(valid.BytesSampled > 0);
+        Assert.Contains("未检测到", valid.Message);
 
         var unsafePath = Path.Combine(_temporaryDirectory, "unsafe.zip");
         using (var archive = ZipFile.Open(unsafePath, ZipArchiveMode.Create))

@@ -109,7 +109,7 @@
                     <Grid>
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding SelectedFile}" IsReadOnly="True" AllowDrop="True" ToolTip="将 ZIP/7z 文件拖入窗口，或点击浏览" />
+                        <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding SelectedFile, Mode=OneWay}" IsReadOnly="True" AllowDrop="True" ToolTip="将 ZIP、7z、RAR、TAR、GZ、TGZ、BZ/BZ2 文件拖入窗口，或点击浏览" />
                         <Button Grid.Row="0" Grid.Column="1" Content="浏览…" Command="{Binding SelectFileCommand}" />
                         <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -137,7 +137,7 @@
                         <PasswordBox x:Name="CandidatePasswordBox" Grid.Row="0" Grid.Column="1" PasswordChanged="CandidatePasswordBox_OnPasswordChanged" />
                         <Button Grid.Row="0" Grid.Column="2" Content="开始验证密码及解压测试" Command="{Binding VerifyCommand}" />
                         <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Status, StringFormat=执行进度：{0}}" Margin="0,8,0,4" TextWrapping="Wrap" />
-                        <ProgressBar Grid.Row="2" Grid.ColumnSpan="3" Height="18" Minimum="0" Maximum="100" Value="{Binding Progress}" />
+                        <ProgressBar Grid.Row="2" Grid.ColumnSpan="3" Height="18" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" />
                     </Grid>
                 </GroupBox>
                 <GroupBox Header="第三步：结果与提交">

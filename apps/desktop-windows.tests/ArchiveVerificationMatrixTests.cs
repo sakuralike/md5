@@ -1,8 +1,11 @@
+using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
 using PasswordDetective.Desktop.Models;
 using PasswordDetective.Desktop.Services;
+using SharpCompress.Compressors.BZip2;
+using SharpCompressionMode = SharpCompress.Compressors.CompressionMode;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -36,23 +39,92 @@ public sealed class ArchiveVerificationMatrixTests : IDisposable
         Assert.Equal(expectedFormat, rejected.ArchiveFormat);
     }
 
+    [Theory]
+    [InlineData("sample.rar", "rar")]
+    [InlineData("sample.tar", "tar")]
+    [InlineData("sample.gz", "gz")]
+    [InlineData("sample.tar.gz", "tar.gz")]
+    [InlineData("sample.tgz", "tgz")]
+    [InlineData("sample.bz", "bz")]
+    [InlineData("sample.bz2", "bz2")]
+    [InlineData("sample.tar.bz", "tar.bz")]
+    [InlineData("sample.tar.bz2", "tar.bz2")]
+    [InlineData("sample.tbz", "tbz")]
+    [InlineData("sample.tbz2", "tbz2")]
+    public void SupportedArchiveSuffixesAreRecognized(string fileName, string expectedFormat)
+    {
+        Assert.True(ArchiveFormatCatalog.IsSupportedPath(fileName));
+        Assert.Equal(expectedFormat, ArchiveFormatCatalog.GetArchiveFormat(fileName));
+    }
+
+    [Fact]
+    public async Task TarAndCompressedTarFormatsAreReadButDoNotClaimPasswordValidation()
+    {
+        var tarPayload = CreateTarPayload();
+        var tarPath = await WriteBytesAsync("sample.tar", tarPayload);
+        var tarGzPath = await CreateGZipAsync("sample.tar.gz", tarPayload);
+        var tgzPath = await CreateGZipAsync("sample.tgz", tarPayload);
+        var tarBz2Path = await CreateBZip2Async("sample.tar.bz2", tarPayload);
+        var service = new ArchiveVerificationService();
+
+        foreach (var path in new[] { tarPath, tarGzPath, tgzPath, tarBz2Path })
+        {
+            var result = await service.VerifyAsync(path, SyntheticPassword);
+
+            Assert.False(result.Success);
+            Assert.True(result.EntryCount > 0, $"{Path.GetFileName(path)}: {result.Message}");
+            Assert.True(result.BytesSampled > 0, $"{Path.GetFileName(path)}: {result.Message}");
+            Assert.Contains("不能确认", result.Message);
+        }
+    }
+
+    [Fact]
+    public async Task StandaloneGZipAndBZip2StreamsAreReadWithoutClaimingPasswordValidation()
+    {
+        var payload = Encoding.UTF8.GetBytes("synthetic standalone compressed stream");
+        var gzipPath = await CreateGZipAsync("sample.gz", payload);
+        var bzip2Path = await CreateBZip2Async("sample.bz2", payload);
+        var service = new ArchiveVerificationService();
+
+        var gzip = await service.VerifyAsync(gzipPath, SyntheticPassword);
+        var bzip2 = await service.VerifyAsync(bzip2Path, SyntheticPassword);
+
+        Assert.False(gzip.Success);
+        Assert.Equal("gz", gzip.ArchiveFormat);
+        Assert.True(gzip.BytesSampled > 0, gzip.Message);
+        Assert.Contains("不能确认", gzip.Message);
+        Assert.False(bzip2.Success);
+        Assert.Equal("bz2", bzip2.ArchiveFormat);
+        Assert.True(bzip2.BytesSampled > 0, bzip2.Message);
+        Assert.Contains("不支持密码加密校验", bzip2.Message);
+    }
+
     [Fact]
     public async Task CorruptAndUnsupportedArchivesAreRejectedWithoutLeakingCandidate()
     {
-        var corruptPath = Path.Combine(_temporaryDirectory, "corrupt.zip");
-        await File.WriteAllBytesAsync(corruptPath, Encoding.UTF8.GetBytes("synthetic-corrupt-data"));
-        var unsupportedPath = Path.Combine(_temporaryDirectory, "unsupported.rar");
-        await File.WriteAllBytesAsync(unsupportedPath, Encoding.UTF8.GetBytes("synthetic-data"));
+        var corruptPath = await WriteBytesAsync(
+            "corrupt.zip",
+            Encoding.UTF8.GetBytes("synthetic-corrupt-data"));
+        var corruptRarPath = await WriteBytesAsync(
+            "corrupt.rar",
+            Encoding.UTF8.GetBytes("synthetic-corrupt-rar"));
+        var unsupportedPath = await WriteBytesAsync(
+            "unsupported.exe",
+            Encoding.UTF8.GetBytes("synthetic-data"));
         var service = new ArchiveVerificationService();
 
         var corrupt = await service.VerifyAsync(corruptPath, SyntheticPassword);
+        var corruptRar = await service.VerifyAsync(corruptRarPath, SyntheticPassword);
         var unsupported = await service.VerifyAsync(unsupportedPath, SyntheticPassword);
 
         Assert.False(corrupt.Success);
         Assert.Contains("已损坏", corrupt.Message);
         Assert.DoesNotContain(SyntheticPassword, corrupt.Message);
+        Assert.False(corruptRar.Success);
+        Assert.Equal("rar", corruptRar.ArchiveFormat);
+        Assert.Contains("已损坏", corruptRar.Message);
         Assert.False(unsupported.Success);
-        Assert.Contains("ZIP 与 7z", unsupported.Message);
+        Assert.Contains(ArchiveFormatCatalog.SupportedFormatsDescription, unsupported.Message);
     }
 
     [Fact]
@@ -108,6 +180,59 @@ public sealed class ArchiveVerificationMatrixTests : IDisposable
                 archivePath,
                 SyntheticPassword,
                 cancellation.Token));
+    }
+
+    private byte[] CreateTarPayload()
+    {
+        using var output = new MemoryStream();
+        using (var writer = new TarWriter(output, TarEntryFormat.Pax, leaveOpen: true))
+        {
+            using var content = new MemoryStream(Encoding.UTF8.GetBytes("synthetic tar entry"));
+            var entry = new PaxTarEntry(TarEntryType.RegularFile, "synthetic.txt")
+            {
+                DataStream = content,
+            };
+            writer.WriteEntry(entry);
+        }
+
+        return output.ToArray();
+    }
+
+    private async Task<string> CreateGZipAsync(string fileName, byte[] payload)
+    {
+        var path = Path.Combine(_temporaryDirectory, fileName);
+        await using var output = File.Create(path);
+        await using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: false))
+        {
+            await gzip.WriteAsync(payload);
+        }
+
+        return path;
+    }
+
+    private async Task<string> CreateBZip2Async(string fileName, byte[] payload)
+    {
+        var path = Path.Combine(_temporaryDirectory, fileName);
+        await using var output = File.Create(path);
+        using (var bzip2 = BZip2Stream.Create(
+            output,
+            SharpCompressionMode.Compress,
+            decompressConcatenated: false,
+            leaveOpen: false,
+            tolerateTruncatedStream: false))
+        {
+            await bzip2.WriteAsync(payload);
+            bzip2.Finish();
+        }
+
+        return path;
+    }
+
+    private async Task<string> WriteBytesAsync(string fileName, byte[] payload)
+    {
+        var path = Path.Combine(_temporaryDirectory, fileName);
+        await File.WriteAllBytesAsync(path, payload);
+        return path;
     }
 
     private async Task<string> CreateZipAsync(

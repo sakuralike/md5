@@ -1,8 +1,11 @@
 using System.IO;
-using SharpCompress.Archives;
-using SharpCompress.Common;
-using SharpCompress.Readers;
 using PasswordDetective.Desktop.Models;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Tar;
+using SharpCompress.Common;
+using SharpCompress.Compressors;
+using SharpCompress.Compressors.BZip2;
+using SharpCompress.Readers;
 
 namespace PasswordDetective.Desktop.Services;
 
@@ -40,7 +43,7 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Failure(GetArchiveFormat(filePath), "本地验证超时，已停止读取压缩包。");
+            return Failure(ArchiveFormatCatalog.GetArchiveFormat(filePath), "本地验证超时，已停止读取压缩包。");
         }
         catch (OperationCanceledException)
         {
@@ -48,13 +51,13 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
         }
         catch (ArchiveSafetyException exception)
         {
-            return Failure(GetArchiveFormat(filePath), exception.Message);
+            return Failure(ArchiveFormatCatalog.GetArchiveFormat(filePath), exception.Message);
         }
-        catch (Exception) when (File.Exists(filePath))
+        catch (Exception exception) when (File.Exists(filePath))
         {
             return Failure(
-                GetArchiveFormat(filePath),
-                "无法使用该候选密码完整读取压缩包，或压缩包格式不受支持/已损坏。");
+                ArchiveFormatCatalog.GetArchiveFormat(filePath),
+                $"无法使用该候选密码完整读取压缩包，或压缩包格式不受支持/已损坏（{exception.GetType().Name}）。");
         }
     }
 
@@ -74,10 +77,21 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
                 $"压缩包超过 {FormatByteLimit(_limits.MaxArchiveBytes)} 本地验证上限。");
         }
 
-        var archiveFormat = GetArchiveFormat(filePath);
-        if (archiveFormat == "unknown")
+        var archiveFormat = ArchiveFormatCatalog.GetArchiveFormat(filePath);
+        if (!ArchiveFormatCatalog.IsSupportedPath(filePath))
         {
-            throw new ArchiveSafetyException("仅支持 ZIP 与 7z 压缩包。");
+            throw new ArchiveSafetyException(
+                $"仅支持 {ArchiveFormatCatalog.SupportedFormatsDescription} 压缩包。");
+        }
+
+        if (ArchiveFormatCatalog.IsGZipPath(filePath))
+        {
+            return VerifyGZipCore(file, archiveFormat, candidatePassword, cancellationToken);
+        }
+
+        if (ArchiveFormatCatalog.IsBZip2Path(filePath))
+        {
+            return VerifyBZip2Core(file, archiveFormat, candidatePassword, cancellationToken);
         }
 
         using var stream = new FileStream(
@@ -95,10 +109,127 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
                 LeaveStreamOpen = false,
             });
 
+        return VerifyArchiveEntries(archive, archiveFormat, cancellationToken);
+    }
+
+    private ArchiveVerificationResult VerifyGZipCore(
+        FileInfo file,
+        string archiveFormat,
+        string candidatePassword,
+        CancellationToken cancellationToken)
+    {
+        using var source = new FileStream(
+            file.FullName,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            1024 * 1024,
+            FileOptions.SequentialScan);
+        using var decompressed = new System.IO.Compression.GZipStream(
+            source,
+            System.IO.Compression.CompressionMode.Decompress,
+            leaveOpen: false);
+        return VerifyCompressedStreamPayload(
+            decompressed,
+            archiveFormat,
+            candidatePassword,
+            "GZ/TGZ 压缩流已成功解压读取，但该格式本身不支持密码加密校验，不能确认候选密码正确。",
+            cancellationToken);
+    }
+
+    private ArchiveVerificationResult VerifyBZip2Core(
+        FileInfo file,
+        string archiveFormat,
+        string candidatePassword,
+        CancellationToken cancellationToken)
+    {
+        using var source = new FileStream(
+            file.FullName,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            1024 * 1024,
+            FileOptions.SequentialScan);
+        using var decompressed = BZip2Stream.Create(
+            source,
+            CompressionMode.Decompress,
+            decompressConcatenated: true,
+            leaveOpen: false,
+            tolerateTruncatedStream: false);
+        return VerifyCompressedStreamPayload(
+            decompressed,
+            archiveFormat,
+            candidatePassword,
+            "BZ/BZ2 压缩流已成功解压读取，但该格式本身不支持密码加密校验，不能确认候选密码正确。",
+            cancellationToken);
+    }
+
+    private ArchiveVerificationResult VerifyCompressedStreamPayload(
+        Stream decompressed,
+        string archiveFormat,
+        string candidatePassword,
+        string nonPasswordMessage,
+        CancellationToken cancellationToken)
+    {
+        using var payload = new MemoryStream();
+        var buffer = new byte[8192];
+        long expandedBytes = 0;
+        int read;
+        while ((read = decompressed.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            expandedBytes = checked(expandedBytes + read);
+            if (expandedBytes > _limits.MaxExpandedBytes)
+            {
+                throw new ArchiveSafetyException(
+                    $"压缩包展开内容超过 {FormatByteLimit(_limits.MaxExpandedBytes)} 安全上限。");
+            }
+
+            payload.Write(buffer, 0, read);
+        }
+
+        payload.Position = 0;
+        if (TarArchive.IsTarFile(payload))
+        {
+            payload.Position = 0;
+            using var archive = ArchiveFactory.OpenArchive(
+                payload,
+                new ReaderOptions
+                {
+                    Password = candidatePassword,
+                    LeaveStreamOpen = false,
+                });
+            return VerifyArchiveEntries(archive, archiveFormat, cancellationToken);
+        }
+
+        if (expandedBytes == 0)
+        {
+            return Failure(archiveFormat, "未读取到可用于验证的压缩流内容，结果不计为成功。");
+        }
+
+        payload.Position = 0;
+        var sampledBytes = ReadSample(payload, _limits.MaxSampleBytes, cancellationToken);
+        return new ArchiveVerificationResult(
+            false,
+            archiveFormat,
+            1,
+            expandedBytes,
+            sampledBytes,
+            nonPasswordMessage,
+            DateTimeOffset.UtcNow);
+    }
+
+    private ArchiveVerificationResult VerifyArchiveEntries(
+        IArchive archive,
+        string archiveFormat,
+        CancellationToken cancellationToken)
+    {
         var entryCount = 0;
         long totalExpandedBytes = 0;
         long sampledBytes = 0;
         var contentRead = false;
+        var encryptedContentRead = false;
+        var encryptedEntryCount = 0;
         var buffer = new byte[8192];
 
         foreach (var entry in archive.Entries)
@@ -112,6 +243,11 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
             }
 
             ValidateEntryPath(entry.Key);
+            if (entry.IsEncrypted)
+            {
+                encryptedEntryCount++;
+            }
+
             if (entry.IsDirectory)
             {
                 continue;
@@ -145,7 +281,9 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
                 {
                     break;
                 }
+
                 contentRead = true;
+                encryptedContentRead |= entry.IsEncrypted;
                 entrySampled += read;
                 sampledBytes += read;
             }
@@ -163,14 +301,49 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
                 DateTimeOffset.UtcNow);
         }
 
+        if (encryptedEntryCount == 0 || !encryptedContentRead)
+        {
+            return new ArchiveVerificationResult(
+                false,
+                archiveFormat,
+                entryCount,
+                totalExpandedBytes,
+                sampledBytes,
+                "压缩包内容已成功读取，但未检测到可验证候选密码的加密条目，不能确认密码正确。",
+                DateTimeOffset.UtcNow);
+        }
+
         return new ArchiveVerificationResult(
             true,
             archiveFormat,
             entryCount,
             totalExpandedBytes,
             sampledBytes,
-            "候选密码已通过本地目录枚举与受控内容读取验证。",
+            "候选密码已通过加密条目目录枚举与受控内容读取验证。",
             DateTimeOffset.UtcNow);
+    }
+
+    private static long ReadSample(
+        Stream stream,
+        long maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[8192];
+        long sampledBytes = 0;
+        while (sampledBytes < maximumBytes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var requested = (int)Math.Min(buffer.Length, maximumBytes - sampledBytes);
+            var read = stream.Read(buffer, 0, requested);
+            if (read == 0)
+            {
+                break;
+            }
+
+            sampledBytes += read;
+        }
+
+        return sampledBytes;
     }
 
     private static void ValidateEntryPath(string? entryPath)
@@ -201,14 +374,6 @@ public sealed class ArchiveVerificationService : IArchiveVerificationService
             _ => $"{bytes:N0} 字节",
         };
     }
-
-    private static string GetArchiveFormat(string filePath) =>
-        Path.GetExtension(filePath).ToLowerInvariant() switch
-        {
-            ".zip" => "zip",
-            ".7z" => "7z",
-            _ => "unknown",
-        };
 
     private static ArchiveVerificationResult Failure(string format, string message) => new(
         false,

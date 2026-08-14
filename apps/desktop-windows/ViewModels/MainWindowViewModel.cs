@@ -32,7 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _loginName = string.Empty;
     private string _totpCode = string.Empty;
     private string _candidateId = string.Empty;
-    private string _status = "请选择 ZIP 或 7z 文件。文件内容和候选密码不会上传。";
+    private string _status = $"请选择 {ArchiveFormatCatalog.SupportedFormatsDescription} 文件。文件内容和候选密码不会上传。";
     private string _installationStatus = "正在初始化本机安装身份…";
     private string _accountStatus = "未登录";
     private double _progress;
@@ -615,9 +615,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public void AcceptFile(string filePath)
     {
-        if (!File.Exists(filePath) || Path.GetExtension(filePath).ToLowerInvariant() is not (".zip" or ".7z"))
+        if (!File.Exists(filePath) || !ArchiveFormatCatalog.IsSupportedPath(filePath))
         {
-            Status = "只支持拖入 ZIP 或 7z 压缩包。";
+            Status = $"只支持 {ArchiveFormatCatalog.SupportedFormatsDescription} 压缩包。";
             return;
         }
         SelectedFile = filePath;
@@ -630,7 +630,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void SelectFile()
     {
-        var dialog = new OpenFileDialog { Title = "选择压缩包", Filter = "支持的压缩包 (*.zip;*.7z)|*.zip;*.7z", CheckFileExists = true };
+        var dialog = new OpenFileDialog { Title = "选择压缩包", Filter = ArchiveFormatCatalog.FileDialogFilter, CheckFileExists = true };
         if (dialog.ShowDialog() == true)
         {
             SelectedFile = dialog.FileName;

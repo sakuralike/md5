@@ -1,13 +1,118 @@
-﻿using System.Configuration;
-using System.Data;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PasswordDetective.Desktop;
 
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
 public partial class App : Application
 {
-}
+    private const uint NativeMessageBoxError = 0x00000010;
+    private static int _failureReported;
 
+    public App()
+    {
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+    }
+
+    private void Application_OnStartup(object sender, StartupEventArgs e)
+    {
+        try
+        {
+            EnsureWindowsDirectoryEnvironment();
+            var window = new MainWindow();
+            MainWindow = window;
+            window.Show();
+        }
+        catch (Exception exception)
+        {
+            ReportStartupFailure(exception);
+            Shutdown(1);
+        }
+    }
+
+    private static void EnsureWindowsDirectoryEnvironment()
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("windir")))
+        {
+            return;
+        }
+
+        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windowsDirectory))
+        {
+            windowsDirectory = Directory.GetParent(Environment.SystemDirectory)?.FullName;
+        }
+
+        if (string.IsNullOrWhiteSpace(windowsDirectory) || !Directory.Exists(windowsDirectory))
+        {
+            throw new DirectoryNotFoundException("无法定位 Windows 系统目录，桌面端无法初始化字体资源。");
+        }
+
+        Environment.SetEnvironmentVariable(
+            "windir",
+            windowsDirectory,
+            EnvironmentVariableTarget.Process);
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        e.Handled = true;
+        ReportStartupFailure(e.Exception);
+        Shutdown(1);
+    }
+
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception exception)
+        {
+            ReportStartupFailure(exception);
+        }
+    }
+
+    private static void ReportStartupFailure(Exception exception)
+    {
+        if (Interlocked.Exchange(ref _failureReported, 1) != 0)
+        {
+            return;
+        }
+
+        var logDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PasswordDetective",
+            "logs");
+        var logPath = Path.Combine(logDirectory, "desktop-startup.log");
+        try
+        {
+            Directory.CreateDirectory(logDirectory);
+            File.AppendAllText(
+                logPath,
+                $"[{DateTimeOffset.Now:O}] 桌面端启动失败{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never hide the original startup failure.
+        }
+
+        try
+        {
+            NativeMessageBox(
+                IntPtr.Zero,
+                $"密码侦探社桌面端启动失败。\n\n详细错误已写入：\n{logPath}",
+                "密码侦探社",
+                NativeMessageBoxError);
+        }
+        catch
+        {
+            // Native message box is best-effort only.
+        }
+    }
+
+    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
+    private static extern int NativeMessageBox(
+        IntPtr hWnd,
+        string text,
+        string caption,
+        uint type);
+}
