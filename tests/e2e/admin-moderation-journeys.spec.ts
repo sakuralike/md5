@@ -20,8 +20,9 @@ test("Admin 审核待验证候选并写入状态时间线", async ({ page }) => 
   const approveButton = page.getByRole("button", { name: "审核通过" });
   const verifiedTransition = page.getByText("待验证 → 已验证", { exact: true });
 
-  // CI 重试会复用已启动的 API 与数据库；用终态事件是否存在决定是否处置，避免瞬时可见性竞态。
-  if ((await verifiedTransition.count()) === 0) {
+  // CI 重试会复用已启动的 API 与数据库；只有本轮实际处置时才断言本轮审核说明。
+  const shouldApprove = (await verifiedTransition.count()) === 0;
+  if (shouldApprove) {
     await expect(approveButton).toBeVisible();
     await page
       .getByLabel("审核说明（进入状态时间线，不写入审计详情）")
@@ -33,7 +34,9 @@ test("Admin 审核待验证候选并写入状态时间线", async ({ page }) => 
   await expect(verifiedTransition).toBeVisible();
   const verifiedEvent = verifiedTransition.locator("xpath=ancestor::li[1]");
   await expect(verifiedEvent).toContainText("manual.verified_by_review");
-  await expect(verifiedEvent).toContainText("合成测试：独立证据满足人工审核要求。");
+  if (shouldApprove) {
+    await expect(verifiedEvent).toContainText("合成测试：独立证据满足人工审核要求。");
+  }
   expectNoBrowserErrors(browserErrors);
 });
 

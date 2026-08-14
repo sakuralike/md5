@@ -1265,7 +1265,10 @@ export type AdminSessionRevocationReasonCode =
 
 export interface AdminReauthenticationResponse {
   reauth_token: string;
-  purpose: "admin_user_governance" | "admin_settings_governance";
+  purpose:
+    | "admin_user_governance"
+    | "admin_settings_governance"
+    | "admin_community_notification_ops";
   expires_at: string;
 }
 
@@ -1481,6 +1484,7 @@ export type CommunityNotificationKind =
   | "group_decision"
   | "group_role_change";
 export type CommunityNotificationSource = "post" | "comment" | "user" | "group";
+export type CommunityNotificationOutboxStatus = "pending" | "delivered" | "failed";
 export type CommunityActivityFeed = "latest" | "following" | "groups";
 export type CommunityActivityKind =
   | "post_published"
@@ -1974,6 +1978,49 @@ export interface AdminCommunityBoardListResponse {
 
 export interface AdminCommunityBoardMutationResponse {
   board: AdminCommunityBoardResponse;
+  audit_id: string;
+  request_id: string | null;
+}
+
+export interface AdminCommunityNotificationOutboxItem {
+  id: string;
+  notification_id: string;
+  recipient_username: string;
+  actor_username: string;
+  kind: CommunityNotificationKind;
+  source_type: CommunityNotificationSource;
+  status: CommunityNotificationOutboxStatus;
+  attempts: number;
+  available_at: string;
+  delivered_at: string | null;
+  failed_at: string | null;
+  last_error_code: string | null;
+  replay_count: number;
+  last_replayed_at: string | null;
+  last_replayed_by_username: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminCommunityNotificationOutboxListResponse {
+  items: AdminCommunityNotificationOutboxItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface AdminCommunityNotificationOutboxMetrics {
+  generated_at: string;
+  pending_count: number;
+  delivered_count: number;
+  failed_count: number;
+  failed_last_24_hours: number;
+  retry_due_count: number;
+  oldest_pending_seconds: number | null;
+}
+
+export interface AdminCommunityNotificationReplayResponse {
+  event: AdminCommunityNotificationOutboxItem;
   audit_id: string;
   request_id: string | null;
 }

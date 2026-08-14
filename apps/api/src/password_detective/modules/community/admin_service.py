@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
@@ -11,20 +13,31 @@ from password_detective.db.models.community import (
     CommunityComment,
     CommunityContentStatus,
     CommunityModerationAction,
+    CommunityNotification,
+    CommunityNotificationKind,
+    CommunityNotificationOutbox,
+    CommunityNotificationOutboxStatus,
     CommunityPost,
     CommunityReport,
     CommunityReportDecision,
     CommunityReportStatus,
 )
+from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import User, UserRole
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.auth.reauthentication import consume_reauthentication_grant
 from password_detective.modules.community.admin_schemas import (
     AdminCommunityBoardCreateRequest,
     AdminCommunityBoardListResponse,
     AdminCommunityBoardMutationResponse,
     AdminCommunityBoardResponse,
     AdminCommunityBoardUpdateRequest,
+    AdminCommunityNotificationOutboxItem,
+    AdminCommunityNotificationOutboxListResponse,
+    AdminCommunityNotificationOutboxMetrics,
+    AdminCommunityNotificationReplayRequest,
+    AdminCommunityNotificationReplayResponse,
     AdminCommunityPostModerateRequest,
     AdminCommunityPostMutationResponse,
     AdminCommunityPostState,
@@ -378,3 +391,253 @@ def _post_state(post: CommunityPost) -> AdminCommunityPostState:
         reply_count=post.reply_count,
         updated_at=post.updated_at,
     )
+
+
+def list_admin_notification_outbox(
+    db: Session,
+    *,
+    status: CommunityNotificationOutboxStatus | None,
+    kind: CommunityNotificationKind | None,
+    error_code: str | None,
+    page: int,
+    page_size: int,
+) -> AdminCommunityNotificationOutboxListResponse:
+    recipient = aliased(User)
+    actor = aliased(User)
+    replayer = aliased(User)
+    conditions = []
+    if status is not None:
+        conditions.append(CommunityNotificationOutbox.status == status)
+    if kind is not None:
+        conditions.append(CommunityNotification.kind == kind)
+    normalized_error = error_code.replace("\x00", "").strip() if error_code else ""
+    if normalized_error:
+        conditions.append(CommunityNotificationOutbox.last_error_code == normalized_error)
+
+    total_statement = (
+        select(func.count(CommunityNotificationOutbox.id))
+        .join(
+            CommunityNotification,
+            CommunityNotification.id == CommunityNotificationOutbox.notification_id,
+        )
+        .where(*conditions)
+    )
+    total = int(db.scalar(total_statement) or 0)
+    rows = db.execute(
+        select(
+            CommunityNotificationOutbox,
+            CommunityNotification,
+            recipient.username,
+            actor.username,
+            replayer.username,
+        )
+        .join(
+            CommunityNotification,
+            CommunityNotification.id == CommunityNotificationOutbox.notification_id,
+        )
+        .join(recipient, recipient.id == CommunityNotificationOutbox.recipient_id)
+        .join(actor, actor.id == CommunityNotification.actor_id)
+        .outerjoin(replayer, replayer.id == CommunityNotificationOutbox.last_replayed_by_id)
+        .where(*conditions)
+        .order_by(
+            CommunityNotificationOutbox.created_at.desc(),
+            CommunityNotificationOutbox.id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return AdminCommunityNotificationOutboxListResponse(
+        items=[
+            _notification_outbox_item(
+                event,
+                notification,
+                recipient_username,
+                actor_username,
+                replayer_username,
+            )
+            for event, notification, recipient_username, actor_username, replayer_username in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def get_admin_notification_outbox_metrics(
+    db: Session,
+) -> AdminCommunityNotificationOutboxMetrics:
+    now = utc_now()
+    counts = {
+        item_status: int(count)
+        for item_status, count in db.execute(
+            select(
+                CommunityNotificationOutbox.status, func.count(CommunityNotificationOutbox.id)
+            ).group_by(CommunityNotificationOutbox.status)
+        ).all()
+    }
+    failed_last_24_hours = int(
+        db.scalar(
+            select(func.count(CommunityNotificationOutbox.id)).where(
+                CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.FAILED,
+                CommunityNotificationOutbox.failed_at >= now - timedelta(hours=24),
+            )
+        )
+        or 0
+    )
+    retry_due_count = int(
+        db.scalar(
+            select(func.count(CommunityNotificationOutbox.id)).where(
+                CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.PENDING,
+                CommunityNotificationOutbox.available_at <= now,
+            )
+        )
+        or 0
+    )
+    oldest_pending_at = db.scalar(
+        select(func.min(CommunityNotificationOutbox.created_at)).where(
+            CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.PENDING
+        )
+    )
+    oldest_pending_seconds = (
+        max(0, int((now - _aware_datetime(oldest_pending_at)).total_seconds()))
+        if oldest_pending_at is not None
+        else None
+    )
+    return AdminCommunityNotificationOutboxMetrics(
+        generated_at=now,
+        pending_count=counts.get(CommunityNotificationOutboxStatus.PENDING, 0),
+        delivered_count=counts.get(CommunityNotificationOutboxStatus.DELIVERED, 0),
+        failed_count=counts.get(CommunityNotificationOutboxStatus.FAILED, 0),
+        failed_last_24_hours=failed_last_24_hours,
+        retry_due_count=retry_due_count,
+        oldest_pending_seconds=oldest_pending_seconds,
+    )
+
+
+def replay_admin_notification_outbox(
+    db: Session,
+    *,
+    event_id: str,
+    payload: AdminCommunityNotificationReplayRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminCommunityNotificationReplayResponse:
+    event = db.scalar(
+        select(CommunityNotificationOutbox)
+        .where(CommunityNotificationOutbox.id == event_id)
+        .with_for_update()
+    )
+    if event is None:
+        raise AppError(
+            "community.notification_outbox_not_found",
+            "社区通知投递事件不存在",
+            status_code=404,
+        )
+    if event.status != CommunityNotificationOutboxStatus.FAILED:
+        raise AppError(
+            "community.notification_outbox_not_failed",
+            "仅失败的社区通知投递事件可以重放",
+            status_code=409,
+        )
+    notification = db.get(CommunityNotification, event.notification_id)
+    if notification is None:
+        raise AppError(
+            "community.notification_not_found",
+            "社区通知不存在，无法重放",
+            status_code=409,
+        )
+    grant = consume_reauthentication_grant(
+        db,
+        raw_token=payload.reauth_token,
+        user_id=principal.user.id,
+        session_family_id=principal.session_family_id,
+        expected_purpose=ReauthenticationPurpose.ADMIN_COMMUNITY_NOTIFICATION_OPS,
+    )
+    if not grant.mfa_verified:
+        raise AppError(
+            "auth.mfa_reauthentication_required",
+            "该操作需要完成 MFA 再认证",
+            status_code=403,
+        )
+
+    recipient = db.get(User, event.recipient_id)
+    actor = db.get(User, notification.actor_id)
+    previous = {
+        "status": event.status.value,
+        "attempts": event.attempts,
+        "last_error_code": event.last_error_code,
+        "failed_at": event.failed_at.isoformat() if event.failed_at else None,
+    }
+    now = utc_now()
+    event.status = CommunityNotificationOutboxStatus.PENDING
+    event.attempts = 0
+    event.available_at = now
+    event.delivered_at = None
+    event.failed_at = None
+    event.last_error_code = None
+    event.replay_count += 1
+    event.last_replayed_at = now
+    event.last_replayed_by_id = principal.user.id
+    audit = write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.notification_outbox.replay",
+        target_type="community_notification_outbox",
+        target_id=event.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "reason": payload.reason,
+            "notification_id": notification.id,
+            "notification_kind": notification.kind.value,
+            "previous": previous,
+            "replay_count": event.replay_count,
+        },
+    )
+    db.flush()
+    db.commit()
+    db.refresh(event)
+    return AdminCommunityNotificationReplayResponse(
+        event=_notification_outbox_item(
+            event,
+            notification,
+            recipient.username if recipient else "已注销用户",
+            actor.username if actor else "已注销用户",
+            principal.user.username,
+        ),
+        audit_id=audit.id,
+        request_id=context.request_id,
+    )
+
+
+def _notification_outbox_item(
+    event: CommunityNotificationOutbox,
+    notification: CommunityNotification,
+    recipient_username: str,
+    actor_username: str,
+    replayer_username: str | None,
+) -> AdminCommunityNotificationOutboxItem:
+    return AdminCommunityNotificationOutboxItem(
+        id=event.id,
+        notification_id=event.notification_id,
+        recipient_username=recipient_username,
+        actor_username=actor_username,
+        kind=notification.kind,
+        source_type=notification.source_type,
+        status=event.status,
+        attempts=event.attempts,
+        available_at=event.available_at,
+        delivered_at=event.delivered_at,
+        failed_at=event.failed_at,
+        last_error_code=event.last_error_code,
+        replay_count=event.replay_count,
+        last_replayed_at=event.last_replayed_at,
+        last_replayed_by_username=replayer_username,
+        created_at=event.created_at,
+        updated_at=event.updated_at,
+    )
+
+
+def _aware_datetime(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)

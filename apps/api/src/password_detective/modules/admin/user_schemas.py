@@ -30,11 +30,10 @@ class AdminReauthenticationRequest(BaseModel):
     purpose: Literal[
         ReauthenticationPurpose.ADMIN_USER_GOVERNANCE,
         ReauthenticationPurpose.ADMIN_SETTINGS_GOVERNANCE,
+        ReauthenticationPurpose.ADMIN_COMMUNITY_NOTIFICATION_OPS,
     ] = ReauthenticationPurpose.ADMIN_USER_GOVERNANCE
     current_password: str = Field(min_length=1, max_length=128)
-    totp_code: str | None = Field(
-        default=None, min_length=6, max_length=8, pattern=r"^[0-9]+$"
-    )
+    totp_code: str | None = Field(default=None, min_length=6, max_length=8, pattern=r"^[0-9]+$")
 
 
 class AdminReauthenticationResponse(BaseModel):
@@ -42,6 +41,7 @@ class AdminReauthenticationResponse(BaseModel):
     purpose: Literal[
         ReauthenticationPurpose.ADMIN_USER_GOVERNANCE,
         ReauthenticationPurpose.ADMIN_SETTINGS_GOVERNANCE,
+        ReauthenticationPurpose.ADMIN_COMMUNITY_NOTIFICATION_OPS,
     ]
     expires_at: datetime
 

@@ -8,6 +8,9 @@ from password_detective.db.models.community import (
     CommunityBoardStatus,
     CommunityContentStatus,
     CommunityModerationAction,
+    CommunityNotificationKind,
+    CommunityNotificationOutboxStatus,
+    CommunityNotificationSource,
     CommunityReportDecision,
     CommunityReportReason,
     CommunityReportStatus,
@@ -138,5 +141,61 @@ class AdminCommunityBoardListResponse(BaseModel):
 
 class AdminCommunityBoardMutationResponse(BaseModel):
     board: AdminCommunityBoardResponse
+    audit_id: str
+    request_id: str | None
+
+
+class AdminCommunityNotificationOutboxItem(BaseModel):
+    id: str
+    notification_id: str
+    recipient_username: str
+    actor_username: str
+    kind: CommunityNotificationKind
+    source_type: CommunityNotificationSource
+    status: CommunityNotificationOutboxStatus
+    attempts: int
+    available_at: datetime
+    delivered_at: datetime | None
+    failed_at: datetime | None
+    last_error_code: str | None
+    replay_count: int
+    last_replayed_at: datetime | None
+    last_replayed_by_username: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminCommunityNotificationOutboxListResponse(BaseModel):
+    items: list[AdminCommunityNotificationOutboxItem]
+    page: int
+    page_size: int
+    total: int
+
+
+class AdminCommunityNotificationOutboxMetrics(BaseModel):
+    generated_at: datetime
+    pending_count: int
+    delivered_count: int
+    failed_count: int
+    failed_last_24_hours: int
+    retry_due_count: int
+    oldest_pending_seconds: int | None
+
+
+class AdminCommunityNotificationReplayRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+    reauth_token: str = Field(min_length=16, max_length=256)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.replace("\x00", "").strip()
+        if len(normalized) < 3:
+            raise ValueError("重放原因至少需要 3 个字符")
+        return normalized
+
+
+class AdminCommunityNotificationReplayResponse(BaseModel):
+    event: AdminCommunityNotificationOutboxItem
     audit_id: str
     request_id: str | None

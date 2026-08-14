@@ -16,7 +16,11 @@ from password_detective.core.idempotency import (
 )
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
-from password_detective.db.models.community import CommunityReportStatus
+from password_detective.db.models.community import (
+    CommunityNotificationKind,
+    CommunityNotificationOutboxStatus,
+    CommunityReportStatus,
+)
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
@@ -28,6 +32,10 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityBoardListResponse,
     AdminCommunityBoardMutationResponse,
     AdminCommunityBoardUpdateRequest,
+    AdminCommunityNotificationOutboxListResponse,
+    AdminCommunityNotificationOutboxMetrics,
+    AdminCommunityNotificationReplayRequest,
+    AdminCommunityNotificationReplayResponse,
     AdminCommunityPostModerateRequest,
     AdminCommunityPostMutationResponse,
     AdminCommunityReportListResponse,
@@ -36,9 +44,12 @@ from password_detective.modules.community.admin_schemas import (
 )
 from password_detective.modules.community.admin_service import (
     create_admin_board,
+    get_admin_notification_outbox_metrics,
     list_admin_boards,
+    list_admin_notification_outbox,
     list_admin_reports,
     moderate_admin_post,
+    replay_admin_notification_outbox,
     resolve_admin_report,
     update_admin_board,
 )
@@ -109,6 +120,80 @@ def admin_community_board_update(
         mutate=lambda: update_admin_board(
             db,
             board_code=board_code,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    )
+
+
+@admin_router.get(
+    "/notification-outbox/metrics",
+    response_model=AdminCommunityNotificationOutboxMetrics,
+)
+def admin_community_notification_outbox_metrics(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> AdminCommunityNotificationOutboxMetrics:
+    del principal
+    return get_admin_notification_outbox_metrics(db)
+
+
+@admin_router.get(
+    "/notification-outbox",
+    response_model=AdminCommunityNotificationOutboxListResponse,
+)
+def admin_community_notification_outbox(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+    status: CommunityNotificationOutboxStatus | None = None,
+    kind: CommunityNotificationKind | None = None,
+    error_code: Annotated[str | None, Query(max_length=128)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminCommunityNotificationOutboxListResponse:
+    del principal
+    return list_admin_notification_outbox(
+        db,
+        status=status,
+        kind=kind,
+        error_code=error_code,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@admin_router.post(
+    "/notification-outbox/{event_id}/replay",
+    response_model=AdminCommunityNotificationReplayResponse,
+    dependencies=[
+        Depends(
+            rate_limit(
+                "admin.community.notification_outbox.replay",
+                limit=30,
+                window_seconds=3600,
+            )
+        )
+    ],
+)
+def admin_community_notification_outbox_replay(
+    event_id: str,
+    payload: AdminCommunityNotificationReplayRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> AdminCommunityNotificationReplayResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="admin.community.notification_outbox.replay",
+        idempotency_key=idempotency_key,
+        request_payload={"event_id": event_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=AdminCommunityNotificationReplayResponse,
+        mutate=lambda: replay_admin_notification_outbox(
+            db,
+            event_id=event_id,
             payload=payload,
             principal=principal,
             context=get_client_context(request),

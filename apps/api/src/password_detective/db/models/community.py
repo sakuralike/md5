@@ -509,6 +509,16 @@ class CommunityNotificationOutbox(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    replay_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_replayed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_replayed_by_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
@@ -555,9 +565,7 @@ class CommunityActivityPreference(Base):
 class CommunityActivityEvent(Base):
     __tablename__ = "community_activity_events"
     __table_args__ = (
-        UniqueConstraint(
-            "kind", "source_type", "source_id", name="uq_community_activity_source"
-        ),
+        UniqueConstraint("kind", "source_type", "source_id", name="uq_community_activity_source"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

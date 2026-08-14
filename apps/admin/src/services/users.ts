@@ -43,7 +43,10 @@ export function getAdminUser(userId: string, token: string): Promise<AdminUserDe
 export interface AdminReauthenticationInput {
   currentPassword: string;
   totpCode?: string;
-  purpose?: "admin_user_governance" | "admin_settings_governance";
+  purpose?:
+    | "admin_user_governance"
+    | "admin_settings_governance"
+    | "admin_community_notification_ops";
 }
 
 export interface AdminUserStatusChangeInput {

@@ -59,6 +59,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: SlidersHorizontal,
   },
   {
+    label: "通知运维",
+    path: "/community/notifications",
+    description: "查询社区通知 Outbox 失败并执行受控重放。",
+    group: "安全运营",
+    icon: BellRing,
+  },
+  {
     label: "风险告警",
     path: "/risk-alerts",
     description: "处置风险告警、分派与通知回放。",

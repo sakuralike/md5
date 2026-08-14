@@ -3,6 +3,7 @@ import AuditPage from "../pages/AuditPage.vue";
 import CandidateModerationPage from "../pages/CandidateModerationPage.vue";
 import CommunityConfigurationPage from "../pages/CommunityConfigurationPage.vue";
 import CommunityModerationPage from "../pages/CommunityModerationPage.vue";
+import CommunityNotificationOutboxPage from "../pages/CommunityNotificationOutboxPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
@@ -34,6 +35,7 @@ const router = createRouter({
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
     { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },
+    { path: "/community/notifications", component: CommunityNotificationOutboxPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
   ],

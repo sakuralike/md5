@@ -17,6 +17,7 @@ class ReauthenticationPurpose(StrEnum):
     ACCOUNT_DELETION = "account_deletion"
     ADMIN_USER_GOVERNANCE = "admin_user_governance"
     ADMIN_SETTINGS_GOVERNANCE = "admin_settings_governance"
+    ADMIN_COMMUNITY_NOTIFICATION_OPS = "admin_community_notification_ops"
 
 
 class ReauthenticationGrant(Base):
