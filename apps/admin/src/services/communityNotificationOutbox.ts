@@ -1,3 +1,4 @@
+import { createClientId } from "@/lib/clientId";
 import type {
   AdminCommunityNotificationOutboxListResponse,
   AdminCommunityNotificationOutboxMetrics,
@@ -64,5 +65,5 @@ export function replayCommunityNotificationOutbox(
 }
 
 export function createCommunityNotificationReplayKey(): string {
-  return `community-notification-replay-${crypto.randomUUID()}`;
+  return `community-notification-replay-${createClientId()}`;
 }

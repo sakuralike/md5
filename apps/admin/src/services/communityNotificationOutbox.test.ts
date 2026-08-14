@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
 import {
+  createCommunityNotificationReplayKey,
   getCommunityNotificationOutboxMetrics,
   listCommunityNotificationOutbox,
   replayCommunityNotificationOutbox,
 } from "./communityNotificationOutbox";
+
+vi.mock("@/lib/clientId", () => ({
+  createClientId: () => "synthetic-client-id",
+}));
 
 vi.mock("./api", () => ({
   apiRequest: vi.fn((path: string) => Promise.resolve({ path })),
@@ -39,6 +44,12 @@ describe("community notification outbox service", () => {
       "/admin/community/notification-outbox?status=failed&kind=follow&error_code=community.notification_dispatch_failed&page=2&page_size=25",
       {},
       "synthetic-admin-token",
+    );
+  });
+
+  it("creates an HTTP-safe replay idempotency key through the shared client id helper", () => {
+    expect(createCommunityNotificationReplayKey()).toBe(
+      "community-notification-replay-synthetic-client-id",
     );
   });
 
