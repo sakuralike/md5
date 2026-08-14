@@ -57,6 +57,12 @@ from password_detective.modules.trust_cases.router import (
 )
 from password_detective.modules.trust_cases.router import user_router as trust_cases_router
 from password_detective.modules.verification.router import router as verification_router
+from password_detective.modules.web_announcements.router import (
+    admin_router as web_announcements_admin_router,
+)
+from password_detective.modules.web_announcements.router import (
+    public_router as web_announcements_router,
+)
 
 
 def create_app(
@@ -157,6 +163,8 @@ def create_app(
     app.include_router(desktop_router, prefix="/api/v1")
     app.include_router(desktop_announcements_router, prefix="/api/v1")
     app.include_router(desktop_announcements_admin_router, prefix="/api/v1")
+    app.include_router(web_announcements_router, prefix="/api/v1")
+    app.include_router(web_announcements_admin_router, prefix="/api/v1")
     app.include_router(desktop_updates_router, prefix="/api/v1")
     app.include_router(desktop_updates_admin_router, prefix="/api/v1")
     return app

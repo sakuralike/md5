@@ -124,6 +124,7 @@ def resolve_site_logo(settings: Settings, asset_name: str) -> tuple[Path, str]:
     suffix_content_types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
     return target, suffix_content_types[target.suffix]
 
+
 _ANNOUNCEMENT_ASSET_NAME_PATTERN = re.compile(r"^[0-9a-f]{64}\.(?:png|jpg|webp)$")
 _ANNOUNCEMENT_ASSET_DIRECTORY = "desktop-announcements"
 
@@ -232,5 +233,116 @@ def resolve_desktop_announcement_image(settings: Settings, asset_name: str) -> t
     target = (storage_root / asset_name).resolve()
     if target.parent != storage_root or not target.is_file():
         raise AppError("desktop.announcement_image_not_found", "公告图片不存在", status_code=404)
+    suffix_content_types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
+    return target, suffix_content_types[target.suffix]
+
+
+_WEB_ANNOUNCEMENT_ASSET_DIRECTORY = "web-announcements"
+
+
+@dataclass(frozen=True, slots=True)
+class StoredWebAnnouncementImage:
+    url: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+
+
+async def store_web_announcement_image(
+    request: Request,
+    settings: Settings,
+) -> StoredWebAnnouncementImage:
+    declared_content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if declared_content_type not in _ALLOWED_CONTENT_TYPES:
+        raise AppError(
+            "admin.web_announcement_image_content_type_invalid",
+            "Web 公告图片仅支持 PNG、JPEG 或 WebP 图片",
+            status_code=415,
+        )
+
+    max_bytes = settings.desktop_announcement_image_max_bytes
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            if int(declared_length) > max_bytes:
+                raise AppError(
+                    "admin.web_announcement_image_too_large",
+                    "Web 公告图片大小超过限制",
+                    status_code=413,
+                    details={"max_bytes": max_bytes},
+                )
+        except ValueError as exc:
+            raise AppError(
+                "request.content_length_invalid",
+                "Content-Length 请求头无效",
+                status_code=400,
+            ) from exc
+
+    payload = bytearray()
+    async for chunk in request.stream():
+        if len(payload) + len(chunk) > max_bytes:
+            raise AppError(
+                "admin.web_announcement_image_too_large",
+                "Web 公告图片大小超过限制",
+                status_code=413,
+                details={"max_bytes": max_bytes},
+            )
+        payload.extend(chunk)
+    if not payload:
+        raise AppError(
+            "admin.web_announcement_image_empty",
+            "Web 公告图片不能为空",
+            status_code=422,
+        )
+
+    binary = bytes(payload)
+    detected_content_type = _detect_content_type(binary)
+    if detected_content_type is None or detected_content_type != declared_content_type:
+        raise AppError(
+            "admin.web_announcement_image_signature_invalid",
+            "图片内容与声明的文件类型不一致",
+            status_code=422,
+        )
+
+    digest = hashlib.sha256(binary).hexdigest()
+    suffix = _ALLOWED_CONTENT_TYPES[detected_content_type]
+    storage_root = (
+        Path(settings.site_asset_storage_path).expanduser().resolve()
+        / _WEB_ANNOUNCEMENT_ASSET_DIRECTORY
+    )
+    storage_root.mkdir(parents=True, exist_ok=True)
+    asset_name = f"{digest}{suffix}"
+    target = storage_root / asset_name
+    if not target.exists():
+        temporary = storage_root / f".{asset_name}.{uuid4().hex}.tmp"
+        try:
+            with temporary.open("xb") as handle:
+                handle.write(binary)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+            with suppress(OSError):
+                target.chmod(0o640)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    return StoredWebAnnouncementImage(
+        url=f"/api/v1/web/announcements/assets/{asset_name}",
+        content_type=detected_content_type,
+        size_bytes=len(binary),
+        sha256=digest,
+    )
+
+
+def resolve_web_announcement_image(settings: Settings, asset_name: str) -> tuple[Path, str]:
+    if not _ANNOUNCEMENT_ASSET_NAME_PATTERN.fullmatch(asset_name):
+        raise AppError("web.announcement_image_not_found", "Web 公告图片不存在", status_code=404)
+    storage_root = (
+        Path(settings.site_asset_storage_path).expanduser().resolve()
+        / _WEB_ANNOUNCEMENT_ASSET_DIRECTORY
+    )
+    target = (storage_root / asset_name).resolve()
+    if target.parent != storage_root or not target.is_file():
+        raise AppError("web.announcement_image_not_found", "Web 公告图片不存在", status_code=404)
     suffix_content_types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
     return target, suffix_content_types[target.suffix]

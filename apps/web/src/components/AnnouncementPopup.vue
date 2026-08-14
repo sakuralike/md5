@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { DesktopAnnouncement } from "@password-detective/api-contract";
+import type { WebAnnouncement } from "@password-detective/api-contract";
 import { ExternalLink, Megaphone, X } from "lucide-vue-next";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
-import { plainAnnouncementContent } from "@/lib/announcementContent";
+import { announcementAutoCloseMilliseconds, plainAnnouncementContent } from "@/lib/announcementContent";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPopupAnnouncements } from "@/services/announcements";
 
@@ -11,7 +11,7 @@ const DISMISS_PREFIX = "web-popup-announcement:";
 
 const props = withDefaults(
   defineProps<{
-    initialAnnouncements?: DesktopAnnouncement[];
+    initialAnnouncements?: WebAnnouncement[];
     autoload?: boolean;
   }>(),
   {
@@ -20,11 +20,12 @@ const props = withDefaults(
   },
 );
 
-const announcements = ref<DesktopAnnouncement[]>([...props.initialAnnouncements]);
+const announcements = ref<WebAnnouncement[]>([...props.initialAnnouncements]);
 const dismissed = ref(new Set<string>());
 const loading = ref(false);
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
-function announcementKey(item: DesktopAnnouncement): string {
+function announcementKey(item: WebAnnouncement): string {
   return `${item.id}:${item.revision}`;
 }
 
@@ -66,6 +67,20 @@ function dismiss(): void {
   dismissed.value = new Set([...dismissed.value, key]);
 }
 
+
+function clearAutoCloseTimer(): void {
+  if (autoCloseTimer !== null) {
+    clearTimeout(autoCloseTimer);
+    autoCloseTimer = null;
+  }
+}
+
+function hideAutomatically(): void {
+  const item = activeAnnouncement.value;
+  if (!item) return;
+  dismissed.value = new Set([...dismissed.value, announcementKey(item)]);
+}
+
 async function loadAnnouncements(): Promise<void> {
   if (loading.value) return;
   loading.value = true;
@@ -77,6 +92,25 @@ async function loadAnnouncements(): Promise<void> {
     loading.value = false;
   }
 }
+
+
+watch(
+  () => {
+    const item = activeAnnouncement.value;
+    return item ? `${announcementKey(item)}:${item.auto_close_seconds ?? 0}` : null;
+  },
+  () => {
+    clearAutoCloseTimer();
+    if (typeof window === "undefined") return;
+    const milliseconds = announcementAutoCloseMilliseconds(
+      activeAnnouncement.value?.auto_close_seconds ?? null,
+    );
+    if (milliseconds !== null) autoCloseTimer = setTimeout(hideAutomatically, milliseconds);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(clearAutoCloseTimer);
 
 onMounted(() => {
   readDismissedKeys();
@@ -120,6 +154,13 @@ onMounted(() => {
       <CardContent v-if="plainContent" class="whitespace-pre-line pb-4 text-sm leading-6 text-muted-foreground">
         {{ plainContent }}
       </CardContent>
+
+      <p
+        v-if="activeAnnouncement.auto_close_seconds"
+        class="px-6 pb-3 text-xs text-muted-foreground"
+      >
+        将在 {{ activeAnnouncement.auto_close_seconds }} 秒后自动关闭
+      </p>
 
       <CardFooter v-if="actionUrl" class="justify-end border-t bg-muted/30 py-3">
         <Button size="sm" as-child>

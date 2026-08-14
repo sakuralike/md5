@@ -7,6 +7,7 @@ import CommunityNotificationOutboxPage from "../pages/CommunityNotificationOutbo
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import DesktopAnnouncementsPage from "../pages/DesktopAnnouncementsPage.vue";
+import WebAnnouncementsPage from "../pages/WebAnnouncementsPage.vue";
 import HashPoolPage from "../pages/HashPoolPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
@@ -42,6 +43,7 @@ const router = createRouter({
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
     { path: "/desktop-announcements", component: DesktopAnnouncementsPage, meta: { requiresAdmin: true } },
+    { path: "/web-announcements", component: WebAnnouncementsPage, meta: { requiresAdmin: true } },
   ],
 });
 

@@ -96,6 +96,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: Megaphone,
   },
   {
+    label: "Web 公告",
+    path: "/web-announcements",
+    description: "独立管理网站右下角弹窗公告与自动关闭时间。",
+    group: "安全运营",
+    icon: Megaphone,
+  },
+  {
     label: "审计日志",
     path: "/audit",
     description: "筛选、查看并导出受控审计记录。",

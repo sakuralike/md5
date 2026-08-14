@@ -141,6 +141,11 @@ from password_detective.db.models.verification import (
     VerificationEvidenceEvent,
     VerificationSource,
 )
+from password_detective.db.models.web_announcement import (
+    WebAnnouncement,
+    WebAnnouncementContentType,
+    WebAnnouncementStatus,
+)
 
 __all__ = [
     "AccountActionToken",
@@ -197,6 +202,9 @@ __all__ = [
     "DesktopAnnouncement",
     "DesktopAnnouncementContentType",
     "DesktopAnnouncementStatus",
+    "WebAnnouncement",
+    "WebAnnouncementContentType",
+    "WebAnnouncementStatus",
     "DesktopArchitecture",
     "DesktopRelease",
     "DesktopReleaseChannel",

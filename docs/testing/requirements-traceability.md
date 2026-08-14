@@ -544,3 +544,11 @@
 | 用户等级与权益归属 | `UserLevelsManagement.vue`、`/users#user-levels` | 已移至用户审批，生成不可变草稿 | 发布门禁和真实浏览器滚动定位 |
 | Web 右下角公告弹窗 | `AnnouncementPopup.vue`、`services/announcements.ts` | 已实现并有 SSR/service 测试，Staging 公告接口返回已发布公告 | 浏览器 localStorage、图片和外链真实点击 |
 | 桌面公告读取 | `DesktopApiClient` 基址补全、no-cache 请求、默认代理地址 | 已实现并有 29 个 Windows 测试，公网代理公告接口 HTTP 200 | Release 包在目标 Windows 实机验证 |
+
+
+## 2026-08-14 公告渠道隔离追踪
+
+| 需求 | 模块 | 自动化证据 | 状态 |
+|---|---|---|---|
+| ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts` | 已实现；统一门禁通过，Staging 待回填 |
+| ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts` | 已实现；真实浏览器计时旅程待补 |

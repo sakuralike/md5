@@ -18,7 +18,7 @@ describe("popup announcement service", () => {
     await getPopupAnnouncements(99);
 
     expect(mockedApiRequest).toHaveBeenCalledWith(
-      "/desktop/announcements?limit=20&refresh=1786659200000",
+      "/web/announcements?limit=20&refresh=1786659200000",
       { cache: "no-store" },
     );
   });

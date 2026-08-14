@@ -638,6 +638,43 @@ export interface DesktopAnnouncementImageUploadResponse {
   sha256: string;
 }
 
+export type WebAnnouncementStatus = "draft" | "published" | "archived";
+export type WebAnnouncementContentType = "text" | "html";
+
+export interface WebAnnouncementWriteRequest {
+  title: string;
+  content: string;
+  content_type: WebAnnouncementContentType;
+  image_urls: string[];
+  action_label: string | null;
+  action_url: string | null;
+  sort_order: number;
+  auto_close_seconds: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+export interface WebAnnouncement extends WebAnnouncementWriteRequest {
+  id: string;
+  status: WebAnnouncementStatus;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  archived_at: string | null;
+}
+
+export interface WebAnnouncementListResponse {
+  items: WebAnnouncement[];
+}
+
+export interface WebAnnouncementImageUploadResponse {
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+}
+
 export type StateTransitionSource = "automatic" | "manual";
 export type RewardAdjustmentDirection = "invalidate" | "restore";
 export type RewardKind = "contribution" | "verification";
