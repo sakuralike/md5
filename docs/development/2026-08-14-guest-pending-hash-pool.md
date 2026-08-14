@@ -57,3 +57,10 @@
 - 真实 Staging 四个独立来源验收发现：游客候选达到 `verification-v3` 门槛后，奖励结算仍尝试向空 `user_id` 写入贡献信誉/成长事件，触发数据库非空约束并返回 HTTP 500。
 - 现已将贡献者信誉与成长奖励限定为存在 `user_id` 的首个提交；游客晋级不产生个人贡献奖励，但仍正常结算四名登录验证者的积分、信誉和成长奖励。
 - 新增游客提交达到四人门槛的 API 回归测试，覆盖候选晋级、匿名提交保持空用户归属，以及不生成 `contribution.verified` 奖励事件。
+## 实际 Staging 验收证据（2026-08-14）
+
+- 修复版本 `c19b7ead6d08` 已推送至 `codex/m5-entry-gates` 并部署；备份目录为 `/opt/password-detective-backups/20260814T114617Z-c19b7ead6d08`。
+- Staging 迁移为 `20260814_0037 (head)`，API 2 实例、Worker 3 实例、Scheduler、Web、Admin 和监控服务均已恢复。
+- 四个不同 Docker 网络来源的真实请求结果为 `pending → pending → pending → verified`，独立成功计数为 `1, 2, 3, 4`；游客提交保持 `pending_verification`、`pending_points=0`。
+- 同一来源的多账号确认仍由 `correlation-v1` 合并降权，不能通过伪造账号数量绕过独立性门槛。
+- 登录用户的 Web 提交先进入待验证池；同一用户完成安装实例、挑战和 ECDSA P-256 成功回执后，桌面验收结果为 `verified`、独立成功计数为 `1`，规则版本为 `verification-v3`。
