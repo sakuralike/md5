@@ -631,6 +631,13 @@ export interface DesktopAnnouncementListResponse {
   items: DesktopAnnouncement[];
 }
 
+export interface DesktopAnnouncementImageUploadResponse {
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+}
+
 export type StateTransitionSource = "automatic" | "manual";
 export type RewardAdjustmentDirection = "invalidate" | "restore";
 export type RewardKind = "contribution" | "verification";

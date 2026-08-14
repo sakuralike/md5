@@ -50,7 +50,14 @@ class DesktopAnnouncementWriteRequest(BaseModel):
     def validate_image_urls(cls, values: list[str]) -> list[str]:
         normalized: list[str] = []
         for value in values:
-            url = _validate_http_url(value)
+            candidate = value.strip()
+            if not candidate:
+                continue
+            if candidate.startswith("/api/v1/desktop/announcements/assets/"):
+                if candidate not in normalized:
+                    normalized.append(candidate)
+                continue
+            url = _validate_http_url(candidate)
             if url and url not in normalized:
                 normalized.append(url)
         return normalized
@@ -85,3 +92,10 @@ class DesktopAnnouncementResponse(BaseModel):
 
 class DesktopAnnouncementListResponse(BaseModel):
     items: list[DesktopAnnouncementResponse]
+
+
+class DesktopAnnouncementImageUploadResponse(BaseModel):
+    url: str
+    content_type: str
+    size_bytes: int
+    sha256: str

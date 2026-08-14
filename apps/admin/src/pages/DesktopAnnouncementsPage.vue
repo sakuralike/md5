@@ -20,6 +20,7 @@ import {
   listDesktopAnnouncements,
   publishDesktopAnnouncement,
   updateDesktopAnnouncement,
+  uploadDesktopAnnouncementImage,
   type DesktopAnnouncementDraft,
 } from "../services/desktopAnnouncements";
 import { useAdminAuthStore } from "../stores/auth";
@@ -30,9 +31,17 @@ const selectedId = ref<string | null>(null);
 const draft = ref<DesktopAnnouncementDraft>(emptyDraft());
 const loading = ref(true);
 const busy = ref(false);
+const uploadBusy = ref(false);
 const error = ref("");
+const uploadError = ref("");
 const success = ref("");
 const selected = computed(() => items.value.find((item) => item.id === selectedId.value) ?? null);
+const imageUrls = computed(() =>
+  draft.value.imageUrlsText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean),
+);
 
 onMounted(() => void load());
 
@@ -64,6 +73,7 @@ function selectItem(item: DesktopAnnouncement): void {
     endsAt: item.ends_at ? item.ends_at.slice(0, 16) : "",
   };
   error.value = "";
+  uploadError.value = "";
   success.value = "";
 }
 
@@ -71,6 +81,7 @@ function resetDraft(): void {
   selectedId.value = null;
   draft.value = emptyDraft();
   error.value = "";
+  uploadError.value = "";
   success.value = "";
 }
 
@@ -84,6 +95,46 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+async function handleImageUpload(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  input.value = "";
+  if (files.length === 0) return;
+  uploadError.value = "";
+
+  const current = imageUrls.value;
+  if (current.length + files.length > 8) {
+    uploadError.value = "单条公告最多上传 8 张图片";
+    return;
+  }
+  const invalid = files.find(
+    (file) => !["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024,
+  );
+  if (invalid) {
+    uploadError.value = "图片仅支持 PNG、JPEG、WebP，单张不能超过 5 MB";
+    return;
+  }
+
+  uploadBusy.value = true;
+  try {
+    const uploaded: string[] = [];
+    for (const file of files) {
+      const result = await uploadDesktopAnnouncementImage(auth.accessToken, file);
+      uploaded.push(result.url);
+    }
+    draft.value.imageUrlsText = [...current, ...uploaded].join("\n");
+    success.value = `已上传 ${uploaded.length} 张公告图片，请保存草稿。`;
+  } catch (caught) {
+    uploadError.value = caught instanceof Error ? caught.message : "公告图片上传失败";
+  } finally {
+    uploadBusy.value = false;
+  }
+}
+
+function removeImage(url: string): void {
+  draft.value.imageUrlsText = imageUrls.value.filter((item) => item !== url).join("\n");
 }
 
 async function save(): Promise<void> {
@@ -149,14 +200,14 @@ function statusLabel(status: DesktopAnnouncement["status"]): string {
         <div class="space-y-3">
           <div class="flex flex-wrap gap-2"><Badge>桌面端运营</Badge><Badge variant="outline">公告管理</Badge></div>
           <h1 class="text-3xl font-semibold tracking-tight">桌面端公告管理</h1>
-          <p class="max-w-3xl text-muted-foreground">维护桌面端右侧公告栏，支持文字、HTML 说明、图片轮播、跳转按钮、排序和投放时间窗。发布、归档与编辑均写入审计日志。</p>
+          <p class="max-w-3xl text-muted-foreground">发布到桌面端右侧公告区，支持纯文本、受控 HTML、图片轮播和跳转按钮。</p>
         </div>
-        <div class="flex gap-2"><Button variant="outline" :disabled="loading || busy" @click="load">刷新</Button><Button :disabled="busy" @click="resetDraft">新建公告</Button></div>
+        <Button type="button" variant="outline" @click="resetDraft">新建公告</Button>
       </div>
     </header>
 
-    <div v-if="error" role="alert" class="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{{ error }}</div>
-    <div v-if="success" role="status" class="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">{{ success }}</div>
+    <p v-if="error" class="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{{ error }}</p>
+    <p v-if="success" class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-700">{{ success }}</p>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <section class="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
@@ -165,13 +216,13 @@ function statusLabel(status: DesktopAnnouncement["status"]): string {
         <div v-else-if="items.length === 0" class="mt-6 rounded-xl border border-dashed p-6 text-sm text-muted-foreground">还没有桌面端公告记录。</div>
         <div v-else class="mt-5 space-y-2">
           <Button v-for="item in items" :key="item.id" type="button" variant="ghost" class="h-auto w-full justify-start rounded-xl border p-4 text-left" :class="selectedId === item.id ? 'border-primary bg-primary/5' : 'border-border'" @click="selectItem(item)">
-            <span class="block w-full"><span class="flex items-start justify-between gap-3"><strong class="line-clamp-2">{{ item.title }}</strong><Badge :variant="item.status === 'published' ? 'default' : 'outline'">{{ statusLabel(item.status) }}</Badge></span><span class="mt-2 block line-clamp-2 text-sm font-normal text-muted-foreground">{{ item.content }}</span><span class="mt-3 block text-xs font-normal text-muted-foreground">修订 {{ item.revision }} · 排序 {{ item.sort_order }}</span></span>
+            <span class="block w-full"><span class="flex items-start justify-between gap-3"><strong class="line-clamp-2">{{ item.title }}</strong><Badge :variant="item.status === 'published' ? 'default' : 'outline'">{{ statusLabel(item.status) }}</Badge></span><span class="mt-2 block line-clamp-2 text-sm font-normal text-muted-foreground">{{ item.content }}</span><span class="mt-3 block text-xs font-normal text-muted-foreground">修订 {{ item.revision }} · 图片 {{ item.image_urls.length }} 张 · 排序 {{ item.sort_order }}</span></span>
           </Button>
         </div>
       </section>
 
       <section class="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
-        <div class="flex items-start justify-between gap-4"><div><h2 class="text-lg font-semibold">{{ selected ? "编辑公告" : "新建公告草稿" }}</h2><p class="text-sm text-muted-foreground">HTML 只用于受控文本展示，图片地址需使用 HTTPS 或 HTTP。</p></div><Badge v-if="selected" variant="outline">{{ statusLabel(selected.status) }}</Badge></div>
+        <div class="flex items-start justify-between gap-4"><div><h2 class="text-lg font-semibold">{{ selected ? "编辑公告" : "新建公告草稿" }}</h2><p class="text-sm text-muted-foreground">图片上传后会生成受保护的静态资源地址，桌面端下次刷新即可加载。</p></div><Badge v-if="selected" variant="outline">{{ statusLabel(selected.status) }}</Badge></div>
         <form class="mt-5 space-y-5" @submit.prevent="save">
           <div class="space-y-2"><Label for="announcement-title">标题</Label><Input id="announcement-title" v-model="draft.title" maxlength="128" placeholder="例如：桌面端验证规则更新" /></div>
           <div class="space-y-2"><Label for="announcement-content">正文</Label><Textarea id="announcement-content" v-model="draft.content" class="min-h-40" maxlength="20000" placeholder="支持文本或受控 HTML 内容" /></div>
@@ -179,13 +230,25 @@ function statusLabel(status: DesktopAnnouncement["status"]): string {
             <div class="space-y-2"><Label for="announcement-content-type">内容类型</Label><Select v-model="draft.contentType"><SelectTrigger id="announcement-content-type"><SelectValue placeholder="选择内容类型" /></SelectTrigger><SelectContent><SelectItem value="text">纯文本</SelectItem><SelectItem value="html">HTML</SelectItem></SelectContent></Select></div>
             <div class="space-y-2"><Label for="announcement-order">排序</Label><Input id="announcement-order" v-model.number="draft.sortOrder" type="number" /></div>
           </div>
-          <div class="space-y-2"><Label for="announcement-images">图片地址（每行一条，可选）</Label><Textarea id="announcement-images" v-model="draft.imageUrlsText" class="min-h-24" placeholder="https://synthetic.example/notice.png" /></div>
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3"><Label for="announcement-images">公告图片</Label><span class="text-xs text-muted-foreground">PNG/JPEG/WebP，单张不超过 5 MB，最多 8 张</span></div>
+            <Input id="announcement-images" type="file" accept="image/png,image/jpeg,image/webp" multiple :disabled="uploadBusy || selected?.status === 'archived'" @change="handleImageUpload" />
+            <p v-if="uploadBusy" class="text-sm text-muted-foreground">正在上传图片，请稍候…</p>
+            <p v-if="uploadError" class="text-sm text-destructive">{{ uploadError }}</p>
+            <div v-if="imageUrls.length" class="grid gap-3 sm:grid-cols-2">
+              <div v-for="url in imageUrls" :key="url" class="overflow-hidden rounded-xl border bg-muted/20">
+                <img :src="url" alt="公告图片预览" class="h-32 w-full object-cover" />
+                <div class="flex items-center justify-between gap-2 p-2"><span class="truncate text-xs text-muted-foreground">{{ url }}</span><Button type="button" variant="ghost" size="sm" :disabled="selected?.status === 'archived'" @click="removeImage(url)">移除</Button></div>
+              </div>
+            </div>
+            <Textarea v-model="draft.imageUrlsText" class="min-h-20" placeholder="也可以手动填写 HTTP(S) 图片地址；每行一条" />
+          </div>
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-2"><Label for="announcement-action-label">按钮文字（可选）</Label><Input id="announcement-action-label" v-model="draft.actionLabel" maxlength="64" /></div>
             <div class="space-y-2"><Label for="announcement-action-url">按钮地址（可选）</Label><Input id="announcement-action-url" v-model="draft.actionUrl" placeholder="https://synthetic.example" /></div>
           </div>
           <div class="grid gap-4 sm:grid-cols-2"><div class="space-y-2"><Label for="announcement-starts">开始时间（可选）</Label><Input id="announcement-starts" v-model="draft.startsAt" type="datetime-local" /></div><div class="space-y-2"><Label for="announcement-ends">结束时间（可选）</Label><Input id="announcement-ends" v-model="draft.endsAt" type="datetime-local" /></div></div>
-          <div class="flex flex-wrap gap-2"><Button type="submit" :disabled="busy || selected?.status === 'archived'">{{ busy ? "处理中…" : "保存草稿" }}</Button><Button v-if="selected && selected.status !== 'published' && selected.status !== 'archived'" type="button" variant="secondary" :disabled="busy" @click="publish">发布公告</Button><Button v-if="selected && selected.status !== 'archived'" type="button" variant="outline" :disabled="busy" @click="archive">归档</Button></div>
+          <div class="flex flex-wrap gap-2"><Button type="submit" :disabled="busy || uploadBusy || selected?.status === 'archived'">{{ busy ? "处理中…" : "保存草稿" }}</Button><Button v-if="selected && selected.status !== 'published' && selected.status !== 'archived'" type="button" variant="secondary" :disabled="busy || uploadBusy" @click="publish">发布公告</Button><Button v-if="selected && selected.status !== 'archived'" type="button" variant="outline" :disabled="busy || uploadBusy" @click="archive">归档</Button></div>
         </form>
       </section>
     </div>

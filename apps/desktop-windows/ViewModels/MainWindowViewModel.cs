@@ -92,13 +92,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public string ClientVersionText => ClientVersion;
-    public string SelectedFile { get => _selectedFile; private set { SetField(ref _selectedFile, value); NotifyCommands(); } }
-    public string ServerBaseUrl { get => _serverBaseUrl; set { SetField(ref _serverBaseUrl, value); NotifyCommands(); } }
+    public string SelectedFile
+    {
+        get => _selectedFile;
+        private set
+        {
+            if (!SetField(ref _selectedFile, value)) return;
+            OnPropertyChanged(nameof(SelectedFileDisplay));
+            NotifyCommands();
+        }
+    }
+    public string SelectedFileDisplay => string.IsNullOrWhiteSpace(SelectedFile)
+        ? "将压缩包拖到此处或点击浏览"
+        : SelectedFile;
+    public string ServerBaseUrl
+    {
+        get => _serverBaseUrl;
+        set
+        {
+            if (!SetField(ref _serverBaseUrl, value)) return;
+            OnPropertyChanged(nameof(CurrentAnnouncementImageUrl));
+            NotifyCommands();
+        }
+    }
     public string LoginName { get => _loginName; set { SetField(ref _loginName, value); NotifyCommands(); } }
     public string TotpCode { get => _totpCode; set => SetField(ref _totpCode, value); }
     public string CandidateId { get => _candidateId; set { SetField(ref _candidateId, value); NotifyCommands(); } }
     public string Status { get => _status; private set => SetField(ref _status, value); }
     public string InstallationStatus { get => _installationStatus; private set => SetField(ref _installationStatus, value); }
+    public string InstallationIdText => _identity?.InstallationId.ToString("N") ?? "正在生成…";
     public string AccountStatus { get => _accountStatus; private set => SetField(ref _accountStatus, value); }
     public double Progress { get => _progress; private set => SetField(ref _progress, value); }
     public FileFingerprintResult? Result { get => _result; private set => SetField(ref _result, value); }
@@ -124,7 +146,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string AnnouncementStatus { get => _announcementStatus; private set => SetField(ref _announcementStatus, value); }
     public string CurrentAnnouncementTitle => CurrentAnnouncement?.Title ?? "暂无公告";
     public string CurrentAnnouncementContent => StripHtml(CurrentAnnouncement?.Content ?? "暂无桌面端公告");
-    public string? CurrentAnnouncementImageUrl => CurrentAnnouncement?.ImageUrls.FirstOrDefault();
+    public string? CurrentAnnouncementImageUrl => ResolveAnnouncementAssetUrl(CurrentAnnouncement?.ImageUrls.FirstOrDefault());
     public bool HasAnnouncementAction => CurrentAnnouncement?.ActionUrl is not null;
 
     public RelayCommand SelectFileCommand { get; }
@@ -353,6 +375,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RewardStatus = profile.Level.Current.Entitlements.CanSubmit ? "具备提交与贡献奖励资格" : "当前等级暂不具备提交资格";
     }
 
+    private string? ResolveAnnouncementAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute)) return absolute.ToString();
+        if (!Uri.TryCreate(ServerBaseUrl, UriKind.Absolute, out var server)) return value;
+        return new Uri(server, value).ToString();
+    }
+
     private void NotifyAnnouncementProperties()
     {
         OnPropertyChanged(nameof(CurrentAnnouncement));
@@ -530,6 +560,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task RegisterInstallationAsync(DesktopSession session, CancellationToken cancellationToken)
     {
         _identity ??= await _identityService.GetOrCreateAsync(cancellationToken);
+        OnPropertyChanged(nameof(InstallationIdText));
         var registration = await _apiClient.RegisterInstallationAsync(
             session.ServerBaseUrl,
             session.AccessToken,
@@ -595,6 +626,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void UpdateInstallationStatus(InstallationIdentity identity)
     {
+        OnPropertyChanged(nameof(InstallationIdText));
         InstallationStatus =
             $"安装实例 {identity.InstallationId:D} · 公钥指纹 {identity.PublicKeyFingerprint[..16]}…";
     }

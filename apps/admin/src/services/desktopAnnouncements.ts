@@ -1,5 +1,6 @@
 import type {
   DesktopAnnouncement,
+  DesktopAnnouncementImageUploadResponse,
   DesktopAnnouncementListResponse,
   DesktopAnnouncementWriteRequest,
 } from "@password-detective/api-contract";
@@ -41,8 +42,14 @@ export function buildDesktopAnnouncementPayload(
     .map((item) => item.trim())
     .filter(Boolean);
   if (imageUrls.length > 8) throw new Error("单条公告最多配置 8 张图片");
-  if (imageUrls.some((item) => !/^https?:\/\//i.test(item))) {
-    throw new Error("图片地址必须使用 HTTP(S)，每行一个地址");
+  if (
+    imageUrls.some(
+      (item) =>
+        !/^https?:\/\//i.test(item) &&
+        !item.startsWith("/api/v1/desktop/announcements/assets/"),
+    )
+  ) {
+    throw new Error("图片地址必须使用 HTTP(S) 或已上传的公告图片地址");
   }
   const startsAt = toIsoOrNull(draft.startsAt);
   const endsAt = toIsoOrNull(draft.endsAt);
@@ -87,4 +94,19 @@ export function publishDesktopAnnouncement(token: string, id: string): Promise<D
 
 export function archiveDesktopAnnouncement(token: string, id: string): Promise<DesktopAnnouncement> {
   return apiRequest(`/admin/desktop-announcements/${id}/archive`, { method: "POST" }, token);
+}
+
+export function uploadDesktopAnnouncementImage(
+  token: string,
+  file: File,
+): Promise<DesktopAnnouncementImageUploadResponse> {
+  return apiRequest(
+    "/admin/desktop-announcements/images",
+    {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    },
+    token,
+  );
 }

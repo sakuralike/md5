@@ -94,3 +94,40 @@ def test_desktop_announcement_rejects_invalid_window_and_action_url(client):
         "/api/v1/admin/desktop-announcements", headers=headers, json=payload
     )
     assert invalid_window.status_code == 422
+
+def test_desktop_announcement_image_upload_and_public_fetch(client):
+    headers = _admin_headers(client)
+    image = b"\x89PNG\r\n\x1a\nsynthetic-image"
+    uploaded = client.post(
+        "/api/v1/admin/desktop-announcements/images",
+        headers={**headers, "Content-Type": "image/png"},
+        content=image,
+    )
+    assert uploaded.status_code == 201
+    payload = uploaded.json()
+    assert payload["url"].startswith("/api/v1/desktop/announcements/assets/")
+    assert payload["content_type"] == "image/png"
+    assert payload["size_bytes"] == len(image)
+
+    created_payload = _announcement_payload()
+    created_payload["image_urls"] = [payload["url"]]
+    created = client.post(
+        "/api/v1/admin/desktop-announcements", headers=headers, json=created_payload
+    )
+    assert created.status_code == 201
+    assert created.json()["image_urls"] == [payload["url"]]
+
+    fetched = client.get(payload["url"])
+    assert fetched.status_code == 200
+    assert fetched.headers["content-type"] == "image/png"
+    assert fetched.content == image
+
+
+def test_desktop_announcement_image_upload_rejects_mismatched_signature(client):
+    headers = _admin_headers(client)
+    response = client.post(
+        "/api/v1/admin/desktop-announcements/images",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"not-a-jpeg",
+    )
+    assert response.status_code == 422

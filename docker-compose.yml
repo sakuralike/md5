@@ -80,6 +80,7 @@ services:
       AUTO_CREATE_TABLES: "false"
       SITE_ASSET_STORAGE_PATH: /var/lib/password-detective/site-assets
       SITE_LOGO_MAX_BYTES: ${SITE_LOGO_MAX_BYTES:-2097152}
+      DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES: ${DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES:-5242880}
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
     volumes:
       - desktop-update-data:/var/lib/password-detective/desktop-updates

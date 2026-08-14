@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     desktop_max_installations_per_user: int = Field(default=10, ge=1, le=100)
     site_asset_storage_path: str = ".local/site-assets"
     site_logo_max_bytes: int = Field(default=2_097_152, ge=1_024, le=10_485_760)
+    desktop_announcement_image_max_bytes: int = Field(default=5_242_880, ge=1_024, le=20_971_520)
     desktop_update_storage_path: str = ".local/desktop-updates"
     desktop_update_max_artifact_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
