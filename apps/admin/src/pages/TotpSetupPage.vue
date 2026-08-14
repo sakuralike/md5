@@ -38,10 +38,10 @@ async function confirm(): Promise<void> {
 <template>
   <section class="panel stack">
     <div>
-      <div class="eyebrow">管理员安全基线</div>
+      <div class="eyebrow">可选安全增强</div>
       <h1>绑定 TOTP</h1>
     </div>
-    <p class="muted">请将下方合成配置录入认证器。密钥只在本次设置流程中显示。</p>
+    <p class="muted">TOTP 默认关闭。需要增强账号安全时，可将下方配置录入认证器；密钥只在本次设置流程中显示。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div v-if="secret" class="stack">
       <div class="field">

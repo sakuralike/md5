@@ -14,7 +14,6 @@ const REMEMBERED_LOGIN_KEY = "password_detective_admin_remembered_login_v1";
 interface StoredAdminSession {
   accessToken: string;
   user: User;
-  enrollmentOnly: boolean;
 }
 
 interface TotpSetupResponse {
@@ -52,26 +51,21 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
   const parsed = readStoredSession();
   const accessToken = ref(parsed?.accessToken ?? "");
   const user = ref<User | null>(parsed?.user ?? null);
-  const enrollmentOnly = ref(parsed?.enrollmentOnly ?? false);
   const busy = ref(false);
   const error = ref("");
   const router = useRouter();
-  const isAuthenticated = computed(
-    () =>
-      Boolean(accessToken.value && user.value && isPrivilegedRole(user.value.role)) &&
-      !enrollmentOnly.value,
+  const isAuthenticated = computed(() =>
+    Boolean(accessToken.value && user.value && isPrivilegedRole(user.value.role)),
   );
 
-  function persist(tokens: BrowserTokenResponse, onlyForEnrollment = false): void {
+  function persist(tokens: BrowserTokenResponse): void {
     accessToken.value = tokens.access_token;
     user.value = tokens.user;
-    enrollmentOnly.value = onlyForEnrollment;
     sessionStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         accessToken: tokens.access_token,
         user: tokens.user,
-        enrollmentOnly: onlyForEnrollment,
       } satisfies StoredAdminSession),
     );
   }
@@ -79,7 +73,6 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
   function clear(): void {
     accessToken.value = "";
     user.value = null;
-    enrollmentOnly.value = false;
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
@@ -104,11 +97,6 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
         throw new Error("该账号没有管理端访问权限");
       }
       persistRememberedLogin(loginName, rememberLogin);
-      if (!tokens.user.totp_enabled) {
-        persist(tokens, true);
-        await router.push("/totp-setup");
-        return;
-      }
       await apiRequest<{ status: string; mfa: string }>(
         "/admin/access-check",
         {},
@@ -133,11 +121,7 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
         clear();
         return null;
       }
-      const onlyForEnrollment = !tokens.user.totp_enabled;
-      persist(tokens, onlyForEnrollment);
-      if (onlyForEnrollment && router.currentRoute.value.path !== "/totp-setup") {
-        await router.push("/totp-setup");
-      }
+      persist(tokens);
       return tokens.access_token;
     } catch {
       clear();
@@ -184,7 +168,6 @@ export const useAdminAuthStore = defineStore("admin-auth", () => {
     user,
     busy,
     error,
-    enrollmentOnly,
     isAuthenticated,
     getRememberedLogin: readRememberedLogin,
     login,

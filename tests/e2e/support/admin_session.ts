@@ -38,7 +38,7 @@ export async function loginWorkflowAdmin(page: Page): Promise<WorkflowAdminCrede
   await page.goto("/login");
   await page.getByLabel("用户名或邮箱").fill(credentials.username);
   await page.getByLabel("密码", { exact: true }).fill(credentials.password);
-  await page.getByLabel("动态验证码（已启用时必填）").fill(currentTotp(credentials.totpSecret));
+  await page.getByLabel("动态验证码（仅已启用 TOTP 时填写）").fill(currentTotp(credentials.totpSecret));
   await page.getByRole("button", { name: "登录管理端" }).click();
   await expect(page).toHaveURL(/\/$/u);
   await expect(page.getByRole("heading", { name: "真实指标仪表盘" })).toBeVisible();
@@ -66,7 +66,7 @@ export async function bootstrapSeededAdminSession(page: Page, rawRefreshToken: s
   await page.evaluate((session) => {
     sessionStorage.setItem(
       "password_detective_admin_session_v2",
-      JSON.stringify({ accessToken: session.access_token, user: session.user, enrollmentOnly: false }),
+      JSON.stringify({ accessToken: session.access_token, user: session.user }),
     );
   }, tokens);
   await page.reload();

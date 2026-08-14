@@ -15,7 +15,8 @@ describe("TotpSetupPage", () => {
     const html = await renderToString(createSSRApp(TotpSetupPage));
 
     expect(html).toContain("绑定 TOTP");
-    expect(html).toContain("管理员安全基线");
+    expect(html).toContain("可选安全增强");
+    expect(html).toContain("TOTP 默认关闭");
     expect(html).toContain("密钥只在本次设置流程中显示");
     expect(html).not.toContain("synthetic-secret");
   });

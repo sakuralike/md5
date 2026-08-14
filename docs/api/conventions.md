@@ -16,7 +16,7 @@
 | 用户 Web | `/web/auth/login`、`/web/auth/refresh`、`/web/auth/logout` | `pd_web_refresh` HttpOnly Cookie |
 | 管理端 | `/admin/auth/login`、`/admin/auth/refresh`、`/admin/auth/logout` | `pd_admin_refresh` HttpOnly Cookie |
 
-浏览器 Cookie 使用 `SameSite=Lax` 和受限 Path；生产必须启用 `Secure`。浏览器认证端点校验 `Origin` 白名单。管理端登录需要特权角色，管理功能还要求已绑定并在当前会话验证 TOTP。
+浏览器 Cookie 使用 `SameSite=Lax` 和受限 Path；生产必须启用 `Secure`。浏览器认证端点校验 `Origin` 白名单。管理端登录需要特权角色；所有账号的 TOTP 默认关闭，未启用账号可使用密码登录和访问管理功能，已启用账号必须在登录与后续管理访问中完成动态码验证。本文表格中的“条件 MFA”均指该规则。
 
 账号安全接口包括：
 
@@ -120,9 +120,9 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/candidates?status=...&query=...&page=1&page_size=20` | 审核员/管理员 + MFA | 可按状态、候选/存档 ID 或指纹摘要筛选；只返回指纹、状态、计数和时间，不返回任何候选秘密字段 |
-| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + MFA | 返回聚合证据、关联组与动态限权摘要、不可变证据修订、自动/人工状态时间线和奖励校正时间线；仅展示账号/反馈标识与信号类型，不返回 IP、安装哈希、关联键或候选秘密 |
-| `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；同事务写入人工状态事件、必要的首次验证奖励与奖励校正，并返回实际校正汇总 |
+| `GET` | `/admin/candidates?status=...&query=...&page=1&page_size=20` | 审核员/管理员 + 条件 MFA | 可按状态、候选/存档 ID 或指纹摘要筛选；只返回指纹、状态、计数和时间，不返回任何候选秘密字段 |
+| `GET` | `/admin/candidates/{candidate_id}` | 审核员/管理员 + 条件 MFA | 返回聚合证据、关联组与动态限权摘要、不可变证据修订、自动/人工状态时间线和奖励校正时间线；仅展示账号/反馈标识与信号类型，不返回 IP、安装哈希、关联键或候选秘密 |
+| `POST` | `/admin/candidates/{candidate_id}/transition` | 审核员/管理员 + 条件 MFA | 必须使用 16～128 字符 `Idempotency-Key`；使用 `moderation-v1` 状态矩阵和受控原因码；同事务写入人工状态事件、必要的首次验证奖励与奖励校正，并返回实际校正汇总 |
 
 人工原因码按目标状态约束：`manual.evidence_conflict`/`manual.security_hold` 仅用于隔离，`manual.invalid_candidate`/`manual.policy_violation` 仅用于拒绝，`manual.review_reopened` 仅用于重新进入待验证，`manual.verified_by_review` 仅用于人工通过，`manual.quarantine_cleared` 用于解除隔离后进入待验证或已验证。
 
@@ -137,11 +137,11 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 | `POST` | `/trust/account-appeals` | 登录 | 仅为当前账号创建 `account_appeal`；客户端不得指定目标账号；受控原因/恢复动作；每日最多 3 次；要求 `Idempotency-Key` |
 | `GET` | `/trust/cases?kind=...&page=1&page_size=20` | 登录 | 只返回当前用户提交的案件，不接受任意 reporter 参数 |
 | `GET` | `/trust/cases/{case_id}` | 登录 | 仅案件提交者可读取详情与事件；其他用户统一返回 `404 trust.case_not_found` |
-| `GET` | `/admin/trust-cases?kind=...&status=...&query=...` | 审核员/管理员 + MFA | 按类型、状态、案件/候选/目标账号/风险告警 ID 或提交人用户名筛选统一队列 |
-| `GET` | `/admin/trust-cases/{case_id}` | 审核员/管理员 + MFA | 返回案件详情和不可变事件时间线 |
-| `POST` | `/admin/trust-cases/{case_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key` 和 `expected_version`；状态和结果码必须匹配；写入不可变事件与脱敏审计；不承担最终原子副作用 |
-| `POST` | `/admin/trust-cases/{case_id}/assign` | 审核员/管理员 + MFA | 要求 `Idempotency-Key` 和 `expected_version`；仅允许 `open/in_review` 案件指派给启用的审核员/管理员；写入负责人前后快照与脱敏审计 |
-| `POST` | `/admin/trust-cases/{case_id}/reopen` | 审核员/管理员 + MFA | 要求 `Idempotency-Key` 和 `expected_version`；仅允许 `resolved/dismissed` 案件以 `admin.reopened` 重开；清理负责人和结论元数据 |
+| `GET` | `/admin/trust-cases?kind=...&status=...&query=...` | 审核员/管理员 + 条件 MFA | 按类型、状态、案件/候选/目标账号/风险告警 ID 或提交人用户名筛选统一队列 |
+| `GET` | `/admin/trust-cases/{case_id}` | 审核员/管理员 + 条件 MFA | 返回案件详情和不可变事件时间线 |
+| `POST` | `/admin/trust-cases/{case_id}/transition` | 审核员/管理员 + 条件 MFA | 要求 `Idempotency-Key` 和 `expected_version`；状态和结果码必须匹配；写入不可变事件与脱敏审计；不承担最终原子副作用 |
+| `POST` | `/admin/trust-cases/{case_id}/assign` | 审核员/管理员 + 条件 MFA | 要求 `Idempotency-Key` 和 `expected_version`；仅允许 `open/in_review` 案件指派给启用的审核员/管理员；写入负责人前后快照与脱敏审计 |
+| `POST` | `/admin/trust-cases/{case_id}/reopen` | 审核员/管理员 + 条件 MFA | 要求 `Idempotency-Key` 和 `expected_version`；仅允许 `resolved/dismissed` 案件以 `admin.reopened` 重开；清理负责人和结论元数据 |
 
 案件状态为 `open/in_review/resolved/dismissed`，每次管理写操作都递增 `trust_cases.version`。主体类型为 `candidate/account/risk_alert`，数据库约束保证候选、目标账号和风险告警三个引用中恰有一个与主体类型一致。通用 `transition` 不再承担关闭案件重开；关闭案件必须调用专用 `reopen`。进入 `in_review` 时保留已明确指派的负责人，否则由服务端设置当前操作者为负责人。版本不匹配统一返回 `409 trust.case_version_conflict`，响应只提供当前版本、状态和负责人 ID。账号申诉最终结论、候选/账号状态副作用、奖励/信誉补偿和结果通知 Outbox 仍等待 WP2 原子处置接口。
 
@@ -151,14 +151,14 @@ Web 提供 `/verify-email`、`/forgot-password` 和 `/reset-password` 页面。�
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/risk-alerts?kind=...&severity=...&status=...&assigned_to_id=...&overdue=true&query=...` | 审核员/管理员 + MFA | 按告警类型、严重度、状态、负责人、实时 SLA 超时和告警/候选 ID 查询；仅返回聚合证据 |
-| `GET` | `/admin/risk-alerts/operators` | 审核员/管理员 + MFA | 仅返回状态正常、角色为 moderator/admin 且启用 TOTP 的可指派人员 |
-| `GET` | `/admin/risk-alerts/{alert_id}` | 审核员/管理员 + MFA | 返回告警投影、SLA、负责人、不可变时间线和通知投递状态，不返回邮箱、IP、安装标识或关联键 |
-| `POST` | `/admin/risk-alerts/{alert_id}/assign` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；只允许指派给可用 MFA 操作者，写入负责人变化事件、通知 Outbox 和最小披露审计 |
-| `POST` | `/admin/risk-alerts/{alert_id}/transition` | 审核员/管理员 + MFA | 要求 `Idempotency-Key`；目标状态与结果码强匹配，写入不可变事件、通知 Outbox 与最小披露审计 |
-| `GET` | `/admin/risk-alerts/notification-deliveries/metrics` | 审核员/管理员 + MFA | 返回状态总量、近 24 小时失败数、最老待发送时长和按提供商聚合指标 |
-| `GET` | `/admin/risk-alerts/notification-deliveries?status=...&kind=...&provider=...` | 审核员/管理员 + MFA | 分页筛选投递记录；不返回邮箱、Webhook 地址、密钥或原始载荷 |
-| `POST` | `/admin/risk-alerts/notification-deliveries/{notification_id}/replay` | 审核员/管理员 + MFA | 仅失败记录；要求 `Idempotency-Key`、受控原因和端点限流，复用原 Outbox 与去重键并写审计 |
+| `GET` | `/admin/risk-alerts?kind=...&severity=...&status=...&assigned_to_id=...&overdue=true&query=...` | 审核员/管理员 + 条件 MFA | 按告警类型、严重度、状态、负责人、实时 SLA 超时和告警/候选 ID 查询；仅返回聚合证据 |
+| `GET` | `/admin/risk-alerts/operators` | 审核员/管理员 + 条件 MFA | 仅返回状态正常、角色为 moderator/admin 且启用 TOTP 的可指派人员 |
+| `GET` | `/admin/risk-alerts/{alert_id}` | 审核员/管理员 + 条件 MFA | 返回告警投影、SLA、负责人、不可变时间线和通知投递状态，不返回邮箱、IP、安装标识或关联键 |
+| `POST` | `/admin/risk-alerts/{alert_id}/assign` | 审核员/管理员 + 条件 MFA | 要求 `Idempotency-Key`；只允许指派给可用 MFA 操作者，写入负责人变化事件、通知 Outbox 和最小披露审计 |
+| `POST` | `/admin/risk-alerts/{alert_id}/transition` | 审核员/管理员 + 条件 MFA | 要求 `Idempotency-Key`；目标状态与结果码强匹配，写入不可变事件、通知 Outbox 与最小披露审计 |
+| `GET` | `/admin/risk-alerts/notification-deliveries/metrics` | 审核员/管理员 + 条件 MFA | 返回状态总量、近 24 小时失败数、最老待发送时长和按提供商聚合指标 |
+| `GET` | `/admin/risk-alerts/notification-deliveries?status=...&kind=...&provider=...` | 审核员/管理员 + 条件 MFA | 分页筛选投递记录；不返回邮箱、Webhook 地址、密钥或原始载荷 |
+| `POST` | `/admin/risk-alerts/notification-deliveries/{notification_id}/replay` | 审核员/管理员 + 条件 MFA | 仅失败记录；要求 `Idempotency-Key`、受控原因和端点限流，复用原 Outbox 与去重键并写审计 |
 
 `risk-alert-v1` 在 15 分钟内观察到至少 3 个独立当前失败组且失败权重不低于 3.0 时创建 `failure_surge/high` 告警。同一候选、类型和规则版本只保留一个活跃告警；处置状态为 `open/acknowledged/resolved`，已解决告警可受控重开。`risk-alert-sla-v1` 固定 15 分钟首次响应和 240 分钟解决目标；告警保存规则版本和绝对截止时间，Worker 扫描响应/解决超时并通过事务 Outbox 有限重试投递。首版不自动封禁账号或扣减信誉。
 
@@ -170,11 +170,11 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 |---|---|---|---|
 | `GET` | `/desktop/updates/check?current_version=...&channel=stable&platform=windows&architecture=x64` | 匿名 | 仅选择相同目标的最高 `published` 版本；返回最低版本、强制升级、发布说明、SHA-256、大小、完整性结果、合法分发确认和后端下载地址 |
 | `GET` | `/desktop/updates/{release_id}/download` | 匿名 | 仅下载 `published` 且存储完整性仍匹配的制品；响应含不可变缓存、ETag、`Digest` 和 `nosniff` |
-| `POST` | `/admin/desktop-releases` | 管理员 + MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256、合法分发确认和不少于 20 字符的合法性声明 |
-| `GET` | `/admin/desktop-releases` | 管理员 + MFA | 列出发布生命周期、上传状态和下载计数 |
-| `PUT` | `/admin/desktop-releases/{release_id}/artifact` | 管理员 + MFA | 请求体为安装包原始字节流；按声明大小和 SHA-256 流式校验，通过后原子替换 |
-| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + MFA | 重新核验存储制品的大小与 SHA-256；仅当合法分发确认和合法性声明齐全时发布 |
-| `POST` | `/admin/desktop-releases/{release_id}/withdraw` | 管理员 + MFA | 将版本标记为 `withdrawn`，检查与下载入口立即停止提供该制品 |
+| `POST` | `/admin/desktop-releases` | 管理员 + 条件 MFA | 创建 `draft` 发布记录；版本目标唯一，声明文件名、大小、SHA-256、合法分发确认和不少于 20 字符的合法性声明 |
+| `GET` | `/admin/desktop-releases` | 管理员 + 条件 MFA | 列出发布生命周期、上传状态和下载计数 |
+| `PUT` | `/admin/desktop-releases/{release_id}/artifact` | 管理员 + 条件 MFA | 请求体为安装包原始字节流；按声明大小和 SHA-256 流式校验，通过后原子替换 |
+| `POST` | `/admin/desktop-releases/{release_id}/publish` | 管理员 + 条件 MFA | 重新核验存储制品的大小与 SHA-256；仅当合法分发确认和合法性声明齐全时发布 |
+| `POST` | `/admin/desktop-releases/{release_id}/withdraw` | 管理员 + 条件 MFA | 将版本标记为 `withdrawn`，检查与下载入口立即停止提供该制品 |
 
 发布生命周期固定为 `draft → published → withdrawn`。同一通道、平台、架构和版本只能存在一条记录；已发布记录不可覆盖制品，修复必须使用新版本。`stable` 与 `beta` 通道严格隔离，当前桌面 UI 默认只查询 `stable/windows/x64|arm64`。
 
@@ -186,7 +186,7 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/dashboard/summary?window_hours=24` | 审核员/管理员 + MFA | 时间窗口 1～720 小时；返回真实聚合指标、生成时间和治理队列快照 |
+| `GET` | `/admin/dashboard/summary?window_hours=24` | 审核员/管理员 + 条件 MFA | 时间窗口 1～720 小时；返回真实聚合指标、生成时间和治理队列快照 |
 
 指标口径：
 
@@ -201,9 +201,9 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/audit-logs` | 审核员/管理员 + MFA | 分页 1～100 条；支持动作、结果、目标类型、操作者、请求号、时间范围和综合搜索 |
-| `GET` | `/admin/audit-logs/{audit_id}` | 审核员/管理员 + MFA | 返回操作者用户名/角色和服务端再次脱敏的详情，不返回邮箱或秘密材料 |
-| `GET` | `/admin/audit-logs/export` | 审核员/管理员 + MFA | 当前筛选同步 CSV；单次最多 5000 条、每分钟最多 10 次，并写入 `admin.audit.export` |
+| `GET` | `/admin/audit-logs` | 审核员/管理员 + 条件 MFA | 分页 1～100 条；支持动作、结果、目标类型、操作者、请求号、时间范围和综合搜索 |
+| `GET` | `/admin/audit-logs/{audit_id}` | 审核员/管理员 + 条件 MFA | 返回操作者用户名/角色和服务端再次脱敏的详情，不返回邮箱或秘密材料 |
+| `GET` | `/admin/audit-logs/export` | 审核员/管理员 + 条件 MFA | 当前筛选同步 CSV；单次最多 5000 条、每分钟最多 10 次，并写入 `admin.audit.export` |
 
 - `created_from` 不得晚于 `created_to`；非法范围返回 `422 admin.audit.invalid_time_range`。
 - 综合搜索只覆盖审计 ID、动作、目标类型、目标 ID、请求号和操作者用户名；通配符按普通字符转义。
@@ -215,8 +215,8 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/users?status=...&role=...&query=...&page=1&page_size=20` | **管理员 + MFA** | 仅 `admin` 角色可访问；按账号状态、角色、用户 ID/用户名/邮箱筛选；列表只返回脱敏邮箱和会话/MFA摘要 |
-| `GET` | `/admin/users/{user_id}` | **管理员 + MFA** | 返回账号治理统计、积分余额、声望事件、提交/案件和隐私队列计数；不存在返回 `404 admin.user_not_found` |
+| `GET` | `/admin/users?status=...&role=...&query=...&page=1&page_size=20` | **管理员 + 条件 MFA** | 仅 `admin` 角色可访问；按账号状态、角色、用户 ID/用户名/邮箱筛选；列表只返回脱敏邮箱和会话/MFA摘要 |
+| `GET` | `/admin/users/{user_id}` | **管理员 + 条件 MFA** | 返回账号治理统计、积分余额、声望事件、提交/案件和隐私队列计数；不存在返回 `404 admin.user_not_found` |
 
 - 用户治理读取接口不返回完整邮箱、密码、TOTP 密钥、刷新令牌、IP 或秘密材料；邮箱查询只用于服务端筛选，响应使用首字符掩码。
 - 列表按注册时间和用户 ID 倒序分页；活跃会话定义为未撤销且未过期，会话总数与最近活跃时间只用于治理摘要。
@@ -226,11 +226,11 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/settings/versions?page=1&page_size=20` | 仅管理员 + MFA | 返回不可变版本摘要和 `published_version_id`；不返回秘密配置 |
-| `GET` | `/admin/settings/versions/{version_id}` | 仅管理员 + MFA | 返回固定 Schema 快照及相对基线的逐字段差异 |
-| `POST` | `/admin/settings/versions` | 仅管理员 + MFA | 要求 `Idempotency-Key`、`expected_base_version_id` 和结构化原因；只创建草稿，不直接生效 |
-| `POST` | `/admin/settings/versions/{version_id}/publish` | 仅管理员 + MFA | 要求 `admin_settings_governance` 一次性再认证、预期当前发布版本、原因码和幂等键 |
-| `POST` | `/admin/settings/versions/{version_id}/rollback` | 仅管理员 + MFA | 只能选择历史已发布版本；创建新的发布版本，不改写目标历史快照 |
+| `GET` | `/admin/settings/versions?page=1&page_size=20` | 仅管理员 + 条件 MFA | 返回不可变版本摘要和 `published_version_id`；不返回秘密配置 |
+| `GET` | `/admin/settings/versions/{version_id}` | 仅管理员 + 条件 MFA | 返回固定 Schema 快照及相对基线的逐字段差异 |
+| `POST` | `/admin/settings/versions` | 仅管理员 + 条件 MFA | 要求 `Idempotency-Key`、`expected_base_version_id` 和结构化原因；只创建草稿，不直接生效 |
+| `POST` | `/admin/settings/versions/{version_id}/publish` | 仅管理员 + 条件 MFA | 要求 `admin_settings_governance` 一次性再认证、预期当前发布版本、原因码和幂等键 |
+| `POST` | `/admin/settings/versions/{version_id}/rollback` | 仅管理员 + 条件 MFA | 只能选择历史已发布版本；创建新的发布版本，不改写目标历史快照 |
 
 首批 `operational-v1` 快照仅允许每日揭示配额、再认证 TTL、账号删除宽限期、桌面最低版本和升级下载缓存五个字段。Pydantic 在草稿入口执行类型、范围和版本格式校验；不接受任意键值、秘密、令牌或自由文本。
 
@@ -275,9 +275,9 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `POST` | `/admin/auth/reauthenticate` | 仅管理员 + MFA | 当前密码与 TOTP；按 `purpose` 签发短时、一次性、当前会话族绑定的 `admin_user_governance` 或 `admin_settings_governance` 凭据；响应 `no-store` |
-| `PATCH` | `/admin/users/{user_id}/status` | 仅管理员 + MFA | 仅 `active/disabled`；要求一次性再认证、结构化原因、`expected_status` 和 `Idempotency-Key`；停用自动撤销活跃会话 |
-| `POST` | `/admin/users/{user_id}/sessions/revoke` | 仅管理员 + MFA | 要求一次性再认证、结构化原因、`expected_active_session_count` 和 `Idempotency-Key` |
+| `POST` | `/admin/auth/reauthenticate` | 仅管理员 + 条件 MFA | 当前密码与 TOTP；按 `purpose` 签发短时、一次性、当前会话族绑定的 `admin_user_governance` 或 `admin_settings_governance` 凭据；响应 `no-store` |
+| `PATCH` | `/admin/users/{user_id}/status` | 仅管理员 + 条件 MFA | 仅 `active/disabled`；要求一次性再认证、结构化原因、`expected_status` 和 `Idempotency-Key`；停用自动撤销活跃会话 |
+| `POST` | `/admin/users/{user_id}/sessions/revoke` | 仅管理员 + 条件 MFA | 要求一次性再认证、结构化原因、`expected_active_session_count` 和 `Idempotency-Key` |
 
 管理员治理凭据不得由公开用户再认证接口签发。对象级规则禁止管理员处置自身、其他管理员和服务账号；状态或会话计数冲突返回 `409` 且不消费凭据。成功响应可由幂等记录重放，但同一再认证令牌用于新的幂等请求必须返回 `401`。审计详情不得包含当前密码、TOTP、再认证令牌、完整邮箱、完整 IP 或自由文本。
 
@@ -287,10 +287,10 @@ Outbox 类型为 `detected/assigned/acknowledgement_overdue/resolution_overdue/r
 
 | 方法 | 路径 | 认证 | 关键约束 |
 |---|---|---|---|
-| `GET` | `/admin/role-change-requests` | 管理员 + 当前会话 MFA | 分页、状态筛选、最小披露 |
-| `POST` | `/admin/users/{user_id}/role-change-requests` | 管理员 + 当前会话 MFA | 用户治理一次性再认证、固定转换矩阵、对象保护、幂等和审计 |
-| `POST` | `/admin/role-change-requests/{request_id}/approve` | 不同管理员 + 当前会话 MFA | 请求状态与目标角色乐观并发、一次性再认证、批准后撤销目标活跃会话 |
-| `POST` | `/admin/role-change-requests/{request_id}/reject` | 不同管理员 + 当前会话 MFA | 请求状态乐观并发、一次性再认证、幂等和审计 |
+| `GET` | `/admin/role-change-requests` | 管理员 + 当前会话条件 MFA | 分页、状态筛选、最小披露 |
+| `POST` | `/admin/users/{user_id}/role-change-requests` | 管理员 + 当前会话条件 MFA | 用户治理一次性再认证、固定转换矩阵、对象保护、幂等和审计 |
+| `POST` | `/admin/role-change-requests/{request_id}/approve` | 不同管理员 + 当前会话条件 MFA | 请求状态与目标角色乐观并发、一次性再认证、批准后撤销目标活跃会话 |
+| `POST` | `/admin/role-change-requests/{request_id}/reject` | 不同管理员 + 当前会话条件 MFA | 请求状态乐观并发、一次性再认证、幂等和审计 |
 
 当前允许 `user`、`trusted_contributor`、`moderator` 之间的固定转换；管理员、服务账号、申请人自身、非正常账号和批量处置不允许进入该入口。请求响应不得包含密码、TOTP、再认证令牌或完整邮箱。
 

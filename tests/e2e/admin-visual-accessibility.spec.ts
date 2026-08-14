@@ -27,7 +27,7 @@ test.describe("Admin 移动端视觉与键盘门禁", () => {
     await page.goto("/login");
     const loginInput = page.getByLabel("用户名或邮箱");
     const passwordInput = page.getByLabel("密码", { exact: true });
-    const totpInput = page.getByLabel("动态验证码（已启用时必填）");
+    const totpInput = page.getByLabel("动态验证码（仅已启用 TOTP 时填写）");
     const rememberLogin = page.getByRole("checkbox", { name: "记住登录账号" });
     const submitButton = page.getByRole("button", { name: "登录管理端" });
 

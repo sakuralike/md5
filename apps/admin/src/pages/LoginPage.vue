@@ -36,10 +36,10 @@ async function submit(): Promise<void> {
         <h2 class="bg-gradient-to-r from-primary to-accent bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">安全运营从受控身份开始。</h2>
       </div>
       <p class="mx-auto max-w-xl text-sm leading-7 text-muted-foreground lg:mx-0">
-        管理员登录、强制 TOTP、多角色治理与关键写操作审计均在独立入口完成。首次登录仅开放受限的 TOTP 绑定流程。页面不会展示候选密码、刷新令牌或真实个人信息。
+        管理员登录、可选 TOTP、多角色治理与关键写操作审计均在独立入口完成。TOTP 默认关闭，可按需主动启用；启用后登录必须填写动态验证码。页面不会展示候选密码、刷新令牌或真实个人信息。
       </p>
       <ul class="mx-auto flex max-w-xl flex-wrap justify-center gap-2 text-xs text-muted-foreground lg:mx-0 lg:justify-start">
-        <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">TOTP 强制门禁</li>
+        <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">TOTP 默认关闭</li>
         <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">不可变审计</li>
         <li class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 shadow-sm backdrop-blur-xl">最小披露</li>
       </ul>
@@ -54,7 +54,7 @@ async function submit(): Promise<void> {
       <header class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-[0.22em] text-primary">安全会话</p>
         <h1 id="admin-login-title" class="text-2xl font-semibold tracking-tight sm:text-3xl">管理端登录</h1>
-        <p class="text-sm leading-6 text-muted-foreground">使用用户名或邮箱与密码登录；特权账号必须绑定 TOTP，首次登录会进入受限绑定流程，后续登录必须填写动态验证码。</p>
+        <p class="text-sm leading-6 text-muted-foreground">使用用户名或邮箱与密码登录；TOTP 默认关闭，仅已主动启用的账号需要填写动态验证码。</p>
       </header>
 
       <div v-if="auth.error" class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert" aria-live="assertive">
@@ -70,7 +70,7 @@ async function submit(): Promise<void> {
         <Input id="password" v-model="password" class="h-11" type="password" autocomplete="current-password" required />
       </div>
       <div class="flex flex-col gap-2">
-        <Label for="totp">动态验证码（已启用时必填）</Label>
+        <Label for="totp">动态验证码（仅已启用 TOTP 时填写）</Label>
         <Input id="totp" v-model="totpCode" class="h-11" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="8" />
       </div>
       <div class="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-3">
@@ -83,7 +83,7 @@ async function submit(): Promise<void> {
       <Button class="h-11 w-full" type="submit" :disabled="auth.busy">
         {{ auth.busy ? "验证中…" : "登录管理端" }}
       </Button>
-      <p class="text-center text-xs leading-5 text-muted-foreground">仅使用分配给你的管理员账号；不要共享密码或动态验证码。</p>
+      <p class="text-center text-xs leading-5 text-muted-foreground">仅使用分配给你的管理员账号；不要共享密码，已启用 TOTP 时也不要共享动态验证码。</p>
     </form>
   </section>
 </template>

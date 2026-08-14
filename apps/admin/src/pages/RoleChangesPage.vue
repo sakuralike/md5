@@ -164,7 +164,7 @@ onMounted(() => void loadRequests());
           </div>
           <Badge variant="secondary">不持久化</Badge>
         </div>
-        <p class="text-sm text-muted-foreground">申请、批准和拒绝均需要当前密码与 TOTP；浏览器不会保存凭据。</p>
+        <p class="text-sm text-muted-foreground">申请、批准和拒绝均需要当前密码；账号已启用 TOTP 时还需动态验证码，浏览器不会保存凭据。</p>
         <div class="grid gap-4 sm:grid-cols-2">
           <Label class="grid gap-2">
             当前密码

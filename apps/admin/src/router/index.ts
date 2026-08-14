@@ -25,7 +25,7 @@ const router = createRouter({
   },
   routes: [
     { path: "/login", component: LoginPage },
-    { path: "/totp-setup", component: TotpSetupPage, meta: { requiresEnrollment: true } },
+    { path: "/totp-setup", component: TotpSetupPage, meta: { requiresAdmin: true } },
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
     { path: "/users", component: UserGovernancePage, meta: { requiresAdmin: true } },
@@ -42,8 +42,7 @@ const router = createRouter({
 });
 
 interface RoutedAdminSession {
-  enrollmentOnly?: boolean;
-  user?: { totp_enabled?: boolean };
+  accessToken?: string;
 }
 
 function readSession(): RoutedAdminSession | null {
@@ -59,13 +58,7 @@ function readSession(): RoutedAdminSession | null {
 
 router.beforeEach((to) => {
   const session = readSession();
-  const enrollmentOnly = Boolean(
-    session && (session.enrollmentOnly || session.user?.totp_enabled === false),
-  );
-  if (to.meta.requiresEnrollment && (!session || !enrollmentOnly)) return "/login";
-  if (to.meta.requiresAdmin && (!session || enrollmentOnly)) {
-    return enrollmentOnly ? "/totp-setup" : "/login";
-  }
+  if (to.meta.requiresAdmin && !session?.accessToken) return "/login";
   return true;
 });
 

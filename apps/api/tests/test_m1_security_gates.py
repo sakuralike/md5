@@ -215,7 +215,7 @@ def test_idempotency_key_conflict_is_rejected(client):
     assert conflict.json()["code"] == "request.idempotency_conflict"
 
 
-def test_admin_totp_enrollment_and_login_enforcement(client):
+def test_admin_totp_is_optional_until_enabled_and_enforced_afterward(client):
     assert _register(client).status_code == 201
     initial_login = _login(client)
     assert initial_login.status_code == 200
@@ -229,8 +229,8 @@ def test_admin_totp_enrollment_and_login_enforcement(client):
         db.commit()
 
     before_setup = client.get("/api/v1/admin/access-check", headers=headers)
-    assert before_setup.status_code == 403
-    assert before_setup.json()["code"] == "auth.totp_setup_required"
+    assert before_setup.status_code == 200
+    assert before_setup.json()["mfa"] == "not_verified"
 
     setup = client.post("/api/v1/admin/totp/setup", headers=headers)
     assert setup.status_code == 200

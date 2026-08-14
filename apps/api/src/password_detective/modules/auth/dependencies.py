@@ -91,13 +91,7 @@ def require_roles(*roles: UserRole):
 
 
 def _require_privileged_mfa(principal: Principal) -> Principal:
-    if not principal.user.totp_enabled:
-        raise AppError(
-            "auth.totp_setup_required",
-            "管理账号必须先绑定 TOTP",
-            status_code=403,
-        )
-    if not principal.mfa_verified:
+    if principal.user.totp_enabled and not principal.mfa_verified:
         raise AppError("auth.totp_required", "管理账号必须完成 TOTP 验证", status_code=403)
     return principal
 
@@ -108,12 +102,12 @@ def require_admin_mfa(
         Depends(require_roles(UserRole.MODERATOR, UserRole.ADMIN)),
     ],
 ) -> Principal:
-    """管理端准入：所有特权账号必须绑定并完成 TOTP 验证。"""
+    """管理端准入：TOTP 默认关闭；账号启用后必须完成验证。"""
     return _require_privileged_mfa(principal)
 
 
 def require_admin_only_mfa(
     principal: Annotated[Principal, Depends(require_roles(UserRole.ADMIN))],
 ) -> Principal:
-    """系统管理员准入：管理员必须绑定并完成 TOTP 验证。"""
+    """系统管理员准入：未启用 TOTP 可直接准入，启用后必须完成验证。"""
     return _require_privileged_mfa(principal)

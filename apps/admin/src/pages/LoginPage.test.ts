@@ -20,7 +20,7 @@ describe("LoginPage", () => {
     expect(html).toContain("用户名或邮箱");
     expect(html).toContain("密码");
     expect(html).toContain("动态验证码");
-    expect(html).toContain("TOTP 强制门禁");
+    expect(html).toContain("TOTP 默认关闭");
     expect(html).toContain("记住登录账号");
     expect(html).toContain("不保存明文密码");
     expect(html).toContain("登录管理端");

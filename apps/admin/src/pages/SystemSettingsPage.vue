@@ -511,7 +511,7 @@ onMounted(() => {
           </div>
           <h1 class="text-3xl font-semibold tracking-tight text-slate-950">系统配置治理工作台</h1>
           <p class="text-sm leading-6 text-slate-600">
-            通过不可变版本完成草稿、差异预览、发布与回滚；所有管理员必须完成 TOTP 动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
+            通过不可变版本完成草稿、差异预览、发布与回滚；账号已启用 TOTP 时必须完成动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
           </p>
         </div>
         <Button variant="outline" :disabled="loading || emailLoading" @click="refreshPage">
