@@ -4,7 +4,9 @@ from sqlalchemy import select
 
 from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
+from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.submission import Submission
+from password_detective.db.models.user_growth_event import UserGrowthEvent
 from password_detective.db.models.verification import (
     CandidateFeedback,
     FeedbackOutcome,
@@ -83,6 +85,38 @@ def _verify_with_four(client, candidate_id: str, key_prefix: str):
         assert response.json()["candidate_status"] == ("verified" if index == 4 else "pending")
     assert response is not None
     return response
+
+
+def test_guest_submission_promotes_without_submitter_rewards(client):
+    created = _create_candidate(
+        client,
+        {"User-Agent": "SyntheticGuestVerificationBrowser/1.0"},
+        "guest-verification-submission-0001",
+    )
+    assert created["submitter_kind"] == "guest"
+    assert created["pending_points"] == 0
+
+    verified = _verify_with_four(
+        client,
+        created["candidate_id"],
+        "guest-verification",
+    )
+    assert verified.json()["candidate_status"] == "verified"
+    assert verified.json()["snapshot"]["independent_success_count"] == 4
+
+    with client.app.state.database.session_factory() as db:
+        candidate = db.get(PasswordCandidate, created["candidate_id"])
+        submission = db.get(Submission, created["submission_id"])
+        assert candidate is not None and candidate.status == CandidateStatus.VERIFIED
+        assert submission is not None and submission.user_id is None
+        assert db.query(PointsLedger).count() == 4
+        reputation_events = list(db.scalars(select(ReputationEvent)))
+        growth_events = list(db.scalars(select(UserGrowthEvent)))
+        assert len(reputation_events) == 4
+        assert sum(event.event_type == "verification.accepted" for event in reputation_events) == 4
+        assert not any(event.event_type == "contribution.verified" for event in reputation_events)
+        assert sum(event.event_type == "verification.accepted" for event in growth_events) == 4
+        assert not any(event.event_type == "contribution.verified" for event in growth_events)
 
 
 def test_four_independent_success_feedbacks_verify_and_settle_points(client):

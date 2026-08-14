@@ -467,22 +467,23 @@ def settle_first_verification_rewards(
 
     if submissions:
         first_submission = submissions[0]
-        apply_reputation_event(
-            db,
-            user_id=first_submission.user_id,
-            amount=CONTRIBUTION_VERIFIED_REPUTATION,
-            event_type="contribution.verified",
-            reference_id=first_submission.id,
-            reason_code="reputation.valid_contribution",
-        )
-        record_growth_event(
-            db,
-            user_id=first_submission.user_id,
-            amount=VERIFIED_CONTRIBUTION_GROWTH,
-            event_type="contribution.verified",
-            reference_id=first_submission.id,
-            reason_code="growth.valid_contribution",
-        )
+        if first_submission.user_id is not None:
+            apply_reputation_event(
+                db,
+                user_id=first_submission.user_id,
+                amount=CONTRIBUTION_VERIFIED_REPUTATION,
+                event_type="contribution.verified",
+                reference_id=first_submission.id,
+                reason_code="reputation.valid_contribution",
+            )
+            record_growth_event(
+                db,
+                user_id=first_submission.user_id,
+                amount=VERIFIED_CONTRIBUTION_GROWTH,
+                event_type="contribution.verified",
+                reference_id=first_submission.id,
+                reason_code="growth.valid_contribution",
+            )
 
     successful_feedbacks = list(
         db.scalars(
