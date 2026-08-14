@@ -5,6 +5,7 @@ import {
   History,
   LayoutDashboard,
   MonitorUp,
+  Megaphone,
   Settings2,
   ShieldAlert,
   SlidersHorizontal,
@@ -78,6 +79,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "管理桌面端制品、发布与撤回。",
     group: "安全运营",
     icon: MonitorUp,
+  },
+  {
+    label: "桌面公告",
+    path: "/desktop-announcements",
+    description: "管理桌面端公告、图片轮播与投放时间窗。",
+    group: "安全运营",
+    icon: Megaphone,
   },
   {
     label: "审计日志",

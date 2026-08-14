@@ -33,6 +33,12 @@ from password_detective.modules.auth.router import router as auth_router
 from password_detective.modules.community.admin_router import admin_router as community_admin_router
 from password_detective.modules.community.boards import ensure_seed_boards
 from password_detective.modules.community.router import router as community_router
+from password_detective.modules.desktop_announcements.router import (
+    admin_router as desktop_announcements_admin_router,
+)
+from password_detective.modules.desktop_announcements.router import (
+    public_router as desktop_announcements_router,
+)
 from password_detective.modules.desktop_updates.router import (
     admin_router as desktop_updates_admin_router,
 )
@@ -147,6 +153,8 @@ def create_app(
     app.include_router(reputation_router, prefix="/api/v1")
     app.include_router(risk_alerts_router, prefix="/api/v1")
     app.include_router(desktop_router, prefix="/api/v1")
+    app.include_router(desktop_announcements_router, prefix="/api/v1")
+    app.include_router(desktop_announcements_admin_router, prefix="/api/v1")
     app.include_router(desktop_updates_router, prefix="/api/v1")
     app.include_router(desktop_updates_admin_router, prefix="/api/v1")
     return app

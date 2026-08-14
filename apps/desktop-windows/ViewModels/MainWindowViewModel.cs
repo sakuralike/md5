@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -14,7 +15,7 @@ namespace PasswordDetective.Desktop.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private const string ClientVersion = "0.1.0";
+    public const string ClientVersion = "0.1.0";
     private readonly IFileFingerprintService _fingerprintService;
     private readonly IArchiveVerificationService _archiveVerificationService;
     private readonly IInstallationIdentityService _identityService;
@@ -42,6 +43,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string? _updateDownloadUrl;
     private FileFingerprintResult? _result;
     private ArchiveVerificationResult? _verificationResult;
+    private string _apiConnectionStatus = "正在检测 API…";
+    private string _nickname = "未登录";
+    private string _email = "-";
+    private string _userGroup = "游客";
+    private string _level = "-";
+    private string _contributionCount = "0";
+    private string _points = "0";
+    private string _dailyQuota = "-";
+    private string _totalHashes = "0";
+    private string _rewardStatus = "登录后显示贡献奖励状态。";
+    private string _archiveSummary = "尚未选择压缩包";
+    private int _currentAnnouncementIndex;
+    private string _announcementStatus = "正在加载公告…";
 
     public MainWindowViewModel(
         IFileFingerprintService fingerprintService,
@@ -69,9 +83,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, CanCheckForUpdates);
         OpenUpdateDownloadCommand = new RelayCommand(OpenUpdateDownload, CanOpenUpdateDownload);
+        TestConnectivityCommand = new AsyncRelayCommand(TestConnectivityAsync, CanCheckForUpdates);
+        RefreshAnnouncementsCommand = new AsyncRelayCommand(RefreshAnnouncementsAsync, () => !IsBusy && !string.IsNullOrWhiteSpace(ServerBaseUrl));
+        PreviousAnnouncementCommand = new RelayCommand(ShowPreviousAnnouncement, () => Announcements.Count > 1);
+        NextAnnouncementCommand = new RelayCommand(ShowNextAnnouncement, () => Announcements.Count > 1);
+        OpenAnnouncementActionCommand = new RelayCommand(OpenAnnouncementAction, () => HasAnnouncementAction && !IsBusy);
         _ = InitializeAsync();
     }
 
+    public string ClientVersionText => ClientVersion;
     public string SelectedFile { get => _selectedFile; private set { SetField(ref _selectedFile, value); NotifyCommands(); } }
     public string ServerBaseUrl { get => _serverBaseUrl; set { SetField(ref _serverBaseUrl, value); NotifyCommands(); } }
     public string LoginName { get => _loginName; set { SetField(ref _loginName, value); NotifyCommands(); } }
@@ -88,6 +108,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string UpgradeNotice { get => _upgradeNotice; private set => SetField(ref _upgradeNotice, value); }
     public string UpdateStatus { get => _updateStatus; private set => SetField(ref _updateStatus, value); }
     public bool HasUpdate => _updateDownloadUrl is not null;
+    public string ApiConnectionStatus { get => _apiConnectionStatus; private set => SetField(ref _apiConnectionStatus, value); }
+    public string Nickname { get => _nickname; private set => SetField(ref _nickname, value); }
+    public string Email { get => _email; private set => SetField(ref _email, value); }
+    public string UserGroup { get => _userGroup; private set => SetField(ref _userGroup, value); }
+    public string Level { get => _level; private set => SetField(ref _level, value); }
+    public string ContributionCount { get => _contributionCount; private set => SetField(ref _contributionCount, value); }
+    public string Points { get => _points; private set => SetField(ref _points, value); }
+    public string DailyQuota { get => _dailyQuota; private set => SetField(ref _dailyQuota, value); }
+    public string TotalHashes { get => _totalHashes; private set => SetField(ref _totalHashes, value); }
+    public string RewardStatus { get => _rewardStatus; private set => SetField(ref _rewardStatus, value); }
+    public string ArchiveSummary { get => _archiveSummary; private set => SetField(ref _archiveSummary, value); }
+    public ObservableCollection<DesktopAnnouncement> Announcements { get; } = new();
+    public DesktopAnnouncement? CurrentAnnouncement => Announcements.Count == 0 ? null : Announcements[Math.Clamp(_currentAnnouncementIndex, 0, Announcements.Count - 1)];
+    public string AnnouncementStatus { get => _announcementStatus; private set => SetField(ref _announcementStatus, value); }
+    public string CurrentAnnouncementTitle => CurrentAnnouncement?.Title ?? "暂无公告";
+    public string CurrentAnnouncementContent => StripHtml(CurrentAnnouncement?.Content ?? "暂无桌面端公告");
+    public string? CurrentAnnouncementImageUrl => CurrentAnnouncement?.ImageUrls.FirstOrDefault();
+    public bool HasAnnouncementAction => CurrentAnnouncement?.ActionUrl is not null;
 
     public RelayCommand SelectFileCommand { get; }
     public AsyncRelayCommand CalculateCommand { get; }
@@ -99,6 +137,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public RelayCommand CancelCommand { get; }
     public AsyncRelayCommand CheckForUpdatesCommand { get; }
     public RelayCommand OpenUpdateDownloadCommand { get; }
+    public AsyncRelayCommand TestConnectivityCommand { get; }
+    public AsyncRelayCommand RefreshAnnouncementsCommand { get; }
+    public RelayCommand PreviousAnnouncementCommand { get; }
+    public RelayCommand NextAnnouncementCommand { get; }
+    public RelayCommand OpenAnnouncementActionCommand { get; }
 
     public void SetCandidatePassword(string password) { _candidatePassword = password; NotifyCommands(); }
     public void SetLoginPassword(string password) { _loginPassword = password; NotifyCommands(); }
@@ -109,6 +152,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             _identity = await _identityService.GetOrCreateAsync();
             UpdateInstallationStatus(_identity);
+            await RefreshAnnouncementsCoreAsync(CancellationToken.None);
+            await TestConnectivityCoreAsync(CancellationToken.None);
             _session = await _sessionStore.LoadAsync();
             if (_session is not null)
             {
@@ -116,6 +161,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 try
                 {
                     await EnsureSessionAndRegistrationAsync(CancellationToken.None);
+                    await LoadTrustProfileAsync(_session, CancellationToken.None);
                 }
                 catch (DesktopApiException exception)
                 {
@@ -230,6 +276,118 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     private bool CanCheckForUpdates() => !IsBusy && !string.IsNullOrWhiteSpace(ServerBaseUrl);
+
+    private async Task TestConnectivityAsync()
+    {
+        BeginOperation("正在测试 API 连通性…");
+        try
+        {
+            await TestConnectivityCoreAsync(_cancellation!.Token);
+            Status = "API 连通性测试成功。";
+        }
+        catch (Exception exception)
+        {
+            ApiConnectionStatus = "API 连接失败";
+            Status = $"API 连通性测试失败：{exception.Message}";
+        }
+        finally { EndOperation(); }
+    }
+
+    private async Task TestConnectivityCoreAsync(CancellationToken cancellationToken)
+    {
+        await _apiClient.TestConnectivityAsync(ServerBaseUrl, cancellationToken);
+        ApiConnectionStatus = "API 连接正常";
+    }
+
+    private async Task RefreshAnnouncementsAsync()
+    {
+        BeginOperation("正在刷新桌面端公告…");
+        try
+        {
+            await RefreshAnnouncementsCoreAsync(_cancellation!.Token);
+            Status = AnnouncementStatus;
+        }
+        catch (Exception exception)
+        {
+            AnnouncementStatus = "公告暂不可用";
+            Status = $"公告刷新失败：{exception.Message}";
+        }
+        finally { EndOperation(); }
+    }
+
+    private async Task RefreshAnnouncementsCoreAsync(CancellationToken cancellationToken)
+    {
+        var response = await _apiClient.GetAnnouncementsAsync(ServerBaseUrl, cancellationToken);
+        Announcements.Clear();
+        foreach (var item in response.Items) Announcements.Add(item);
+        _currentAnnouncementIndex = 0;
+        AnnouncementStatus = Announcements.Count == 0 ? "暂无公告" : $"共 {Announcements.Count} 条公告";
+        NotifyAnnouncementProperties();
+    }
+
+    private void ShowPreviousAnnouncement()
+    {
+        if (Announcements.Count == 0) return;
+        _currentAnnouncementIndex = (_currentAnnouncementIndex - 1 + Announcements.Count) % Announcements.Count;
+        NotifyAnnouncementProperties();
+    }
+
+    private void ShowNextAnnouncement()
+    {
+        if (Announcements.Count == 0) return;
+        _currentAnnouncementIndex = (_currentAnnouncementIndex + 1) % Announcements.Count;
+        NotifyAnnouncementProperties();
+    }
+
+    private async Task LoadTrustProfileAsync(DesktopSession session, CancellationToken cancellationToken)
+    {
+        var profile = await _apiClient.GetTrustProfileAsync(session.ServerBaseUrl, session.AccessToken, cancellationToken);
+        Nickname = session.Username;
+        Email = _session?.Username ?? "-";
+        UserGroup = "登录用户";
+        Level = profile.Level.Current.Name;
+        ContributionCount = profile.Contributions.Total.ToString("N0");
+        Points = profile.Points.Available.ToString("N0");
+        DailyQuota = profile.Level.Current.Entitlements.DailyRevealQuota.ToString("N0");
+        TotalHashes = profile.Contributions.Verified.ToString("N0");
+        RewardStatus = profile.Level.Current.Entitlements.CanSubmit ? "具备提交与贡献奖励资格" : "当前等级暂不具备提交资格";
+    }
+
+    private void NotifyAnnouncementProperties()
+    {
+        OnPropertyChanged(nameof(CurrentAnnouncement));
+        OnPropertyChanged(nameof(CurrentAnnouncementTitle));
+        OnPropertyChanged(nameof(CurrentAnnouncementContent));
+        OnPropertyChanged(nameof(CurrentAnnouncementImageUrl));
+        OnPropertyChanged(nameof(HasAnnouncementAction));
+        PreviousAnnouncementCommand.NotifyCanExecuteChanged();
+        NextAnnouncementCommand.NotifyCanExecuteChanged();
+        OpenAnnouncementActionCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OpenAnnouncementAction()
+    {
+        var actionUrl = CurrentAnnouncement?.ActionUrl;
+        if (string.IsNullOrWhiteSpace(actionUrl)
+            || !Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            Status = "公告跳转地址无效。";
+            return;
+        }
+
+        try
+        {
+            _externalUriLauncher.Open(uri);
+            Status = "已在系统浏览器中打开公告链接。";
+        }
+        catch (Exception)
+        {
+            Status = "无法打开公告链接，请稍后重试。";
+        }
+    }
+
+    private static string StripHtml(string value) => System.Text.RegularExpressions.Regex.Replace(value, "<[^>]+>", string.Empty).Trim();
     private bool CanOpenUpdateDownload() => !IsBusy && _updateDownloadUrl is not null;
 
     private async Task LoginAsync()
@@ -245,6 +403,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await _sessionStore.SaveAsync(_session, _cancellation.Token);
             AccountStatus = $"已登录：{_session.Username} · 正在注册安装身份";
             await RegisterInstallationAsync(_session, _cancellation.Token);
+            await LoadTrustProfileAsync(_session, _cancellation.Token);
             AccountStatus = $"已登录：{_session.Username} · 令牌由 Windows DPAPI 保护";
             Status = "登录成功，本机安装公钥已注册。";
         }
@@ -445,8 +604,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _sessionStore.Clear();
         _session = null;
         AccountStatus = "未登录";
+        Nickname = "未登录";
+        Email = "-";
+        UserGroup = "游客";
+        Level = "-";
+        RewardStatus = "登录后显示贡献奖励状态。";
         Status = "本地令牌已清除。";
         NotifyCommands();
+    }
+
+    public void AcceptFile(string filePath)
+    {
+        if (!File.Exists(filePath) || Path.GetExtension(filePath).ToLowerInvariant() is not (".zip" or ".7z"))
+        {
+            Status = "只支持拖入 ZIP 或 7z 压缩包。";
+            return;
+        }
+        SelectedFile = filePath;
+        ArchiveSummary = $"{Path.GetFileName(filePath)} · {new FileInfo(filePath).Length:N0} 字节";
+        Result = null;
+        VerificationResult = null;
+        Progress = 0;
+        Status = "文件已拖入，可开始本地验证。";
     }
 
     private void SelectFile()
@@ -455,6 +634,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (dialog.ShowDialog() == true)
         {
             SelectedFile = dialog.FileName;
+            ArchiveSummary = $"{Path.GetFileName(dialog.FileName)} · {new FileInfo(dialog.FileName).Length:N0} 字节";
             Result = null;
             VerificationResult = null;
             Progress = 0;
@@ -475,6 +655,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 VerificationResult = await _archiveVerificationService.VerifyAsync(SelectedFile, _candidatePassword, _cancellation!.Token);
                 Status = VerificationResult.Message;
+                ArchiveSummary = $"{Result?.FileName} · {VerificationResult.ArchiveFormat} · {VerificationResult.EntryCount} 个文件";
             }
             else Status = "指纹计算完成；未上传任何文件内容。";
         }
@@ -511,6 +692,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CancelCommand.NotifyCanExecuteChanged();
         CheckForUpdatesCommand.NotifyCanExecuteChanged();
         OpenUpdateDownloadCommand.NotifyCanExecuteChanged();
+        TestConnectivityCommand.NotifyCanExecuteChanged();
+        RefreshAnnouncementsCommand.NotifyCanExecuteChanged();
+        OpenAnnouncementActionCommand.NotifyCanExecuteChanged();
     }
 
     private void OnPropertyChanged(string propertyName) =>

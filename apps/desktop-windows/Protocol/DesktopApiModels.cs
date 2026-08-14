@@ -4,7 +4,46 @@ namespace PasswordDetective.Desktop.Protocol;
 
 public sealed record LoginRequest(string Login, string Password, string? TotpCode);
 
-public sealed record ApiUser(string Id, string Username);
+public sealed record ApiUser(
+    string Id,
+    string Username,
+    string? Email = null,
+    string? Role = null,
+    int ReputationScore = 0,
+    bool TotpEnabled = false);
+
+public sealed record TrustProfileResponse(
+    int ReputationScore,
+    TrustPoints Points,
+    TrustContributions Contributions,
+    TrustLevelProfile Level);
+
+public sealed record TrustPoints(int Available, int Pending, int Reversed);
+
+public sealed record TrustContributions(int Total, int Verified);
+
+public sealed record TrustLevelProfile(TrustLevelSummary Current);
+
+public sealed record TrustLevelSummary(string Code, string Name, TrustLevelEntitlements Entitlements);
+
+public sealed record TrustLevelEntitlements(int DailyRevealQuota, bool CanSubmit);
+
+public sealed record DesktopAnnouncement(
+    string Id,
+    string Title,
+    string Content,
+    string ContentType,
+    IReadOnlyList<string> ImageUrls,
+    string? ActionLabel,
+    string? ActionUrl,
+    int SortOrder,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? EndsAt,
+    string Status,
+    int Revision,
+    DateTimeOffset? PublishedAt);
+
+public sealed record DesktopAnnouncementListResponse(IReadOnlyList<DesktopAnnouncement> Items);
 
 public sealed record TokenResponse(
     string AccessToken,

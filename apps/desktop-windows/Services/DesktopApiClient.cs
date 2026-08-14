@@ -23,6 +23,25 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         _ownsClient = httpClient is null;
     }
 
+    public async Task<bool> TestConnectivityAsync(
+        string serverBaseUrl,
+        CancellationToken cancellationToken = default)
+    {
+        await GetAsync<JsonElement>(serverBaseUrl, "health/ready", cancellationToken);
+        return true;
+    }
+
+    public Task<DesktopAnnouncementListResponse> GetAnnouncementsAsync(
+        string serverBaseUrl,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<DesktopAnnouncementListResponse>(serverBaseUrl, "desktop/announcements", cancellationToken);
+
+    public Task<TrustProfileResponse> GetTrustProfileAsync(
+        string serverBaseUrl,
+        string accessToken,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<TrustProfileResponse>(serverBaseUrl, "me/trust-profile", accessToken, cancellationToken);
+
     public Task<DesktopUpdateCheckResponse> CheckForUpdateAsync(
         string serverBaseUrl,
         string currentVersion,
@@ -101,14 +120,25 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             accessToken,
             cancellationToken);
 
+    private Task<TResponse> GetAsync<TResponse>(
+        string serverBaseUrl,
+        string relativePath,
+        CancellationToken cancellationToken) =>
+        GetAsync<TResponse>(serverBaseUrl, relativePath, null, cancellationToken);
+
     private async Task<TResponse> GetAsync<TResponse>(
         string serverBaseUrl,
         string relativePath,
+        string? accessToken,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             BuildUri(serverBaseUrl, relativePath));
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
         request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
         return await SendAsync<TResponse>(request, cancellationToken);
     }

@@ -1,200 +1,190 @@
 <Window x:Class="PasswordDetective.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="密码侦探社 · 本地验证" Height="900" Width="1020"
-        MinHeight="680" MinWidth="840" WindowStartupLocation="CenterScreen"
-        Background="#F4F7FB">
+        Title="密码侦探社-桌面端v1.0" Height="760" Width="1180" MinHeight="680" MinWidth="980"
+        WindowStartupLocation="CenterScreen" Background="#F2F2F2" AllowDrop="True"
+        DragOver="Window_OnDragOver" Drop="Window_OnDrop">
     <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="Margin" Value="0,0,10,0"/>
-            <Setter Property="Background" Value="#165D8D"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="BorderBrush" Value="#A8A8A8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#222222" />
         </Style>
         <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="12"/>
-            <Setter Property="BorderBrush" Value="#D6DFEB"/>
-            <Setter Property="Background" Value="White"/>
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="BorderBrush" Value="#C8C8C8" />
+            <Setter Property="Background" Value="White" />
         </Style>
         <Style TargetType="PasswordBox">
-            <Setter Property="Padding" Value="12"/>
-            <Setter Property="BorderBrush" Value="#D6DFEB"/>
-            <Setter Property="Background" Value="White"/>
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="BorderBrush" Value="#C8C8C8" />
+            <Setter Property="Background" Value="White" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,2" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Background" Value="#ECECEC" />
+            <Setter Property="BorderBrush" Value="#A8A8A8" />
+            <Setter Property="Foreground" Value="#222222" />
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="Padding" Value="2,3" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#242424" />
         </Style>
     </Window.Resources>
-    <Grid>
+    <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Border Background="#112B46" Padding="34,24">
-            <StackPanel>
-                <TextBlock Text="密码侦探社" Foreground="White" FontSize="26" FontWeight="Bold"/>
-                <TextBlock Text="Windows 本地 ZIP / 7z 密码验证 · 文件内容与候选密码不会上传"
-                           Foreground="#CFE8F6" Margin="0,6,0,0"/>
-            </StackPanel>
+        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D0D0" BorderThickness="1" Padding="10,6">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Border Width="30" Height="30" Background="#9E42E8" CornerRadius="7" Margin="0,0,8,0">
+                        <TextBlock Text="盾" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="密码侦探社 · 桌面端" FontWeight="Bold" FontSize="16" />
+                        <TextBlock Text="本地验证与安全贡献" FontSize="11" Foreground="#777777" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ClientVersionText, StringFormat=版本 {0}}" Foreground="#777777" VerticalAlignment="Center" />
+            </DockPanel>
         </Border>
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="34">
-                <Border Background="#FFF8E7" BorderBrush="#EACB76" BorderThickness="1"
-                        Padding="18" CornerRadius="10">
-                    <StackPanel>
-                        <TextBlock Text="桌面端稳定更新通道" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Text="应用启动时自动检查后端发布清单；升级包仅从后端下载入口获取。"
-                                   Foreground="#6B5A2B" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding UpdateStatus}" Foreground="#7A5B12"
-                                   Margin="0,8,0,0" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                            <Button Content="检查更新" Command="{Binding CheckForUpdatesCommand}"
-                                    Background="#8A6512"/>
-                            <Button Content="下载升级包" Command="{Binding OpenUpdateDownloadCommand}"
-                                    Background="#087A55"
-                                    ToolTip="通过后端下载入口打开已发布升级制品"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
 
-                <Border Background="#EAF4FA" BorderBrush="#B8D8E8" BorderThickness="1"
-                        Margin="0,20,0,0"
-                        Padding="16" CornerRadius="10">
-                    <StackPanel>
-                        <TextBlock Text="本机安装身份" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding InstallationStatus}" Foreground="#45657A"
-                                   Margin="0,5,0,0" TextWrapping="Wrap" FontFamily="Consolas"/>
-                        <Button Content="生成新的安装身份并重新注册"
-                                Command="{Binding RegenerateInstallationCommand}"
-                                HorizontalAlignment="Left" Margin="0,12,0,0"
-                                ToolTip="仅在当前安装身份被撤销、绑定冲突或密钥不一致时启用"/>
-                        <TextBlock Text="{Binding UpgradeNotice}" Foreground="#B54708"
-                                   Margin="0,10,0,0" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Background="White" BorderBrush="#D6DFEB" BorderThickness="1"
-                        Padding="26" CornerRadius="14" Margin="0,20,0,0">
-                    <StackPanel>
-                        <TextBlock Text="服务端登录与安装注册" FontSize="22" FontWeight="SemiBold"/>
-                        <TextBlock Text="登录令牌使用当前 Windows 用户的 DPAPI 加密保存；不会采集硬件序列号或 MAC 地址。"
-                                   Foreground="#667085" Margin="0,8,0,14" TextWrapping="Wrap"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="2*"/><ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="110"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" ToolTip="API 基础地址"/>
-                            <TextBox Grid.Column="2" Text="{Binding LoginName, UpdateSourceTrigger=PropertyChanged}" ToolTip="用户名或邮箱"/>
-                            <PasswordBox x:Name="LoginPasswordBox" Grid.Column="4" PasswordChanged="LoginPasswordBox_OnPasswordChanged" ToolTip="账号密码"/>
-                            <TextBox Grid.Column="6" Text="{Binding TotpCode, UpdateSourceTrigger=PropertyChanged}" ToolTip="管理员 TOTP（普通用户留空）"/>
-                        </Grid>
-                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                            <Button Content="登录并注册安装" Command="{Binding LoginCommand}"/>
-                            <Button Content="清除本地令牌" Command="{Binding LogoutCommand}" Background="#667085"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding AccountStatus}" Foreground="#45657A" Margin="0,10,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Background="White" BorderBrush="#D6DFEB" BorderThickness="1"
-                        Padding="26" CornerRadius="14" Margin="0,20,0,0">
-                    <StackPanel>
-                        <TextBlock Text="1. 选择压缩包" FontSize="22" FontWeight="SemiBold"/>
-                        <TextBlock Text="支持 ZIP 与 7z。客户端只读取本地文件，并限制文件大小、条目数、展开大小、压缩比和验证时长。"
-                                   Foreground="#667085" Margin="0,8,0,16" TextWrapping="Wrap"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox Text="{Binding SelectedFile}" IsReadOnly="True"
-                                     VerticalContentAlignment="Center"/>
-                            <Button Grid.Column="1" Content="选择文件"
-                                    Command="{Binding SelectFileCommand}" Margin="12,0,0,0"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <Border Background="White" BorderBrush="#D6DFEB" BorderThickness="1"
-                        Padding="26" CornerRadius="14" Margin="0,20,0,0">
-                    <StackPanel>
-                        <TextBlock Text="2. 输入候选密码并本地验证" FontSize="22" FontWeight="SemiBold"/>
-                        <TextBlock Text="成功必须同时完成目录枚举和受控内容读取；仅识别文件头不会判定成功。"
-                                   Foreground="#667085" Margin="0,8,0,12" TextWrapping="Wrap"/>
-                        <Grid Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="候选 ID（提交回执时必填）" VerticalAlignment="Center"/>
-                            <TextBox Grid.Column="1" Text="{Binding CandidateId, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas"/>
-                        </Grid>
-                        <PasswordBox x:Name="CandidatePasswordBox"
-                                     PasswordChanged="CandidatePasswordBox_OnPasswordChanged"
-                                     ToolTip="候选密码仅在当前进程内用于本地验证，不写入日志或身份文件。"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
-                            <Button Content="仅计算指纹" Command="{Binding CalculateCommand}"/>
-                            <Button Content="验证候选密码" Command="{Binding VerifyCommand}" Background="#087A55"/>
-                            <Button Content="验证并提交签名回执" Command="{Binding SubmitReceiptCommand}" Background="#6B3FA0"/>
-                            <Button Content="取消" Command="{Binding CancelCommand}" Background="#B42318"/>
-                        </StackPanel>
-                        <ProgressBar Height="10" Margin="0,18,0,0" Minimum="0" Maximum="100"
-                                     Value="{Binding Progress}"/>
-                        <TextBlock Text="{Binding Status}" Foreground="#667085" Margin="0,10,0,0"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-
-                <Grid Margin="0,20,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="20"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Border Background="White" BorderBrush="#D6DFEB" BorderThickness="1"
-                            Padding="24" CornerRadius="14">
-                        <StackPanel>
-                            <TextBlock Text="3. 文件指纹" FontSize="20" FontWeight="SemiBold"/>
-                            <TextBlock Text="SHA-256（主指纹）" FontWeight="SemiBold" Margin="0,16,0,6"/>
-                            <TextBox Text="{Binding Result.Sha256}" IsReadOnly="True"
-                                     FontFamily="Consolas" TextWrapping="Wrap"/>
-                            <TextBlock Text="MD5（历史兼容）" FontWeight="SemiBold" Margin="0,14,0,6"/>
-                            <TextBox Text="{Binding Result.Md5}" IsReadOnly="True"
-                                     FontFamily="Consolas" TextWrapping="Wrap"/>
-                            <TextBlock Foreground="#667085" Margin="0,12,0,0" TextWrapping="Wrap">
-                                <Run Text="文件："/><Run Text="{Binding Result.FileName}"/>
-                                <LineBreak/>
-                                <Run Text="大小："/><Run Text="{Binding Result.FileSize}"/><Run Text=" 字节"/>
-                            </TextBlock>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Grid.Column="2" Background="White" BorderBrush="#D6DFEB"
-                            BorderThickness="1" Padding="24" CornerRadius="14">
-                        <StackPanel>
-                            <TextBlock Text="4. 本地验证结果" FontSize="20" FontWeight="SemiBold"/>
-                            <TextBlock Margin="0,16,0,0" FontSize="18" FontWeight="SemiBold">
-                                <Run Text="通过："/><Run Text="{Binding VerificationResult.Success}"/>
-                            </TextBlock>
-                            <TextBlock Foreground="#667085" Margin="0,12,0,0">
-                                <Run Text="格式："/><Run Text="{Binding VerificationResult.ArchiveFormat}"/>
-                            </TextBlock>
-                            <TextBlock Foreground="#667085" Margin="0,6,0,0">
-                                <Run Text="条目数："/><Run Text="{Binding VerificationResult.EntryCount}"/>
-                            </TextBlock>
-                            <TextBlock Foreground="#667085" Margin="0,6,0,0">
-                                <Run Text="声明展开大小："/><Run Text="{Binding VerificationResult.TotalUncompressedBytes}"/>
-                                <Run Text=" 字节"/>
-                            </TextBlock>
-                            <TextBlock Foreground="#667085" Margin="0,6,0,0">
-                                <Run Text="受控读取："/><Run Text="{Binding VerificationResult.BytesSampled}"/>
-                                <Run Text=" 字节"/>
-                            </TextBlock>
-                            <TextBlock Text="{Binding VerificationResult.Message}" Foreground="#45657A"
-                                       Margin="0,12,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
+        <GroupBox Grid.Row="1" Header="用户信息" Margin="0,8,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="380" /><ColumnDefinition Width="*" /><ColumnDefinition Width="90" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,8,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <Label Grid.Column="0" Content="后端 API：" FontWeight="Bold" />
+                    <TextBox Grid.Column="1" Text="{Binding ServerBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Grid.Column="2" Content="测试连通性" Command="{Binding TestConnectivityCommand}" />
                 </Grid>
+                <Grid Grid.Column="0" Grid.Row="1" Grid.RowSpan="3" Margin="0,0,10,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="80" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Label Grid.Row="0" Content="用户名/邮箱：" FontWeight="Bold" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LoginName, UpdateSourceTrigger=PropertyChanged}" />
+                    <Label Grid.Row="1" Content="账号密码：" FontWeight="Bold" />
+                    <PasswordBox x:Name="LoginPasswordBox" Grid.Row="1" Grid.Column="1" PasswordChanged="LoginPasswordBox_OnPasswordChanged" />
+                    <Label Grid.Row="2" Content="TOTP 验证码：" FontWeight="Bold" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding TotpCode, UpdateSourceTrigger=PropertyChanged}" MaxLength="6" />
+                    <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="3" Content="登录" Command="{Binding LoginCommand}" Height="92" />
+                </Grid>
+                <Grid Grid.Column="1" Grid.Row="1" Grid.RowSpan="3">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="130" /><ColumnDefinition Width="110" /><ColumnDefinition Width="130" /><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="昵称：" /><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Nickname}" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="用户组：" /><TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding UserGroup}" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Text="等级：" /><TextBlock Grid.Row="0" Grid.Column="5" Text="{Binding Level}" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="贡献数量：" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ContributionCount}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="积分：" /><TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Points}" />
+                    <TextBlock Grid.Row="1" Grid.Column="4" Text="每日剩余配额：" /><TextBlock Grid.Row="1" Grid.Column="5" Text="{Binding DailyQuota}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="总哈希值：" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TotalHashes}" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="邮箱：" /><TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding Email}" />
+                    <TextBlock Grid.Row="2" Grid.Column="4" Text="状态：" /><TextBlock Grid.Row="2" Grid.Column="5" Text="{Binding AccountStatus}" Foreground="#008000" />
+                </Grid>
+                <TextBlock Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" VerticalAlignment="Bottom" Margin="80,0,0,0" Text="{Binding InstallationStatus, StringFormat=设备 ID：{0}}" FontSize="10" Foreground="#888888" />
+                <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="4" Margin="8,0,0,0" BorderBrush="#C8C8C8" BorderThickness="1" Background="#FAFAFA">
+                    <StackPanel VerticalAlignment="Center"><TextBlock Text="用户" FontSize="18" HorizontalAlignment="Center" /><TextBlock Text="头像" FontSize="18" HorizontalAlignment="Center" /></StackPanel>
+                </Border>
+            </Grid>
+        </GroupBox>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="1.2*" /></Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                <GroupBox Header="第一步：选择压缩包">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding SelectedFile}" IsReadOnly="True" AllowDrop="True" ToolTip="将 ZIP/7z 文件拖入窗口，或点击浏览" />
+                        <Button Grid.Row="0" Grid.Column="1" Content="浏览…" Command="{Binding SelectFileCommand}" />
+                        <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="详细信息：" FontWeight="Bold" />
+                                <TextBlock Text="{Binding Result.FileName, StringFormat=压缩包名：{0}}" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding Result.FileSize, StringFormat=压缩包大小：{0}}" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding Result.Md5, StringFormat=MD5：{0}}" FontFamily="Consolas" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Result.Sha256, StringFormat=SHA256：{0}}" FontFamily="Consolas" Margin="0,3,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="包内文件：" FontWeight="Bold" />
+                                <TextBlock Text="{Binding ArchiveSummary}" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="提示：文件内容与候选密码只在本机处理。" Foreground="#666666" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                <Button Content="计算指纹" Command="{Binding CalculateCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </GroupBox>
+                <GroupBox Header="第二步：验证密码">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Label Grid.Row="0" Content="压缩包密码：" />
+                        <PasswordBox x:Name="CandidatePasswordBox" Grid.Row="0" Grid.Column="1" PasswordChanged="CandidatePasswordBox_OnPasswordChanged" />
+                        <Button Grid.Row="0" Grid.Column="2" Content="开始验证密码及解压测试" Command="{Binding VerifyCommand}" />
+                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Status, StringFormat=执行进度：{0}}" Margin="0,8,0,4" TextWrapping="Wrap" />
+                        <ProgressBar Grid.Row="2" Grid.ColumnSpan="3" Height="18" Minimum="0" Maximum="100" Value="{Binding Progress}" />
+                    </Grid>
+                </GroupBox>
+                <GroupBox Header="第三步：结果与提交">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="密码验证成功！" FontWeight="Bold" Foreground="#008000" />
+                            <TextBlock Text="{Binding VerificationResult.Message, StringFormat=验证结果：{0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding RewardStatus, StringFormat=当前登录/奖励状态：{0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                            <TextBlock Text="候选 ID（网页端生成后可填）：" Margin="0,10,0,2" />
+                            <TextBox Text="{Binding CandidateId, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="提交哈希值密码对" Command="{Binding SubmitReceiptCommand}" Width="130" Height="62" />
+                    </Grid>
+                </GroupBox>
+                <GroupBox Header="项目支持">
+                    <TextBlock Text="{Binding InstallationStatus}" TextWrapping="Wrap" Foreground="#666666" />
+                </GroupBox>
             </StackPanel>
-        </ScrollViewer>
+            <StackPanel Grid.Column="1">
+                <GroupBox Header="公告区" Height="250">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <DockPanel Grid.Row="0"><TextBlock Text="{Binding CurrentAnnouncementTitle}" FontWeight="Bold" /><Button DockPanel.Dock="Right" Content="刷新" Command="{Binding RefreshAnnouncementsCommand}" /></DockPanel>
+                        <Image Grid.Row="1" Source="{Binding CurrentAnnouncementImageUrl}" Height="64" Margin="0,8,0,0" Stretch="UniformToFill" />
+                        <ScrollViewer Grid.Row="2" Margin="0,8"><TextBlock Text="{Binding CurrentAnnouncementContent}" TextWrapping="Wrap" /></ScrollViewer>
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="上一条" Command="{Binding PreviousAnnouncementCommand}" />
+                            <Button Content="下一条" Command="{Binding NextAnnouncementCommand}" />
+                            <Button Content="查看详情" Command="{Binding OpenAnnouncementActionCommand}" IsEnabled="{Binding HasAnnouncementAction}" />
+                            <TextBlock Text="{Binding AnnouncementStatus}" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#666666" />
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+                <GroupBox Header="运行状态">
+                    <StackPanel>
+                        <TextBlock Text="{Binding ApiConnectionStatus, StringFormat=API：{0}}" Foreground="#008000" />
+                        <TextBlock Text="{Binding UpdateStatus, StringFormat=更新：{0}}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                        <Button Content="检查更新" Command="{Binding CheckForUpdatesCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                        <Button Content="下载升级包" Command="{Binding OpenUpdateDownloadCommand}" HorizontalAlignment="Left" />
+                        <TextBlock Text="{Binding UpgradeNotice}" Foreground="#B54708" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="安全说明">
+                    <TextBlock Text="后端可设置公告，桌面端支持文字/HTML说明和图片地址展示；压缩包、密码及密码摘要不会作为文件内容上传。" TextWrapping="Wrap" Foreground="#555555" />
+                </GroupBox>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

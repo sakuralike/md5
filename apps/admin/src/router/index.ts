@@ -6,6 +6,7 @@ import CommunityModerationPage from "../pages/CommunityModerationPage.vue";
 import CommunityNotificationOutboxPage from "../pages/CommunityNotificationOutboxPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
+import DesktopAnnouncementsPage from "../pages/DesktopAnnouncementsPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
 import RoleChangesPage from "../pages/RoleChangesPage.vue";
@@ -38,6 +39,7 @@ const router = createRouter({
     { path: "/community/notifications", component: CommunityNotificationOutboxPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
+    { path: "/desktop-announcements", component: DesktopAnnouncementsPage, meta: { requiresAdmin: true } },
   ],
 });
 

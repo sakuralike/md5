@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using PasswordDetective.Desktop.Services;
 using PasswordDetective.Desktop.ViewModels;
 
@@ -26,4 +27,17 @@ public partial class MainWindow : Window
 
     private void LoginPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs eventArgs) =>
         _viewModel.SetLoginPassword(LoginPasswordBox.Password);
+
+    private void Window_OnDragOver(object sender, DragEventArgs eventArgs) =>
+        eventArgs.Effects = eventArgs.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+
+    private void Window_OnDrop(object sender, DragEventArgs eventArgs)
+    {
+        if (eventArgs.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        {
+            _viewModel.AcceptFile(files[0]);
+        }
+    }
 }

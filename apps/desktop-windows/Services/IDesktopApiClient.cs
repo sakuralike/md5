@@ -4,6 +4,19 @@ namespace PasswordDetective.Desktop.Services;
 
 public interface IDesktopApiClient
 {
+    Task<bool> TestConnectivityAsync(
+        string serverBaseUrl,
+        CancellationToken cancellationToken = default);
+
+    Task<DesktopAnnouncementListResponse> GetAnnouncementsAsync(
+        string serverBaseUrl,
+        CancellationToken cancellationToken = default);
+
+    Task<TrustProfileResponse> GetTrustProfileAsync(
+        string serverBaseUrl,
+        string accessToken,
+        CancellationToken cancellationToken = default);
+
     Task<DesktopUpdateCheckResponse> CheckForUpdateAsync(
         string serverBaseUrl,
         string currentVersion,

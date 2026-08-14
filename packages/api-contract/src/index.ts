@@ -602,6 +602,35 @@ export interface DesktopReleaseListResponse {
   items: DesktopRelease[];
 }
 
+export type DesktopAnnouncementStatus = "draft" | "published" | "archived";
+export type DesktopAnnouncementContentType = "text" | "html";
+
+export interface DesktopAnnouncementWriteRequest {
+  title: string;
+  content: string;
+  content_type: DesktopAnnouncementContentType;
+  image_urls: string[];
+  action_label: string | null;
+  action_url: string | null;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+export interface DesktopAnnouncement extends DesktopAnnouncementWriteRequest {
+  id: string;
+  status: DesktopAnnouncementStatus;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  archived_at: string | null;
+}
+
+export interface DesktopAnnouncementListResponse {
+  items: DesktopAnnouncement[];
+}
+
 export type StateTransitionSource = "automatic" | "manual";
 export type RewardAdjustmentDirection = "invalidate" | "restore";
 export type RewardKind = "contribution" | "verification";

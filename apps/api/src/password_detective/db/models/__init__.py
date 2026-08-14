@@ -53,6 +53,11 @@ from password_detective.db.models.community import (
     CommunityUserFollow,
     CommunityUserMute,
 )
+from password_detective.db.models.desktop_announcement import (
+    DesktopAnnouncement,
+    DesktopAnnouncementContentType,
+    DesktopAnnouncementStatus,
+)
 from password_detective.db.models.desktop_update import (
     CodeSignatureStatus,
     DesktopArchitecture,
@@ -189,6 +194,9 @@ __all__ = [
     "CommunityReportStatus",
     "CodeSignatureStatus",
     "FeedbackOutcome",
+    "DesktopAnnouncement",
+    "DesktopAnnouncementContentType",
+    "DesktopAnnouncementStatus",
     "DesktopArchitecture",
     "DesktopRelease",
     "DesktopReleaseChannel",
