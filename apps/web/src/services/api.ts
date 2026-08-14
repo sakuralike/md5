@@ -43,11 +43,12 @@ async function sendRequest(
   path: string,
   options: RequestInit,
   accessToken?: string,
+  accept = "application/json",
 ): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     credentials: "include",
     ...options,
-    headers: createHeaders(options, accessToken),
+    headers: createHeaders(options, accessToken, accept),
   });
 }
 
@@ -113,4 +114,30 @@ export async function apiFileRequest(
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "privacy-export.json";
   return { blob: await response.blob(), filename };
+}
+
+export async function apiStreamRequest(
+  path: string,
+  accessToken: string,
+  options: { signal: AbortSignal; lastEventId?: string | null },
+): Promise<Response> {
+  const requestOptions: RequestInit = {
+    method: "GET",
+    signal: options.signal,
+    headers: options.lastEventId ? { "Last-Event-ID": options.lastEventId } : {},
+  };
+  let response = await sendRequest(path, requestOptions, accessToken, "text/event-stream");
+  if (!response.ok) {
+    const body = await readApiError(response);
+    if (response.status === 401 && body.code === EXPIRED_ACCESS_TOKEN_CODE) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) {
+        response = await sendRequest(path, requestOptions, refreshedToken, "text/event-stream");
+        if (response.ok) return response;
+        throw new ApiError(response.status, await readApiError(response));
+      }
+    }
+    throw new ApiError(response.status, body);
+  }
+  return response;
 }

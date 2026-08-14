@@ -1707,7 +1707,10 @@ def _notification_response(
 
 
 def _notification_visibility_condition(user_id: str):
-    visible_post_ids = select(CommunityPost.id).where(post_visibility_condition(user_id))
+    visible_post_ids = select(CommunityPost.id).where(
+        CommunityPost.status == CommunityContentStatus.PUBLISHED,
+        post_visibility_condition(user_id),
+    )
     return or_(
         CommunityNotification.post_id.is_(None),
         CommunityNotification.post_id.in_(visible_post_ids),
@@ -1720,7 +1723,11 @@ def _notification_is_visible(
     if notification.post_id is None:
         return True
     post = db.get(CommunityPost, notification.post_id)
-    return post is not None and can_user_view_post(db, post, user_id)
+    return (
+        post is not None
+        and post.status == CommunityContentStatus.PUBLISHED
+        and can_user_view_post(db, post, user_id)
+    )
 
 
 def _unread_notification_count(db: Session, user_id: str) -> int:

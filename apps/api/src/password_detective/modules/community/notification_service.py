@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
+    CommunityContentStatus,
     CommunityNotification,
     CommunityNotificationKind,
+    CommunityNotificationOutbox,
+    CommunityNotificationOutboxStatus,
     CommunityNotificationPreference,
     CommunityNotificationSource,
+    CommunityPost,
     CommunityUserBlock,
 )
 
@@ -49,6 +55,8 @@ def create_notification(
             existing.preview = notification_preview(preview)
             existing.read_at = None
             existing.created_at = utc_now()
+            existing.delivery_version += 1
+            queue_notification_event(db, existing)
         return existing
     notification = CommunityNotification(
         recipient_id=recipient_id,
@@ -61,6 +69,8 @@ def create_notification(
         preview=notification_preview(preview),
     )
     db.add(notification)
+    db.flush()
+    queue_notification_event(db, notification)
     return notification
 
 
@@ -101,6 +111,8 @@ def sync_like_summary(
         if refresh_unread:
             existing.read_at = None
             existing.created_at = utc_now()
+            existing.delivery_version += 1
+            queue_notification_event(db, existing)
         return
     if not create_if_missing:
         return
@@ -117,9 +129,7 @@ def sync_like_summary(
     )
 
 
-def notification_enabled(
-    db: Session, recipient_id: str, kind: CommunityNotificationKind
-) -> bool:
+def notification_enabled(db: Session, recipient_id: str, kind: CommunityNotificationKind) -> bool:
     preference = db.scalar(
         select(CommunityNotificationPreference).where(
             CommunityNotificationPreference.user_id == recipient_id,
@@ -148,3 +158,102 @@ def users_block_each_other(db: Session, *, actor_id: str, target_id: str) -> boo
 def notification_preview(text: str) -> str:
     compact = " ".join(text.split())
     return compact if len(compact) <= 180 else f"{compact[:177]}..."
+
+
+def queue_notification_event(
+    db: Session, notification: CommunityNotification
+) -> CommunityNotificationOutbox:
+    event = CommunityNotificationOutbox(
+        notification_id=notification.id,
+        recipient_id=notification.recipient_id,
+        dedupe_key=(f"community-notification:{notification.id}:v{notification.delivery_version}"),
+    )
+    db.add(event)
+    return event
+
+
+def dispatch_pending_notification_events(db: Session, *, limit: int = 100) -> dict[str, int]:
+    now = utc_now()
+    events = db.scalars(
+        select(CommunityNotificationOutbox)
+        .where(
+            CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.PENDING,
+            CommunityNotificationOutbox.available_at <= now,
+        )
+        .order_by(
+            CommunityNotificationOutbox.available_at,
+            CommunityNotificationOutbox.created_at,
+            CommunityNotificationOutbox.id,
+        )
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    ).all()
+    delivered = 0
+    failed = 0
+    retried = 0
+    for event in events:
+        event.attempts += 1
+        try:
+            notification = db.get(CommunityNotification, event.notification_id)
+            if notification is None or notification.recipient_id != event.recipient_id:
+                event.status = CommunityNotificationOutboxStatus.FAILED
+                event.failed_at = now
+                event.last_error_code = "community.notification_missing"
+                failed += 1
+                continue
+            if not notification_enabled(db, event.recipient_id, notification.kind):
+                event.status = CommunityNotificationOutboxStatus.FAILED
+                event.failed_at = now
+                event.last_error_code = "community.notification_preference_disabled"
+                failed += 1
+                continue
+            if notification.kind not in {
+                CommunityNotificationKind.GROUP_DECISION,
+                CommunityNotificationKind.GROUP_ROLE_CHANGE,
+            } and users_block_each_other(
+                db, actor_id=notification.actor_id, target_id=event.recipient_id
+            ):
+                event.status = CommunityNotificationOutboxStatus.FAILED
+                event.failed_at = now
+                event.last_error_code = "community.notification_visibility_revoked"
+                failed += 1
+                continue
+            if notification.post_id is not None:
+                from password_detective.modules.community.group_service import (
+                    can_user_view_post,
+                )
+
+                post = db.get(CommunityPost, notification.post_id)
+                if (
+                    post is None
+                    or post.status != CommunityContentStatus.PUBLISHED
+                    or not can_user_view_post(db, post, event.recipient_id)
+                ):
+                    event.status = CommunityNotificationOutboxStatus.FAILED
+                    event.failed_at = now
+                    event.last_error_code = "community.notification_visibility_revoked"
+                    failed += 1
+                    continue
+            event.status = CommunityNotificationOutboxStatus.DELIVERED
+            event.delivered_at = now
+            event.failed_at = None
+            event.last_error_code = None
+            delivered += 1
+        except Exception:
+            if event.attempts >= 5:
+                event.status = CommunityNotificationOutboxStatus.FAILED
+                event.failed_at = now
+                event.last_error_code = "community.notification_dispatch_failed"
+                failed += 1
+            else:
+                delay_seconds = min(60, 2**event.attempts)
+                event.available_at = now + timedelta(seconds=delay_seconds)
+                event.last_error_code = "community.notification_dispatch_retry"
+                retried += 1
+    db.commit()
+    return {
+        "processed": len(events),
+        "delivered": delivered,
+        "retried": retried,
+        "failed": failed,
+    }

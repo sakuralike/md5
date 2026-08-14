@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
 import { getPublicSiteConfig } from "./services/site";
 import { useAuthStore } from "./stores/auth";
 
@@ -16,6 +17,7 @@ interface BackgroundOption {
 }
 
 const auth = useAuthStore();
+const communityNotifications = useCommunityNotificationStream();
 const siteConfig = ref<PublicSiteConfig>({
   site_name: "密码侦探社",
   site_logo_url: "",
@@ -207,6 +209,8 @@ onBeforeUnmount(releaseCustomBackground);
           v-else-if="auth.user"
           :user="auth.user"
           :busy="auth.busy"
+          :unread-count="communityNotifications.unreadCount.value"
+          :notification-status="communityNotifications.status.value"
           @logout="auth.logout()"
         />
       </div>

@@ -196,6 +196,12 @@ class CommunityNotificationKind(StrEnum):
     GROUP_ROLE_CHANGE = "group_role_change"
 
 
+class CommunityNotificationOutboxStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
 class CommunityNotificationSource(StrEnum):
     POST = "post"
     COMMENT = "comment"
@@ -468,8 +474,46 @@ class CommunityNotification(Base):
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    delivery_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
+class CommunityNotificationOutbox(Base):
+    """Durable community notification event used for SSE replay and later channels."""
+
+    __tablename__ = "community_notification_outbox"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    notification_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("community_notifications.id", ondelete="CASCADE"), index=True
+    )
+    recipient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    status: Mapped[CommunityNotificationOutboxStatus] = mapped_column(
+        Enum(CommunityNotificationOutboxStatus, native_enum=False, length=16),
+        default=CommunityNotificationOutboxStatus.PENDING,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
 

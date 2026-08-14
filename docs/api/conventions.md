@@ -308,3 +308,14 @@ Admin `/role-changes` 工作台提供状态筛选、分页、加载/空/错误�
 - 该接口要求已登录管理员；若管理员账号已启用 TOTP，则会沿用管理端 MFA 准入。上传写入 `admin.settings.site_logo_uploaded` 审计事件。
 - `GET /api/v1/site/assets/logo/{sha256}.{ext}` 为公开只读资源；只接受 64 位小写十六进制摘要与允许的扩展名，返回一年 `immutable` 缓存。
 - 文件上传与配置发布分离：上传成功不代表站点配置已生效，调用方仍需走系统配置版本草稿与发布 API。
+
+## 社区通知实时流（2026-08-14）
+
+| 方法 | 路径 | 认证 | 关键约束 |
+|---|---|---|---|
+| `GET` | `/api/v1/community/notifications` | 当前用户 | 分页通知快照；未读数和列表均按本人、屏蔽、私密群组、主题状态过滤 |
+| `GET` | `/api/v1/community/notifications/stream` | 当前用户 | `Accept: text/event-stream`；支持 `Last-Event-ID` 游标补偿；只返回本人且当前仍可见的已投递事件 |
+
+SSE 事件类型为 `ready`、`notification` 和注释心跳。`ready` 返回 `last_event_id`、当前 `unread_count` 和服务器时间；`notification` 返回 Outbox 事件 ID、通知对象和事件发生时的未读数。客户端必须按用户 ID 隔离保存游标，断线重连时携带最后已处理的事件 ID；缺失或跨用户游标不得导致其他用户事件泄露。服务端设置 `Cache-Control: no-cache, no-transform` 与 `X-Accel-Buffering: no`，连接空闲期间发送注释心跳。
+
+业务写事务只负责创建/刷新 `CommunityNotification` 并写入同事务 Outbox；Worker 将事件从 `pending` 转为 `delivered` 或有限重试后的 `failed`。投递前再次检查通知偏好、社交屏蔽、主题可见性和主题是否仍为 `published`。当前 SSE 是数据库 Outbox 的可靠补偿通道，邮件摘要和 Admin 失败重放不在本轮开放。

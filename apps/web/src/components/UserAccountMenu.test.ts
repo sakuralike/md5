@@ -45,7 +45,12 @@ vi.mock("vue-router", async () => {
 
 describe("UserAccountMenu", () => {
   it("renders the avatar trigger and account actions", async () => {
-    const app = createSSRApp(UserAccountMenu, { user, defaultOpen: true });
+    const app = createSSRApp(UserAccountMenu, {
+      user,
+      defaultOpen: true,
+      unreadCount: 128,
+      notificationStatus: "connected",
+    });
     app.component(
       "RouterLink",
       defineComponent({
@@ -57,6 +62,9 @@ describe("UserAccountMenu", () => {
 
     expect(html).toContain("打开 sakura 的账户菜单");
     expect(html).toContain("用户中心");
+    expect(html).toContain("社区通知");
+    expect(html).toContain("99+");
+    expect(html).toContain("实时连接正常");
     expect(html).toContain("退出登录");
     expect(html).toContain("sakura@example.test");
   });

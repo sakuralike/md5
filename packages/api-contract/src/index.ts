@@ -1714,6 +1714,24 @@ export interface CommunityNotificationListResponse {
   has_more: boolean;
 }
 
+export interface CommunityNotificationStreamReady {
+  event_id: string | null;
+  unread_count: number;
+}
+
+export interface CommunityNotificationStreamEvent {
+  event_id: string;
+  notification: CommunityNotificationResponse;
+  unread_count: number;
+}
+
+export type CommunityNotificationStreamStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "offline";
+
 export interface CommunityNotificationReadResponse {
   message: string;
   unread_count: number;

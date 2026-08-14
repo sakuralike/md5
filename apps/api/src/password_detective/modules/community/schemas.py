@@ -302,6 +302,17 @@ class CommunityNotificationListResponse(BaseModel):
     has_more: bool = False
 
 
+class CommunityNotificationStreamReady(BaseModel):
+    event_id: str | None = None
+    unread_count: int
+
+
+class CommunityNotificationStreamEvent(BaseModel):
+    event_id: str
+    notification: CommunityNotificationResponse
+    unread_count: int
+
+
 class CommunityNotificationReadResponse(BaseModel):
     message: str
     unread_count: int

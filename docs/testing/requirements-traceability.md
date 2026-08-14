@@ -510,3 +510,14 @@
 | 后台设置导航修复 | `App.vue` 将桌面侧栏移出模糊顶栏，`AdminSettingsNavigation.vue` 桌面/移动模式 | `App.test.ts` 固定视口定位和主内容留白断言 | 已实现 |
 | 等级权益横向布局 | `SystemSettingsPage.vue` 横向 flex、snap、overflow 列表 | `SystemSettingsPage.test.ts` 横向列表语义与类名断言 | 已实现 |
 | 容器持久化 | `site-asset-data`、`SITE_ASSET_STORAGE_PATH`、Nginx 3 MB 限制 | Compose 配置校验与目标部署冒烟 | 待本轮服务器验证 |
+
+## 2026-08-14 WP5-I7 通知可靠性第一轮追踪
+
+| 需求 | 代码证据 | 自动化证据 | 状态与剩余风险 |
+|---|---|---|---|
+| 事务 Outbox 与幂等投递 | `CommunityNotificationOutbox`、迁移 `20260814_0035_community_notification_outbox.py`、`notification_service.py` | `test_notification_outbox_dispatch_and_replay_cursor`、Ruff、迁移往返 | 已实现数据库事实与待投递事件同事务提交；邮件通道和 Admin 失败重放尚未实现 |
+| Worker 重试与投递前权限复核 | `worker.py` 的 Beat/Task、`dispatch_pending_notification_events` | 社区服务测试、统一门禁、目标环境 Worker 状态 | 已实现有限指数退避、终态错误码、偏好/屏蔽/主题可见性复核；指标导出与人工重放待后续 |
+| SSE 事件流与断线补偿 | `notification_stream.py`、`router.py`、`CommunityNotificationStream*` | API 测试、Web `communityNotificationStream.test.ts`、公网 curl/浏览器验收 | 已实现 ready/notification、心跳、`Last-Event-ID`、跨用户隔离和失效主题过滤；多实例 Pub/Sub 优化待后续 |
+| Web 全局未读入口 | `useCommunityNotificationStream.ts`、`App.vue`、`UserAccountMenu.vue` | Web Vitest、typecheck、真实 Chromium 旅程 | 已实现初始快照、实时未读、断线重连和用户会话游标；通知中心列表实时插入/分页合并待后续 |
+
+本切片只推进网页端；桌面端 UI 尚未设计冻结，不纳入本轮新增范围。上述本地证据不能替代真实 SMTP 送达、多实例 Redis、目标环境迁移和发布回滚证据。

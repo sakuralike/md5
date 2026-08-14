@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+import json
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -41,6 +44,11 @@ from password_detective.modules.community.group_service import (
     leave_group,
     list_groups,
     update_group,
+)
+from password_detective.modules.community.notification_stream import (
+    latest_delivered_event_id,
+    list_delivered_events,
+    unread_notification_count,
 )
 from password_detective.modules.community.schemas import (
     CommunityActivityListResponse,
@@ -652,6 +660,32 @@ def community_notifications(
     )
 
 
+@router.get(
+    "/notifications/stream",
+    dependencies=[
+        Depends(rate_limit("community.notification.stream", limit=60, window_seconds=60))
+    ],
+)
+async def community_notification_stream(
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+) -> StreamingResponse:
+    return StreamingResponse(
+        _notification_event_stream(
+            request,
+            recipient_id=principal.user.id,
+            last_event_id=last_event_id,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/notifications/preferences", response_model=CommunityNotificationPreferencesResponse)
 def community_notification_preferences(
     db: Annotated[Session, Depends(get_db)],
@@ -1208,3 +1242,54 @@ def _mutate_with_idempotency[ResponseModel: BaseModel](
         db.rollback()
         abandon_idempotency(db, lease)
         raise
+
+
+def _sse_message(*, event: str, data: BaseModel, event_id: str | None = None) -> str:
+    lines: list[str] = []
+    if event_id:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event}")
+    payload = json.dumps(data.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+    lines.append(f"data: {payload}")
+    return "\n".join(lines) + "\n\n"
+
+
+async def _notification_event_stream(
+    request: Request,
+    *,
+    recipient_id: str,
+    last_event_id: str | None,
+) -> AsyncIterator[str]:
+    cursor = last_event_id
+    if cursor is None:
+        with request.app.state.database.session_factory() as db:
+            cursor = latest_delivered_event_id(db, recipient_id)
+            unread_count = unread_notification_count(db, recipient_id)
+        from password_detective.modules.community.schemas import CommunityNotificationStreamReady
+
+        yield _sse_message(
+            event="ready",
+            event_id=cursor,
+            data=CommunityNotificationStreamReady(event_id=cursor, unread_count=unread_count),
+        )
+    heartbeat_seconds = 15
+    elapsed = 0
+    while not await request.is_disconnected():
+        with request.app.state.database.session_factory() as db:
+            batch = list_delivered_events(
+                db,
+                recipient_id=recipient_id,
+                after_event_id=cursor,
+                limit=20,
+            )
+        if batch.items:
+            for item in batch.items:
+                cursor = item.event_id
+                yield _sse_message(event="notification", event_id=item.event_id, data=item)
+            elapsed = 0
+        else:
+            await asyncio.sleep(1)
+            elapsed += 1
+            if elapsed >= heartbeat_seconds:
+                yield ": heartbeat\n\n"
+                elapsed = 0

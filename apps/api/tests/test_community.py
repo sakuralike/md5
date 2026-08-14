@@ -9,6 +9,8 @@ from password_detective.db.models.community import (
     CommunityComment,
     CommunityCommentLike,
     CommunityContentStatus,
+    CommunityNotificationOutbox,
+    CommunityNotificationOutboxStatus,
     CommunityPost,
     CommunityPostBookmark,
     CommunityPostLike,
@@ -17,6 +19,12 @@ from password_detective.db.models.community import (
     CommunityReportStatus,
 )
 from password_detective.db.models.user import User, UserRole
+from password_detective.modules.community.notification_service import (
+    dispatch_pending_notification_events,
+)
+from password_detective.modules.community.notification_stream import (
+    list_delivered_events,
+)
 
 
 def register_and_login(client, *, username: str, email: str, verified: bool = True) -> dict:
@@ -1171,3 +1179,81 @@ def test_activity_and_notification_preferences_only_affect_future_events(client)
         and item["actor"]["username"] == "preference_actor"
         for item in latest.json()["items"]
     )
+
+
+def test_notification_outbox_dispatch_and_replay_cursor(client):
+    recipient = register_and_login(
+        client,
+        username="stream_recipient",
+        email="stream-recipient@example.com",
+    )
+    actor = register_and_login(
+        client,
+        username="stream_actor",
+        email="stream-actor@example.com",
+    )
+    payload = post_payload()
+    payload["content"] += " @stream_recipient"
+    created = client.post(
+        "/api/v1/community/posts",
+        json=payload,
+        headers=headers(actor, "community-stream-post-001"),
+    )
+    assert created.status_code == 201
+
+    with client.app.state.database.session_factory() as db:
+        event = db.scalar(select(CommunityNotificationOutbox))
+        assert event is not None
+        assert event.status == CommunityNotificationOutboxStatus.PENDING
+        assert event.attempts == 0
+        assert event.dedupe_key.endswith(":v1")
+
+        dispatched = dispatch_pending_notification_events(db)
+        assert dispatched == {
+            "processed": 1,
+            "delivered": 1,
+            "retried": 0,
+            "failed": 0,
+        }
+        batch = list_delivered_events(
+            db, recipient_id=recipient["user"]["id"], after_event_id=None
+        )
+        assert len(batch.items) == 1
+        assert batch.items[0].notification.actor.username == "stream_actor"
+        assert batch.items[0].notification.post_id == created.json()["id"]
+        assert batch.items[0].unread_count == 1
+
+        replay = list_delivered_events(
+            db,
+            recipient_id=recipient["user"]["id"],
+            after_event_id=batch.last_event_id,
+        )
+        assert replay.items == []
+        assert replay.last_event_id == batch.last_event_id
+
+        invalid_cursor = list_delivered_events(
+            db,
+            recipient_id=recipient["user"]["id"],
+            after_event_id="missing-event-id",
+        )
+        assert invalid_cursor.items == []
+        assert invalid_cursor.last_event_id == batch.last_event_id
+
+        isolated = list_delivered_events(
+            db,
+            recipient_id=actor["user"]["id"],
+            after_event_id=batch.last_event_id,
+        )
+        assert isolated.items == []
+        assert isolated.last_event_id is None
+
+        post = db.get(CommunityPost, created.json()["id"])
+        assert post is not None
+        post.status = CommunityContentStatus.REMOVED
+        db.commit()
+        hidden_after_removal = list_delivered_events(
+            db, recipient_id=recipient["user"]["id"], after_event_id=None
+        )
+        assert hidden_after_removal.items == []
+
+        assert dispatch_pending_notification_events(db)["processed"] == 0
