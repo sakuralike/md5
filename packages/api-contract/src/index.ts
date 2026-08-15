@@ -2153,12 +2153,59 @@ export type ThirdPartyAppStatus =
   | "suspended"
   | "revoked";
 export type ThirdPartyAppSource = "admin" | "developer_self_service";
-export type ThirdPartyScope =
-  | "profile:read"
-  | "hash:read"
-  | "desktop:installations"
-  | "desktop:verification"
-  | "desktop:verification:trusted";
+
+export const THIRD_PARTY_API_V1_SCOPES = [
+  "profile:read",
+  "hash:read",
+  "desktop:installations",
+  "desktop:verification",
+  "desktop:verification:trusted",
+] as const;
+
+export type ThirdPartyScope = (typeof THIRD_PARTY_API_V1_SCOPES)[number];
+
+export const THIRD_PARTY_OAUTH_GRANT_TYPES = [
+  "authorization_code",
+  "refresh_token",
+] as const;
+
+export type ThirdPartyOAuthGrantType =
+  (typeof THIRD_PARTY_OAUTH_GRANT_TYPES)[number];
+
+export const THIRD_PARTY_API_V1_PATHS = {
+  oauthAuthorize: "/third-party/oauth/authorize",
+  oauthConsent: "/third-party/oauth/consent",
+  authorizedApplications: "/third-party/oauth/authorized-applications",
+  oauthToken: "/third-party/oauth/token",
+  oauthRevoke: "/third-party/oauth/revoke",
+  oauthMe: "/third-party/oauth/me",
+  installations: "/third-party/installations",
+  challenges: "/third-party/challenges",
+  verificationReceipts: "/third-party/verification-receipts",
+} as const;
+
+export const THIRD_PARTY_RECEIPT_CANONICAL_PAYLOAD_VERSION =
+  "desktop-receipt-v1" as const;
+
+export const THIRD_PARTY_RECEIPT_CANONICAL_FIELDS = [
+  "version",
+  "client_id",
+  "challenge_id",
+  "challenge_nonce",
+  "installation_id",
+  "account_id",
+  "candidate_id",
+  "fingerprint_algorithm",
+  "fingerprint_digest",
+  "candidate_digest",
+  "outcome",
+  "archive_format",
+  "client_version",
+  "verified_at",
+] as const;
+
+export type ThirdPartyReceiptCanonicalField =
+  (typeof THIRD_PARTY_RECEIPT_CANONICAL_FIELDS)[number];
 
 export interface ThirdPartyAuthorizationRequest {
   response_type: "code";
@@ -2188,6 +2235,74 @@ export interface ThirdPartyAuthorizationDecisionRequest
 
 export interface ThirdPartyAuthorizationDecisionResponse {
   redirect_url: string;
+}
+
+export interface ThirdPartyOAuthTokenRequest {
+  grant_type: ThirdPartyOAuthGrantType;
+  client_id: string;
+  code?: string | null;
+  redirect_uri?: string | null;
+  code_verifier?: string | null;
+  refresh_token?: string | null;
+}
+
+export interface ThirdPartyOAuthTokenResponse {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+}
+
+export interface ThirdPartyOAuthRevokeRequest {
+  client_id: string;
+  token: string;
+  token_type_hint?: "access_token" | "refresh_token" | null;
+}
+
+export interface ThirdPartyPrincipalResponse {
+  user_id: string;
+  client_id: string;
+  app_id: string;
+  scopes: ThirdPartyScope[];
+}
+
+export type ThirdPartyOperatingSystem =
+  | "windows"
+  | "linux"
+  | "macos"
+  | "other";
+export type ThirdPartyArchitecture = "x86" | "x64" | "arm64" | "other";
+
+export interface ThirdPartyInstallationRegistrationRequest
+  extends DesktopInstallationRegistrationRequest {
+  operating_system?: ThirdPartyOperatingSystem | null;
+  architecture?: ThirdPartyArchitecture | null;
+}
+
+export interface ThirdPartyInstallation extends DesktopInstallation {
+  client_id: string;
+  receipt_protocol: typeof THIRD_PARTY_RECEIPT_CANONICAL_PAYLOAD_VERSION;
+  operating_system: ThirdPartyOperatingSystem | null;
+  architecture: ThirdPartyArchitecture | null;
+}
+
+export interface ThirdPartyInstallationListResponse {
+  items: ThirdPartyInstallation[];
+}
+
+export type ThirdPartyChallengeRequest = DesktopChallengeRequest;
+
+export interface ThirdPartyChallengeResponse extends DesktopChallengeResponse {
+  client_id: string;
+}
+
+export interface ThirdPartyReceiptRequest extends DesktopReceiptRequest {
+  client_id: string;
+}
+
+export interface ThirdPartyReceiptResponse extends DesktopReceiptResponse {
+  trust_channel: "third_party_pending" | "third_party_trusted";
 }
 
 export interface AuthorizedApplication {

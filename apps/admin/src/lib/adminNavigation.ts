@@ -4,6 +4,7 @@ import {
   FileCheck2,
   Flag,
   History,
+  KeyRound,
   LayoutDashboard,
   MonitorUp,
   Megaphone,
@@ -80,6 +81,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "处置风险告警、分派与通知回放。",
     group: "安全运营",
     icon: ShieldAlert,
+  },
+  {
+    label: "第三方 API",
+    path: "/third-party-apps",
+    description: "审核第三方桌面应用、权限范围与可信验证能力。",
+    group: "安全运营",
+    icon: KeyRound,
   },
   {
     label: "桌面发布",

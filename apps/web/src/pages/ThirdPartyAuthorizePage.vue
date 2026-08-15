@@ -4,7 +4,7 @@ import type {
   ThirdPartyAuthorizationDetails,
   ThirdPartyAuthorizationRequest,
 } from "@password-detective/api-contract";
-import { ref } from "vue";
+import { onMounted, onServerPrefetch, ref } from "vue";
 import { useRoute } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
@@ -69,7 +69,10 @@ async function decide(decision: "approve" | "deny"): Promise<void> {
   }
 }
 
-await load();
+onServerPrefetch(load);
+onMounted(() => {
+  void load();
+});
 </script>
 
 <template>
