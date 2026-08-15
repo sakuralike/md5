@@ -8,6 +8,7 @@ from password_detective.db.models.community import (
     CommunityActivityFeed,
     CommunityActivityKind,
     CommunityActivitySource,
+    CommunityAvatarKind,
     CommunityBoardStatus,
     CommunityGroupMembershipStatus,
     CommunityGroupRole,
@@ -400,6 +401,8 @@ class CommunityPublicProfileResponse(BaseModel):
     display_name: str
     bio: str
     avatar_seed: str
+    avatar_kind: CommunityAvatarKind
+    avatar_url: str | None = None
     role: UserRole
     level: CommunityPublicLevel
     registered_month: str
@@ -414,12 +417,15 @@ class CommunityOwnProfileResponse(CommunityPublicProfileResponse):
     following_visibility: CommunityRelationVisibility
     message_policy: CommunityInteractionPolicy
     mention_policy: CommunityInteractionPolicy
+    gravatar_enabled: bool = False
 
 
 class CommunityProfileUpdateRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=48)
     bio: str = Field(default="", max_length=300)
     regenerate_avatar: bool = False
+    avatar_kind: CommunityAvatarKind = CommunityAvatarKind.GENERATED
+    gravatar_enabled: bool = False
 
     @field_validator("display_name")
     @classmethod

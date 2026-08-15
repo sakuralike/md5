@@ -18,6 +18,9 @@ vi.mock("../services/community", () => ({
     display_name: "合成资料所有者",
     bio: "合成公开简介",
     avatar_seed: "synthetic-avatar-seed",
+    avatar_kind: "generated",
+    avatar_url: null,
+    gravatar_enabled: false,
     role: "user",
     level: { code: "rookie", name: "新手侦探" },
     registered_month: "2026-08",
@@ -30,6 +33,7 @@ vi.mock("../services/community", () => ({
     message_policy: "following",
     mention_policy: "everyone",
   })),
+  uploadCommunityAvatar: vi.fn(),
   updateCommunityOwnProfile: vi.fn(),
   updateCommunityPrivacy: vi.fn(),
 }));
@@ -41,5 +45,8 @@ describe("CommunitySettingsPage", () => {
     expect(html).toContain("用户名");
     expect(html).toContain("谁可以提及我");
     expect(html).toContain("注册后不可修改");
+    expect(html).toContain("头像来源");
+    expect(html).toContain("上传头像");
+    expect(html).toContain("Gravatar 仅在你主动开启后使用");
   });
 });

@@ -34,7 +34,7 @@ function createHeaders(
   const headers = new Headers(options.headers);
   headers.set("Accept", accept);
   headers.set("X-Request-ID", `web_${createClientId()}`);
-  if (options.body) headers.set("Content-Type", "application/json");
+  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   return headers;
 }

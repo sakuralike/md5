@@ -346,3 +346,96 @@ def resolve_web_announcement_image(settings: Settings, asset_name: str) -> tuple
         raise AppError("web.announcement_image_not_found", "Web 公告图片不存在", status_code=404)
     suffix_content_types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
     return target, suffix_content_types[target.suffix]
+
+
+_COMMUNITY_AVATAR_ASSET_DIRECTORY = "community-avatars"
+
+
+@dataclass(frozen=True, slots=True)
+class StoredCommunityAvatar:
+    url: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+
+
+async def store_community_avatar(request: Request, settings: Settings) -> StoredCommunityAvatar:
+    declared_content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if declared_content_type not in _ALLOWED_CONTENT_TYPES:
+        raise AppError(
+            "community.avatar_content_type_invalid",
+            "头像仅支持 PNG、JPEG 或 WebP 图片",
+            status_code=415,
+        )
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            if int(declared_length) > settings.community_avatar_max_bytes:
+                raise AppError(
+                    "community.avatar_too_large",
+                    "头像图片大小超过限制",
+                    status_code=413,
+                    details={"max_bytes": settings.community_avatar_max_bytes},
+                )
+        except ValueError as exc:
+            raise AppError(
+                "request.content_length_invalid", "Content-Length 请求头无效", status_code=400
+            ) from exc
+    payload = bytearray()
+    async for chunk in request.stream():
+        if len(payload) + len(chunk) > settings.community_avatar_max_bytes:
+            raise AppError(
+                "community.avatar_too_large",
+                "头像图片大小超过限制",
+                status_code=413,
+                details={"max_bytes": settings.community_avatar_max_bytes},
+            )
+        payload.extend(chunk)
+    if not payload:
+        raise AppError("community.avatar_empty", "头像图片不能为空", status_code=422)
+    binary = bytes(payload)
+    detected_content_type = _detect_content_type(binary)
+    if detected_content_type is None or detected_content_type != declared_content_type:
+        raise AppError(
+            "community.avatar_signature_invalid", "图片内容与声明的文件类型不一致", status_code=422
+        )
+    digest = hashlib.sha256(binary).hexdigest()
+    asset_name = f"{digest}{_ALLOWED_CONTENT_TYPES[detected_content_type]}"
+    storage_root = (
+        Path(settings.site_asset_storage_path).expanduser().resolve()
+        / _COMMUNITY_AVATAR_ASSET_DIRECTORY
+    )
+    storage_root.mkdir(parents=True, exist_ok=True)
+    target = storage_root / asset_name
+    if not target.exists():
+        temporary = storage_root / f".{asset_name}.{uuid4().hex}.tmp"
+        try:
+            with temporary.open("xb") as handle:
+                handle.write(binary)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+            with suppress(OSError):
+                target.chmod(0o640)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return StoredCommunityAvatar(
+        url=f"/api/v1/site/assets/avatars/{asset_name}",
+        content_type=detected_content_type,
+        size_bytes=len(binary),
+        sha256=digest,
+    )
+
+
+def resolve_community_avatar(settings: Settings, asset_name: str) -> tuple[Path, str]:
+    if not _ASSET_NAME_PATTERN.fullmatch(asset_name):
+        raise AppError("community.avatar_not_found", "头像图片不存在", status_code=404)
+    storage_root = (
+        Path(settings.site_asset_storage_path).expanduser().resolve()
+        / _COMMUNITY_AVATAR_ASSET_DIRECTORY
+    )
+    target = (storage_root / asset_name).resolve()
+    if target.parent != storage_root or not target.is_file():
+        raise AppError("community.avatar_not_found", "头像图片不存在", status_code=404)
+    content_types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
+    return target, content_types[target.suffix]

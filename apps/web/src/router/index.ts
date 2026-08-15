@@ -26,6 +26,7 @@ import TrustCasesPage from "../pages/TrustCasesPage.vue";
 import ThirdPartyAuthorizePage from "../pages/ThirdPartyAuthorizePage.vue";
 import AuthorizedApplicationsPage from "../pages/AuthorizedApplicationsPage.vue";
 import UserCenterPage from "../pages/UserCenterPage.vue";
+import DeveloperApplicationsPage from "../pages/DeveloperApplicationsPage.vue";
 import VerifyEmailPage from "../pages/VerifyEmailPage.vue";
 
 const router = createRouter({
@@ -40,6 +41,9 @@ const router = createRouter({
     { path: "/verify-email", component: VerifyEmailPage },
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
     { path: "/user-center", component: UserCenterPage, meta: { requiresAuth: true } },
+    { path: "/developer", redirect: "/developer/applications" },
+    { path: "/developer/apply", component: DeveloperApplicationsPage, meta: { requiresAuth: true } },
+    { path: "/developer/applications", component: DeveloperApplicationsPage, meta: { requiresAuth: true } },
     { path: "/community", component: CommunityHomePage },
     { path: "/community/activity", component: CommunityActivityPage },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },

@@ -95,3 +95,91 @@ class ThirdPartyAppRedirectUri(Base):
     redirect_uri_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
+
+class ThirdPartyApplicationRequestStatus(StrEnum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    REJECTED = "rejected"
+    APPROVED = "approved"
+
+
+class ThirdPartyApplicationReviewEventKind(StrEnum):
+    CREATED = "created"
+    SUBMITTED = "submitted"
+    RESUBMITTED = "resubmitted"
+    REJECTED = "rejected"
+    APPROVED = "approved"
+
+
+class ThirdPartyApplicationRequest(Base):
+    __tablename__ = "third_party_application_requests"
+    __table_args__ = (
+        Index("ix_third_party_application_requests_status_created", "status", "created_at"),
+        Index(
+            "ix_third_party_application_requests_submitter_status", "submitted_by_user_id", "status"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    submitted_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    developer_name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str] = mapped_column(Text, default="")
+    website_url: Mapped[str] = mapped_column(String(2_000))
+    privacy_policy_url: Mapped[str] = mapped_column(String(2_000))
+    redirect_uris_json: Mapped[str] = mapped_column(Text, default="[]")
+    requested_scopes_json: Mapped[str] = mapped_column(Text, default="[]")
+    windows_release_info: Mapped[str] = mapped_column(Text, default="")
+    use_case: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[ThirdPartyApplicationRequestStatus] = mapped_column(
+        Enum(ThirdPartyApplicationRequestStatus, native_enum=False, length=24),
+        default=ThirdPartyApplicationRequestStatus.DRAFT,
+        index=True,
+    )
+    resubmission_count: Mapped[int] = mapped_column(Integer, default=0)
+    current_version: Mapped[int] = mapped_column(Integer, default=1)
+    reviewer_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_application_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("third_party_apps.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class ThirdPartyApplicationReviewEvent(Base):
+    __tablename__ = "third_party_application_review_events"
+    __table_args__ = (
+        Index(
+            "ix_third_party_application_review_events_request_created",
+            "application_request_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    application_request_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("third_party_application_requests.id", ondelete="CASCADE"),
+        index=True,
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kind: Mapped[ThirdPartyApplicationReviewEventKind] = mapped_column(
+        Enum(ThirdPartyApplicationReviewEventKind, native_enum=False, length=24), index=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

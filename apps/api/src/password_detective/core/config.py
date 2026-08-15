@@ -80,14 +80,13 @@ class Settings(BaseSettings):
     desktop_max_installations_per_user: int = Field(default=10, ge=1, le=100)
     site_asset_storage_path: str = ".local/site-assets"
     site_logo_max_bytes: int = Field(default=2_097_152, ge=1_024, le=10_485_760)
+    community_avatar_max_bytes: int = Field(default=2_097_152, ge=1_024, le=10_485_760)
     desktop_announcement_image_max_bytes: int = Field(default=5_242_880, ge=1_024, le=20_971_520)
     desktop_update_storage_path: str = ".local/desktop-updates"
     desktop_update_max_artifact_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )
-    desktop_update_download_cache_seconds: int = Field(
-        default=86_400, ge=60, le=31_536_000
-    )
+    desktop_update_download_cache_seconds: int = Field(default=86_400, ge=60, le=31_536_000)
     database_url: str = "sqlite:///./.local/password-detective.db"
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=20, ge=0, le=200)
@@ -128,9 +127,7 @@ class Settings(BaseSettings):
                 continue
             direct_value = values.get(field_name)
             if direct_value not in (None, ""):
-                raise ValueError(
-                    f"{environment_name} 和 {environment_name}_FILE 不能同时配置"
-                )
+                raise ValueError(f"{environment_name} 和 {environment_name}_FILE 不能同时配置")
             values[field_name] = _read_file_backed_setting(raw_path, environment_name)
         return values
 
@@ -229,8 +226,7 @@ class Settings(BaseSettings):
         except (json.JSONDecodeError, ValueError) as exc:
             raise ValueError("CANDIDATE_SECRET_KEYRING 必须是无重复键的 JSON 对象") from exc
         if not isinstance(parsed, dict) or any(
-            not isinstance(key, str) or not isinstance(value, str)
-            for key, value in parsed.items()
+            not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
         ):
             raise ValueError("CANDIDATE_SECRET_KEYRING 必须是字符串到字符串的 JSON 对象")
         return parsed
