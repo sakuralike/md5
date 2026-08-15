@@ -47,7 +47,7 @@ test("Admin 停用普通用户、撤销活跃会话并恢复账号", async ({ pa
 
   await loginAdmin(page, admin);
   await page.goto("/users");
-  await expect(page.getByRole("heading", { name: "用户治理工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "用户审批工作台" })).toBeVisible();
   await page.getByLabel("搜索用户").fill(username);
   await page.getByRole("button", { name: "查询", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: username });

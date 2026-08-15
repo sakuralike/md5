@@ -24,7 +24,7 @@ test("Admin 创建并发布配置版本，再从历史版本生成不可变回�
   await expect(page.getByText("尚无配置版本，请创建首个草稿。")).toBeVisible();
 
   await page.getByLabel("每日明文查看配额").fill("21");
-  await page.getByRole("button", { name: "创建不可变草稿" }).click();
+  await page.getByRole("button", { name: "保存为不可变草稿" }).click();
   await expect(page.getByText(/不可变草稿 .* 已创建，可在差异确认后发布/u)).toBeVisible();
   await expect(page.getByRole("table").getByText("草稿", { exact: true })).toBeVisible();
 
@@ -34,7 +34,7 @@ test("Admin 创建并发布配置版本，再从历史版本生成不可变回�
   await expect(page.getByRole("table").getByText("当前生效", { exact: true })).toBeVisible();
 
   await page.getByLabel("每日明文查看配额").fill("22");
-  await page.getByRole("button", { name: "创建不可变草稿" }).click();
+  await page.getByRole("button", { name: "保存为不可变草稿" }).click();
   await expect(page.getByText(/不可变草稿 .* 已创建，可在差异确认后发布/u)).toBeVisible();
   await fillSettingsReauthentication(page, admin.password, admin.totpSecret);
   await page.getByRole("button", { name: "发布选中草稿" }).click();

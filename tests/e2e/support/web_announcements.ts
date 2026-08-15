@@ -34,10 +34,47 @@ export interface PublishedWebAnnouncement {
   autoCloseSeconds: number | null;
 }
 
+export interface PublishWebAnnouncementOptions {
+  withImage?: boolean;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+}
+
+const SYNTHETIC_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
+async function uploadWebAnnouncementImageForBrowser(
+  request: APIRequestContext,
+  accessToken: string,
+): Promise<string> {
+  const upload = await request.post(`${apiBaseUrl}/admin/web-announcements/images`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Origin: adminOrigin,
+      "Content-Type": "image/png",
+    },
+    data: SYNTHETIC_PNG,
+  });
+  expect(upload.status(), await upload.text()).toBe(201);
+  const body = (await upload.json()) as {
+    url: string;
+    content_type: string;
+    size_bytes: number;
+    sha256: string;
+  };
+  expect(body.content_type).toBe("image/png");
+  expect(body.size_bytes).toBe(SYNTHETIC_PNG.length);
+  expect(body.sha256).toMatch(/^[0-9a-f]{64}$/u);
+  return body.url;
+}
+
 export async function publishWebAnnouncementForBrowser(
   request: APIRequestContext,
   title: string,
   autoCloseSeconds: number | null,
+  options: PublishWebAnnouncementOptions = {},
 ): Promise<PublishedWebAnnouncement> {
   const username = process.env.E2E_ADMIN_WORKFLOW_USERNAME;
   const password = process.env.E2E_ADMIN_WORKFLOW_PASSWORD;
@@ -56,22 +93,40 @@ export async function publishWebAnnouncementForBrowser(
   });
   expect(login.status(), await login.text()).toBe(200);
   const tokens = (await login.json()) as BrowserTokenResponse;
+  const adminHeaders = {
+    Authorization: `Bearer ${tokens.access_token}`,
+    Origin: adminOrigin,
+  };
+  const existing = await request.get(`${apiBaseUrl}/admin/web-announcements`, { headers: adminHeaders });
+  expect(existing.status(), await existing.text()).toBe(200);
+  const existingBody = (await existing.json()) as {
+    items: Array<{ id: string; status: AnnouncementResponse["status"] }>;
+  };
+  for (const item of existingBody.items) {
+    if (item.status !== "published") continue;
+    const archived = await request.post(`${apiBaseUrl}/admin/web-announcements/${item.id}/archive`, {
+      headers: adminHeaders,
+    });
+    expect(archived.status(), await archived.text()).toBe(200);
+  }
+  const imageUrls = options.withImage
+    ? [await uploadWebAnnouncementImageForBrowser(request, tokens.access_token)]
+    : [];
   const payload: WebAnnouncementWriteRequest = {
     title,
     content: "这是用于浏览器验收的 Web 公告，不包含真实敏感信息。",
     content_type: "text",
-    image_urls: [],
-    action_label: null,
-    action_url: null,
-    sort_order: 9_000 + (Date.now() % 1_000),
+    image_urls: imageUrls,
+    action_label: options.actionLabel ?? null,
+    action_url: options.actionUrl ?? null,
+    sort_order: 10_000,
     auto_close_seconds: autoCloseSeconds,
     starts_at: null,
     ends_at: null,
   };
   const created = await request.post(`${apiBaseUrl}/admin/web-announcements`, {
     headers: {
-      Authorization: `Bearer ${tokens.access_token}`,
-      Origin: adminOrigin,
+      ...adminHeaders,
     },
     data: payload,
   });
@@ -81,8 +136,7 @@ export async function publishWebAnnouncementForBrowser(
 
   const published = await request.post(`${apiBaseUrl}/admin/web-announcements/${draft.id}/publish`, {
     headers: {
-      Authorization: `Bearer ${tokens.access_token}`,
-      Origin: adminOrigin,
+      ...adminHeaders,
     },
   });
   expect(published.status(), await published.text()).toBe(200);
@@ -96,14 +150,59 @@ export async function publishWebAnnouncementForBrowser(
   };
 }
 
+export async function isolateWebAnnouncement(page: Page, title: string): Promise<void> {
+  const response = await page.request.get(`${apiBaseUrl}/web/announcements?limit=20`);
+  expect(response.status(), await response.text()).toBe(200);
+  const body = (await response.json()) as { items: Array<Record<string, unknown> & { title: string }> };
+  const target = body.items.find((item) => item.title === title);
+  expect(target, `未在公开公告列表找到验收公告：${title}`).toBeDefined();
+  await page.route("**/api/v1/web/announcements?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [target] }),
+    });
+  });
+}
+
 export async function clearWebAnnouncementDismissals(page: Page): Promise<void> {
   await page.addInitScript(() => {
+    const resetMarker = "web-announcement-e2e-dismissals-reset";
+    if (sessionStorage.getItem(resetMarker)) return;
+    sessionStorage.setItem(resetMarker, "1");
     for (let index = localStorage.length - 1; index >= 0; index -= 1) {
       const key = localStorage.key(index);
-      if (key?.startsWith("password_detective_web_announcement_dismissed:")) {
+      if (key?.startsWith("web-popup-announcement:")) {
         localStorage.removeItem(key);
       }
     }
   });
+}
+export async function dismissAllWebAnnouncements(page: Page): Promise<void> {
+  const popup = page.getByRole("complementary", { name: "网站公告" });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (attempt === 0) {
+      try {
+        await expect(popup).toBeVisible({ timeout: 1_500 });
+      } catch {
+        return;
+      }
+    } else if (!(await popup.isVisible())) {
+      return;
+    }
+    await popup.getByRole("button", { name: "关闭公告" }).click();
+    await page.waitForTimeout(100);
+  }
+  throw new Error("未能关闭全部 Web 公告弹窗");
+}
+
+export async function focusWebAnnouncement(page: Page, title: string): Promise<void> {
+  const popup = page.getByRole("complementary", { name: "网站公告" });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await popup.getByText(title, { exact: true }).count()) > 0) return;
+    await expect(popup).toBeVisible();
+    await popup.getByRole("button", { name: "关闭公告" }).click();
+  }
+  throw new Error(`未能在公告队列中定位标题：${title}`);
 }
 

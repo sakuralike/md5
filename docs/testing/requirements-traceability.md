@@ -542,13 +542,21 @@
 | 总哈希值池 | `apps/api/src/password_detective/modules/hash_pool/`、`apps/admin/src/pages/HashPoolPage.vue`、`GET /api/v1/admin/hash-pool` | 已实现，定向测试、统一门禁及 Staging 受保护路由冒烟通过 | 已登录真实浏览器和生产级数据量验证 |
 | 用户审批手动创建用户 | `AdminUserCreateRequest`、`POST /api/v1/admin/users`、`UserGovernancePage.vue` | 已实现并有服务/API/页面测试，Staging 页面制品已部署 | 已登录目标环境权限和审计查询验证 |
 | 用户等级与权益归属 | `UserLevelsManagement.vue`、`/users#user-levels` | 已移至用户审批，生成不可变草稿 | 发布门禁和真实浏览器滚动定位 |
-| Web 右下角公告弹窗 | `AnnouncementPopup.vue`、`services/announcements.ts` | 已实现并有 SSR/service 测试，Staging 公告接口返回已发布公告 | 浏览器 localStorage、图片和外链真实点击 |
+| Web 右下角公告弹窗 | `AnnouncementPopup.vue`、`services/announcements.ts`、`tests/e2e/web-announcements.spec.ts` | 已实现；Chromium、Firefox、WebKit 均完成自动关闭、手动关闭、localStorage、图片加载和外链点击真实旅程 | Staging 公网图片缓存与目标 Windows 实机联调 |
 | 桌面公告读取 | `DesktopApiClient` 基址补全、no-cache 请求、默认代理地址 | 已实现并有 29 个 Windows 测试，公网代理公告接口 HTTP 200 | Release 包在目标 Windows 实机验证 |
 
+
+## 2026-08-15 Web 公告图片与外链真实验收追踪
+
+| 需求 | 模块 | 自动化证据 | 状态 |
+|---|---|---|---|
+| ANN-WEB-IMAGE-01 Admin 上传并保存公告图片 | `WebAnnouncementsPage.vue`、`POST /admin/web-announcements/images` | Admin Chromium/Firefox/WebKit E2E 上传合成 PNG，校验 MIME、字节数、SHA-256、预览、保存和发布 | 已实现；Staging 公网资源缓存待验证 |
+| ANN-WEB-IMAGE-02 Web 弹窗图片加载与点击外链 | `AnnouncementPopup.vue`、专用图片资源路径 | Web Chromium/Firefox/WebKit E2E 校验图片 `naturalWidth > 0`，点击后打开配置的 HTTP(S) 外链 | 已实现；目标 Windows 桌面端图片联动不在本轮范围 |
+| ANN-WEB-E2E-03 跨浏览器公告状态隔离 | `tests/e2e/support/web_announcements.ts`、Vite API 代理环境变量 | 三浏览器各 37 项 E2E；WebKit 首次单项时序抖动复跑通过 | 已实现；后续保留稳定性观察 |
 
 ## 2026-08-14 公告渠道隔离追踪
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
-| ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts` | 已实现；Chromium Admin/Web 真实浏览器 E2E 通过，Firefox/WebKit 待补 |
-| ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts` | 已实现；Chromium 自动关闭、手动关闭与 localStorage 旅程通过，Firefox/WebKit 待补 |
+| ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts`、跨浏览器 Admin/Web E2E | 已实现；Chromium、Firefox、WebKit 真实浏览器 E2E 通过 |
+| ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts`、跨浏览器 Web E2E | 已实现；Chromium、Firefox、WebKit 自动关闭、手动关闭与 localStorage 旅程通过 |

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_assertions";
+import { dismissAllWebAnnouncements } from "./support/web_announcements";
 
 test.use({ screenshot: "off", trace: "off" });
 
@@ -9,6 +10,7 @@ async function loginSeededWeb(page: Page): Promise<void> {
   if (!username || !password) throw new Error("缺少 E2E_WEB_USERNAME 或 E2E_WEB_PASSWORD");
 
   await page.goto("/login");
+  await dismissAllWebAnnouncements(page);
   await page.getByLabel("用户名或邮箱").fill(username);
   await page.getByLabel("账号密码").fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -72,6 +74,7 @@ test("Web 游客可提交授权贡献但只进入待验证池", async ({ page })
   const password = "Synthetic-Guest-Contribution-2026!";
 
   await page.goto("/");
+  await dismissAllWebAnnouncements(page);
   await searchManualFingerprint(page, fingerprint);
   await expect(page.getByText("暂无社区匹配")).toBeVisible();
 

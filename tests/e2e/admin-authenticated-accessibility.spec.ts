@@ -24,13 +24,13 @@ test("Admin 用户治理与角色审批覆盖桌面、移动、跳转主内容�
     requiredAdminFixture("E2E_ADMIN_ACCESSIBILITY_REFRESH_TOKEN"),
   );
   await page.goto("/users");
-  await expect(page.getByRole("heading", { name: "用户治理工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "用户审批工作台" })).toBeVisible();
 
   await exerciseSkipLink(page);
   await expectPageBaseline(page, testInfo, {
     name: "admin-user-governance-desktop",
     criticalRegions: [
-      page.getByRole("heading", { name: "用户治理工作台" }),
+      page.getByRole("heading", { name: "用户审批工作台" }),
       page.getByRole("navigation", { name: "管理导航" }),
       page.getByRole("table"),
     ],

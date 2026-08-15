@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_assertions";
 import { expectNoSeriousAccessibilityViolations, expectPageVisualBaseline } from "./support/visual_assertions";
+import { dismissAllWebAnnouncements } from "./support/web_announcements";
 
 test("Web 登录页形成桌面视觉、键盘顺序与错误提示门禁", async ({ page }, testInfo) => {
   const browserErrors = observeBrowserErrors(page);
   await page.goto("/login");
+  await dismissAllWebAnnouncements(page);
 
   const loginInput = page.getByLabel("用户名或邮箱");
   const passwordInput = page.getByLabel("账号密码");
@@ -44,6 +46,7 @@ test.describe("Web 移动端视觉门禁", () => {
   test("Web 首页移动视口保持关键内容可见且无页面级溢出", async ({ page }, testInfo) => {
     const browserErrors = observeBrowserErrors(page);
     await page.goto("/");
+    await dismissAllWebAnnouncements(page);
     await expectPageVisualBaseline(page, testInfo, {
       name: "web-home-mobile",
       criticalRegions: [

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_assertions";
+import { dismissAllWebAnnouncements } from "./support/web_announcements";
 
 // 认证请求含短期合成凭据，不生成可能记录请求体或令牌的 Trace。
 test.use({ screenshot: "off", trace: "off" });
@@ -20,6 +21,7 @@ test("Web 游客门禁、注册、退出和重新登录形成真实 API 闭环",
   const email = `${username}@example.com`;
 
   await page.goto("/trust-cases");
+  await dismissAllWebAnnouncements(page);
   await expect(page).toHaveURL(/\/login$/u);
   await expect(page.getByRole("heading", { name: "登录密码侦探社" })).toBeVisible();
 

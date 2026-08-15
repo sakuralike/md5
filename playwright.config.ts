@@ -120,7 +120,7 @@ export default defineConfig({
     ].flatMap(({ name, device }) => [
       {
         name: `web-${name}`,
-        testMatch: /web-.*\.spec\.ts/,
+        testMatch: /(^|[\\/])web-[^\\/]+\.spec\.ts$/,
         use: {
           ...device,
           baseURL: `http://127.0.0.1:${webPort}`,
@@ -128,7 +128,7 @@ export default defineConfig({
       },
       {
         name: `admin-${name}`,
-        testMatch: /admin-.*\.spec\.ts/,
+        testMatch: /(^|[\\/])admin-[^\\/]+\.spec\.ts$/,
         use: {
           ...device,
           baseURL: `http://127.0.0.1:${adminPort}`,
@@ -157,6 +157,7 @@ export default defineConfig({
       env: {
         ...process.env,
         VITE_API_BASE_URL: `http://127.0.0.1:${apiPort}/api/v1`,
+        VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
       },
     },
     {
@@ -167,6 +168,7 @@ export default defineConfig({
       env: {
         ...process.env,
         VITE_API_BASE_URL: `http://127.0.0.1:${apiPort}/api/v1`,
+        VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
       },
     },
   ],
