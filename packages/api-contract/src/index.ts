@@ -2173,6 +2173,46 @@ export const THIRD_PARTY_API_V1_SCOPES = [
 
 export type ThirdPartyScope = (typeof THIRD_PARTY_API_V1_SCOPES)[number];
 
+export const THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS = [
+  {
+    value: "profile:read",
+    label: "读取已授权用户的公开资料",
+    description: "仅用于显示当前已授权用户的基础资料。",
+  },
+  {
+    value: "hash:read",
+    label: "读取已公开的哈希资料",
+    description: "查询公开哈希条目及其公开评论。",
+  },
+  {
+    value: "announcements:read",
+    label: "读取桌面端公告",
+    description: "获取面向桌面端的公告内容与图片链接。",
+  },
+  {
+    value: "updates:read",
+    label: "检查桌面端版本更新",
+    description: "检查当前桌面程序是否有可用更新。",
+  },
+  {
+    value: "desktop:installations",
+    label: "登记与管理本机安装实例",
+    description: "登记当前设备安装实例以完成桌面端可信调用。",
+  },
+  {
+    value: "desktop:verification",
+    label: "验证压缩包密码并提交回执",
+    description: "提交本地验证结果；默认进入待验证池。",
+  },
+] as const satisfies ReadonlyArray<{
+  value: Exclude<ThirdPartyScope, "desktop:verification:trusted">;
+  label: string;
+  description: string;
+}>;
+
+export type ThirdPartyRequestableScope =
+  (typeof THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS)[number]["value"];
+
 export const THIRD_PARTY_OAUTH_GRANT_TYPES = [
   "authorization_code",
   "refresh_token",

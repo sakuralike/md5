@@ -53,6 +53,12 @@ describe("DeveloperApplicationsPage", () => {
 
     expect(html).toContain("开发者应用申请");
     expect(html).toContain("OAuth 回调地址");
+    expect(html).toContain("读取已授权用户的公开资料");
+    expect(html).toContain("读取已公开的哈希资料");
+    expect(html).toContain("读取桌面端公告");
+    expect(html).toContain("检查桌面端版本更新");
+    expect(html).toContain("登记与管理本机安装实例");
+    expect(html).toContain("验证压缩包密码并提交回执");
     expect(html).toContain("合成桌面应用");
     expect(html).toContain("修改并重新提交");
     expect(html).toContain("只有管理员审核通过，系统才会创建可用的第三方桌面应用");

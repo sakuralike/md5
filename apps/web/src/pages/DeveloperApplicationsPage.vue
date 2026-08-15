@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS } from "@password-detective/api-contract";
 import { computed, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +42,7 @@ const form = ref<DeveloperApplicationForm>({
   use_case: "",
 });
 const redirectUrisText = ref("");
-const scopesText = ref("profile:read");
+const selectableScopes = THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS;
 
 const editingApplication = computed(() =>
   applications.value.find((application) => application.id === editingId.value) ?? null,
@@ -53,6 +55,12 @@ function messageFrom(caught: unknown, fallback: string): string {
 
 function splitLines(value: string): string[] {
   return [...new Set(value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean))];
+}
+
+function updateScopeSelection(scope: string, checked: boolean | "indeterminate"): void {
+  form.value.scopes = checked === true
+    ? [...new Set([...form.value.scopes, scope])]
+    : form.value.scopes.filter((selectedScope) => selectedScope !== scope);
 }
 
 function statusLabel(status: DeveloperApplicationStatus): string {
@@ -73,7 +81,6 @@ function resetForm(): void {
     use_case: "",
   };
   redirectUrisText.value = "";
-  scopesText.value = "profile:read";
 }
 
 function populateForm(application: DeveloperApplication): void {
@@ -90,7 +97,6 @@ function populateForm(application: DeveloperApplication): void {
     use_case: application.use_case,
   };
   redirectUrisText.value = application.redirect_uris.join("\n");
-  scopesText.value = application.requested_scopes.join("\n");
   success.value = "已载入申请，可直接修改后保存或重新提交。";
 }
 
@@ -101,7 +107,6 @@ function startEditing(application: DeveloperApplication): void {
 
 function syncFormLists(): boolean {
   form.value.redirect_uris = splitLines(redirectUrisText.value);
-  form.value.scopes = splitLines(scopesText.value);
   if (form.value.redirect_uris.length === 0 || form.value.scopes.length === 0) {
     error.value = "请至少填写一个回调地址和一个申请 Scope。";
     return false;
@@ -210,7 +215,7 @@ onServerPrefetch(load);
             <div class="space-y-2"><Label for="developer-app-privacy">隐私政策地址</Label><Input id="developer-app-privacy" v-model="form.privacy_policy_url" type="url" placeholder="https://example.com/privacy" /></div>
           </div>
           <div class="space-y-2"><Label for="developer-app-redirects">OAuth 回调地址（每行一个）</Label><Textarea id="developer-app-redirects" v-model="redirectUrisText" rows="3" placeholder="https://example.com/oauth/callback" /></div>
-          <div class="space-y-2"><Label for="developer-app-scopes">申请 Scope（每行一个）</Label><Textarea id="developer-app-scopes" v-model="scopesText" rows="3" placeholder="profile:read" /><p class="text-xs text-muted-foreground">可申请的 Scope 由后台策略校验；如需可信验证能力，请说明桌面端验证流程。</p></div>
+          <fieldset class="space-y-3"><legend class="text-sm font-medium leading-none">申请 Scope</legend><p class="text-xs text-muted-foreground">请手动勾选所需权限。可信直入总哈希池不在此处申请，仅能由管理员审核后单独授予。</p><div class="grid gap-3 sm:grid-cols-2"><div v-for="option in selectableScopes" :key="option.value" class="flex gap-3 rounded-lg border p-3"><Checkbox :id="`developer-app-scope-${option.value}`" :checked="form.scopes.includes(option.value)" @update:checked="updateScopeSelection(option.value, $event)" /><Label :for="`developer-app-scope-${option.value}`" class="grid cursor-pointer gap-1 leading-snug"><span class="font-medium text-foreground">{{ option.label }}</span><code class="text-xs text-muted-foreground">{{ option.value }}</code><span class="text-xs font-normal text-muted-foreground">{{ option.description }}</span></Label></div></div></fieldset>
           <div class="space-y-2"><Label for="developer-app-release">Windows 桌面端发行信息</Label><Textarea id="developer-app-release" v-model="form.windows_release_info" rows="3" /></div>
           <div class="space-y-2"><Label for="developer-app-use-case">使用场景与数据处理说明</Label><Textarea id="developer-app-use-case" v-model="form.use_case" rows="4" /></div>
         </CardContent>

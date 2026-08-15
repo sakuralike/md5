@@ -5,7 +5,7 @@ import type {
   CommunityOwnProfileResponse,
   CommunityRelationVisibility,
 } from "@password-detective/api-contract";
-import { onMounted, onServerPrefetch, ref } from "vue";
+import { computed, onMounted, onServerPrefetch, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,9 +23,12 @@ import {
   uploadCommunityAvatar,
   updateCommunityPrivacy,
 } from "../services/community";
+import { resolveCommunityAvatarUrl } from "@/lib/communityAvatar";
+import { useCommunityAvatar } from "../composables/useCommunityAvatar";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
+const communityAvatar = useCommunityAvatar();
 const profile = ref<CommunityOwnProfileResponse | null>(null);
 const displayName = ref("");
 const bio = ref("");
@@ -41,9 +44,11 @@ const savingProfile = ref(false);
 const savingPrivacy = ref(false);
 const error = ref("");
 const success = ref("");
+const avatarSrc = computed(() => (profile.value ? resolveCommunityAvatarUrl(profile.value) : null));
 
 function applyProfile(next: CommunityOwnProfileResponse): void {
   profile.value = next;
+  communityAvatar.apply(next);
   displayName.value = next.display_name;
   bio.value = next.bio;
   avatarKind.value = next.avatar_kind;
@@ -175,7 +180,7 @@ onServerPrefetch(() => load());
         <CardContent class="space-y-5">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
             <Avatar class="h-20 w-20 border">
-              <AvatarImage v-if="profile.avatar_url" :src="profile.avatar_url" :alt="`${profile.display_name} 的头像`" />
+              <AvatarImage v-if="avatarSrc" :src="avatarSrc" :alt="`${profile.display_name} 的头像`" />
               <AvatarFallback>{{ profile.display_name.slice(0, 1).toUpperCase() || "?" }}</AvatarFallback>
             </Avatar>
             <div class="space-y-2">
