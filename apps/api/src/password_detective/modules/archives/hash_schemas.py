@@ -43,10 +43,18 @@ class HashInteractionResponse(BaseModel):
     viewer_vote: HashVoteOutcome | None = None
 
 
+class HashCommentListResponse(BaseModel):
+    items: list[HashCommentResponse] = Field(default_factory=list)
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
 class HashDetailResponse(HashInteractionResponse):
     matched: bool
     archive: ArchiveSearchResult | None = None
+    comment_count: int = 0
     comments: list[HashCommentResponse] = Field(default_factory=list)
+    comments_next_cursor: str | None = None
 
 
 class HashVoteRequest(BaseModel):

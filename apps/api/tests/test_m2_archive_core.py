@@ -347,3 +347,59 @@ def test_hash_detail_can_open_unmatched_hash(client):
     assert response.json()["matched"] is False
     assert response.json()["archive"] is None
     assert response.json()["comments"] == []
+
+
+def test_hash_comment_list_uses_stable_cursor_pagination(client):
+    headers = _register_and_login(client)
+    submission = client.post(
+        "/api/v1/archives/submissions",
+        json=_submission_payload(),
+        headers={**headers, "Idempotency-Key": "hash-comment-page-submission-0001"},
+    )
+    assert submission.status_code == 201
+
+    detail_url = f"/api/v1/hashes/sha256/{SHA256}"
+    created_ids: list[str] = []
+    for index in range(3):
+        response = client.post(
+            f"{detail_url}/comments",
+            json={"content": f"Synthetic paged comment {index}", "rules_accepted": True},
+            headers={
+                **headers,
+                "Idempotency-Key": f"hash-comment-page-create-{index:04d}",
+            },
+        )
+        assert response.status_code == 201
+        created_ids.append(response.json()["comments"][0]["id"])
+
+    first_page = client.get(f"{detail_url}/comments?limit=2", headers=headers)
+    assert first_page.status_code == 200
+    first_body = first_page.json()
+    assert [item["id"] for item in first_body["items"]] == list(reversed(created_ids[1:]))
+    assert first_body["next_cursor"]
+    assert first_body["has_more"] is True
+
+    second_page = client.get(
+        f"{detail_url}/comments",
+        params={"limit": 2, "cursor": first_body["next_cursor"]},
+        headers=headers,
+    )
+    assert second_page.status_code == 200
+    second_body = second_page.json()
+    assert [item["id"] for item in second_body["items"]] == created_ids[:1]
+    assert second_body["next_cursor"] is None
+    assert second_body["has_more"] is False
+
+    invalid = client.get(
+        f"{detail_url}/comments",
+        params={"cursor": "not-a-valid-cursor"},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["code"] == "hash.invalid_cursor"
+
+    detail = client.get(detail_url, headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["comment_count"] == 3
+    assert detail.json()["comments_next_cursor"] is None
+    assert [item["id"] for item in detail.json()["comments"]] == list(reversed(created_ids))

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createClientId } from "@/lib/clientId";
 import {
   createHashComment,
+  getHashComments,
   getHashDetail,
   setHashCommentLike,
   setHashLike,
@@ -23,6 +24,7 @@ const auth = useAuthStore();
 const detail = ref<HashDetailResponse | null>(null);
 const loading = ref(true);
 const busy = ref(false);
+const commentsLoading = ref(false);
 const error = ref("");
 const success = ref("");
 const comment = ref("");
@@ -31,7 +33,7 @@ const rulesAccepted = ref(false);
 const algorithm = computed(() => String(route.params.algorithm ?? ""));
 const digest = computed(() => String(route.params.digest ?? ""));
 const isLoggedIn = computed(() => Boolean(auth.accessToken));
-const commentCount = computed(() => detail.value?.comments.length ?? 0);
+const commentCount = computed(() => detail.value?.comment_count ?? 0);
 
 onMounted(() => void load());
 onServerPrefetch(load);
@@ -90,7 +92,8 @@ async function toggleCommentLike(commentId: string, liked: boolean): Promise<voi
   busy.value = true;
   error.value = "";
   try {
-    detail.value = await setHashCommentLike(
+    const current = detail.value;
+    const result = await setHashCommentLike(
       algorithm.value,
       digest.value,
       commentId,
@@ -98,10 +101,51 @@ async function toggleCommentLike(commentId: string, liked: boolean): Promise<voi
       auth.accessToken,
       key(),
     );
+    detail.value = {
+      ...result,
+      comment_count: current.comment_count,
+      comments_next_cursor: current.comments_next_cursor,
+      comments: current.comments.map((item) => item.id === commentId
+        ? {
+            ...item,
+            viewer_has_liked: !liked,
+            like_count: Math.max(0, item.like_count + (liked ? -1 : 1)),
+          }
+        : item),
+    };
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "评论点赞失败";
   } finally {
     busy.value = false;
+  }
+}
+
+async function loadMoreComments(): Promise<void> {
+  if (!detail.value?.comments_next_cursor || commentsLoading.value) return;
+  commentsLoading.value = true;
+  error.value = "";
+  try {
+    const current = detail.value;
+    const page = await getHashComments(
+      algorithm.value,
+      digest.value,
+      current.comments_next_cursor,
+      20,
+      auth.accessToken || undefined,
+    );
+    const knownIds = new Set(current.comments.map((item) => item.id));
+    detail.value = {
+      ...current,
+      comments: [
+        ...current.comments,
+        ...page.items.filter((item) => !knownIds.has(item.id)),
+      ],
+      comments_next_cursor: page.next_cursor,
+    };
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "更多评论加载失败";
+  } finally {
+    commentsLoading.value = false;
   }
 }
 
@@ -219,6 +263,15 @@ function formatDate(value: string): string {
               </article>
             </div>
             <p v-else class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">还没有评论，欢迎成为第一位贡献者。</p>
+            <Button
+              v-if="detail.comments_next_cursor"
+              variant="outline"
+              class="w-full"
+              :disabled="commentsLoading"
+              @click="loadMoreComments"
+            >
+              {{ commentsLoading ? "加载中…" : "加载更多评论" }}
+            </Button>
           </section>
         </CardContent>
       </Card>

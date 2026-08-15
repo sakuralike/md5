@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from password_detective.core.idempotency import (
@@ -17,6 +17,7 @@ from password_detective.db.dependencies import get_db
 from password_detective.db.models.archive_fingerprint import FingerprintAlgorithm
 from password_detective.modules.archives.hash_schemas import (
     HashCommentCreateRequest,
+    HashCommentListResponse,
     HashDetailResponse,
     HashInteractionResponse,
     HashVoteRequest,
@@ -24,6 +25,7 @@ from password_detective.modules.archives.hash_schemas import (
 from password_detective.modules.archives.hash_service import (
     create_hash_comment,
     get_hash_detail,
+    list_hash_comments,
     set_hash_comment_like,
     set_hash_like,
     set_hash_vote,
@@ -272,6 +274,29 @@ def hash_comment_unlike(
         db=db,
         principal=principal,
         idempotency_key=idempotency_key,
+    )
+
+
+@router.get(
+    "/{algorithm}/{digest}/comments",
+    response_model=HashCommentListResponse,
+    dependencies=[Depends(rate_limit("hash.comment.list", limit=120, window_seconds=60))],
+)
+def hash_comment_list(
+    algorithm: FingerprintAlgorithm,
+    digest: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> HashCommentListResponse:
+    return list_hash_comments(
+        db,
+        algorithm=algorithm,
+        digest=digest,
+        principal=principal,
+        cursor=cursor,
+        limit=limit,
     )
 
 

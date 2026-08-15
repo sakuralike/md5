@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import base64
+import json
+from datetime import UTC, datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from password_detective.core.errors import AppError
@@ -19,6 +23,7 @@ from password_detective.db.models.hash_detail import (
 from password_detective.db.models.user import User
 from password_detective.modules.archives.hash_schemas import (
     HashCommentCreateRequest,
+    HashCommentListResponse,
     HashCommentResponse,
     HashDetailResponse,
     HashInteractionResponse,
@@ -96,16 +101,73 @@ def _comment_response(
     )
 
 
-def _comments(
-    db: Session, fingerprint_id: str, principal: Principal | None
-) -> list[HashCommentResponse]:
-    items = db.scalars(
+def _encode_comment_cursor(created_at: datetime, comment_id: str) -> str:
+    payload = {"created_at": created_at.isoformat(), "id": comment_id}
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_comment_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        created_at = datetime.fromisoformat(str(payload["created_at"]))
+        comment_id = str(payload["id"])
+        if not comment_id:
+            raise ValueError
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        return created_at, comment_id
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError("hash.invalid_cursor", "评论分页游标无效", status_code=422) from exc
+
+
+def list_hash_comments(
+    db: Session,
+    *,
+    algorithm: FingerprintAlgorithm | str,
+    digest: str,
+    principal: Principal | None,
+    cursor: str | None,
+    limit: int,
+) -> HashCommentListResponse:
+    query = normalize_fingerprint(digest, algorithm)
+    fingerprint = db.scalar(
+        select(ArchiveFingerprint).where(
+            ArchiveFingerprint.algorithm == query.algorithm,
+            ArchiveFingerprint.digest == query.digest,
+        )
+    )
+    if fingerprint is None:
+        return HashCommentListResponse()
+
+    conditions = [HashComment.fingerprint_id == fingerprint.id]
+    if cursor is not None:
+        created_at, comment_id = _decode_comment_cursor(cursor)
+        conditions.append(
+            or_(
+                HashComment.created_at < created_at,
+                (HashComment.created_at == created_at) & (HashComment.id < comment_id),
+            )
+        )
+    comments = db.scalars(
         select(HashComment)
-        .where(HashComment.fingerprint_id == fingerprint_id)
-        .order_by(HashComment.created_at.asc(), HashComment.id.asc())
-        .limit(100)
+        .where(*conditions)
+        .order_by(HashComment.created_at.desc(), HashComment.id.desc())
+        .limit(limit + 1)
     ).all()
-    return [_comment_response(db, item, principal=principal) for item in items]
+    has_more = len(comments) > limit
+    items = comments[:limit]
+    next_cursor = (
+        _encode_comment_cursor(items[-1].created_at, items[-1].id)
+        if has_more and items
+        else None
+    )
+    return HashCommentListResponse(
+        items=[_comment_response(db, item, principal=principal) for item in items],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 def get_hash_detail(
@@ -136,7 +198,9 @@ def get_hash_detail(
             viewer_has_liked=False,
             vote_counts={},
             viewer_vote=None,
+            comment_count=0,
             comments=[],
+            comments_next_cursor=None,
         )
     like_count = (
         db.scalar(select(func.count(HashLike.id)).where(HashLike.fingerprint_id == fingerprint.id))
@@ -152,6 +216,22 @@ def get_hash_detail(
         )
         is not None
     )
+    comment_page = list_hash_comments(
+        db,
+        algorithm=query.algorithm,
+        digest=query.digest,
+        principal=principal,
+        cursor=None,
+        limit=20,
+    )
+    comment_count = (
+        db.scalar(
+            select(func.count(HashComment.id)).where(
+                HashComment.fingerprint_id == fingerprint.id
+            )
+        )
+        or 0
+    )
     return HashDetailResponse(
         algorithm=query.algorithm,
         digest=query.digest,
@@ -161,7 +241,9 @@ def get_hash_detail(
         viewer_has_liked=viewer_has_liked,
         vote_counts=_vote_counts(db, fingerprint.id),
         viewer_vote=_viewer_vote(db, fingerprint.id, principal),
-        comments=_comments(db, fingerprint.id, principal),
+        comment_count=comment_count,
+        comments=comment_page.items,
+        comments_next_cursor=comment_page.next_cursor,
     )
 
 

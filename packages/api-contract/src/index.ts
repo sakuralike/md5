@@ -252,6 +252,12 @@ export interface HashCommentResponse {
   created_at: string;
 }
 
+export interface HashCommentListResponse {
+  items: HashCommentResponse[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
 export interface HashInteractionResponse {
   algorithm: FingerprintAlgorithm;
   digest: string;
@@ -264,7 +270,9 @@ export interface HashInteractionResponse {
 export interface HashDetailResponse extends HashInteractionResponse {
   matched: boolean;
   archive: ArchiveSearchResult | null;
+  comment_count: number;
   comments: HashCommentResponse[];
+  comments_next_cursor: string | null;
 }
 
 export interface HashCommentCreateRequest {

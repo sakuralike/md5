@@ -40,6 +40,7 @@ vi.mock("../services/hashDetails", () => ({
     viewer_has_liked: true,
     vote_counts: { useful: 2, not_useful: 1 },
     viewer_vote: "useful",
+    comment_count: 21,
     comments: [{
       id: "synthetic-comment",
       parent_id: null,
@@ -49,7 +50,9 @@ vi.mock("../services/hashDetails", () => ({
       viewer_has_liked: false,
       created_at: "2026-08-13T00:00:00Z",
     }],
+    comments_next_cursor: "synthetic-next-cursor",
   })),
+  getHashComments: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
   setHashLike: vi.fn(),
   voteHash: vi.fn(),
   createHashComment: vi.fn(),
@@ -65,5 +68,7 @@ describe("HashDetailPage", () => {
     expect(html).toContain("有帮助");
     expect(html).toContain("评论与讨论");
     expect(html).toContain("合成验证说明");
+    expect(html).toContain("21 条评论");
+    expect(html).toContain("加载更多评论");
   });
 });

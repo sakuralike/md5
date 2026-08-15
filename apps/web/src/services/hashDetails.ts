@@ -1,5 +1,6 @@
 import type {
   HashCommentCreateRequest,
+  HashCommentListResponse,
   HashDetailResponse,
   HashInteractionResponse,
   HashVoteOutcome,
@@ -16,6 +17,22 @@ export function getHashDetail(
   token?: string,
 ): Promise<HashDetailResponse> {
   return apiRequest<HashDetailResponse>(hashPath(algorithm, digest), {}, token);
+}
+
+export function getHashComments(
+  algorithm: string,
+  digest: string,
+  cursor: string | null = null,
+  limit = 20,
+  token?: string,
+): Promise<HashCommentListResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiRequest<HashCommentListResponse>(
+    hashPath(algorithm, digest, `/comments?${params.toString()}`),
+    {},
+    token,
+  );
 }
 
 export function setHashLike(
