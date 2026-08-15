@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { User } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
-import { Award, Bell, Bookmark, FileArchive, History, LockKeyhole, ShieldCheck, UserRound } from "lucide-vue-next";
+import { Award, Bell, Bookmark, Code2, FileArchive, History, LockKeyhole, ShieldCheck, UserRound } from "lucide-vue-next";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ const user = computed<User | null>(() => auth.user);
 const initials = computed(() => user.value?.username.slice(0, 1).toUpperCase() ?? "?");
 const centerLinks: CenterLink[] = [
   { title: "个人资料", description: "编辑社区公开资料与头像信息", to: "/community/settings", icon: UserRound },
+  { title: "开发者应用", description: "创建、修改并提交第三方桌面应用申请", to: "/developer/applications", icon: Code2 },
   { title: "账号安全", description: "密码、TOTP 与登录会话管理", to: "/security", icon: ShieldCheck },
   { title: "等级积分信誉", description: "查看成长值、积分流水与信誉事件", to: "/reputation", icon: Award },
   { title: "我的贡献", description: "跟踪提交记录与审核结果", to: "/submissions", icon: FileArchive },

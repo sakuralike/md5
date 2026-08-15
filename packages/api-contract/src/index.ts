@@ -1942,11 +1942,15 @@ export interface CommunityPublicCommentSummary {
   created_at: string;
 }
 
+export type CommunityAvatarKind = "generated" | "upload" | "gravatar";
+
 export interface CommunityPublicProfileResponse {
   username: string;
   display_name: string;
   bio: string;
   avatar_seed: string;
+  avatar_kind: CommunityAvatarKind;
+  avatar_url: string | null;
   role: UserRole;
   level: CommunityPublicLevel;
   registered_month: string;
@@ -1961,12 +1965,15 @@ export interface CommunityOwnProfileResponse extends CommunityPublicProfileRespo
   following_visibility: CommunityRelationVisibility;
   message_policy: CommunityInteractionPolicy;
   mention_policy: CommunityInteractionPolicy;
+  gravatar_enabled: boolean;
 }
 
 export interface CommunityProfileUpdateRequest {
   display_name: string;
   bio: string;
   regenerate_avatar: boolean;
+  avatar_kind: CommunityAvatarKind;
+  gravatar_enabled: boolean;
 }
 
 export interface CommunityPrivacyUpdateRequest {

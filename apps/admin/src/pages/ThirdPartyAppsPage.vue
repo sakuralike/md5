@@ -3,6 +3,7 @@ import type { ThirdPartyApp, ThirdPartyAppCreateRequest } from "@password-detect
 import { onMounted, onServerPrefetch, ref } from "vue";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -10,15 +11,20 @@ import { Textarea } from "../components/ui/textarea";
 import { useAdminAuthStore } from "../stores/auth";
 import {
   approveThirdPartyApp,
+  approveThirdPartyApplicationRequest,
   createThirdPartyApp,
   listThirdPartyApps,
+  listThirdPartyApplicationRequests,
+  rejectThirdPartyApplicationRequest,
   restoreThirdPartyApp,
   revokeThirdPartyApp,
   suspendThirdPartyApp,
+  type ThirdPartyApplicationRequest,
 } from "../services/thirdPartyApps";
 
 const auth = useAdminAuthStore();
 const applications = ref<ThirdPartyApp[]>([]);
+const selfServiceRequests = ref<ThirdPartyApplicationRequest[]>([]);
 const name = ref("");
 const developerName = ref("");
 const description = ref("");
@@ -57,9 +63,14 @@ function statusVariant(status: ThirdPartyApp["status"]): "default" | "secondary"
 
 async function load(): Promise<void> {
   try {
-    applications.value = (await listThirdPartyApps(auth.accessToken)).items;
+    const [applicationsResponse, requestsResponse] = await Promise.all([
+      listThirdPartyApps(auth.accessToken),
+      listThirdPartyApplicationRequests(auth.accessToken),
+    ]);
+    applications.value = applicationsResponse.items;
+    selfServiceRequests.value = requestsResponse.items;
   } catch (caught) {
-    error.value = messageFrom(caught, "无法加载第三方应用");
+    error.value = messageFrom(caught, "无法加载第三方应用治理数据");
   }
 }
 
@@ -105,6 +116,47 @@ async function approve(application: ThirdPartyApp): Promise<void> {
     success.value = `应用“${updated.name}”已审核通过`;
   } catch (caught) {
     error.value = messageFrom(caught, "审核应用失败");
+  } finally {
+    busy.value = "";
+  }
+}
+
+function requestStatusLabel(status: ThirdPartyApplicationRequest["status"]): string {
+  return { draft: "草稿", pending_review: "待审核", rejected: "已驳回", approved: "已通过" }[status];
+}
+
+async function approveSelfServiceRequest(request: ThirdPartyApplicationRequest): Promise<void> {
+  clearFeedback();
+  busy.value = `request-approve:${request.id}`;
+  try {
+    await approveThirdPartyApplicationRequest(auth.accessToken, request.id, {
+      review_note: reviewNote.value.trim() || null,
+      approved_scopes: request.requested_scopes,
+      trusted_verification_enabled: trustedVerification.value,
+    });
+    await load();
+    success.value = `已审核通过“${request.name}”；可用第三方应用已创建。`;
+  } catch (caught) {
+    error.value = messageFrom(caught, "审核开发者申请失败");
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function rejectSelfServiceRequest(request: ThirdPartyApplicationRequest): Promise<void> {
+  const note = reviewNote.value.trim();
+  if (!note) {
+    error.value = "驳回开发者申请前必须填写审核备注。";
+    return;
+  }
+  clearFeedback();
+  busy.value = `request-reject:${request.id}`;
+  try {
+    await rejectThirdPartyApplicationRequest(auth.accessToken, request.id, note);
+    await load();
+    success.value = `已驳回“${request.name}”，开发者可直接修改原申请并重新提交。`;
+  } catch (caught) {
+    error.value = messageFrom(caught, "驳回开发者申请失败");
   } finally {
     busy.value = "";
   }
@@ -174,5 +226,29 @@ onMounted(() => {
         </form>
       </section>
     </div>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>开发者自助申请审核</CardTitle>
+        <CardDescription>仅审核中申请可创建可用应用。驳回后，开发者将直接修改原申请并重新提交。</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <article v-for="request in selfServiceRequests" :key="request.id" class="space-y-4 rounded-lg border p-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="space-y-1"><h3 class="font-semibold">{{ request.name }}</h3><p class="text-sm text-muted-foreground">{{ request.developer_name }} · 版本 {{ request.current_version }} · {{ request.status === 'rejected' ? `第 ${request.resubmission_count} 次重新提交` : '自助申请' }}</p></div>
+            <Badge :variant="request.status === 'approved' ? 'default' : request.status === 'rejected' ? 'destructive' : 'secondary'">{{ requestStatusLabel(request.status) }}</Badge>
+          </div>
+          <p class="text-sm text-muted-foreground">{{ request.description || "未提供应用说明" }}</p>
+          <div class="grid gap-3 text-sm sm:grid-cols-2"><p class="break-all text-muted-foreground">官网：{{ request.website_url }}</p><p class="break-all text-muted-foreground">隐私政策：{{ request.privacy_policy_url }}</p></div>
+          <div class="flex flex-wrap gap-2"><Badge v-for="scope in request.requested_scopes" :key="scope" variant="outline">{{ scope }}</Badge></div>
+          <p class="whitespace-pre-wrap text-sm text-muted-foreground">Windows 发行信息：{{ request.windows_release_info }}</p>
+          <p class="whitespace-pre-wrap text-sm text-muted-foreground">使用场景：{{ request.use_case }}</p>
+          <p v-if="request.review_note" class="rounded-md bg-muted p-3 text-sm text-muted-foreground">最近审核备注：{{ request.review_note }}</p>
+          <div v-if="request.status === 'pending_review'" class="flex flex-wrap gap-2"><Button :disabled="busy === `request-approve:${request.id}`" @click="approveSelfServiceRequest(request)">{{ busy === `request-approve:${request.id}` ? "审核中…" : "审核通过并创建应用" }}</Button><Button variant="destructive" :disabled="busy === `request-reject:${request.id}`" @click="rejectSelfServiceRequest(request)">{{ busy === `request-reject:${request.id}` ? "处理中…" : "驳回申请" }}</Button></div>
+        </article>
+        <p v-if="selfServiceRequests.length === 0" class="py-8 text-center text-sm text-muted-foreground">暂无开发者自助申请。</p>
+      </CardContent>
+      <CardFooter class="text-sm text-muted-foreground">审核备注与可信验证开关使用页面上方“创建应用”区域的相应字段；驳回时审核备注必填。</CardFooter>
+    </Card>
   </main>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  CommunityAvatarKind,
   CommunityInteractionPolicy,
   CommunityOwnProfileResponse,
   CommunityRelationVisibility,
@@ -7,7 +8,9 @@ import type {
 import { onMounted, onServerPrefetch, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +20,7 @@ import {
   createCommunityIdempotencyKey,
   getCommunityOwnProfile,
   updateCommunityOwnProfile,
+  uploadCommunityAvatar,
   updateCommunityPrivacy,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
@@ -25,6 +29,9 @@ const auth = useAuthStore();
 const profile = ref<CommunityOwnProfileResponse | null>(null);
 const displayName = ref("");
 const bio = ref("");
+const avatarKind = ref<CommunityAvatarKind>("generated");
+const gravatarEnabled = ref(false);
+const uploadingAvatar = ref(false);
 const followerVisibility = ref<CommunityRelationVisibility>("public");
 const followingVisibility = ref<CommunityRelationVisibility>("public");
 const messagePolicy = ref<CommunityInteractionPolicy>("following");
@@ -39,6 +46,8 @@ function applyProfile(next: CommunityOwnProfileResponse): void {
   profile.value = next;
   displayName.value = next.display_name;
   bio.value = next.bio;
+  avatarKind.value = next.avatar_kind;
+  gravatarEnabled.value = next.gravatar_enabled;
   followerVisibility.value = next.follower_visibility;
   followingVisibility.value = next.following_visibility;
   messagePolicy.value = next.message_policy;
@@ -68,6 +77,8 @@ async function saveProfile(regenerateAvatar = false): Promise<void> {
         display_name: displayName.value.trim(),
         bio: bio.value.trim(),
         regenerate_avatar: regenerateAvatar,
+        avatar_kind: avatarKind.value,
+        gravatar_enabled: gravatarEnabled.value,
       },
       auth.accessToken,
       createCommunityIdempotencyKey("profile-update"),
@@ -78,6 +89,32 @@ async function saveProfile(regenerateAvatar = false): Promise<void> {
     error.value = caught instanceof Error ? caught.message : "社区资料保存失败";
   } finally {
     savingProfile.value = false;
+  }
+}
+
+async function uploadAvatar(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(file.type)) {
+    error.value = "头像仅支持 PNG、JPEG 或 WebP 格式。";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    error.value = "头像文件不能超过 2 MiB。";
+    return;
+  }
+  uploadingAvatar.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    applyProfile(await uploadCommunityAvatar(file, auth.accessToken));
+    success.value = "头像已上传并设为公开头像。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "头像上传失败";
+  } finally {
+    uploadingAvatar.value = false;
   }
 }
 
@@ -132,10 +169,39 @@ onServerPrefetch(() => load());
     <div v-else-if="profile" class="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>公开身份</CardTitle>
-          <CardDescription>不会公开邮箱、精确注册时间、登录活动、设备或积分流水。</CardDescription>
+          <CardTitle>公开身份与头像</CardTitle>
+          <CardDescription>邮箱不会公开；上传头像仅以受控静态资源提供，Gravatar 仅在你主动开启后使用。</CardDescription>
         </CardHeader>
         <CardContent class="space-y-5">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <Avatar class="h-20 w-20 border">
+              <AvatarImage v-if="profile.avatar_url" :src="profile.avatar_url" :alt="`${profile.display_name} 的头像`" />
+              <AvatarFallback>{{ profile.display_name.slice(0, 1).toUpperCase() || "?" }}</AvatarFallback>
+            </Avatar>
+            <div class="space-y-2">
+              <Label for="community-avatar-file">上传头像</Label>
+              <Input id="community-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" :disabled="uploadingAvatar" @change="uploadAvatar" />
+              <p class="text-xs text-muted-foreground">支持 PNG、JPEG、WebP，最大 2 MiB。上传后立即替换当前公开头像。</p>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <Label>头像来源</Label>
+            <Select v-model="avatarKind">
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="generated">内置合成头像</SelectItem>
+                <SelectItem value="upload">已上传头像</SelectItem>
+                <SelectItem value="gravatar">Gravatar 公共头像</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div v-if="avatarKind === 'gravatar'" class="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            系统只会基于已验证邮箱计算不可逆摘要以获取头像，不会向社区公开邮箱地址。
+            <div class="mt-3 flex items-center gap-2">
+              <Checkbox id="community-gravatar-enabled" v-model="gravatarEnabled" />
+              <Label for="community-gravatar-enabled">我同意使用 Gravatar 公共头像服务</Label>
+            </div>
+          </div>
           <div class="space-y-2">
             <Label for="community-username">用户名</Label>
             <Input id="community-username" :model-value="profile.username" disabled />
@@ -152,10 +218,10 @@ onServerPrefetch(() => load());
           </div>
         </CardContent>
         <CardFooter class="flex flex-wrap gap-2">
-          <Button :disabled="savingProfile || !displayName.trim()" @click="saveProfile(false)">
+          <Button :disabled="savingProfile || uploadingAvatar || !displayName.trim()" @click="saveProfile(false)">
             {{ savingProfile ? "保存中…" : "保存公开资料" }}
           </Button>
-          <Button variant="outline" :disabled="savingProfile" @click="saveProfile(true)">更换合成头像</Button>
+          <Button variant="outline" :disabled="savingProfile || uploadingAvatar" @click="saveProfile(true)">更换合成头像</Button>
           <Button as-child variant="ghost">
             <RouterLink :to="`/community/users/${profile.username}`">查看公开主页</RouterLink>
           </Button>

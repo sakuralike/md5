@@ -2,6 +2,7 @@
 import type { PublicSiteConfig } from "@password-detective/api-contract";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
+import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -218,6 +219,7 @@ onBeforeUnmount(releaseCustomBackground);
     </header>
 
     <main id="main-content" class="main" tabindex="-1">
+      <AppBreadcrumbs />
       <RouterView />
     </main>
 

@@ -35,11 +35,39 @@ vi.mock("../services/thirdPartyApps", () => ({
     page_size: 20,
     total: 1,
   }),
+  listThirdPartyApplicationRequests: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: "request-synthetic",
+        name: "合成开发者桌面端",
+        developer_name: "合成开发者",
+        description: "合成自助申请",
+        website_url: "https://client.example",
+        privacy_policy_url: "https://client.example/privacy",
+        redirect_uris: ["https://client.example/callback"],
+        requested_scopes: ["profile:read", "desktop:verification"],
+        windows_release_info: "Windows 发行信息",
+        use_case: "验证合成压缩包",
+        status: "pending_review",
+        resubmission_count: 0,
+        current_version: 1,
+        review_note: null,
+        reviewed_at: null,
+        created_at: "2026-08-15T00:00:00Z",
+        updated_at: "2026-08-15T00:00:00Z",
+      },
+    ],
+    page: 1,
+    page_size: 100,
+    total: 1,
+  }),
   createThirdPartyApp: vi.fn(),
   approveThirdPartyApp: vi.fn(),
   suspendThirdPartyApp: vi.fn(),
   restoreThirdPartyApp: vi.fn(),
   revokeThirdPartyApp: vi.fn(),
+  approveThirdPartyApplicationRequest: vi.fn(),
+  rejectThirdPartyApplicationRequest: vi.fn(),
 }));
 
 describe("ThirdPartyAppsPage", () => {
@@ -48,7 +76,8 @@ describe("ThirdPartyAppsPage", () => {
     expect(html).toContain("第三方应用治理");
     expect(html).toContain("创建应用");
     expect(html).toContain("可信验证直入总哈希池");
-    expect(html).toContain("审核通过");
+    expect(html).toContain("审核通过并创建应用");
+    expect(html).toContain("合成开发者桌面端");
     expect(html).toContain("暂停应用");
   });
 });
