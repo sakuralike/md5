@@ -89,10 +89,13 @@ def upgrade() -> None:
         sa.Column("id", sa.String(36), nullable=False),
         sa.Column("app_id", sa.String(36), nullable=False),
         sa.Column("redirect_uri", sa.String(2000), nullable=False),
+        sa.Column("redirect_uri_hash", sa.String(64), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["app_id"], ["third_party_apps.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("app_id", "redirect_uri", name="uq_third_party_app_redirect_uri"),
+        sa.UniqueConstraint(
+            "app_id", "redirect_uri_hash", name="uq_third_party_app_redirect_uri_hash"
+        ),
     )
     op.create_index(
         "ix_third_party_app_redirect_uris_app_id",

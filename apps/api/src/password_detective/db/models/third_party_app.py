@@ -81,7 +81,9 @@ class ThirdPartyApp(Base):
 class ThirdPartyAppRedirectUri(Base):
     __tablename__ = "third_party_app_redirect_uris"
     __table_args__ = (
-        UniqueConstraint("app_id", "redirect_uri", name="uq_third_party_app_redirect_uri"),
+        UniqueConstraint(
+            "app_id", "redirect_uri_hash", name="uq_third_party_app_redirect_uri_hash"
+        ),
         Index("ix_third_party_app_redirect_uris_app_id", "app_id"),
     )
 
@@ -90,4 +92,6 @@ class ThirdPartyAppRedirectUri(Base):
         String(36), ForeignKey("third_party_apps.id", ondelete="CASCADE")
     )
     redirect_uri: Mapped[str] = mapped_column(String(2_000))
+    redirect_uri_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+

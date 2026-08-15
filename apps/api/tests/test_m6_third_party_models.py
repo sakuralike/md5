@@ -42,9 +42,13 @@ def test_third_party_uniqueness_and_token_family_fields(client) -> None:
             constraint.get("column_names") == ["client_id"] for constraint in app_unique_constraints
         )
 
+        redirect_columns = {
+            column["name"] for column in inspector.get_columns("third_party_app_redirect_uris")
+        }
+        assert "redirect_uri_hash" in redirect_columns
         redirect_constraints = inspector.get_unique_constraints("third_party_app_redirect_uris")
         assert any(
-            constraint.get("column_names") == ["app_id", "redirect_uri"]
+            constraint.get("column_names") == ["app_id", "redirect_uri_hash"]
             for constraint in redirect_constraints
         )
 

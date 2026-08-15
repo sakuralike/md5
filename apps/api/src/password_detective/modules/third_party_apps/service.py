@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 from collections.abc import Sequence
@@ -149,7 +150,16 @@ def create_app(
     )
     db.add(app)
     db.flush()
-    db.add_all([ThirdPartyAppRedirectUri(app_id=app.id, redirect_uri=uri) for uri in redirect_uris])
+    db.add_all(
+        [
+            ThirdPartyAppRedirectUri(
+                app_id=app.id,
+                redirect_uri=uri,
+                redirect_uri_hash=hashlib.sha256(uri.encode("utf-8")).hexdigest(),
+            )
+            for uri in redirect_uris
+        ]
+    )
     _audit(db, actor_id=actor_id, action="third_party_app.create", app_id=app.id)
     db.commit()
     db.refresh(app)
@@ -262,3 +272,4 @@ def rotate_secret(db: Session, *, actor_id: str, app_id: str) -> ThirdPartyAppLi
     db.commit()
     db.refresh(app)
     return _item(app, _redirects(db, app.id), secret=secret)
+
