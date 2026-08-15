@@ -4,6 +4,7 @@ import {
   isPrivilegedRole,
   THIRD_PARTY_API_V1_PATHS,
   THIRD_PARTY_API_V1_SCOPES,
+  THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS,
   THIRD_PARTY_OAUTH_GRANT_TYPES,
   THIRD_PARTY_RECEIPT_CANONICAL_FIELDS,
 } from "./index";
@@ -34,6 +35,14 @@ describe("shared API contract", () => {
       "desktop:installations",
       "desktop:verification",
       "desktop:verification:trusted",
+    ]);
+    expect(THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS.map((option) => option.value)).toEqual([
+      "profile:read",
+      "hash:read",
+      "announcements:read",
+      "updates:read",
+      "desktop:installations",
+      "desktop:verification",
     ]);
     expect(THIRD_PARTY_API_V1_PATHS.hashDetail).toBe(
       "/third-party/hashes/{algorithm}/{digest}",

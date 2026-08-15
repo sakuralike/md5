@@ -2,7 +2,7 @@
 import type { CommunityNotificationStreamStatus, User } from "@password-detective/api-contract";
 import { computed } from "vue";
 import { Bell, LogOut, UserRound } from "lucide-vue-next";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,12 +21,14 @@ const props = withDefaults(
     defaultOpen?: boolean;
     unreadCount?: number;
     notificationStatus?: CommunityNotificationStreamStatus;
+    avatarSrc?: string | null;
   }>(),
   {
     busy: false,
     defaultOpen: false,
     unreadCount: 0,
     notificationStatus: "idle",
+    avatarSrc: null,
   },
 );
 
@@ -53,6 +55,7 @@ const notificationStatusLabel = computed(() => {
         :aria-label="`打开 ${user.username} 的账户菜单`"
       >
         <Avatar size="sm" class="h-9 w-9 border-2 border-background shadow-md">
+          <AvatarImage v-if="avatarSrc" :src="avatarSrc" :alt="`${user.username} 的头像`" />
           <AvatarFallback class="bg-gradient-to-br from-primary to-accent text-primary-foreground font-semibold">
             {{ initials }}
           </AvatarFallback>

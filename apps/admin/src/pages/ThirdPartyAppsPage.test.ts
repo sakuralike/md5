@@ -74,6 +74,12 @@ describe("ThirdPartyAppsPage", () => {
   it("renders governance controls and trusted verification review", async () => {
     const html = await renderToString(createSSRApp(ThirdPartyAppsPage));
     expect(html).toContain("第三方应用治理");
+    expect(html).toContain("读取已授权用户的公开资料");
+    expect(html).toContain("读取已公开的哈希资料");
+    expect(html).toContain("读取桌面端公告");
+    expect(html).toContain("检查桌面端版本更新");
+    expect(html).toContain("登记与管理本机安装实例");
+    expect(html).toContain("验证压缩包密码并提交回执");
     expect(html).toContain("创建应用");
     expect(html).toContain("可信验证直入总哈希池");
     expect(html).toContain("审核通过并创建应用");

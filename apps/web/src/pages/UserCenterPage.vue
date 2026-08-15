@@ -2,13 +2,14 @@
 import type { User } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { Award, Bell, Bookmark, Code2, FileArchive, History, LockKeyhole, ShieldCheck, UserRound } from "lucide-vue-next";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { loadTrustCenter, type TrustCenterData } from "../services/reputation";
+import { useCommunityAvatar } from "../composables/useCommunityAvatar";
 import { useAuthStore } from "../stores/auth";
 
 interface CenterLink {
@@ -19,6 +20,8 @@ interface CenterLink {
 }
 
 const auth = useAuthStore();
+const communityAvatar = useCommunityAvatar();
+const currentAvatarSrc = communityAvatar.avatarSrc;
 const data = ref<TrustCenterData | null>(null);
 const loading = ref(true);
 const error = ref("");
@@ -64,7 +67,10 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(value));
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  if (auth.user && auth.accessToken) void communityAvatar.hydrate(auth.user.id, auth.accessToken);
+});
 </script>
 
 <template>
@@ -81,6 +87,7 @@ onMounted(load);
     <Card class="overflow-hidden rounded-[2rem] border-border/70 bg-card/75 shadow-xl backdrop-blur-xl">
       <CardContent class="grid gap-6 p-6 sm:grid-cols-[auto_1fr] sm:items-center sm:p-8">
         <Avatar size="base" class="h-24 w-24 border-4 border-background shadow-lg sm:h-28 sm:w-28">
+          <AvatarImage v-if="currentAvatarSrc" :src="currentAvatarSrc" :alt="`${user?.username ?? '用户'} 的头像`" />
           <AvatarFallback class="bg-gradient-to-br from-primary to-accent text-3xl font-bold text-primary-foreground">
             {{ initials }}
           </AvatarFallback>
