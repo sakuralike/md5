@@ -560,3 +560,9 @@
 |---|---|---|---|
 | ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts`、跨浏览器 Admin/Web E2E | 已实现；Chromium、Firefox、WebKit 真实浏览器 E2E 通过 |
 | ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts`、跨浏览器 Web E2E | 已实现；Chromium、Firefox、WebKit 自动关闭、手动关闭与 localStorage 旅程通过 |
+
+## 2026-08-15 Web 公告图片与外链 Staging 收口
+
+- `7531c634188a` 已推送到 `codex/m5-entry-gates` 并部署到 Staging；API 2、Worker 3、Web、Admin、Scheduler 和监控服务均运行正常，迁移为 `20260814_0039 (head)`。
+- 服务器本机 `ready`、桌面公告、Web 公告接口均 HTTP 200；公网 Web `:5173`、Admin `:5174` 及其 `/api/v1` 代理同样 HTTP 200。
+- 公网 `:8000` 直连仍为 HTTP 502，标记为独立入口配置风险；不改变当前 Web/Admin 代理路径的通过结论。
