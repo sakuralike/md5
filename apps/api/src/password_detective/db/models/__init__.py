@@ -118,6 +118,17 @@ from password_detective.db.models.setting_version import (
 )
 from password_detective.db.models.submission import Submission, SubmissionSource
 from password_detective.db.models.system_setting import SystemSetting
+from password_detective.db.models.third_party_app import (
+    ThirdPartyApp,
+    ThirdPartyAppRedirectUri,
+    ThirdPartyAppSource,
+    ThirdPartyAppStatus,
+)
+from password_detective.db.models.third_party_oauth import (
+    OAuthAuthorizationCode,
+    OAuthTokenSession,
+    ThirdPartyAuthorization,
+)
 from password_detective.db.models.trust_case import (
     TrustCase,
     TrustCaseEffect,
@@ -158,6 +169,13 @@ __all__ = [
     "CandidateFeedback",
     "CandidateStatus",
     "ClientInstallation",
+    "OAuthAuthorizationCode",
+    "OAuthTokenSession",
+    "ThirdPartyApp",
+    "ThirdPartyAppRedirectUri",
+    "ThirdPartyAppSource",
+    "ThirdPartyAppStatus",
+    "ThirdPartyAuthorization",
     "CommunityActivityEvent",
     "CommunityActivityFeed",
     "CommunityActivityKind",
