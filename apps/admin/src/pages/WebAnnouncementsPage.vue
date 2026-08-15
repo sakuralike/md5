@@ -60,7 +60,7 @@ function emptyDraft(): WebAnnouncementDraft {
   };
 }
 
-function selectItem(item: WebAnnouncement): void {
+function selectItem(item: WebAnnouncement, clearFeedback = true): void {
   selectedId.value = item.id;
   draft.value = {
     title: item.title,
@@ -74,9 +74,11 @@ function selectItem(item: WebAnnouncement): void {
     startsAt: item.starts_at ? item.starts_at.slice(0, 16) : "",
     endsAt: item.ends_at ? item.ends_at.slice(0, 16) : "",
   };
-  error.value = "";
-  uploadError.value = "";
-  success.value = "";
+  if (clearFeedback) {
+    error.value = "";
+    uploadError.value = "";
+    success.value = "";
+  }
 }
 
 function resetDraft(): void {
@@ -148,9 +150,10 @@ async function save(): Promise<void> {
     const result = selected.value
       ? await updateWebAnnouncement(auth.accessToken, selected.value.id, payload)
       : await createWebAnnouncement(auth.accessToken, payload);
-    success.value = selected.value ? "公告草稿已更新。" : "公告草稿已创建。";
+    const message = selected.value ? "公告草稿已更新。" : "公告草稿已创建。";
     await load();
-    selectItem(result);
+    selectItem(result, false);
+    success.value = message;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "公告保存失败";
   } finally {
@@ -164,9 +167,9 @@ async function publish(): Promise<void> {
   error.value = "";
   try {
     const result = await publishWebAnnouncement(auth.accessToken, selected.value.id);
-    success.value = "公告已发布，桌面端将在下次刷新时看到。";
     await load();
-    selectItem(result);
+    selectItem(result, false);
+    success.value = "公告已发布，Web 端将在下次请求时看到。";
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "公告发布失败";
   } finally {
@@ -180,9 +183,9 @@ async function archive(): Promise<void> {
   error.value = "";
   try {
     const result = await archiveWebAnnouncement(auth.accessToken, selected.value.id);
-    success.value = "公告已归档，不再向桌面端投放。";
     await load();
-    selectItem(result);
+    selectItem(result, false);
+    success.value = "公告已归档，不再向 Web 端投放。";
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "公告归档失败";
   } finally {

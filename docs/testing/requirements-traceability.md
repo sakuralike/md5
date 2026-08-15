@@ -550,5 +550,5 @@
 
 | 需求 | 模块 | 自动化证据 | 状态 |
 |---|---|---|---|
-| ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts` | 已实现；统一门禁通过，Staging 待回填 |
-| ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts` | 已实现；真实浏览器计时旅程待补 |
+| ANN-CHANNEL-01 桌面/Web 公告完全分离 | `desktop_announcements`、`web_announcements`、Admin 双入口、独立资源目录 | `apps/api/tests/test_m5_desktop_announcements.py`、`apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/pages/WebAnnouncementsPage.test.ts` | 已实现；Chromium Admin/Web 真实浏览器 E2E 通过，Firefox/WebKit 待补 |
+| ANN-WEB-02 Web 自动关闭时间 | `auto_close_seconds`、`AnnouncementPopup.vue`、`announcementContent.ts` | `apps/api/tests/test_m5_web_announcements.py`、`apps/admin/src/services/webAnnouncements.test.ts`、`apps/web/src/components/AnnouncementPopup.test.ts`、`apps/web/src/lib/announcementContent.test.ts` | 已实现；Chromium 自动关闭、手动关闭与 localStorage 旅程通过，Firefox/WebKit 待补 |
