@@ -25,6 +25,16 @@ class AccessClaims:
     mfa_verified: bool
 
 
+@dataclass(frozen=True)
+class ThirdPartyAccessClaims:
+    user_id: str
+    app_id: str
+    client_id: str
+    token_session_id: str
+    token_family_id: str
+    scopes: tuple[str, ...]
+
+
 def hash_account_password(password: str) -> str:
     return _password_hasher.hash(password)
 
@@ -97,6 +107,79 @@ def create_access_token(
         "jti": secrets.token_urlsafe(16),
     }
     return jwt.encode(payload, secret_key, algorithm="HS256")
+
+
+def create_third_party_access_token(
+    *,
+    secret_key: str,
+    ttl_minutes: int,
+    user_id: str,
+    app_id: str,
+    client_id: str,
+    token_session_id: str,
+    token_family_id: str,
+    scopes: tuple[str, ...],
+) -> str:
+    now = utc_now()
+    payload = {
+        "sub": user_id,
+        "app_id": app_id,
+        "client_id": client_id,
+        "sid": token_session_id,
+        "fid": token_family_id,
+        "scope": list(scopes),
+        "aud": "third-party-desktop",
+        "typ": "third_party_access",
+        "iat": now,
+        "exp": now + timedelta(minutes=ttl_minutes),
+        "jti": secrets.token_urlsafe(16),
+    }
+    return jwt.encode(payload, secret_key, algorithm="HS256")
+
+
+def decode_third_party_access_token(token: str, secret_key: str) -> ThirdPartyAccessClaims:
+    try:
+        payload = jwt.decode(
+            token,
+            secret_key,
+            algorithms=["HS256"],
+            audience="third-party-desktop",
+            options={
+                "require": [
+                    "sub",
+                    "app_id",
+                    "client_id",
+                    "sid",
+                    "fid",
+                    "scope",
+                    "aud",
+                    "typ",
+                    "iat",
+                    "exp",
+                    "jti",
+                ]
+            },
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise AppError(
+            "third_party_oauth.access_token_expired", "第三方访问令牌已过期", status_code=401
+        ) from exc
+    except jwt.PyJWTError as exc:
+        raise AppError(
+            "third_party_oauth.invalid_access_token", "第三方访问令牌无效", status_code=401
+        ) from exc
+    if payload.get("typ") != "third_party_access" or not isinstance(payload.get("scope"), list):
+        raise AppError(
+            "third_party_oauth.invalid_access_token", "第三方访问令牌无效", status_code=401
+        )
+    return ThirdPartyAccessClaims(
+        user_id=str(payload["sub"]),
+        app_id=str(payload["app_id"]),
+        client_id=str(payload["client_id"]),
+        token_session_id=str(payload["sid"]),
+        token_family_id=str(payload["fid"]),
+        scopes=tuple(str(scope) for scope in payload["scope"]),
+    )
 
 
 def decode_access_token(token: str, secret_key: str) -> AccessClaims:
