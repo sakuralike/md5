@@ -52,17 +52,23 @@ def public_announcements(
 @public_router.get("/assets/{asset_name}", response_class=FileResponse)
 def public_announcement_image(
     asset_name: str,
+    request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
-) -> FileResponse:
+) -> Response:
     path, content_type = resolve_web_announcement_image(settings, asset_name)
-    return FileResponse(
-        path,
-        media_type=content_type,
-        headers={
-            "Cache-Control": "public, max-age=31536000, immutable",
-            "Content-Disposition": "inline",
-        },
-    )
+    etag = f'"{asset_name.rsplit(".", 1)[0]}"'
+    cache_headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Disposition": "inline",
+        "ETag": etag,
+    }
+    if_none_match = request.headers.get("if-none-match", "")
+    if any(
+        candidate.strip() in {etag, f"W/{etag}", "*"}
+        for candidate in if_none_match.split(",")
+    ):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=cache_headers)
+    return FileResponse(path, media_type=content_type, headers=cache_headers)
 
 
 @admin_router.post(

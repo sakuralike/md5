@@ -173,8 +173,16 @@ def test_web_announcement_image_upload_and_public_fetch(client):
     fetched = client.get(payload["url"])
     assert fetched.status_code == 200
     assert fetched.headers["content-type"] == "image/png"
+    assert fetched.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert fetched.headers["content-disposition"] == "inline"
+    assert fetched.headers["etag"]
     assert fetched.content == image
 
+    cached = client.get(payload["url"], headers={"If-None-Match": fetched.headers["etag"]})
+    assert cached.status_code == 304
+    assert cached.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert cached.headers["etag"] == fetched.headers["etag"]
+    assert cached.content == b""
 
 def test_web_announcement_image_upload_rejects_mismatched_signature(client):
     headers = _admin_headers(client)
