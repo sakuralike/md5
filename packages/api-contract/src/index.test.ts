@@ -33,6 +33,12 @@ describe("shared API contract", () => {
       "desktop:verification",
       "desktop:verification:trusted",
     ]);
+    expect(THIRD_PARTY_API_V1_PATHS.hashDetail).toBe(
+      "/third-party/hashes/{algorithm}/{digest}",
+    );
+    expect(THIRD_PARTY_API_V1_PATHS.hashComments).toBe(
+      "/third-party/hashes/{algorithm}/{digest}/comments",
+    );
     expect(THIRD_PARTY_OAUTH_GRANT_TYPES).toEqual([
       "authorization_code",
       "refresh_token",

@@ -2179,11 +2179,15 @@ export const THIRD_PARTY_API_V1_PATHS = {
   oauthToken: "/third-party/oauth/token",
   oauthRevoke: "/third-party/oauth/revoke",
   oauthMe: "/third-party/oauth/me",
+  hashDetail: "/third-party/hashes/{algorithm}/{digest}",
+  hashComments: "/third-party/hashes/{algorithm}/{digest}/comments",
   installations: "/third-party/installations",
   challenges: "/third-party/challenges",
   verificationReceipts: "/third-party/verification-receipts",
 } as const;
 
+export type ThirdPartyHashDetailResponse = HashDetailResponse;
+export type ThirdPartyHashCommentListResponse = HashCommentListResponse;
 export const THIRD_PARTY_RECEIPT_CANONICAL_PAYLOAD_VERSION =
   "desktop-receipt-v1" as const;
 
