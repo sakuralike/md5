@@ -39,6 +39,7 @@ describe("App", () => {
     expect(html).toContain('aria-label="后台设置导航"');
     expect(html).toContain("仪表盘");
     expect(html).toContain("候选审核");
+    expect(html).toContain("第三方 API");
     expect(html).toContain("角色审批");
     expect(html).toContain("社区配置");
     expect(html).toContain("系统配置");

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AuthorizedApplication } from "@password-detective/api-contract";
-import { ref } from "vue";
+import { onMounted, onServerPrefetch, ref } from "vue";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -58,7 +58,10 @@ async function revoke(application: AuthorizedApplication): Promise<void> {
   }
 }
 
-await load();
+onServerPrefetch(load);
+onMounted(() => {
+  void load();
+});
 </script>
 
 <template>

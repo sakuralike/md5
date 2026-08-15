@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ThirdPartyApp, ThirdPartyAppCreateRequest } from "@password-detective/api-contract";
-import { ref } from "vue";
+import { onMounted, onServerPrefetch, ref } from "vue";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
@@ -125,7 +125,10 @@ async function mutate(application: ThirdPartyApp, action: "suspend" | "restore" 
   }
 }
 
-await load();
+onServerPrefetch(load);
+onMounted(() => {
+  void load();
+});
 </script>
 <template>
   <main class="mx-auto w-full max-w-7xl space-y-6 px-4 py-8">
