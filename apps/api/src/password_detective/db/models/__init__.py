@@ -68,8 +68,10 @@ from password_detective.db.models.desktop_update import (
 from password_detective.db.models.desktop_verification import (
     ClientInstallation,
     InstallationStatus,
+    ReceiptProtocol,
     VerificationChallenge,
     VerificationReceipt,
+    VerificationTrustChannel,
 )
 from password_detective.db.models.evidence_correlation import EvidenceCorrelationAssessment
 from password_detective.db.models.hash_detail import (
@@ -237,6 +239,7 @@ __all__ = [
     "IdempotencyRecord",
     "IdempotencyStatus",
     "InstallationStatus",
+    "ReceiptProtocol",
     "PasswordCandidate",
     "PointsLedger",
     "PointsLedgerStatus",
@@ -286,4 +289,5 @@ __all__ = [
     "VerificationEvidenceEvent",
     "VerificationReceipt",
     "VerificationSource",
+    "VerificationTrustChannel",
 ]

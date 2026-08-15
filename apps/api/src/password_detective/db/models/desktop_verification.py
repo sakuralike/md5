@@ -28,6 +28,17 @@ class InstallationStatus(StrEnum):
     REVOKED = "revoked"
 
 
+class ReceiptProtocol(StrEnum):
+    OFFICIAL_DESKTOP_V1 = "desktop-receipt-v1"
+    THIRD_PARTY_DESKTOP_V1 = "third-party-desktop-receipt-v1"
+
+
+class VerificationTrustChannel(StrEnum):
+    OFFICIAL_DESKTOP = "official_desktop"
+    THIRD_PARTY_PENDING = "third_party_pending"
+    THIRD_PARTY_TRUSTED = "third_party_trusted"
+
+
 class ClientInstallation(Base):
     __tablename__ = "client_installations"
     __table_args__ = (
@@ -41,6 +52,17 @@ class ClientInstallation(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
+    third_party_app_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("third_party_apps.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    receipt_protocol: Mapped[str] = mapped_column(
+        String(48), default=ReceiptProtocol.OFFICIAL_DESKTOP_V1.value, index=True
+    )
+    operating_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    architecture: Mapped[str | None] = mapped_column(String(32), nullable=True)
     public_key_der: Mapped[bytes] = mapped_column(LargeBinary)
     public_key_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
     key_algorithm: Mapped[str] = mapped_column(String(32), default="ecdsa-p256-sha256")
@@ -68,6 +90,15 @@ class VerificationChallenge(Base):
     )
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    third_party_app_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("third_party_apps.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    receipt_protocol: Mapped[str] = mapped_column(
+        String(48), default=ReceiptProtocol.OFFICIAL_DESKTOP_V1.value, index=True
     )
     candidate_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("password_candidates.id", ondelete="CASCADE"), index=True
@@ -99,6 +130,18 @@ class VerificationReceipt(Base):
     )
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    third_party_app_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("third_party_apps.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    receipt_protocol: Mapped[str] = mapped_column(
+        String(48), default=ReceiptProtocol.OFFICIAL_DESKTOP_V1.value, index=True
+    )
+    trust_channel: Mapped[str] = mapped_column(
+        String(32), default=VerificationTrustChannel.OFFICIAL_DESKTOP.value, index=True
     )
     candidate_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("password_candidates.id", ondelete="CASCADE"), index=True

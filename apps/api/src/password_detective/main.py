@@ -53,6 +53,9 @@ from password_detective.modules.reputation.router import router as reputation_ro
 from password_detective.modules.risk_alerts.router import router as risk_alerts_router
 from password_detective.modules.site.router import router as site_router
 from password_detective.modules.third_party_apps.router import router as third_party_apps_router
+from password_detective.modules.third_party_desktop.router import (
+    router as third_party_desktop_router,
+)
 from password_detective.modules.third_party_oauth.router import router as third_party_oauth_router
 from password_detective.modules.trust_cases.router import (
     admin_router as trust_cases_admin_router,
@@ -155,6 +158,7 @@ def create_app(
     app.include_router(hash_pool_router, prefix="/api/v1")
     app.include_router(third_party_apps_router, prefix="/api/v1")
     app.include_router(third_party_oauth_router, prefix="/api/v1")
+    app.include_router(third_party_desktop_router, prefix="/api/v1")
     app.include_router(trust_cases_router, prefix="/api/v1")
     app.include_router(trust_cases_admin_router, prefix="/api/v1")
     app.include_router(archives_router, prefix="/api/v1")
