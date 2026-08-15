@@ -15,6 +15,7 @@ import RoleChangesPage from "../pages/RoleChangesPage.vue";
 import SystemSettingsPage from "../pages/SystemSettingsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
+import ThirdPartyAppsPage from "../pages/ThirdPartyAppsPage.vue";
 import UserGovernancePage from "../pages/UserGovernancePage.vue";
 
 const STORAGE_KEY = "password_detective_admin_session_v2";
@@ -37,6 +38,7 @@ const router = createRouter({
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
     { path: "/hash-pool", component: HashPoolPage, meta: { requiresAdmin: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
+    { path: "/third-party-apps", component: ThirdPartyAppsPage, meta: { requiresAdmin: true } },
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
     { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },
     { path: "/community/notifications", component: CommunityNotificationOutboxPage, meta: { requiresAdmin: true } },

@@ -2145,3 +2145,102 @@ export interface AdminCommunityNotificationReplayResponse {
   audit_id: string;
   request_id: string | null;
 }
+
+export type ThirdPartyAppStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "suspended"
+  | "revoked";
+export type ThirdPartyAppSource = "admin" | "developer_self_service";
+export type ThirdPartyScope =
+  | "profile:read"
+  | "hash:read"
+  | "desktop:installations"
+  | "desktop:verification"
+  | "desktop:verification:trusted";
+
+export interface ThirdPartyAuthorizationRequest {
+  response_type: "code";
+  client_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  state: string;
+  code_challenge_method: "S256";
+  scope?: string;
+}
+
+export interface ThirdPartyAuthorizationDetails {
+  client_id: string;
+  app_name: string;
+  developer_name: string;
+  description: string;
+  redirect_uri: string;
+  requested_scopes: string[];
+  approved_scopes: string[];
+  previously_authorized: boolean;
+}
+
+export interface ThirdPartyAuthorizationDecisionRequest
+  extends ThirdPartyAuthorizationRequest {
+  decision: "approve" | "deny";
+}
+
+export interface ThirdPartyAuthorizationDecisionResponse {
+  redirect_url: string;
+}
+
+export interface AuthorizedApplication {
+  app_id: string;
+  client_id: string;
+  app_name: string;
+  developer_name: string;
+  scopes: string[];
+  authorized_at: string;
+  last_used_at: string | null;
+}
+
+export interface AuthorizedApplicationListResponse {
+  items: AuthorizedApplication[];
+}
+
+export interface ThirdPartyApp {
+  id: string;
+  client_id: string;
+  name: string;
+  developer_name: string;
+  description: string;
+  status: ThirdPartyAppStatus;
+  application_source: ThirdPartyAppSource;
+  requested_scopes: string[];
+  approved_scopes: string[];
+  redirect_uris: string[];
+  trusted_verification_enabled: boolean;
+  request_count: number;
+  last_used_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+  management_secret: string | null;
+}
+
+export interface ThirdPartyAppListResponse {
+  items: ThirdPartyApp[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface ThirdPartyAppCreateRequest {
+  name: string;
+  developer_name: string;
+  description: string;
+  redirect_uris: string[];
+  scopes: string[];
+}
+
+export interface ThirdPartyAppReviewRequest {
+  review_note?: string | null;
+  trusted_verification_enabled: boolean;
+}

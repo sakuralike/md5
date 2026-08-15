@@ -32,6 +32,11 @@ from password_detective.db.models.third_party_oauth import (
 )
 from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.third_party_apps.service import TRUSTED_SCOPE
+from password_detective.modules.third_party_oauth.schemas import (
+    AuthorizedApplicationItem,
+    ThirdPartyAuthorizationDetails,
+    ThirdPartyAuthorizationRequest,
+)
 
 ACCESS_TOKEN_TTL_MINUTES = 15
 AUTHORIZATION_CODE_TTL_MINUTES = 5
@@ -388,3 +393,125 @@ def revoke_token(db: Session, *, client_id: str, token: str) -> None:
     if row is not None:
         _revoke_family(db, row.token_family_id)
         db.commit()
+
+
+
+def _authorization_request_context(
+    db: Session, *, user: User, request: ThirdPartyAuthorizationRequest
+) -> tuple[ThirdPartyApp, list[str]]:
+    if user.status != UserStatus.ACTIVE:
+        raise AppError("auth.account_unavailable", "账号当前不可用", status_code=403)
+    if request.response_type != "code":
+        raise _invalid("仅支持 response_type=code")
+    if request.code_challenge_method != "S256":
+        raise _invalid("PKCE 仅支持 S256")
+    if len(request.state) < 16:
+        raise _invalid("state 长度至少为 16")
+    if len(request.code_challenge) < 43 or len(request.code_challenge) > 128:
+        raise _invalid("code_challenge 格式无效")
+    app = _approved_app(db, request.client_id)
+    _validate_redirect(db, app.id, request.redirect_uri)
+    return app, _validate_scopes(app, _scopes(request.scope))
+
+
+def get_authorization_details(
+    db: Session, *, user: User, request: ThirdPartyAuthorizationRequest
+) -> ThirdPartyAuthorizationDetails:
+    app, requested_scopes = _authorization_request_context(db, user=user, request=request)
+    authorization = db.scalar(
+        select(ThirdPartyAuthorization).where(
+            ThirdPartyAuthorization.app_id == app.id,
+            ThirdPartyAuthorization.user_id == user.id,
+            ThirdPartyAuthorization.revoked_at.is_(None),
+        )
+    )
+    return ThirdPartyAuthorizationDetails(
+        client_id=app.client_id,
+        app_name=app.name,
+        developer_name=app.developer_name,
+        description=app.description,
+        redirect_uri=request.redirect_uri,
+        requested_scopes=requested_scopes,
+        approved_scopes=_decode_scopes(app.approved_scopes_json),
+        previously_authorized=authorization is not None,
+    )
+
+
+def decide_authorization(
+    db: Session,
+    *,
+    user: User,
+    request: ThirdPartyAuthorizationRequest,
+    decision: str,
+) -> str:
+    app, requested_scopes = _authorization_request_context(db, user=user, request=request)
+    if decision == "deny":
+        return _append_query(
+            request.redirect_uri,
+            {"error": "access_denied", "state": request.state},
+        )
+    if decision != "approve":
+        raise _invalid("授权决定无效")
+    code = issue_authorization_code(
+        db,
+        app=app,
+        user=user,
+        redirect_uri=request.redirect_uri,
+        code_challenge=request.code_challenge,
+        code_challenge_method=request.code_challenge_method,
+        requested_scopes=requested_scopes,
+    )
+    return _append_query(request.redirect_uri, {"code": code, "state": request.state})
+
+
+def list_authorized_applications(
+    db: Session, *, user: User
+) -> list[AuthorizedApplicationItem]:
+    rows = db.execute(
+        select(ThirdPartyAuthorization, ThirdPartyApp)
+        .join(ThirdPartyApp, ThirdPartyApp.id == ThirdPartyAuthorization.app_id)
+        .where(
+            ThirdPartyAuthorization.user_id == user.id,
+            ThirdPartyAuthorization.revoked_at.is_(None),
+        )
+        .order_by(ThirdPartyAuthorization.created_at.desc())
+    ).all()
+    return [
+        AuthorizedApplicationItem(
+            app_id=authorization.app_id,
+            client_id=app.client_id,
+            app_name=app.name,
+            developer_name=app.developer_name,
+            scopes=_decode_scopes(authorization.scope_json),
+            authorized_at=authorization.created_at.isoformat(),
+            last_used_at=(
+                authorization.last_used_at.isoformat()
+                if authorization.last_used_at is not None
+                else None
+            ),
+        )
+        for authorization, app in rows
+    ]
+
+
+def revoke_authorization(db: Session, *, user: User, app_id: str) -> None:
+    authorization = db.scalar(
+        select(ThirdPartyAuthorization).where(
+            ThirdPartyAuthorization.app_id == app_id,
+            ThirdPartyAuthorization.user_id == user.id,
+            ThirdPartyAuthorization.revoked_at.is_(None),
+        )
+    )
+    if authorization is None:
+        return
+    now = utc_now()
+    authorization.revoked_at = now
+    db.execute(
+        update(OAuthTokenSession)
+        .where(
+            OAuthTokenSession.authorization_id == authorization.id,
+            OAuthTokenSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    db.commit()

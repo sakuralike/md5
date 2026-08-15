@@ -15,14 +15,23 @@ from password_detective.modules.third_party_oauth.dependencies import (
     require_third_party_scope,
 )
 from password_detective.modules.third_party_oauth.schemas import (
+    AuthorizedApplicationListResponse,
     OAuthRevokeRequest,
     OAuthTokenRequest,
     OAuthTokenResponse,
+    ThirdPartyAuthorizationDecisionRequest,
+    ThirdPartyAuthorizationDecisionResponse,
+    ThirdPartyAuthorizationDetails,
+    ThirdPartyAuthorizationRequest,
     ThirdPartyPrincipalResponse,
 )
 from password_detective.modules.third_party_oauth.service import (
     authorize,
+    decide_authorization,
     exchange_authorization_code,
+    get_authorization_details,
+    list_authorized_applications,
+    revoke_authorization,
     revoke_token,
     rotate_refresh_token,
 )
@@ -54,6 +63,49 @@ def oauth_authorize(
         user=principal.user,
     )
     return RedirectResponse(location, status_code=302)
+
+
+@router.get("/consent", response_model=ThirdPartyAuthorizationDetails)
+def oauth_consent_details(
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    request: Annotated[ThirdPartyAuthorizationRequest, Depends()],
+) -> ThirdPartyAuthorizationDetails:
+    return get_authorization_details(db, user=principal.user, request=request)
+
+
+@router.post("/consent", response_model=ThirdPartyAuthorizationDecisionResponse)
+def oauth_consent_decision(
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    payload: ThirdPartyAuthorizationDecisionRequest,
+) -> ThirdPartyAuthorizationDecisionResponse:
+    location = decide_authorization(
+        db,
+        user=principal.user,
+        request=payload,
+        decision=payload.decision,
+    )
+    return ThirdPartyAuthorizationDecisionResponse(redirect_url=location)
+
+
+@router.get("/authorized-applications", response_model=AuthorizedApplicationListResponse)
+def oauth_authorized_applications(
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthorizedApplicationListResponse:
+    return AuthorizedApplicationListResponse(
+        items=list_authorized_applications(db, user=principal.user)
+    )
+
+
+@router.delete("/authorized-applications/{app_id}", status_code=204)
+def oauth_revoke_authorized_application(
+    app_id: str,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    revoke_authorization(db, user=principal.user, app_id=app_id)
 
 
 @router.post("/token", response_model=OAuthTokenResponse)

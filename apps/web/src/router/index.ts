@@ -23,6 +23,8 @@ import ReputationPage from "../pages/ReputationPage.vue";
 import SecurityPage from "../pages/SecurityPage.vue";
 import SubmissionsPage from "../pages/SubmissionsPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
+import ThirdPartyAuthorizePage from "../pages/ThirdPartyAuthorizePage.vue";
+import AuthorizedApplicationsPage from "../pages/AuthorizedApplicationsPage.vue";
 import UserCenterPage from "../pages/UserCenterPage.vue";
 import VerifyEmailPage from "../pages/VerifyEmailPage.vue";
 
@@ -77,6 +79,8 @@ const router = createRouter({
     { path: "/submissions", component: SubmissionsPage, meta: { requiresAuth: true } },
     { path: "/reputation", component: ReputationPage, meta: { requiresAuth: true } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAuth: true } },
+    { path: "/oauth/authorize", component: ThirdPartyAuthorizePage, meta: { requiresAuth: true } },
+    { path: "/account/authorized-applications", component: AuthorizedApplicationsPage, meta: { requiresAuth: true } },
   ],
 });
 

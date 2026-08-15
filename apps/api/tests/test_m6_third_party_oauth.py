@@ -379,3 +379,77 @@ def test_suspended_app_invalidates_existing_third_party_access_token(client) -> 
     )
     assert response.status_code == 401
     assert response.json()["code"] == "third_party_oauth.session_unavailable"
+
+
+def test_consent_page_lists_and_revokes_authorized_application(client) -> None:
+    client_id, redirect_uri, _ = _approved_app(client)
+    user_headers = _login_user(client)
+    verifier = "synthetic-verifier-consent-abcdefghijklmnopqrstuvwxyz"
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": _challenge(verifier),
+        "code_challenge_method": "S256",
+        "scope": "profile:read hash:read",
+        "state": "synthetic-state-consent",
+    }
+
+    details = client.get(
+        "/api/v1/third-party/oauth/consent",
+        headers=user_headers,
+        params=params,
+    )
+    assert details.status_code == 200
+    assert details.json()["app_name"] == "Synthetic OAuth Desktop"
+    assert details.json()["requested_scopes"] == ["profile:read", "hash:read"]
+    assert details.json()["previously_authorized"] is False
+
+    approved = client.post(
+        "/api/v1/third-party/oauth/consent",
+        headers=user_headers,
+        json={**params, "decision": "approve"},
+    )
+    assert approved.status_code == 200
+    query = parse_qs(urlparse(approved.json()["redirect_url"]).query)
+    assert query["state"] == ["synthetic-state-consent"]
+    code = query["code"][0]
+
+    token = client.post(
+        "/api/v1/third-party/oauth/token",
+        json={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": verifier,
+        },
+    )
+    assert token.status_code == 200
+
+    applications = client.get(
+        "/api/v1/third-party/oauth/authorized-applications",
+        headers=user_headers,
+    )
+    assert applications.status_code == 200
+    assert len(applications.json()["items"]) == 1
+    application = applications.json()["items"][0]
+    assert application["client_id"] == client_id
+    assert application["scopes"] == ["profile:read", "hash:read"]
+
+    revoked = client.delete(
+        f"/api/v1/third-party/oauth/authorized-applications/{application['app_id']}",
+        headers=user_headers,
+    )
+    assert revoked.status_code == 204
+    assert client.get(
+        "/api/v1/third-party/oauth/authorized-applications",
+        headers=user_headers,
+    ).json()["items"] == []
+
+    revoked_access = client.get(
+        "/api/v1/third-party/oauth/me",
+        headers={"Authorization": f"Bearer {token.json()['access_token']}"},
+    )
+    assert revoked_access.status_code == 401
+    assert revoked_access.json()["code"] == "third_party_oauth.session_unavailable"
