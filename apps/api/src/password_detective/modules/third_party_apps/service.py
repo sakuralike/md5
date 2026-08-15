@@ -29,6 +29,8 @@ from password_detective.modules.third_party_apps.schemas import (
 ALLOWED_SCOPES = {
     "profile:read",
     "hash:read",
+    "announcements:read",
+    "updates:read",
     "desktop:installations",
     "desktop:verification",
 }

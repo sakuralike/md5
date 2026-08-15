@@ -2157,6 +2157,8 @@ export type ThirdPartyAppSource = "admin" | "developer_self_service";
 export const THIRD_PARTY_API_V1_SCOPES = [
   "profile:read",
   "hash:read",
+  "announcements:read",
+  "updates:read",
   "desktop:installations",
   "desktop:verification",
   "desktop:verification:trusted",
@@ -2181,10 +2183,48 @@ export const THIRD_PARTY_API_V1_PATHS = {
   oauthMe: "/third-party/oauth/me",
   hashDetail: "/third-party/hashes/{algorithm}/{digest}",
   hashComments: "/third-party/hashes/{algorithm}/{digest}/comments",
+  announcements: "/third-party/announcements",
+  updatesCheck: "/third-party/updates/check",
   installations: "/third-party/installations",
   challenges: "/third-party/challenges",
   verificationReceipts: "/third-party/verification-receipts",
 } as const;
+
+export interface ThirdPartyAnnouncementItem {
+  id: string;
+  title: string;
+  content: string;
+  content_type: DesktopAnnouncementContentType;
+  image_urls: string[];
+  action_label: string | null;
+  action_url: string | null;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+export interface ThirdPartyAnnouncementListResponse {
+  items: ThirdPartyAnnouncementItem[];
+}
+
+export interface ThirdPartyUpdateCheckResponse {
+  update_available: boolean;
+  mandatory: boolean;
+  current_version: string;
+  latest_version: string | null;
+  minimum_supported_version: string | null;
+  channel: DesktopReleaseChannel;
+  platform: string;
+  architecture: DesktopArchitecture;
+  release_id: string | null;
+  release_notes: string;
+  published_at: string | null;
+  download_url: string | null;
+  artifact_filename: string | null;
+  artifact_sha256: string | null;
+  artifact_size_bytes: number | null;
+  artifact_integrity: "sha256-verified" | null;
+}
 
 export type ThirdPartyHashDetailResponse = HashDetailResponse;
 export type ThirdPartyHashCommentListResponse = HashCommentListResponse;

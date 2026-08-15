@@ -29,6 +29,8 @@ describe("shared API contract", () => {
     expect(THIRD_PARTY_API_V1_SCOPES).toEqual([
       "profile:read",
       "hash:read",
+      "announcements:read",
+      "updates:read",
       "desktop:installations",
       "desktop:verification",
       "desktop:verification:trusted",
@@ -39,6 +41,8 @@ describe("shared API contract", () => {
     expect(THIRD_PARTY_API_V1_PATHS.hashComments).toBe(
       "/third-party/hashes/{algorithm}/{digest}/comments",
     );
+    expect(THIRD_PARTY_API_V1_PATHS.announcements).toBe("/third-party/announcements");
+    expect(THIRD_PARTY_API_V1_PATHS.updatesCheck).toBe("/third-party/updates/check");
     expect(THIRD_PARTY_OAUTH_GRANT_TYPES).toEqual([
       "authorization_code",
       "refresh_token",

@@ -573,3 +573,79 @@ console.log(payloadBytes.byteLength);
 - 既有字段语义、canonical payload 字段顺序或签名协议如需破坏性调整，必须发布新的协议版本。
 - 客户端应忽略不认识的响应字段，但不能忽略未知 `trust_channel`、签名协议版本或错误码对应的安全失败。
 - 稳定 TypeScript 合同位于 `packages/api-contract/src/index.ts`，端点常量、Scope、Grant Type 和 canonical 字段顺序应从该包引用，而不是在多个客户端内手工复制。
+
+
+## 15. 桌面公告与版本检查
+
+### 15.1 公告
+
+请求：
+
+```http
+GET /api/v1/third-party/announcements?limit=10
+Authorization: Bearer <access_token>
+```
+
+需要 `announcements:read` Scope。响应只包含客户端展示所需字段：
+
+```json
+{
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000501",
+      "title": "合成桌面公告",
+      "content": "公告正文",
+      "content_type": "text",
+      "image_urls": ["https://synthetic.example/notice.png"],
+      "action_label": "查看说明",
+      "action_url": "https://synthetic.example/guide",
+      "sort_order": 10,
+      "starts_at": null,
+      "ends_at": null
+    }
+  ]
+}
+```
+
+服务端只返回已经发布且处于有效时间窗的桌面公告；`action_url` 与图片地址必须是已通过服务端校验的 HTTP(S) 地址或桌面公告图片资源路径。响应使用 `Cache-Control: private, no-store`。
+
+### 15.2 更新检查
+
+请求：
+
+```http
+GET /api/v1/third-party/updates/check?current_version=0.1.0&channel=stable&platform=windows&architecture=x64
+Authorization: Bearer <access_token>
+```
+
+需要 `updates:read` Scope。响应示例：
+
+```json
+{
+  "update_available": true,
+  "mandatory": false,
+  "current_version": "0.1.0",
+  "latest_version": "0.2.0",
+  "minimum_supported_version": "0.1.0",
+  "channel": "stable",
+  "platform": "windows",
+  "architecture": "x64",
+  "release_id": "00000000-0000-4000-8000-000000000502",
+  "release_notes": "合成版本说明",
+  "published_at": "2026-08-15T12:00:00Z",
+  "download_url": "https://synthetic.example/api/v1/desktop/updates/00000000-0000-4000-8000-000000000502/download",
+  "artifact_filename": "password-detective-0.2.0-x64.msix",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_size_bytes": 123456,
+  "artifact_integrity": "sha256-verified"
+}
+```
+
+更新筛选沿用官方桌面更新通道：制品必须已上传、已发布、分发授权有效且具备法律声明。客户端下载后必须再次校验 `artifact_sha256`，不能仅凭 `update_available` 或文件名安装。
+
+### 15.3 最小权限与错误
+
+- 只有 `announcements:read` 的令牌访问更新检查时返回 `third_party_oauth.insufficient_scope`。
+- 只有 `updates:read` 的令牌访问公告时返回 `third_party_oauth.insufficient_scope`。
+- 缺少 Bearer Token 或 Token 已失效返回 HTTP 401。
+- 两个适配端点均采用独立限流和应用级审计；客户端应遵守 429 的 `Retry-After` 并使用退避重试。
