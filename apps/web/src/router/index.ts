@@ -5,6 +5,7 @@ import CommunityPage from "../pages/CommunityPage.vue";
 import CommunityActivityPage from "../pages/CommunityActivityPage.vue";
 import CommunityBookmarksPage from "../pages/CommunityBookmarksPage.vue";
 import CommunityHomePage from "../pages/CommunityHomePage.vue";
+import CommunitySearchPage from "../pages/CommunitySearchPage.vue";
 import CommunityGroupsPage from "../pages/CommunityGroupsPage.vue";
 import CommunityGroupPage from "../pages/CommunityGroupPage.vue";
 import CommunityNotificationsPage from "../pages/CommunityNotificationsPage.vue";
@@ -41,6 +42,7 @@ const router = createRouter({
     { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
     { path: "/user-center", component: UserCenterPage, meta: { requiresAuth: true } },
     { path: "/community", component: CommunityHomePage },
+    { path: "/community/search", component: CommunitySearchPage },
     { path: "/community/activity", component: CommunityActivityPage },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },
     { path: "/community/groups", component: CommunityGroupsPage },

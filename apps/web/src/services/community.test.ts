@@ -11,6 +11,7 @@ import {
   listCommunityNotifications,
   markAllCommunityNotificationsRead,
   markCommunityNotificationRead,
+  searchCommunity,
   listCommunityBookmarks,
   setCommunityCommentLike,
   setCommunityPostBookmark,
@@ -108,6 +109,24 @@ describe("web community service", () => {
         ],
       }),
     );
+  });
+
+  it("encodes a community search query and repeated result types", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ items: [], provider: { mode: "test", degraded: false } })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await searchCommunity({
+      query: "recover guide",
+      types: ["post", "group"],
+      page: 2,
+    });
+
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]), "http://synthetic.local");
+    expect(url.pathname).toContain("/community/search");
+    expect(url.search).toBe("?q=recover+guide&types=post&types=group&page=2&page_size=20");
   });
 
   it("keeps idempotency and authorization headers on writes", async () => {

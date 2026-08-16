@@ -37,6 +37,8 @@ import type {
   CommunityPostListResponse,
   CommunityReportCreateRequest,
   CommunityReportResponse,
+  CommunitySearchResponse,
+  CommunitySearchResultType,
 } from "@password-detective/api-contract";
 import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "./api";
@@ -76,6 +78,25 @@ export function createCommunityIdempotencyKey(
     | "group-member-role",
 ): string {
   return `web-community-${kind}-${createClientId()}`;
+}
+
+
+export interface CommunitySearchOptions {
+  query: string;
+  types?: CommunitySearchResultType[];
+  page?: number;
+  pageSize?: number;
+}
+
+export function searchCommunity(
+  options: CommunitySearchOptions,
+  token?: string,
+): Promise<CommunitySearchResponse> {
+  const params = new URLSearchParams({ q: options.query });
+  for (const type of options.types ?? []) params.append("types", type);
+  params.set("page", String(options.page ?? 1));
+  params.set("page_size", String(options.pageSize ?? 20));
+  return apiRequest<CommunitySearchResponse>(`/community/search?${params.toString()}`, {}, token);
 }
 
 export function listCommunityBoards(): Promise<CommunityBoardListResponse> {

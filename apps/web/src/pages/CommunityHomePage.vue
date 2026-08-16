@@ -86,9 +86,14 @@ function formatDate(value: string): string {
             按板块浏览合成数据、验证流程和安全实践。帖子详情、评论和发布均使用独立页面，便于分享和返回。
           </p>
         </div>
-        <Button as-child>
-          <RouterLink to="/community/new">发布新主题</RouterLink>
-        </Button>
+        <div class="flex flex-wrap gap-2">
+          <Button variant="outline" as-child>
+            <RouterLink to="/community/search">搜索社区</RouterLink>
+          </Button>
+          <Button as-child>
+            <RouterLink to="/community/new">发布新主题</RouterLink>
+          </Button>
+        </div>
       </div>
     </header>
 
