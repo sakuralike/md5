@@ -405,7 +405,7 @@
 | COMMUNITY-37～44 | 公开主页、关注/粉丝、屏蔽/静音 | `test_community_profiles.py`、关系页面渲染测试和统一门禁 | 本地已实现；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-45～54 | 可配置板块、群组、成员和角色治理 | `test_community_groups.py`、`test_community_board_admin.py`、`test_community_board_seeding.py`、群组与管理配置页面渲染测试、Alembic 往返和统一门禁 | 本地代码与自动化已完成；默认板块已覆盖启动期与双实例并发初始化；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-55～61 | 动态信息流 | `test_activity_feeds_and_reply_follow_notifications`、偏好未来事件测试、群组动态断言、Web 页面/服务测试 | 本地编码完成；目标 MySQL/浏览器部署回归待验证 |
-| COMMUNITY-62～68 | 社区搜索 | Provider、权限过滤、索引重放与重建测试 | 已规划，未编码 |
+| COMMUNITY-62～68 | 社区搜索 | `CommunitySearchProvider`、权限复核、Outbox 重放/续跑重建、管理最小披露测试；Web/Admin 渲染测试；Chromium、Firefox、WebKit 各 2 条定向 Playwright 旅程；`scripts/check.ps1 -SkipInstall` | 本地实现与统一门禁已完成：公开主题/用户/板块/公开群组、受限前缀降级、事务 Outbox、差异核对和健康聚合均有代码与自动化证据；目标 MySQL `ngram`、容量/降级演练、Staging、远端同步和发布验收仍未验证 |
 | COMMUNITY-69～76 | 通知中心 | 通知去重、类型过滤、屏蔽、偏好、已读和 Web 页面测试 | 提及/回复/关注和站内/邮件偏好子集已实现；点赞、群组、私信/治理、邮件投递与 SSE 待后续 |
 | COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
 

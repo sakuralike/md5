@@ -31,6 +31,17 @@ from password_detective.db.models.archive_fingerprint import (
     ArchiveFingerprint,
     FingerprintAlgorithm,
 )
+from password_detective.db.models.community import (
+    CommunityBoard,
+    CommunityBoardCode,
+    CommunityBoardStatus,
+    CommunityContentStatus,
+    CommunityGroup,
+    CommunityGroupStatus,
+    CommunityGroupVisibility,
+    CommunityPost,
+    CommunitySearchSource,
+)
 from password_detective.db.models.password_candidate import (
     CandidateStatus,
     PasswordCandidate,
@@ -55,6 +66,12 @@ from password_detective.db.models.verification import (
     FeedbackOutcome,
     VerificationEvidenceEvent,
     VerificationSource,
+)
+from password_detective.modules.community.search_index import (
+    dispatch_pending_search_events,
+    enqueue_search_event,
+    rebuild_search_index,
+    source_document_version,
 )
 
 
@@ -286,6 +303,83 @@ def ensure_risk_alert(
     )
 
 
+def ensure_community_search_fixtures(db: Session, *, author: User) -> None:
+    board = db.scalar(select(CommunityBoard).where(CommunityBoard.code == "e2e_search"))
+    if board is None:
+        board = CommunityBoard(
+            code="e2e_search",
+            name="E2E 社区搜索板块",
+            description="浏览器验收用的公开社区搜索合成数据。",
+            sort_order=999,
+            minimum_role="guest",
+            status=CommunityBoardStatus.ACTIVE,
+            is_read_only=False,
+        )
+        db.add(board)
+        db.flush()
+
+    public_post = db.scalar(
+        select(CommunityPost).where(CommunityPost.title == "E2E 公开社区搜索恢复指南")
+    )
+    if public_post is None:
+        public_post = CommunityPost(
+            board_id=board.id,
+            board_code=CommunityBoardCode.GENERAL,
+            group_id=None,
+            author_id=author.id,
+            title="E2E 公开社区搜索恢复指南",
+            content="公开社区搜索浏览器验收合成内容，仅用于验证公开结果可见。",
+            status=CommunityContentStatus.PUBLISHED,
+        )
+        db.add(public_post)
+
+    private_group = db.scalar(
+        select(CommunityGroup).where(CommunityGroup.slug == "e2e-private-search")
+    )
+    if private_group is None:
+        private_group = CommunityGroup(
+            slug="e2e-private-search",
+            name="E2E 私密搜索群组",
+            description="浏览器验收用的私密群组合成数据。",
+            visibility=CommunityGroupVisibility.PRIVATE,
+            owner_id=author.id,
+            status=CommunityGroupStatus.ACTIVE,
+        )
+        db.add(private_group)
+        db.flush()
+
+    private_post = db.scalar(
+        select(CommunityPost).where(CommunityPost.title == "E2E 私密社区搜索恢复指南")
+    )
+    if private_post is None:
+        private_post = CommunityPost(
+            board_id=board.id,
+            board_code=CommunityBoardCode.GENERAL,
+            group_id=private_group.id,
+            author_id=author.id,
+            title="E2E 私密社区搜索恢复指南",
+            content="私密群组搜索浏览器验收合成内容，公开访客不得检索到。",
+            status=CommunityContentStatus.PUBLISHED,
+        )
+        db.add(private_post)
+
+    db.flush()
+    for source_type, source in (
+        (CommunitySearchSource.BOARD, board),
+        (CommunitySearchSource.GROUP, private_group),
+        (CommunitySearchSource.POST, public_post),
+        (CommunitySearchSource.POST, private_post),
+    ):
+        enqueue_search_event(
+            db,
+            source_type=source_type,
+            source_id=source.id,
+            document_version=source_document_version(source),
+        )
+    dispatch_pending_search_events(db)
+    rebuild_search_index(db, apply=True)
+
+
 def main() -> None:
     settings = Settings()
     database = Database(settings)
@@ -469,7 +563,7 @@ def main() -> None:
             email=totp_email,
             password=totp_password,
         )
-        privacy_user = ensure_user(
+        _privacy_user = ensure_user(
             db,
             username=privacy_username,
             email=privacy_email,
@@ -657,6 +751,7 @@ def main() -> None:
                     sla_due_at=utc_now() + timedelta(hours=24),
                 )
             )
+        ensure_community_search_fixtures(db, author=web_user)
         db.commit()
     database.dispose()
 
