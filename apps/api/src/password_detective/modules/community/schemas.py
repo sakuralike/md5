@@ -366,6 +366,37 @@ class CommunityDirectReadStateResponse(BaseModel):
     unread_count: int
 
 
+class CommunityDirectStreamReady(BaseModel):
+    event_id: str
+    total_unread_count: int
+    reset_required: bool
+
+
+class CommunityDirectMessageCreatedEvent(BaseModel):
+    event_id: str
+    conversation_id: str
+    message_id: str
+    message_sequence: int
+    sender_id: str
+    created_at: datetime
+
+
+class CommunityDirectConversationReadEvent(BaseModel):
+    event_id: str
+    conversation_id: str
+    reader_id: str
+    last_read_sequence: int
+    read_at: datetime
+
+
+class CommunityDirectUnreadChangedEvent(BaseModel):
+    event_id: str
+    conversation_id: str
+    conversation_unread_count: int
+    total_unread_count: int
+    changed_at: datetime
+
+
 class CommunityDirectMemberStateResponse(BaseModel):
     conversation_id: str
     archived_at: datetime | None = None
