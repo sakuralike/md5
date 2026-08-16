@@ -70,6 +70,8 @@ docker run --rm --user 0:0 \
 | `candidate_secret_key_version` | 当前候选秘密写入版本 |
 | `candidate_secret_keyring` | AES-GCM 候选秘密版本密钥环 |
 | `candidate_secret_dedup_key` | 稳定 HMAC 去重秘密；正常轮换中不得改变 |
+| `direct_message_key_version` | 当前私信正文加密写入版本 |
+| `direct_message_keyring` | 独立 AES-GCM 私信密钥环；不得复用应用主秘密或候选秘密密钥 |
 | `mysql_password` / `mysql_root_password` | MySQL 应用和 root 密码 |
 | `redis_password` | Redis 认证密码 |
 | `database_url` / `redis_url` | 包含编码后凭据的应用连接地址 |
