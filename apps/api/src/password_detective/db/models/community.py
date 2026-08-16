@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -194,6 +204,7 @@ class CommunityNotificationKind(StrEnum):
     GROUP_APPLICATION = "group_application"
     GROUP_DECISION = "group_decision"
     GROUP_ROLE_CHANGE = "group_role_change"
+    DIRECT_MESSAGE = "direct_message"
 
 
 class CommunityNotificationOutboxStatus(StrEnum):
@@ -207,6 +218,102 @@ class CommunityNotificationSource(StrEnum):
     COMMENT = "comment"
     USER = "user"
     GROUP = "group"
+    DIRECT_MESSAGE = "direct_message"
+
+
+class CommunityDirectConversation(Base):
+    __tablename__ = "community_direct_conversations"
+    __table_args__ = (
+        UniqueConstraint(
+            "participant_low_id",
+            "participant_high_id",
+            name="uq_community_direct_conversation_pair",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    participant_low_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    participant_high_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, index=True
+    )
+
+
+class CommunityDirectConversationMember(Base):
+    __tablename__ = "community_direct_conversation_members"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "user_id", name="uq_community_direct_member"),
+        Index(
+            "ix_community_direct_member_user_updated",
+            "user_id",
+            "updated_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("community_direct_conversations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    last_read_sequence: Mapped[int] = mapped_column(Integer, default=0)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    muted_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityDirectMessage(Base):
+    __tablename__ = "community_direct_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_community_direct_message_sequence",
+        ),
+        UniqueConstraint(
+            "sender_id",
+            "client_message_id",
+            name="uq_community_direct_sender_client_message",
+        ),
+        Index(
+            "ix_community_direct_message_conversation_sequence",
+            "conversation_id",
+            "sequence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("community_direct_conversations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    sender_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    ciphertext: Mapped[str] = mapped_column(Text)
+    nonce: Mapped[str] = mapped_column(String(32))
+    key_version: Mapped[str] = mapped_column(String(32))
+    client_message_id: Mapped[str] = mapped_column(String(72))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class CommunityActivityKind(StrEnum):
