@@ -4,6 +4,7 @@ import CandidateModerationPage from "../pages/CandidateModerationPage.vue";
 import CommunityConfigurationPage from "../pages/CommunityConfigurationPage.vue";
 import CommunityModerationPage from "../pages/CommunityModerationPage.vue";
 import CommunityNotificationOutboxPage from "../pages/CommunityNotificationOutboxPage.vue";
+import CommunitySearchHealthPage from "../pages/CommunitySearchHealthPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import DesktopReleasesPage from "../pages/DesktopReleasesPage.vue";
 import DesktopAnnouncementsPage from "../pages/DesktopAnnouncementsPage.vue";
@@ -42,6 +43,7 @@ const router = createRouter({
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
     { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },
     { path: "/community/notifications", component: CommunityNotificationOutboxPage, meta: { requiresAdmin: true } },
+    { path: "/community/search-health", component: CommunitySearchHealthPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
     { path: "/desktop-announcements", component: DesktopAnnouncementsPage, meta: { requiresAdmin: true } },

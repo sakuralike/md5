@@ -26,12 +26,13 @@ describe("DashboardPage", () => {
     const html = await renderToString(app);
 
     expect(html).toContain("全部管理功能站内路径");
-    expect(html).toContain("共 16 个入口");
+    expect(html).toContain("共 17 个入口");
     expect(html).toContain("/candidates");
     expect(html).toContain("/trust-cases");
     expect(html).toContain("/hash-pool");
     expect(html).toContain("/community/settings");
     expect(html).toContain("/community/notifications");
+    expect(html).toContain("/community/search-health");
     expect(html).toContain("/desktop-releases");
     expect(html).toContain("/web-announcements");
     expect(html).toContain("/role-changes");

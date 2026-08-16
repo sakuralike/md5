@@ -76,6 +76,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: BellRing,
   },
   {
+    label: "搜索健康",
+    path: "/community/search-health",
+    description: "查看社区搜索 Provider、索引 Outbox 与重建的聚合健康状态。",
+    group: "安全运营",
+    icon: Database,
+  },
+  {
     label: "风险告警",
     path: "/risk-alerts",
     description: "处置风险告警、分派与通知回放。",
