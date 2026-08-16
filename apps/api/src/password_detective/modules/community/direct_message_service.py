@@ -8,12 +8,20 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from password_detective.core.config import Settings, get_settings
+from password_detective.core.direct_message_crypto import (
+    DirectMessageVault,
+    build_direct_message_vault,
+)
 from password_detective.core.errors import AppError
+from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
     CommunityDirectMessage,
     CommunityInteractionPolicy,
+    CommunityNotificationKind,
+    CommunityNotificationSource,
     CommunityPublicProfile,
     CommunityUserBlock,
     CommunityUserFollow,
@@ -25,6 +33,13 @@ from password_detective.modules.community.schemas import (
     CommunityDirectConversationCreateResponse,
     CommunityDirectConversationListResponse,
     CommunityDirectConversationResponse,
+    CommunityDirectMemberStateResponse,
+    CommunityDirectMemberStateUpdateRequest,
+    CommunityDirectMessageCreateRequest,
+    CommunityDirectMessageListResponse,
+    CommunityDirectMessageResponse,
+    CommunityDirectReadStateResponse,
+    CommunityDirectReadStateUpdateRequest,
 )
 
 _DEFAULT_PAGE_SIZE = 20
@@ -408,4 +423,244 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
             raise ValueError("conversation id missing")
         return updated_at, conversation_id
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError("community.invalid_cursor", "分页游标无效", status_code=422) from exc
+
+
+def send_direct_message(
+    db: Session,
+    *,
+    principal: Principal,
+    conversation_id: str,
+    payload: CommunityDirectMessageCreateRequest,
+    idempotency_key: str,
+    settings: Settings | None = None,
+) -> CommunityDirectMessageResponse:
+    del idempotency_key
+    sender = _active_user(db, principal.user.id)
+    conversation = _get_member_conversation(
+        db, conversation_id=conversation_id, user_id=sender.id
+    )
+    recipient = _counterpart_user(db, conversation=conversation, user_id=sender.id)
+    _require_direct_message_access(db, sender=sender, recipient=recipient, action="send")
+    vault = build_direct_message_vault(settings or get_settings())
+    existing = db.scalar(
+        select(CommunityDirectMessage).where(
+            CommunityDirectMessage.sender_id == sender.id,
+            CommunityDirectMessage.client_message_id == payload.client_message_id,
+        )
+    )
+    if existing is not None:
+        same_body = _decrypt_message(vault, existing) == payload.body
+        if existing.conversation_id == conversation.id and same_body:
+            return _message_response(db, message=existing, vault=vault)
+        raise AppError(
+            "DIRECT_MESSAGE_IDEMPOTENCY_CONFLICT",
+            "客户端消息标识已用于不同的私信内容",
+            status_code=409,
+        )
+
+    locked = db.scalar(
+        select(CommunityDirectConversation)
+        .where(CommunityDirectConversation.id == conversation.id)
+        .with_for_update()
+    )
+    if locked is None:
+        raise AppError("DIRECT_MESSAGE_NOT_PARTICIPANT", "无权访问该私信会话", status_code=404)
+    encrypted = vault.encrypt(payload.body)
+    sequence = int(
+        db.scalar(
+            select(func.max(CommunityDirectMessage.sequence)).where(
+                CommunityDirectMessage.conversation_id == locked.id
+            )
+        )
+        or 0
+    ) + 1
+    message = CommunityDirectMessage(
+        conversation_id=locked.id,
+        sender_id=sender.id,
+        sequence=sequence,
+        ciphertext=encrypted.ciphertext,
+        nonce=encrypted.nonce,
+        key_version=encrypted.key_version,
+        client_message_id=payload.client_message_id,
+    )
+    db.add(message)
+    recipient_member = _get_member(db, conversation_id=locked.id, user_id=recipient.id)
+    recipient_member.archived_at = None
+    locked.updated_at = utc_now()
+    db.flush()
+
+    from password_detective.modules.community.notification_service import create_notification
+
+    create_notification(
+        db,
+        recipient_id=recipient.id,
+        actor_id=sender.id,
+        kind=CommunityNotificationKind.DIRECT_MESSAGE,
+        source_type=CommunityNotificationSource.DIRECT_MESSAGE,
+        source_id=message.id,
+        post_id=None,
+        comment_id=None,
+        preview="你收到一条新私信",
+        queue_event=recipient_member.muted_until is None,
+        create_when_disabled=True,
+    )
+    db.flush()
+    return _message_response(db, message=message, vault=vault)
+
+
+def list_direct_messages(
+    db: Session,
+    *,
+    principal: Principal,
+    conversation_id: str,
+    cursor: str | None,
+    limit: int,
+    settings: Settings | None = None,
+) -> CommunityDirectMessageListResponse:
+    user = _active_user(db, principal.user.id)
+    conversation = _get_member_conversation(db, conversation_id=conversation_id, user_id=user.id)
+    _require_existing_conversation_access(db, conversation=conversation, user_id=user.id)
+    page_size = _validate_page_size(limit)
+    conditions = [CommunityDirectMessage.conversation_id == conversation.id]
+    if cursor is not None:
+        before_sequence = _decode_message_cursor(cursor)
+        conditions.append(CommunityDirectMessage.sequence < before_sequence)
+    messages = db.scalars(
+        select(CommunityDirectMessage)
+        .where(*conditions)
+        .order_by(CommunityDirectMessage.sequence.desc())
+        .limit(page_size + 1)
+    ).all()
+    has_more = len(messages) > page_size
+    page = messages[:page_size]
+    vault = build_direct_message_vault(settings or get_settings())
+    return CommunityDirectMessageListResponse(
+        items=[_message_response(db, message=message, vault=vault) for message in page],
+        next_cursor=_encode_message_cursor(page[-1].sequence) if has_more and page else None,
+        has_more=has_more,
+    )
+
+
+def update_direct_read_state(
+    db: Session,
+    *,
+    principal: Principal,
+    conversation_id: str,
+    payload: CommunityDirectReadStateUpdateRequest,
+) -> CommunityDirectReadStateResponse:
+    user = _active_user(db, principal.user.id)
+    conversation = _get_member_conversation(db, conversation_id=conversation_id, user_id=user.id)
+    _require_existing_conversation_access(db, conversation=conversation, user_id=user.id)
+    member = _get_member(db, conversation_id=conversation.id, user_id=user.id)
+    last_sequence = int(
+        db.scalar(
+            select(func.max(CommunityDirectMessage.sequence)).where(
+                CommunityDirectMessage.conversation_id == conversation.id
+            )
+        )
+        or 0
+    )
+    member.last_read_sequence = max(
+        member.last_read_sequence, min(payload.last_read_sequence, last_sequence)
+    )
+    db.flush()
+    unread_count = int(
+        db.scalar(
+            select(func.count(CommunityDirectMessage.id)).where(
+                CommunityDirectMessage.conversation_id == conversation.id,
+                CommunityDirectMessage.sequence > member.last_read_sequence,
+                CommunityDirectMessage.sender_id != user.id,
+            )
+        )
+        or 0
+    )
+    return CommunityDirectReadStateResponse(
+        conversation_id=conversation.id,
+        last_read_sequence=member.last_read_sequence,
+        unread_count=unread_count,
+    )
+
+
+def update_direct_member_state(
+    db: Session,
+    *,
+    principal: Principal,
+    conversation_id: str,
+    payload: CommunityDirectMemberStateUpdateRequest,
+) -> CommunityDirectMemberStateResponse:
+    user = _active_user(db, principal.user.id)
+    conversation = _get_member_conversation(db, conversation_id=conversation_id, user_id=user.id)
+    member = _get_member(db, conversation_id=conversation.id, user_id=user.id)
+    if payload.archived is not None:
+        member.archived_at = utc_now() if payload.archived else None
+    if payload.muted_until is not None:
+        member.muted_until = payload.muted_until
+    db.flush()
+    return CommunityDirectMemberStateResponse(
+        conversation_id=conversation.id,
+        archived_at=member.archived_at,
+        muted_until=member.muted_until,
+    )
+
+
+def _require_existing_conversation_access(
+    db: Session, *, conversation: CommunityDirectConversation, user_id: str
+) -> None:
+    counterpart = _counterpart_user(db, conversation=conversation, user_id=user_id)
+    _active_user(db, counterpart.id)
+    if _users_block_each_other(db, first_user_id=user_id, second_user_id=counterpart.id):
+        raise AppError("DIRECT_MESSAGE_UNAVAILABLE", "当前无法访问该私信会话", status_code=403)
+
+
+def _counterpart_user(
+    db: Session, *, conversation: CommunityDirectConversation, user_id: str
+) -> User:
+    counterpart_id = (
+        conversation.participant_high_id
+        if conversation.participant_low_id == user_id
+        else conversation.participant_low_id
+    )
+    counterpart = db.get(User, counterpart_id)
+    if counterpart is None:
+        raise AppError("DIRECT_MESSAGE_ACCOUNT_UNAVAILABLE", "私信账号当前不可用", status_code=403)
+    return counterpart
+
+
+def _message_response(
+    db: Session, *, message: CommunityDirectMessage, vault
+) -> CommunityDirectMessageResponse:
+    sender = db.get(User, message.sender_id)
+    if sender is None:
+        raise AppError("community.direct_message_unavailable", "私信暂时无法读取", status_code=500)
+    return CommunityDirectMessageResponse(
+        id=message.id,
+        conversation_id=message.conversation_id,
+        sender_username=sender.username,
+        body=_decrypt_message(vault, message),
+        sequence=message.sequence,
+        created_at=message.created_at,
+    )
+
+
+def _decrypt_message(vault: DirectMessageVault, message: CommunityDirectMessage) -> str:
+    return vault.decrypt(
+        ciphertext=message.ciphertext,
+        nonce=message.nonce,
+        key_version=message.key_version,
+    )
+
+
+def _encode_message_cursor(sequence: int) -> str:
+    return base64.urlsafe_b64encode(str(sequence).encode("ascii")).decode("ascii").rstrip("=")
+
+
+def _decode_message_cursor(cursor: str) -> int:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        sequence = int(base64.urlsafe_b64decode(padded.encode("ascii")).decode("ascii"))
+        if sequence < 1:
+            raise ValueError("sequence is not positive")
+        return sequence
+    except (UnicodeDecodeError, ValueError) as exc:
         raise AppError("community.invalid_cursor", "分页游标无效", status_code=422) from exc

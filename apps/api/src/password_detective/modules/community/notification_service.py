@@ -31,8 +31,13 @@ def create_notification(
     comment_id: str | None,
     preview: str,
     refresh_existing: bool = False,
+    queue_event: bool = True,
+    create_when_disabled: bool = False,
 ) -> CommunityNotification | None:
-    if recipient_id == actor_id or not notification_enabled(db, recipient_id, kind):
+    if recipient_id == actor_id:
+        return None
+    enabled = notification_enabled(db, recipient_id, kind)
+    if not enabled and not create_when_disabled:
         return None
     if kind not in {
         CommunityNotificationKind.GROUP_DECISION,
@@ -56,7 +61,8 @@ def create_notification(
             existing.read_at = None
             existing.created_at = utc_now()
             existing.delivery_version += 1
-            queue_notification_event(db, existing)
+            if queue_event and enabled:
+                queue_notification_event(db, existing)
         return existing
     notification = CommunityNotification(
         recipient_id=recipient_id,
@@ -70,9 +76,9 @@ def create_notification(
     )
     db.add(notification)
     db.flush()
-    queue_notification_event(db, notification)
+    if queue_event and enabled:
+        queue_notification_event(db, notification)
     return notification
-
 
 def sync_like_summary(
     db: Session,

@@ -11,7 +11,10 @@ from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
+    CommunityDirectMessage,
     CommunityInteractionPolicy,
+    CommunityNotification,
+    CommunityNotificationOutbox,
     CommunityPublicProfile,
     CommunityUserBlock,
     CommunityUserFollow,
@@ -22,6 +25,10 @@ from password_detective.modules.community.direct_message_service import (
     _get_member_conversation,
     create_direct_conversation,
     list_direct_conversations,
+    list_direct_messages,
+    send_direct_message,
+    update_direct_member_state,
+    update_direct_read_state,
 )
 from password_detective.modules.community.schemas import (
     CommunityDirectConversationCreateRequest,
@@ -302,3 +309,153 @@ def test_list_direct_conversations_excludes_archived_and_keeps_equal_timestamp_p
             "dm_page_carol",
             "dm_page_dave",
         }
+
+
+def test_send_direct_message_encrypts_storage_replays_and_hides_plaintext(client) -> None:
+    _register_login(client, "dm_send_alice")
+    _register_login(client, "dm_send_bob")
+    with client.app.state.database.session_factory() as db:
+        alice = _principal(db, "dm_send_alice")
+        _set_message_policy(
+            db,
+            username="dm_send_bob",
+            policy=CommunityInteractionPolicy.EVERYONE,
+        )
+        conversation = create_direct_conversation(
+            db,
+            principal=alice,
+            payload=CommunityDirectConversationCreateRequest(recipient_username="dm_send_bob"),
+        ).conversation
+        sent = send_direct_message(
+            db,
+            principal=alice,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMessageCreateRequest(
+                body="只用于测试的合成私信",
+                client_message_id="synthetic-client-1",
+            ),
+            idempotency_key="synthetic-http-key-1",
+            settings=client.app.state.settings,
+        )
+        replayed = send_direct_message(
+            db,
+            principal=alice,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMessageCreateRequest(
+                body="只用于测试的合成私信",
+                client_message_id="synthetic-client-1",
+            ),
+            idempotency_key="synthetic-http-key-1",
+            settings=client.app.state.settings,
+        )
+        _assert_error_code(
+            "DIRECT_MESSAGE_IDEMPOTENCY_CONFLICT",
+            lambda: send_direct_message(
+                db,
+                principal=alice,
+                conversation_id=conversation.id,
+                payload=CommunityDirectMessageCreateRequest(
+                    body="不同的合成私信正文",
+                    client_message_id="synthetic-client-1",
+                ),
+                idempotency_key="synthetic-http-key-1",
+                settings=client.app.state.settings,
+            ),
+        )
+        db.commit()
+
+        stored = db.scalar(select(CommunityDirectMessage))
+        notification = db.scalar(select(CommunityNotification))
+        outbox = db.scalar(select(CommunityNotificationOutbox))
+        assert stored is not None
+        assert notification is not None
+        assert outbox is not None
+        assert stored.ciphertext != "只用于测试的合成私信"
+        assert stored.nonce
+        assert sent.id == replayed.id
+        assert notification.preview == "你收到一条新私信"
+        assert "合成私信" not in notification.preview
+
+
+def test_direct_message_access_read_state_and_member_state_are_private(client) -> None:
+    _register_login(client, "dm_state_alice")
+    _register_login(client, "dm_state_bob")
+    with client.app.state.database.session_factory() as db:
+        alice = _principal(db, "dm_state_alice")
+        bob = _principal(db, "dm_state_bob")
+        _set_message_policy(
+            db,
+            username="dm_state_bob",
+            policy=CommunityInteractionPolicy.EVERYONE,
+        )
+        conversation = create_direct_conversation(
+            db,
+            principal=alice,
+            payload=CommunityDirectConversationCreateRequest(recipient_username="dm_state_bob"),
+        ).conversation
+        send_direct_message(
+            db,
+            principal=alice,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMessageCreateRequest(
+                body="第一条合成私信",
+                client_message_id="synthetic-state-1",
+            ),
+            idempotency_key="synthetic-state-http-1",
+            settings=client.app.state.settings,
+        )
+        read = update_direct_read_state(
+            db,
+            principal=bob,
+            conversation_id=conversation.id,
+            payload=CommunityDirectReadStateUpdateRequest(last_read_sequence=1),
+        )
+        unchanged = update_direct_read_state(
+            db,
+            principal=bob,
+            conversation_id=conversation.id,
+            payload=CommunityDirectReadStateUpdateRequest(last_read_sequence=0),
+        )
+        assert read.last_read_sequence == unchanged.last_read_sequence == 1
+
+        update_direct_member_state(
+            db,
+            principal=bob,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMemberStateUpdateRequest(archived=True),
+        )
+        alice_state = update_direct_member_state(
+            db,
+            principal=alice,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMemberStateUpdateRequest(muted_until=None),
+        )
+        assert alice_state.archived_at is None
+
+        db.add(CommunityUserBlock(blocker_id=bob.user.id, blocked_id=alice.user.id))
+        db.flush()
+        _assert_error_code(
+            "DIRECT_MESSAGE_UNAVAILABLE",
+            lambda: list_direct_messages(
+                db,
+                principal=alice,
+                conversation_id=conversation.id,
+                cursor=None,
+                limit=20,
+                settings=client.app.state.settings,
+            ),
+        )
+        _assert_error_code(
+            "DIRECT_MESSAGE_UNAVAILABLE",
+            lambda: send_direct_message(
+                db,
+                principal=alice,
+                conversation_id=conversation.id,
+                payload=CommunityDirectMessageCreateRequest(
+                    body="拉黑后不可发送",
+                    client_message_id="synthetic-state-2",
+                ),
+                idempotency_key="synthetic-state-http-2",
+                settings=client.app.state.settings,
+            ),
+        )
