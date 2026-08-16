@@ -502,7 +502,10 @@ def send_direct_message(
         post_id=None,
         comment_id=None,
         preview="你收到一条新私信",
-        queue_event=recipient_member.muted_until is None,
+        queue_event=(
+            recipient_member.muted_until is None
+            or recipient_member.muted_until <= utc_now()
+        ),
         create_when_disabled=True,
     )
     db.flush()
@@ -594,7 +597,7 @@ def update_direct_member_state(
     member = _get_member(db, conversation_id=conversation.id, user_id=user.id)
     if payload.archived is not None:
         member.archived_at = utc_now() if payload.archived else None
-    if payload.muted_until is not None:
+    if "muted_until" in payload.model_fields_set:
         member.muted_until = payload.muted_until
     db.flush()
     return CommunityDirectMemberStateResponse(

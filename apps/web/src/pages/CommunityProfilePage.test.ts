@@ -6,13 +6,15 @@ import CommunityProfilePage from "./CommunityProfilePage.vue";
 vi.mock("vue-router", () => ({
   RouterLink: { props: ["to"], template: "<a><slot /></a>" },
   useRoute: () => ({ params: { username: "synthetic-user" } }),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("../stores/auth", () => ({
-  useAuthStore: () => ({ accessToken: "", isAuthenticated: false }),
+  useAuthStore: () => ({ accessToken: "synthetic-access-token", isAuthenticated: true }),
 }));
 
 vi.mock("../services/community", () => ({
+  createCommunityDirectConversation: vi.fn(),
   createCommunityIdempotencyKey: vi.fn(() => "synthetic-idempotency-key"),
   getCommunityPublicProfile: vi.fn(() => Promise.resolve({
     username: "synthetic-user",
@@ -43,6 +45,7 @@ describe("CommunityProfilePage", () => {
     expect(html).toContain("合成社区用户");
     expect(html).toContain("新手侦探");
     expect(html).toContain("加入于 2026-08");
+    expect(html).toContain("发送私信");
     expect(html).not.toContain("example.com");
   });
 });

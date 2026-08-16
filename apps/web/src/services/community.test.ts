@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createCommunityDirectConversation,
   createCommunityPost,
   deleteCommunityComment,
   getCommunityActivityPreferences,
@@ -8,15 +9,20 @@ import {
   getCommunityPost,
   listCommunityActivity,
   listCommunityComments,
+  listCommunityDirectConversations,
+  listCommunityDirectMessages,
   listCommunityNotifications,
   markAllCommunityNotificationsRead,
   markCommunityNotificationRead,
   searchCommunity,
+  sendCommunityDirectMessage,
   listCommunityBookmarks,
   setCommunityCommentLike,
   setCommunityPostBookmark,
   setCommunityPostLike,
   updateCommunityActivityPreferences,
+  updateCommunityDirectMemberState,
+  updateCommunityDirectReadState,
   updateCommunityNotificationPreferences,
 } from "./community";
 
@@ -262,4 +268,81 @@ describe("web community service", () => {
     }
   });
 
+  it("encodes authenticated private message reads and idempotent writes", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ items: [], next_cursor: null, has_more: false })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await createCommunityDirectConversation(
+      { recipient_username: "recipient/name" },
+      "access-token",
+      "conversation-key",
+    );
+    await listCommunityDirectConversations("access-token", {
+      cursor: "conversation/cursor",
+      includeArchived: true,
+      limit: 12,
+    });
+    await listCommunityDirectMessages(
+      "conversation/with space",
+      "access-token",
+      { cursor: "message/cursor", limit: 15 },
+    );
+    await sendCommunityDirectMessage(
+      "conversation/with space",
+      { body: "合成私信正文", client_message_id: "client-message-id" },
+      "access-token",
+      "message-key",
+    );
+    await updateCommunityDirectReadState(
+      "conversation/with space",
+      { last_read_sequence: 9 },
+      "access-token",
+      "read-key",
+    );
+    await updateCommunityDirectMemberState(
+      "conversation/with space",
+      { archived: true },
+      "access-token",
+      "member-key",
+    );
+
+    const createInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(createInit.method).toBe("POST");
+    expect(new Headers(createInit.headers).get("Idempotency-Key")).toBe("conversation-key");
+
+    const listUrl = new URL(String(fetchMock.mock.calls[1]?.[0]), "http://synthetic.local");
+    expect(listUrl.searchParams.get("cursor")).toBe("conversation/cursor");
+    expect(listUrl.searchParams.get("include_archived")).toBe("true");
+    expect(listUrl.searchParams.get("limit")).toBe("12");
+
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+      "/community/direct-conversations/conversation%2Fwith%20space/messages",
+    );
+    const messageListUrl = new URL(String(fetchMock.mock.calls[2]?.[0]), "http://synthetic.local");
+    expect(messageListUrl.searchParams.get("cursor")).toBe("message/cursor");
+    expect(messageListUrl.searchParams.get("limit")).toBe("15");
+
+    const sendInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    expect(sendInit.method).toBe("POST");
+    expect(new Headers(sendInit.headers).get("Idempotency-Key")).toBe("message-key");
+    expect(sendInit.body).toBe(JSON.stringify({
+      body: "合成私信正文",
+      client_message_id: "client-message-id",
+    }));
+
+    const readInit = fetchMock.mock.calls[4]?.[1] as RequestInit;
+    expect(readInit.method).toBe("PATCH");
+    expect(new Headers(readInit.headers).get("Idempotency-Key")).toBe("read-key");
+
+    const memberInit = fetchMock.mock.calls[5]?.[1] as RequestInit;
+    expect(memberInit.method).toBe("PATCH");
+    expect(new Headers(memberInit.headers).get("Idempotency-Key")).toBe("member-key");
+
+    for (const call of fetchMock.mock.calls) {
+      expect(new Headers(call[1]?.headers).get("Authorization")).toBe("Bearer access-token");
+    }
+  });
 });

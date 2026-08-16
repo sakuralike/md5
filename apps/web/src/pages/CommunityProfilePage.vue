@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { CommunityPublicProfileResponse } from "@password-detective/api-contract";
 import { computed, onMounted, onServerPrefetch, ref, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  createCommunityDirectConversation,
   createCommunityIdempotencyKey,
   getCommunityPublicProfile,
   setCommunityUserRelation,
@@ -16,10 +17,12 @@ import { resolveCommunityAvatarUrl } from "@/lib/communityAvatar";
 import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
 const profile = ref<CommunityPublicProfileResponse | null>(null);
 const loading = ref(false);
 const mutating = ref(false);
+const startingConversation = ref(false);
 const error = ref("");
 const success = ref("");
 
@@ -44,6 +47,25 @@ async function load(): Promise<void> {
     error.value = caught instanceof Error ? caught.message : "无法加载社区公开主页";
   } finally {
     loading.value = false;
+  }
+}
+
+async function startDirectMessage(): Promise<void> {
+  if (!auth.isAuthenticated || !profile.value || startingConversation.value) return;
+  startingConversation.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    const response = await createCommunityDirectConversation(
+      { recipient_username: profile.value.username },
+      auth.accessToken,
+      createCommunityIdempotencyKey("direct-conversation"),
+    );
+    await router.push(`/community/messages/${response.conversation.id}`);
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "无法发起私信会话";
+  } finally {
+    startingConversation.value = false;
   }
 }
 
@@ -133,6 +155,14 @@ onServerPrefetch(() => load());
             </div>
           </div>
           <div v-if="auth.isAuthenticated && !profile.relationship.viewer_is_self" class="flex flex-wrap gap-2">
+            <Button
+              v-if="!profile.relationship.viewer_is_blocking && !profile.relationship.viewer_is_blocked"
+              variant="secondary"
+              :disabled="startingConversation"
+              @click="startDirectMessage"
+            >
+              {{ startingConversation ? "正在打开…" : "发送私信" }}
+            </Button>
             <Button
               :disabled="mutating || profile.relationship.viewer_is_blocking || profile.relationship.viewer_is_blocked"
               @click="changeRelation('follow', !profile.relationship.viewer_is_following)"

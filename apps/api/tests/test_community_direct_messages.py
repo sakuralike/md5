@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -424,6 +424,15 @@ def test_direct_message_access_read_state_and_member_state_are_private(client) -
             conversation_id=conversation.id,
             payload=CommunityDirectMemberStateUpdateRequest(archived=True),
         )
+        muted = update_direct_member_state(
+            db,
+            principal=alice,
+            conversation_id=conversation.id,
+            payload=CommunityDirectMemberStateUpdateRequest(
+                muted_until=utc_now() + timedelta(days=7)
+            ),
+        )
+        assert muted.muted_until is not None
         alice_state = update_direct_member_state(
             db,
             principal=alice,
@@ -431,6 +440,7 @@ def test_direct_message_access_read_state_and_member_state_are_private(client) -
             payload=CommunityDirectMemberStateUpdateRequest(muted_until=None),
         )
         assert alice_state.archived_at is None
+        assert alice_state.muted_until is None
 
         db.add(CommunityUserBlock(blocker_id=bob.user.id, blocked_id=alice.user.id))
         db.flush()

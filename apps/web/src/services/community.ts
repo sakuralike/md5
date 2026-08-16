@@ -10,6 +10,16 @@ import type {
   CommunityCommentLikeResponse,
   CommunityCommentListResponse,
   CommunityCommentUpdateRequest,
+  CommunityDirectConversationCreateRequest,
+  CommunityDirectConversationCreateResponse,
+  CommunityDirectConversationListResponse,
+  CommunityDirectMemberStateResponse,
+  CommunityDirectMemberStateUpdateRequest,
+  CommunityDirectMessageCreateRequest,
+  CommunityDirectMessageListResponse,
+  CommunityDirectMessageResponse,
+  CommunityDirectReadStateResponse,
+  CommunityDirectReadStateUpdateRequest,
   CommunityGroupCreateRequest,
   CommunityGroupDetail,
   CommunityGroupListResponse,
@@ -75,9 +85,120 @@ export function createCommunityIdempotencyKey(
     | "group-join"
     | "group-leave"
     | "group-member-decision"
-    | "group-member-role",
+    | "group-member-role"
+    | "direct-conversation"
+    | "direct-message"
+    | "direct-read-state"
+    | "direct-member-state",
 ): string {
   return `web-community-${kind}-${createClientId()}`;
+}
+
+
+export interface CommunityDirectConversationListOptions {
+  cursor?: string;
+  includeArchived?: boolean;
+  limit?: number;
+}
+
+export interface CommunityDirectMessageListOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export function createCommunityDirectConversation(
+  payload: CommunityDirectConversationCreateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityDirectConversationCreateResponse> {
+  return apiRequest<CommunityDirectConversationCreateResponse>(
+    "/community/direct-conversations",
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function listCommunityDirectConversations(
+  token: string,
+  options: CommunityDirectConversationListOptions = {},
+): Promise<CommunityDirectConversationListResponse> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.includeArchived) params.set("include_archived", "true");
+  return apiRequest<CommunityDirectConversationListResponse>(
+    `/community/direct-conversations?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function listCommunityDirectMessages(
+  conversationId: string,
+  token: string,
+  options: CommunityDirectMessageListOptions = {},
+): Promise<CommunityDirectMessageListResponse> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  return apiRequest<CommunityDirectMessageListResponse>(
+    `/community/direct-conversations/${encodeURIComponent(conversationId)}/messages?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function sendCommunityDirectMessage(
+  conversationId: string,
+  payload: CommunityDirectMessageCreateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityDirectMessageResponse> {
+  return apiRequest<CommunityDirectMessageResponse>(
+    `/community/direct-conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateCommunityDirectReadState(
+  conversationId: string,
+  payload: CommunityDirectReadStateUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityDirectReadStateResponse> {
+  return apiRequest<CommunityDirectReadStateResponse>(
+    `/community/direct-conversations/${encodeURIComponent(conversationId)}/read-state`,
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateCommunityDirectMemberState(
+  conversationId: string,
+  payload: CommunityDirectMemberStateUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityDirectMemberStateResponse> {
+  return apiRequest<CommunityDirectMemberStateResponse>(
+    `/community/direct-conversations/${encodeURIComponent(conversationId)}/member-state`,
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
 }
 
 
