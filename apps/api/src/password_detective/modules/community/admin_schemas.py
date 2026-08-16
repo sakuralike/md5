@@ -14,6 +14,7 @@ from password_detective.db.models.community import (
     CommunityReportDecision,
     CommunityReportReason,
     CommunityReportStatus,
+    CommunitySearchRebuildStatus,
 )
 from password_detective.db.models.user import UserRole
 
@@ -199,3 +200,31 @@ class AdminCommunityNotificationReplayResponse(BaseModel):
     event: AdminCommunityNotificationOutboxItem
     audit_id: str
     request_id: str | None
+
+
+class AdminCommunitySearchProviderHealth(BaseModel):
+    mode: str
+    degraded: bool
+
+
+class AdminCommunitySearchRebuildSummary(BaseModel):
+    status: CommunitySearchRebuildStatus
+    expected_count: int
+    indexed_count: int
+    missing_count: int
+    extra_count: int
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class AdminCommunitySearchHealthResponse(BaseModel):
+    generated_at: datetime
+    provider: AdminCommunitySearchProviderHealth
+    pending_count: int
+    delivered_count: int
+    failed_count: int
+    retry_due_count: int
+    oldest_pending_seconds: int | None
+    last_delivered_at: datetime | None
+    delivery_latency_buckets: dict[str, int]
+    last_rebuild: AdminCommunitySearchRebuildSummary | None

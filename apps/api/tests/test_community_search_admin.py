@@ -57,5 +57,15 @@ def test_search_health_is_admin_only_and_contains_no_query_history(client):
     )
     assert response.status_code == 200, response.text
     body = response.json()
+    assert set(body) >= {
+        "generated_at",
+        "provider",
+        "pending_count",
+        "failed_count",
+        "last_rebuild",
+    }
+    assert "items" not in body
     assert "queries" not in body
     assert "documents" not in body
+    assert "query" not in str(body).lower()
+    assert "content" not in str(body).lower()

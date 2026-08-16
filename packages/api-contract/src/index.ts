@@ -1838,6 +1838,34 @@ export interface CommunitySearchResponse {
   provider: CommunitySearchProviderState;
 }
 
+export type CommunitySearchRebuildStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface CommunitySearchRebuildSummary {
+  status: CommunitySearchRebuildStatus;
+  expected_count: number;
+  indexed_count: number;
+  missing_count: number;
+  extra_count: number;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CommunitySearchHealthResponse {
+  generated_at: string;
+  provider: CommunitySearchProviderState;
+  pending_count: number;
+  delivered_count: number;
+  failed_count: number;
+  retry_due_count: number;
+  oldest_pending_seconds: number | null;
+  last_delivered_at: string | null;
+  delivery_latency_buckets: Record<string, number>;
+  last_rebuild: CommunitySearchRebuildSummary | null;
+}
 export interface CommunityPostInteractionResponse {
   post_id: string;
   like_count: number;

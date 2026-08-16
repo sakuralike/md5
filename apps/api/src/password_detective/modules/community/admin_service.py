@@ -21,6 +21,9 @@ from password_detective.db.models.community import (
     CommunityReport,
     CommunityReportDecision,
     CommunityReportStatus,
+    CommunitySearchOutbox,
+    CommunitySearchOutboxStatus,
+    CommunitySearchRebuildRun,
     CommunitySearchSource,
 )
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
@@ -46,12 +49,16 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityReportMutationResponse,
     AdminCommunityReportResolveRequest,
     AdminCommunityReportSummary,
+    AdminCommunitySearchHealthResponse,
+    AdminCommunitySearchProviderHealth,
+    AdminCommunitySearchRebuildSummary,
 )
 from password_detective.modules.community.boards import ensure_seed_boards
 from password_detective.modules.community.search_index import (
     enqueue_search_event,
     source_document_version,
 )
+from password_detective.modules.community.search_provider import provider_for_session
 
 
 def list_admin_boards(db: Session) -> AdminCommunityBoardListResponse:
@@ -414,6 +421,99 @@ def _post_state(post: CommunityPost) -> AdminCommunityPostState:
         reply_count=post.reply_count,
         updated_at=post.updated_at,
     )
+
+
+def get_admin_search_health(db: Session) -> AdminCommunitySearchHealthResponse:
+    now = utc_now()
+    counts = {
+        status: int(count)
+        for status, count in db.execute(
+            select(CommunitySearchOutbox.status, func.count(CommunitySearchOutbox.id)).group_by(
+                CommunitySearchOutbox.status
+            )
+        ).all()
+    }
+    oldest_pending_at = db.scalar(
+        select(func.min(CommunitySearchOutbox.created_at)).where(
+            CommunitySearchOutbox.status == CommunitySearchOutboxStatus.PENDING
+        )
+    )
+    retry_due_count = int(
+        db.scalar(
+            select(func.count(CommunitySearchOutbox.id)).where(
+                CommunitySearchOutbox.status == CommunitySearchOutboxStatus.FAILED,
+                CommunitySearchOutbox.available_at <= now,
+            )
+        )
+        or 0
+    )
+    last_delivered_at = db.scalar(select(func.max(CommunitySearchOutbox.delivered_at)))
+    latest_rebuild = db.scalar(
+        select(CommunitySearchRebuildRun).order_by(
+            CommunitySearchRebuildRun.created_at.desc(), CommunitySearchRebuildRun.id.desc()
+        )
+    )
+    provider_state = provider_for_session(db).preflight(db)
+    return AdminCommunitySearchHealthResponse(
+        generated_at=now,
+        provider=AdminCommunitySearchProviderHealth(
+            mode=provider_state.mode,
+            degraded=provider_state.degraded,
+        ),
+        pending_count=counts.get(CommunitySearchOutboxStatus.PENDING, 0),
+        delivered_count=counts.get(CommunitySearchOutboxStatus.DELIVERED, 0),
+        failed_count=counts.get(CommunitySearchOutboxStatus.FAILED, 0),
+        retry_due_count=retry_due_count,
+        oldest_pending_seconds=(
+            max(0, int((now - _aware_datetime(oldest_pending_at)).total_seconds()))
+            if oldest_pending_at is not None
+            else None
+        ),
+        last_delivered_at=last_delivered_at,
+        delivery_latency_buckets=_search_delivery_latency_buckets(db, now=now),
+        last_rebuild=(
+            AdminCommunitySearchRebuildSummary(
+                status=latest_rebuild.status,
+                expected_count=latest_rebuild.expected_count,
+                indexed_count=latest_rebuild.indexed_count,
+                missing_count=latest_rebuild.missing_count,
+                extra_count=latest_rebuild.extra_count,
+                started_at=latest_rebuild.started_at,
+                finished_at=latest_rebuild.finished_at,
+            )
+            if latest_rebuild is not None
+            else None
+        ),
+    )
+
+
+def _search_delivery_latency_buckets(db: Session, *, now: datetime) -> dict[str, int]:
+    buckets = {
+        "under_5_seconds": 0,
+        "under_30_seconds": 0,
+        "under_5_minutes": 0,
+        "over_5_minutes": 0,
+    }
+    delivered_events = db.execute(
+        select(CommunitySearchOutbox.created_at, CommunitySearchOutbox.delivered_at).where(
+            CommunitySearchOutbox.status == CommunitySearchOutboxStatus.DELIVERED,
+            CommunitySearchOutbox.delivered_at.is_not(None),
+            CommunitySearchOutbox.delivered_at >= now - timedelta(hours=24),
+        )
+    ).all()
+    for created_at, delivered_at in delivered_events:
+        latency_seconds = max(
+            0, int((_aware_datetime(delivered_at) - _aware_datetime(created_at)).total_seconds())
+        )
+        if latency_seconds <= 5:
+            buckets["under_5_seconds"] += 1
+        elif latency_seconds <= 30:
+            buckets["under_30_seconds"] += 1
+        elif latency_seconds <= 300:
+            buckets["under_5_minutes"] += 1
+        else:
+            buckets["over_5_minutes"] += 1
+    return buckets
 
 
 def list_admin_notification_outbox(

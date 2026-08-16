@@ -41,10 +41,12 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityReportListResponse,
     AdminCommunityReportMutationResponse,
     AdminCommunityReportResolveRequest,
+    AdminCommunitySearchHealthResponse,
 )
 from password_detective.modules.community.admin_service import (
     create_admin_board,
     get_admin_notification_outbox_metrics,
+    get_admin_search_health,
     list_admin_boards,
     list_admin_notification_outbox,
     list_admin_reports,
@@ -125,6 +127,18 @@ def admin_community_board_update(
             context=get_client_context(request),
         ),
     )
+
+
+@admin_router.get(
+    "/search/health",
+    response_model=AdminCommunitySearchHealthResponse,
+)
+def admin_community_search_health(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> AdminCommunitySearchHealthResponse:
+    del principal
+    return get_admin_search_health(db)
 
 
 @admin_router.get(
