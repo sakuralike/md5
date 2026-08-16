@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from sqlalchemy import select
+
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.archive import Archive
@@ -10,6 +12,15 @@ from password_detective.db.models.archive_fingerprint import (
     FingerprintAlgorithm,
 )
 from password_detective.db.models.authorization_declaration import AuthorizationDeclaration
+from password_detective.db.models.community import (
+    CommunityDirectConversation,
+    CommunityDirectConversationMember,
+    CommunityDirectMessage,
+    CommunityInteractionPolicy,
+    CommunityNotification,
+    CommunityNotificationOutbox,
+    CommunityPublicProfile,
+)
 from password_detective.db.models.privacy_request import (
     PrivacyDeletionRequest,
     PrivacyDeletionStatus,
@@ -37,6 +48,42 @@ def _register_and_login(client, suffix: str = "one") -> tuple[dict, dict[str, st
 
 
 
+def _conversation_with_two_users(client) -> tuple[dict, dict[str, str], str]:
+    owner, owner_headers = _register_and_login(client, "dm_owner")
+    _register_and_login(client, "dm_other")
+    with client.app.state.database.session_factory() as db:
+        other_user = db.scalar(select(User).where(User.username == "privacy_dm_other"))
+        assert other_user is not None
+        profile = db.get(CommunityPublicProfile, other_user.id)
+        if profile is None:
+            profile = CommunityPublicProfile(
+                user_id=other_user.id,
+                display_name=other_user.username,
+                avatar_seed=other_user.id.replace("-", "")[:24].ljust(24, "0"),
+            )
+            db.add(profile)
+            db.flush()
+        profile.message_policy = CommunityInteractionPolicy.EVERYONE
+        db.commit()
+    response = client.post(
+        "/api/v1/community/direct-conversations",
+        json={"recipient_username": "privacy_dm_other"},
+        headers={**owner_headers, "Idempotency-Key": "privacy-dm-conversation-0001"},
+    )
+    assert response.status_code == 201
+    return owner, owner_headers, response.json()["conversation"]["id"]
+
+
+def _send_direct_message(client, headers: dict[str, str], conversation_id: str) -> dict:
+    response = client.post(
+        f"/api/v1/community/direct-conversations/{conversation_id}/messages",
+        json={"body": "导出用合成正文", "client_message_id": "privacy-export-message-0001"},
+        headers={**headers, "Idempotency-Key": "privacy-export-message-request-0001"},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 def _reauthenticate(
     client,
     headers: dict[str, str],
@@ -52,6 +99,76 @@ def _reauthenticate(
     assert response.status_code == 200
     return response.json()["reauth_token"]
 
+
+
+def test_privacy_export_contains_only_requesters_direct_message_records(client):
+    owner, owner_headers, conversation_id = _conversation_with_two_users(client)
+    _send_direct_message(client, owner_headers, conversation_id)
+    export_response = client.post(
+        "/api/v1/me/privacy/exports",
+        headers={**owner_headers, "Idempotency-Key": "privacy-dm-export-request-0001"},
+    )
+    assert export_response.status_code == 202
+    artifact = client.post(
+        f"/api/v1/me/privacy/exports/{export_response.json()['id']}/download",
+        json={"token": export_response.json()["download_token"]},
+        headers=owner_headers,
+    ).json()
+    assert artifact["community"]["direct_messages"][0]["body"] == "导出用合成正文"
+    assert artifact["community"]["direct_messages"][0]["conversation_id"] == conversation_id
+    assert "ciphertext" not in artifact["community"]["direct_messages"][0]
+    assert artifact["account"]["id"] == owner["user"]["id"]
+
+
+def test_account_deletion_removes_direct_message_rows(client):
+    owner, headers, conversation_id = _conversation_with_two_users(client)
+    _send_direct_message(client, headers, conversation_id)
+    reauth_token = _reauthenticate(client, headers)
+    created = client.post(
+        "/api/v1/me/privacy/deletion-requests",
+        json={"reauth_token": reauth_token},
+        headers={**headers, "Idempotency-Key": "privacy-dm-delete-request-0001"},
+    )
+    assert created.status_code == 202
+    with client.app.state.database.session_factory() as db:
+        record = db.get(PrivacyDeletionRequest, created.json()["id"])
+        assert record is not None
+        record.cancel_before = utc_now() - timedelta(seconds=1)
+        db.commit()
+        assert process_due_deletion_requests(db) == 1
+        assert (
+            db.scalars(
+                select(CommunityDirectMessage).where(
+                    CommunityDirectMessage.sender_id == owner["user"]["id"]
+                )
+            ).all()
+            == []
+        )
+        assert (
+            db.scalars(
+                select(CommunityDirectConversationMember).where(
+                    CommunityDirectConversationMember.user_id == owner["user"]["id"]
+                )
+            ).all()
+            == []
+        )
+        assert db.get(CommunityDirectConversation, conversation_id) is None
+        assert (
+            db.scalars(
+                select(CommunityNotification).where(
+                    CommunityNotification.actor_id == owner["user"]["id"]
+                )
+            ).all()
+            == []
+        )
+        assert (
+            db.scalars(
+                select(CommunityNotificationOutbox).where(
+                    CommunityNotificationOutbox.recipient_id == owner["user"]["id"]
+                )
+            ).all()
+            == []
+        )
 
 def test_reveal_history_masks_fingerprints_and_never_returns_plaintext(client):
     tokens, headers = _register_and_login(client)

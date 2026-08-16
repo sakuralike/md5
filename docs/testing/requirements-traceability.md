@@ -566,3 +566,11 @@
 - `7531c634188a` 已推送到 `codex/m5-entry-gates` 并部署到 Staging；API 2、Worker 3、Web、Admin、Scheduler 和监控服务均运行正常，迁移为 `20260814_0039 (head)`。
 - 服务器本机 `ready`、桌面公告、Web 公告接口均 HTTP 200；公网 Web `:5173`、Admin `:5174` 及其 `/api/v1` 代理同样 HTTP 200。
 - 公网 `:8000` 直连仍为 HTTP 502，标记为独立入口配置风险；不改变当前 Web/Admin 代理路径的通过结论。
+
+## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| COMMUNITY-77～93 导出边界 | `build_privacy_export` 仅查询请求人参与的私信会话；导出 `direct_conversations` 与 `direct_messages` 时只投影公开身份、正文、序号和时间 | `test_privacy_export_contains_only_requesters_direct_message_records`；断言不含 `ciphertext` | 本地已实现并通过定向测试；目标环境导出回归待部署 |
+| COMMUNITY-77～93 删除清理 | `process_due_deletion_requests` 按通知 Outbox、通知、消息、成员、会话顺序清理私信数据；不把正文写入审计详情 | `test_account_deletion_removes_direct_message_rows`；断言消息、成员、会话、私信通知和 Outbox 清零 | 本地已实现并通过定向测试；目标环境删除回归待部署 |
+| I9 全闭环状态 | 加密、授权、幂等、通知、导出/删除的代码与迁移已在本地分切片完成 | 私信专项 API 测试、N1 隐私专项测试、Ruff；Web、三浏览器和统一门禁尚未完成 | 部分实现；不可标记为远端/Staging/UAT 完成 |

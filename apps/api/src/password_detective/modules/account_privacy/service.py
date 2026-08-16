@@ -8,10 +8,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings
+from password_detective.core.direct_message_crypto import build_direct_message_vault
 from password_detective.core.errors import AppError
 from password_detective.core.operational_settings import get_operational_setting
 from password_detective.core.security import (
@@ -24,6 +25,15 @@ from password_detective.db.models.account_action_token import AccountActionToken
 from password_detective.db.models.archive_fingerprint import ArchiveFingerprint
 from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.authorization_declaration import AuthorizationDeclaration
+from password_detective.db.models.community import (
+    CommunityDirectConversation,
+    CommunityDirectConversationMember,
+    CommunityDirectMessage,
+    CommunityNotification,
+    CommunityNotificationKind,
+    CommunityNotificationOutbox,
+    CommunityNotificationSource,
+)
 from password_detective.db.models.privacy_request import (
     PrivacyDeletionRequest,
     PrivacyDeletionStatus,
@@ -306,6 +316,45 @@ def build_privacy_export(db: Session, settings: Settings, export_id: str) -> Non
             page=1,
             page_size=100,
         )
+        direct_members = db.scalars(
+            select(CommunityDirectConversationMember).where(
+                CommunityDirectConversationMember.user_id == user.id
+            )
+        ).all()
+        direct_conversation_ids = [member.conversation_id for member in direct_members]
+        direct_conversations = (
+            db.scalars(
+                select(CommunityDirectConversation)
+                .where(CommunityDirectConversation.id.in_(direct_conversation_ids))
+                .order_by(CommunityDirectConversation.created_at, CommunityDirectConversation.id)
+            ).all()
+            if direct_conversation_ids
+            else []
+        )
+        direct_user_ids = {
+            participant_id
+            for conversation in direct_conversations
+            for participant_id in (
+                conversation.participant_low_id,
+                conversation.participant_high_id,
+            )
+        }
+        direct_users = {
+            direct_user.id: direct_user
+            for direct_user in db.scalars(
+                select(User).where(User.id.in_(direct_user_ids))
+            ).all()
+        }
+        direct_messages = (
+            db.scalars(
+                select(CommunityDirectMessage)
+                .where(CommunityDirectMessage.conversation_id.in_(direct_conversation_ids))
+                .order_by(CommunityDirectMessage.created_at, CommunityDirectMessage.id)
+            ).all()
+            if direct_conversation_ids
+            else []
+        )
+        direct_vault = build_direct_message_vault(settings)
         artifact: dict[str, Any] = {
             "schema_version": "privacy-export-v1",
             "generated_at": utc_now().isoformat(),
@@ -343,6 +392,36 @@ def build_privacy_export(db: Session, settings: Settings, export_id: str) -> Non
                 for item in submissions
             ],
             "reveal_history": [item.model_dump(mode="json") for item in reveal_history.items],
+            "community": {
+                "direct_conversations": [
+                    {
+                        "id": conversation.id,
+                        "counterpart_username": direct_users[
+                            conversation.participant_high_id
+                            if conversation.participant_low_id == user.id
+                            else conversation.participant_low_id
+                        ].username,
+                        "created_at": conversation.created_at.isoformat(),
+                        "updated_at": conversation.updated_at.isoformat(),
+                    }
+                    for conversation in direct_conversations
+                ],
+                "direct_messages": [
+                    {
+                        "id": message.id,
+                        "conversation_id": message.conversation_id,
+                        "sender_username": direct_users[message.sender_id].username,
+                        "body": direct_vault.decrypt(
+                            ciphertext=message.ciphertext,
+                            nonce=message.nonce,
+                            key_version=message.key_version,
+                        ),
+                        "sequence": message.sequence,
+                        "created_at": message.created_at.isoformat(),
+                    }
+                    for message in direct_messages
+                ],
+            },
             "security_notice": "导出不包含账号密码、候选密码、TOTP 密钥或历史明文密码。",
         }
         canonical = json.dumps(
@@ -593,6 +672,62 @@ def process_due_deletion_requests(db: Session) -> int:
         user.totp_pending_secret_ciphertext = None
         user.totp_secret_ciphertext = None
         user.totp_enabled_at = None
+        direct_conversation_ids = db.scalars(
+            select(CommunityDirectConversationMember.conversation_id).where(
+                CommunityDirectConversationMember.user_id == user.id
+            )
+        ).all()
+        direct_message_ids = (
+            db.scalars(
+                select(CommunityDirectMessage.id).where(
+                    CommunityDirectMessage.conversation_id.in_(direct_conversation_ids)
+                )
+            ).all()
+            if direct_conversation_ids
+            else []
+        )
+        direct_notification_conditions = [
+            CommunityNotification.actor_id == user.id,
+            CommunityNotification.recipient_id == user.id,
+        ]
+        if direct_message_ids:
+            direct_notification_conditions.append(
+                CommunityNotification.source_id.in_(direct_message_ids)
+            )
+        direct_notification_ids = db.scalars(
+            select(CommunityNotification.id).where(
+                CommunityNotification.kind == CommunityNotificationKind.DIRECT_MESSAGE,
+                CommunityNotification.source_type == CommunityNotificationSource.DIRECT_MESSAGE,
+                or_(*direct_notification_conditions),
+            )
+        ).all()
+        if direct_notification_ids:
+            db.execute(
+                delete(CommunityNotificationOutbox).where(
+                    CommunityNotificationOutbox.notification_id.in_(direct_notification_ids)
+                )
+            )
+            db.execute(
+                delete(CommunityNotification).where(
+                    CommunityNotification.id.in_(direct_notification_ids)
+                )
+            )
+        if direct_conversation_ids:
+            db.execute(
+                delete(CommunityDirectMessage).where(
+                    CommunityDirectMessage.conversation_id.in_(direct_conversation_ids)
+                )
+            )
+            db.execute(
+                delete(CommunityDirectConversationMember).where(
+                    CommunityDirectConversationMember.conversation_id.in_(direct_conversation_ids)
+                )
+            )
+            db.execute(
+                delete(CommunityDirectConversation).where(
+                    CommunityDirectConversation.id.in_(direct_conversation_ids)
+                )
+            )
         db.execute(delete(AccountActionToken).where(AccountActionToken.user_id == user.id))
         db.execute(
             delete(AuthorizationDeclaration).where(
