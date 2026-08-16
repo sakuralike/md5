@@ -54,6 +54,9 @@ from password_detective.modules.community.direct_message_service import (
     update_direct_member_state,
     update_direct_read_state,
 )
+from password_detective.modules.community.direct_message_stream import (
+    direct_message_event_stream as _direct_message_event_stream,
+)
 from password_detective.modules.community.group_service import (
     change_member_role,
     create_group,
@@ -193,6 +196,33 @@ def community_direct_conversation_list(
         cursor=cursor,
         include_archived=include_archived,
         limit=limit,
+    )
+
+
+@router.get(
+    "/direct-messages/stream",
+    dependencies=[Depends(rate_limit("community.direct.stream", limit=60, window_seconds=60))],
+)
+async def community_direct_message_stream(
+    request: Request,
+    principal: Annotated[Principal, Depends(get_current_stream_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+) -> StreamingResponse:
+    return StreamingResponse(
+        _direct_message_event_stream(
+            request,
+            recipient_id=principal.user.id,
+            raw_last_event_id=last_event_id,
+            session_factory=request.app.state.database.session_factory,
+            redis_url=settings.redis_url,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
