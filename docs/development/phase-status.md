@@ -885,3 +885,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 远端 | 本地代码提交 `c658cff7aade` 的 Git Tree `72337848988a` 已同步到 `codex/wp5-i10-direct-message-realtime`，远端等价树提交为 `1a59275d042d` | 已验证 `equivalent_tree=true` |
 | Staging | 修订 `1a59275d042d` 已部署；备份 `/opt/password-detective-backups/20260816T173933Z-1a59275d042d`，迁移 `20260816_0045 (head)`，API 2/Worker 3，SSE 授权、跨实例 Redis 唤醒和数据库补偿通过 | 已验证；Web/Admin 公网入口 200，公网 `:8000` 不开放 |
 | UAT/Production | 无批准证据；Staging 复验另发现既有 `PATCH /community/me/privacy` 写搜索 Outbox 时 `document_version` 超出 MySQL 列范围并返回 500 | 未验收；该独立缺陷须在后续轮次修复 |
+
+
+## 2026-08-16 搜索 Outbox 文档版本溢出修复发布状态
+
+| 层级 | 当前证据 | 状态 |
+|---|---|---|
+| 根因与数据契约 | 隐私设置把 `updated_at` 微秒版本写入 MySQL 32 位列导致 1264；`community_search_outbox` 与 `community_search_documents` 均改为 `BIGINT`，迁移为 `20260816_0046` | 已修复 |
+| 本地验证 | 9 项定向测试、完整 API `300 passed, 1 skipped`（88.26%）、SQLite `0046 -> base -> 0046`、前端 lint/typecheck/test/build 均通过 | 已验证；`check.ps1` 受本机 `.venv`/DLL 工具链限制，未作为本轮通过证据 |
+| 远端 | 本地提交 `032f53790dffaaf6e58016c1c2f6f36f00d1cae7` 的 Tree `99cab018963bbb07f2f3c0b71314f3b5e3f70429` 同步为远端等价树提交 `82fef8257ab7d5eb885271b96d13cb63c67e290f` | 已验证 `equivalent_tree=true` |
+| Staging | 备份 `/opt/password-detective-backups/20260816T210230Z-82fef8257ab7`；MySQL `20260816_0046 (head)`；双列 `bigint`；真实隐私更新 200 且 Outbox 版本 `1786914188170251`；API 2、Worker 3、Scheduler、代理 ready 200、保护接口 401、长事务 0 | 已验证 |
+| UAT/Production | 尚无业务验收或生产变更批准 | 未验收 |
