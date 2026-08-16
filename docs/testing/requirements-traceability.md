@@ -580,8 +580,8 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-85 持久事件 | `CommunityDirectStreamPosition`、`CommunityDirectEvent`、Alembic `20260816_0045`、消息/已读同事务事件 | 迁移结构与 MySQL DDL、发送/已读/幂等/未读投影测试；隔离 SQLite `0045 -> 0044 -> 0045` | 本地已实现；目标 MySQL 待 Staging 迁移复验 |
-| Redis 跨实例唤醒与降级 | `direct_message_realtime.py`、提交后 `_publish_direct_conversation_wakeups`、数据库轮询补偿 | 发布/订阅、Redis 故障不改变已提交消息、流 Session 生命周期测试 | 本地自动化通过；真实 Redis 跨实例和停用补偿待 Staging |
-| 独立私信 SSE | `GET /api/v1/community/direct-messages/stream`、function-scope 认证、`Last-Event-ID`、`ready/reset_required` | 合法/未来/非法/过期游标、本人事件边界、等待期间短 Session 测试 | 本地已实现；未登录 401 与授权 `ready` 待 Staging 复验 |
-| Web 实时状态 | 独立服务、组合式函数、Pinia Store、App 生命周期、账户菜单/收件箱/会话页 | Web 45 文件 78 测试；Chromium/Firefox/WebKit 双用户旅程 3/3 | 本地通过；远端制品和 Staging 浏览器/HTTP 证据待部署 |
-| 证据边界 | 本地、远端、Staging、UAT/Production 分层记录 | `pwsh ./scripts/check.ps1 -SkipInstall` 已完整通过；远端 tree 与部署复验继续分别执行 | 本地定向与统一门禁证据完成；不得提前标记 UAT/Production |
+| COMMUNITY-85 持久事件 | `CommunityDirectStreamPosition`、`CommunityDirectEvent`、Alembic `20260816_0045`、消息/已读同事务事件 | 本地迁移测试；Staging MySQL 已到 `20260816_0045 (head)`，发布备份为 `/opt/password-detective-backups/20260816T173933Z-1a59275d042d` | 已验证 |
+| Redis 跨实例唤醒与降级 | `direct_message_realtime.py`、提交后 `_publish_direct_conversation_wakeups`、数据库轮询补偿 | Staging API-2 发送、API-1 接流，Redis 唤醒 0.108 秒；停止 Redis 后数据库补偿 0.005 秒，随后 Redis 恢复健康 | 已验证；事件载荷无敏感字段 |
+| 独立私信 SSE | `GET /api/v1/community/direct-messages/stream`、function-scope 认证、`Last-Event-ID`、`ready/reset_required` | 本地游标与 Session 测试；Staging 未登录 401、授权 `ready`、跨实例事件和 `Last-Event-ID` CORS 预检 200 | 已验证；长事务为 0 |
+| Web 实时状态 | 独立服务、组合式函数、Pinia Store、App 生命周期、账户菜单/收件箱/会话页 | Web 45 文件 78 测试；Chromium/Firefox/WebKit 3/3；Staging Web 制品含实时游标标记，公网首页与消息页 200 | 已验证 Staging 制品与入口；UAT 仍未验收 |
+| 证据边界 | 本地、远端、Staging、UAT/Production 分层记录 | 本地统一门禁通过；远端提交 `1a59275d042d` 与本地 tree `72337848988a` 等价；Staging 修订独立复验通过 | Staging 通过不等于 UAT/Production；隐私设置 Outbox 溢出缺陷单独跟踪 |

@@ -882,6 +882,6 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 浏览器 | Chromium、Firefox、WebKit 双用户实时未读、逐消息已读、离线连续消息补偿和刷新持久化旅程 3/3 通过 | 本地已验证 |
 | 迁移 | 隔离 SQLite 完成 `20260816_0045 -> 20260816_0044 -> 20260816_0045`，最终 head 为 `20260816_0045` | 本地已验证 |
 | 统一门禁 | `pwsh ./scripts/check.ps1 -SkipInstall` 全量通过；同时修正旧迁移链测试，使唯一 head 明确为 `20260816_0045` | 本地已验证 |
-| 远端 | `codex/wp5-i10-direct-message-realtime` ref/commit/tree 尚待本轮推送和等价树复验 | 待验证 |
-| Staging | 目标 MySQL、API 2/Worker 3、SSE 授权、Redis 跨实例唤醒/停用补偿和长事务尚待本轮部署 | 待验证 |
-| UAT/Production | 无批准证据 | 未验收 |
+| 远端 | 本地代码提交 `c658cff7aade` 的 Git Tree `72337848988a` 已同步到 `codex/wp5-i10-direct-message-realtime`，远端等价树提交为 `1a59275d042d` | 已验证 `equivalent_tree=true` |
+| Staging | 修订 `1a59275d042d` 已部署；备份 `/opt/password-detective-backups/20260816T173933Z-1a59275d042d`，迁移 `20260816_0045 (head)`，API 2/Worker 3，SSE 授权、跨实例 Redis 唤醒和数据库补偿通过 | 已验证；Web/Admin 公网入口 200，公网 `:8000` 不开放 |
+| UAT/Production | 无批准证据；Staging 复验另发现既有 `PATCH /community/me/privacy` 写搜索 Outbox 时 `document_version` 超出 MySQL 列范围并返回 500 | 未验收；该独立缺陷须在后续轮次修复 |
