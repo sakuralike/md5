@@ -32,6 +32,10 @@ const environment = {
   APP_ENV: "integration",
   APP_DEBUG: "false",
   APP_SECRET_KEY: "synthetic-playwright-secret-key-2026",
+  DIRECT_MESSAGE_KEY_VERSION: "v1",
+  DIRECT_MESSAGE_KEYRING: JSON.stringify({
+    v1: "synthetic-playwright-direct-message-key-at-least-32",
+  }),
   DATABASE_URL: "sqlite:///./.local/playwright/password-detective-e2e.db",
   RATE_LIMIT_BACKEND: "memory",
   WEB_LOGIN_RATE_LIMIT: "100",

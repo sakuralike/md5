@@ -140,7 +140,13 @@ def create_app(
         allow_origins=resolved_settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "Idempotency-Key",
+            "Last-Event-ID",
+            "X-Request-ID",
+        ],
         expose_headers=["X-Request-ID", "Content-Disposition", "X-Exported-Rows"],
     )
     app.add_middleware(ObservabilityMiddleware)
