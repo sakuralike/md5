@@ -19,6 +19,7 @@ from password_detective.db.models.community import (
     CommunityNotificationKind,
     CommunityNotificationSource,
     CommunityPost,
+    CommunitySearchSource,
 )
 from password_detective.db.models.user import User, UserRole
 from password_detective.modules.auth.context import ClientContext
@@ -34,6 +35,10 @@ from password_detective.modules.community.schemas import (
     CommunityGroupMembershipResponse,
     CommunityGroupSummary,
     CommunityGroupUpdateRequest,
+)
+from password_detective.modules.community.search_index import (
+    enqueue_search_event,
+    source_document_version,
 )
 
 
@@ -119,6 +124,12 @@ def create_group(
         group,
         {"visibility": group.visibility.value},
     )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.GROUP,
+        source_id=group.id,
+        document_version=source_document_version(group),
+    )
     db.commit()
     return get_group(db, slug=group.slug, principal=principal)
 
@@ -150,6 +161,12 @@ def update_group(
         "community.group.update",
         group,
         {"before": before, "after": _group_state(group)},
+    )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.GROUP,
+        source_id=group.id,
+        document_version=source_document_version(group),
     )
     db.commit()
     return _build_group_detail(

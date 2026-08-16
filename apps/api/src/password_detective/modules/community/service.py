@@ -31,6 +31,7 @@ from password_detective.db.models.community import (
     CommunityRelationVisibility,
     CommunityReport,
     CommunityReportStatus,
+    CommunitySearchSource,
     CommunityUserBlock,
     CommunityUserFollow,
     CommunityUserMute,
@@ -98,6 +99,10 @@ from password_detective.modules.community.schemas import (
 )
 from password_detective.modules.community.schemas import (
     CommunityBoard as CommunityBoardSchema,
+)
+from password_detective.modules.community.search_index import (
+    enqueue_search_event,
+    source_document_version,
 )
 
 _MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,32})")
@@ -298,6 +303,12 @@ def create_post(
         post_id=post.id,
         comment_id=None,
     )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.POST,
+        source_id=post.id,
+        document_version=post.version,
+    )
     db.commit()
     db.refresh(post)
     return get_post(db, post.id, principal=principal)
@@ -353,6 +364,12 @@ def update_post(
         post_id=post.id,
         comment_id=None,
     )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.POST,
+        source_id=post.id,
+        document_version=post.version,
+    )
     db.commit()
     return get_post(db, post.id, principal=principal)
 
@@ -397,6 +414,12 @@ def delete_post(
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
         details={"previous_version": previous_version, "current_version": post.version},
+    )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.POST,
+        source_id=post.id,
+        document_version=post.version,
     )
     db.commit()
     return get_post(db, post.id, principal=principal)
@@ -1039,6 +1062,12 @@ def update_public_profile(
             ]
         },
     )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.USER,
+        source_id=principal.user.id,
+        document_version=source_document_version(profile),
+    )
     db.commit()
     return get_own_profile(db, principal=principal)
 
@@ -1072,6 +1101,12 @@ def update_privacy_preferences(
                 "mention_policy",
             ]
         },
+    )
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.USER,
+        source_id=principal.user.id,
+        document_version=source_document_version(profile),
     )
     db.commit()
     return get_own_profile(db, principal=principal)
@@ -1645,9 +1680,7 @@ def update_notification_preferences(
     for item in payload.items:
         preference = stored.get(item.kind)
         if preference is None:
-            preference = CommunityNotificationPreference(
-                user_id=principal.user.id, kind=item.kind
-            )
+            preference = CommunityNotificationPreference(user_id=principal.user.id, kind=item.kind)
             db.add(preference)
         preference.in_app_enabled = item.in_app_enabled
         preference.email_digest_enabled = item.email_digest_enabled
@@ -1685,7 +1718,6 @@ def _mention_allowed(db: Session, *, actor_id: str, recipient_id: str) -> bool:
             is not None
         )
     return True
-
 
 
 def _notification_response(
@@ -1789,9 +1821,7 @@ def _liked_comment_ids(
     )
 
 
-def _sync_post_like_notification(
-    db: Session, post: CommunityPost, *, refresh_unread: bool
-) -> None:
+def _sync_post_like_notification(db: Session, post: CommunityPost, *, refresh_unread: bool) -> None:
     latest = db.scalar(
         select(CommunityPostLike)
         .where(

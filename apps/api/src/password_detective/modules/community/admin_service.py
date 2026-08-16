@@ -21,6 +21,7 @@ from password_detective.db.models.community import (
     CommunityReport,
     CommunityReportDecision,
     CommunityReportStatus,
+    CommunitySearchSource,
 )
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import User, UserRole
@@ -47,6 +48,10 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityReportSummary,
 )
 from password_detective.modules.community.boards import ensure_seed_boards
+from password_detective.modules.community.search_index import (
+    enqueue_search_event,
+    source_document_version,
+)
 
 
 def list_admin_boards(db: Session) -> AdminCommunityBoardListResponse:
@@ -79,6 +84,12 @@ def create_admin_board(
     db.add(board)
     db.flush()
     audit = _audit_board(db, board, principal, context, "community.board.create", None)
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.BOARD,
+        source_id=board.id,
+        document_version=source_document_version(board),
+    )
     db.commit()
     db.refresh(board)
     return AdminCommunityBoardMutationResponse(
@@ -106,6 +117,12 @@ def update_admin_board(
     board.is_read_only = payload.is_read_only
     board.status = payload.status
     audit = _audit_board(db, board, principal, context, "community.board.update", before)
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.BOARD,
+        source_id=board.id,
+        document_version=source_document_version(board),
+    )
     db.commit()
     db.refresh(board)
     return AdminCommunityBoardMutationResponse(
@@ -317,6 +334,12 @@ def moderate_admin_post(
         },
     )
     db.flush()
+    enqueue_search_event(
+        db,
+        source_type=CommunitySearchSource.POST,
+        source_id=post.id,
+        document_version=source_document_version(post),
+    )
     db.commit()
     db.refresh(post)
     return AdminCommunityPostMutationResponse(

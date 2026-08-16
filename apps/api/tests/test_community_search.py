@@ -124,11 +124,9 @@ def test_private_blocked_or_muted_sources_never_appear_in_search(client):
     assert private_post["id"] not in serialized
     assert "sealed recovery guide" not in serialized
 
+
 MIGRATION_PATH = (
-    Path(__file__).parents[1]
-    / "alembic"
-    / "versions"
-    / "20260816_0042_community_search.py"
+    Path(__file__).parents[1] / "alembic" / "versions" / "20260816_0042_community_search.py"
 )
 
 
@@ -194,3 +192,79 @@ def test_sqlite_search_provider_reports_test_mode(client):
 
     assert state.mode == "test"
     assert state.degraded is False
+
+
+def test_post_write_creates_deduplicated_search_outbox_event(client):
+    from password_detective.db.models.community import (
+        CommunitySearchOutbox,
+        CommunitySearchOutboxStatus,
+    )
+
+    author = register_and_login(
+        client,
+        username="search_writer",
+        email="search-writer@synthetic.example.com",
+    )
+    post = client.post(
+        "/api/v1/community/posts",
+        json={
+            "board_code": "general",
+            "title": "recover archive safely",
+            "content": "Synthetic search indexing body.",
+            "rules_accepted": True,
+        },
+        headers=request_headers(author, "search-outbox-post"),
+    )
+    assert post.status_code == 201, post.text
+    post_id = post.json()["id"]
+
+    with client.app.state.database.session_factory() as db:
+        events = db.scalars(
+            select(CommunitySearchOutbox).where(CommunitySearchOutbox.source_id == post_id)
+        ).all()
+
+    assert len(events) == 1
+    assert events[0].status is CommunitySearchOutboxStatus.PENDING
+    assert events[0].dedupe_key.endswith(":upsert")
+
+
+def test_replay_and_rebuild_converge_on_the_same_document_set(client):
+    from password_detective.db.models.community import (
+        CommunitySearchDocument,
+        CommunitySearchSource,
+    )
+    from password_detective.modules.community.search_index import (
+        dispatch_pending_search_events,
+        rebuild_search_index,
+    )
+
+    author = register_and_login(
+        client,
+        username="search_replayer",
+        email="search-replayer@synthetic.example.com",
+    )
+    post = client.post(
+        "/api/v1/community/posts",
+        json={
+            "board_code": "general",
+            "title": "rebuild recovery guide",
+            "content": "Synthetic content for deterministic reindex verification.",
+            "rules_accepted": True,
+        },
+        headers=request_headers(author, "search-replay-post"),
+    )
+    assert post.status_code == 201, post.text
+
+    with client.app.state.database.session_factory() as db:
+        incremental = dispatch_pending_search_events(db)
+        document = db.scalar(
+            select(CommunitySearchDocument).where(
+                CommunitySearchDocument.source_type == CommunitySearchSource.POST,
+                CommunitySearchDocument.source_id == post.json()["id"],
+            )
+        )
+        rebuilt = rebuild_search_index(db, apply=True)
+
+    assert incremental.delivered >= 1
+    assert document is not None
+    assert rebuilt.mismatch_count == 0

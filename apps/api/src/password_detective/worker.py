@@ -20,6 +20,7 @@ from password_detective.modules.account_privacy.service import (
 from password_detective.modules.community.notification_service import (
     dispatch_pending_notification_events,
 )
+from password_detective.modules.community.search_index import dispatch_pending_search_events
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
     queue_due_sla_notifications,
@@ -55,6 +56,10 @@ celery_app.conf.update(
         },
         "dispatch-community-notification-events": {
             "task": "community.dispatch_notification_events",
+            "schedule": 2.0,
+        },
+        "dispatch-community-search-events": {
+            "task": "community.dispatch_search_events",
             "schedule": 2.0,
         },
         "escalate-overdue-trust-cases": {
@@ -137,6 +142,16 @@ def dispatch_community_notification_events() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return dispatch_pending_notification_events(db)
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="community.dispatch_search_events")
+def dispatch_community_search_events() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return dispatch_pending_search_events(db).as_dict()
     finally:
         database.dispose()
 
