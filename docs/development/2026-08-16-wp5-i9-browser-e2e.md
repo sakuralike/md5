@@ -60,8 +60,25 @@ pwsh ./scripts/check.ps1 -SkipInstall -IncludeE2E
 - 移动端社区回归：1/1 通过。
 - 统一门禁：通过；Chromium Web/Admin Playwright 42/42，Windows Desktop 测试 29/29。
 
+## 远端同步
+
+- 本地代码提交：`f7da09ba0b0083241de0ed4dcef383d49da5bfe3`。
+- 本地 Git Tree：`265bfdb3d55e424e51c6a500752539fb35b0de56`。
+- 常规 HTTPS push 因连接被重置失败后，使用 Git Data API 将同一 Git Tree 写入远端分支；远端等价树提交为 `4c3376e18840fd6b3359811228377c223446d8fa`。
+- 远端 ref、提交父链和 Git Tree 已通过 GitHub API 复核；`equivalent_tree=true`。
+
+## Staging 部署与独立复验
+
+- 部署目标：`/opt/password-detective-staging`，部署前生成数据库、源码、`.env` 和 Compose override 备份。
+- 迁移：`20260816_0044 (head)`。
+- 拓扑：2 个 API、3 个 Worker；Scheduler 与 API/Worker 使用 `password-detective-api:4c3376e18840`，Admin 使用 `password-detective-admin:4c3376e18840`。
+- 本轮 Web 运行时代码未变化，保持 `password-detective-web:cf92d1d0e894`，未以无关重建替代发布证据。
+- 镜像标签中的 `org.opencontainers.image.source_tree` 与远端 Git Tree `265bfdb3d55e424e51c6a500752539fb35b0de56` 一致。
+- HTTP 复核：ready、Web 首页、Admin 首页、私信收件箱和会话 SPA 路由均为 200；未认证私信 API 为 401。
+- 通知 SSE 的真实 CORS 预检为 200，响应允许头包含 `Last-Event-ID`；Admin 部署产物包含 `direct_message` 的“私信”标签。
+- 独立延时复验再次确认上述迁移、拓扑、镜像和 HTTP 结果；私信密钥环与应用主秘密/候选秘密相互独立，超过 60 秒的 InnoDB 长事务为 0。
+
 ## 证据边界
 
-- 本节记录的是本地代码与自动化证据。
-- 远端分支同步和 Staging 部署将在本轮提交后执行，并在成功后补记提交、Git Tree、镜像、迁移和 HTTP 复核结果。
-- 本轮不宣称 Production 或 UAT 完成。
+- 本轮已具备本地、远端等价树和 Staging 证据。
+- 本轮不宣称 Production 或 UAT 完成；实时 Redis Pub/Sub、消息举报和治理收口仍属于 WP5-I10。
