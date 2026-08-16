@@ -36,6 +36,7 @@ describe("CommunityNotificationsPage", () => {
     expect(html).toContain("提及");
     expect(html).toContain("回复");
     expect(html).toContain("关注");
+    expect(html).toContain("私信");
     expect(html).toContain("未读 0");
     expect(html).toContain("全部已读");
     expect(html).toContain("实时通知未连接");

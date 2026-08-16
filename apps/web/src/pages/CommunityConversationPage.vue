@@ -1,0 +1,203 @@
+<script setup lang="ts">
+import type { CommunityDirectMessageResponse } from "@password-detective/api-contract";
+import { computed, onMounted, onServerPrefetch, ref } from "vue";
+import { RouterLink, useRoute } from "vue-router";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { createClientId } from "@/lib/clientId";
+import {
+  createCommunityIdempotencyKey,
+  listCommunityDirectMessages,
+  sendCommunityDirectMessage,
+  updateCommunityDirectReadState,
+} from "../services/community";
+import { useAuthStore } from "../stores/auth";
+
+const route = useRoute();
+const auth = useAuthStore();
+const messages = ref<CommunityDirectMessageResponse[]>([]);
+const nextCursor = ref<string | null>(null);
+const hasMore = ref(false);
+const loading = ref(false);
+const loadingMore = ref(false);
+const sending = ref(false);
+const body = ref("");
+const error = ref("");
+
+const conversationId = computed(() => String(route.params.conversationId ?? ""));
+const orderedMessages = computed(() =>
+  [...messages.value].sort((left, right) => left.sequence - right.sequence),
+);
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function isOwnMessage(message: CommunityDirectMessageResponse): boolean {
+  return message.sender_username === auth.user?.username;
+}
+
+async function markLoadedMessagesRead(loaded: CommunityDirectMessageResponse[]): Promise<void> {
+  const lastReadSequence = loaded.reduce(
+    (maximum, message) => Math.max(maximum, message.sequence),
+    0,
+  );
+  if (!conversationId.value || lastReadSequence === 0) return;
+  await updateCommunityDirectReadState(
+    conversationId.value,
+    { last_read_sequence: lastReadSequence },
+    auth.accessToken,
+    createCommunityIdempotencyKey("direct-read-state"),
+  );
+}
+
+async function load(reset = true): Promise<void> {
+  if (!conversationId.value) return;
+  if (reset) loading.value = true;
+  else loadingMore.value = true;
+  error.value = "";
+  try {
+    const response = await listCommunityDirectMessages(
+      conversationId.value,
+      auth.accessToken,
+      {
+        ...(reset || !nextCursor.value ? {} : { cursor: nextCursor.value }),
+        limit: 30,
+      },
+    );
+    messages.value = reset ? response.items : [...messages.value, ...response.items];
+    nextCursor.value = response.next_cursor;
+    hasMore.value = response.has_more;
+    if (reset) await markLoadedMessagesRead(response.items);
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "无法加载私信会话";
+  } finally {
+    loading.value = false;
+    loadingMore.value = false;
+  }
+}
+
+async function send(): Promise<void> {
+  const normalizedBody = body.value.trim();
+  if (!conversationId.value || !normalizedBody || sending.value) return;
+  sending.value = true;
+  error.value = "";
+  try {
+    const message = await sendCommunityDirectMessage(
+      conversationId.value,
+      { body: normalizedBody, client_message_id: createClientId() },
+      auth.accessToken,
+      createCommunityIdempotencyKey("direct-message"),
+    );
+    messages.value = [message, ...messages.value.filter((item) => item.id !== message.id)];
+    body.value = "";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "发送私信失败";
+  } finally {
+    sending.value = false;
+  }
+}
+
+onMounted(() => void load());
+onServerPrefetch(() => load());
+</script>
+
+<template>
+  <section class="mx-auto max-w-4xl space-y-6">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Direct message</p>
+        <h1 class="text-3xl font-semibold tracking-tight text-foreground">私信会话</h1>
+        <p class="max-w-2xl text-sm leading-6 text-muted-foreground">
+          消息正文采用服务端信封加密存储。当前不是端到端加密，请勿发送密码、令牌或其他敏感信息。
+        </p>
+      </div>
+      <Button as-child variant="outline">
+        <RouterLink to="/community/messages">返回私信收件箱</RouterLink>
+      </Button>
+    </div>
+
+    <Alert v-if="error" variant="destructive" role="alert">
+      <AlertTitle>私信会话暂时不可用</AlertTitle>
+      <AlertDescription>{{ error }}</AlertDescription>
+    </Alert>
+
+    <Card>
+      <CardHeader>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle>消息记录</CardTitle>
+            <CardDescription>仅会话成员可读取，较早消息可按游标继续加载。</CardDescription>
+          </div>
+          <Badge variant="outline">{{ orderedMessages.length }} 条已加载</Badge>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div v-if="hasMore" class="flex justify-center">
+          <Button variant="outline" :disabled="loadingMore" @click="load(false)">
+            {{ loadingMore ? "加载中…" : "加载更早消息" }}
+          </Button>
+        </div>
+
+        <div v-if="loading" class="space-y-3" aria-label="正在加载私信消息">
+          <div v-for="index in 3" :key="index" class="h-20 animate-pulse rounded-xl bg-muted" />
+        </div>
+        <div v-else class="space-y-3" aria-live="polite">
+          <article
+            v-for="message in orderedMessages"
+            :key="message.id"
+            class="max-w-[88%] space-y-1 rounded-xl border p-3 sm:max-w-[75%]"
+            :class="isOwnMessage(message) ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted'"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span class="font-semibold">{{ isOwnMessage(message) ? "我" : `@${message.sender_username}` }}</span>
+              <span :class="isOwnMessage(message) ? 'text-primary-foreground/80' : 'text-muted-foreground'">
+                {{ formatDate(message.created_at) }}
+              </span>
+            </div>
+            <p class="whitespace-pre-wrap break-words text-sm leading-6">{{ message.body }}</p>
+          </article>
+
+          <div
+            v-if="orderedMessages.length === 0"
+            class="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground"
+          >
+            尚无消息。发送第一条合成、非敏感内容开始会话。
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>发送消息</CardTitle>
+        <CardDescription>最多 4000 个字符；发送期间会禁用按钮以避免重复提交。</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="space-y-2">
+          <Label for="community-direct-message-body">消息内容</Label>
+          <Textarea
+            id="community-direct-message-body"
+            v-model="body"
+            class="min-h-32"
+            :maxlength="4000"
+            placeholder="请输入不含密码、令牌或个人敏感信息的消息…"
+          />
+          <p class="text-right text-xs text-muted-foreground">{{ body.length }}/4000</p>
+        </div>
+        <div class="flex justify-end">
+          <Button :disabled="sending || !body.trim()" @click="send">
+            {{ sending ? "发送中…" : "发送消息" }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  </section>
+</template>

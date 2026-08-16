@@ -41,6 +41,7 @@ const notificationFilters: NotificationFilter[] = [
   { value: "group_application", label: "群组申请" },
   { value: "group_decision", label: "群组决定" },
   { value: "group_role_change", label: "角色变更" },
+  { value: "direct_message", label: "私信" },
 ];
 
 const notificationLabels: Record<CommunityNotificationKind, string> = {
@@ -51,6 +52,7 @@ const notificationLabels: Record<CommunityNotificationKind, string> = {
   group_application: "群组申请",
   group_decision: "群组决定",
   group_role_change: "群组角色变更",
+  direct_message: "私信",
 };
 
 const auth = useAuthStore();
@@ -85,16 +87,19 @@ function notificationTitle(item: CommunityNotificationResponse): string {
   if (item.kind === "like_summary") return "你的内容收到了新的点赞";
   if (item.kind === "group_application") return `${item.actor.username} 提交了群组加入申请`;
   if (item.kind === "group_decision") return "你的群组申请状态已更新";
+  if (item.kind === "direct_message") return `${item.actor.username} 向你发送了私信`;
   return "你的群组角色已发生变更";
 }
 
 function notificationLink(item: CommunityNotificationResponse): string | null {
+  if (item.kind === "direct_message") return "/community/messages";
   if (item.post_id) return `/community/posts/${item.post_id}`;
   if (item.source_type === "user") return `/community/users/${item.actor.username}`;
   return null;
 }
 
 function notificationLinkLabel(item: CommunityNotificationResponse): string {
+  if (item.kind === "direct_message") return "打开私信收件箱";
   if (item.post_id) return "查看对应内容";
   return "查看用户主页";
 }
