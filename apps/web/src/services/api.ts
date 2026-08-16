@@ -4,6 +4,13 @@ import { createClientId } from "@/lib/clientId";
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 const EXPIRED_ACCESS_TOKEN_CODE = "auth.access_token_expired";
 
+export function resolveApiResourceUrl(path: string): string {
+  if (/^(?:data:|https?:\/\/)/i.test(path)) return path;
+  if (!path.startsWith("/")) return `${baseUrl}/${path.replace(/^\/+/, "")}`;
+  if (/^https?:\/\//i.test(baseUrl)) return new URL(path, baseUrl).toString();
+  return path;
+}
+
 type AccessTokenRefreshHandler = () => Promise<string | null>;
 
 let accessTokenRefreshHandler: AccessTokenRefreshHandler | null = null;
@@ -34,7 +41,7 @@ function createHeaders(
   const headers = new Headers(options.headers);
   headers.set("Accept", accept);
   headers.set("X-Request-ID", `web_${createClientId()}`);
-  if (options.body) headers.set("Content-Type", "application/json");
+  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   return headers;
 }

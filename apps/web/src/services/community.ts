@@ -487,6 +487,21 @@ export function getCommunityOwnProfile(token: string): Promise<CommunityOwnProfi
   return apiRequest<CommunityOwnProfileResponse>("/community/me/profile", {}, token);
 }
 
+export function uploadCommunityAvatar(
+  file: File,
+  token: string,
+): Promise<CommunityOwnProfileResponse> {
+  return apiRequest<CommunityOwnProfileResponse>(
+    "/community/me/avatar",
+    {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    },
+    token,
+  );
+}
+
 export function updateCommunityOwnProfile(
   payload: CommunityProfileUpdateRequest,
   token: string,

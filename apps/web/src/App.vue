@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { PublicSiteConfig } from "@password-detective/api-contract";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
+import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCommunityAvatar } from "./composables/useCommunityAvatar";
 import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
 import { getPublicSiteConfig } from "./services/site";
 import { useAuthStore } from "./stores/auth";
@@ -19,6 +21,8 @@ interface BackgroundOption {
 
 const auth = useAuthStore();
 const communityNotifications = useCommunityNotificationStream();
+const communityAvatar = useCommunityAvatar();
+const currentAvatarSrc = communityAvatar.avatarSrc;
 const siteConfig = ref<PublicSiteConfig>({
   site_name: "密码侦探社",
   site_logo_url: "",
@@ -94,7 +98,20 @@ function releaseCustomBackground(): void {
   }
 }
 
-onMounted(loadSiteConfig);
+onMounted(() => {
+  void loadSiteConfig();
+  watch(
+    () => [auth.isAuthenticated, auth.user?.id ?? "", auth.accessToken] as const,
+    ([isAuthenticated, userId, accessToken]) => {
+      if (!isAuthenticated || !userId || !accessToken) {
+        communityAvatar.clear();
+        return;
+      }
+      void communityAvatar.hydrate(userId, accessToken);
+    },
+    { immediate: true },
+  );
+});
 onBeforeUnmount(releaseCustomBackground);
 </script>
 
@@ -210,6 +227,7 @@ onBeforeUnmount(releaseCustomBackground);
           v-else-if="auth.user"
           :user="auth.user"
           :busy="auth.busy"
+          :avatar-src="currentAvatarSrc"
           :unread-count="communityNotifications.unreadCount.value"
           :notification-status="communityNotifications.status.value"
           @logout="auth.logout()"
@@ -218,6 +236,7 @@ onBeforeUnmount(releaseCustomBackground);
     </header>
 
     <main id="main-content" class="main" tabindex="-1">
+      <AppBreadcrumbs />
       <RouterView />
     </main>
 

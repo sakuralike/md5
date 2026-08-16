@@ -3,6 +3,7 @@ import type { CommunityPublicProfileResponse } from "@password-detective/api-con
 import { computed, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import {
   getCommunityPublicProfile,
   setCommunityUserRelation,
 } from "../services/community";
+import { resolveCommunityAvatarUrl } from "@/lib/communityAvatar";
 import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
@@ -23,6 +25,7 @@ const success = ref("");
 
 const username = computed(() => String(route.params.username ?? ""));
 const avatarInitial = computed(() => profile.value?.display_name.trim().slice(0, 1).toUpperCase() || "社");
+const avatarSrc = computed(() => (profile.value ? resolveCommunityAvatarUrl(profile.value) : null));
 const contentHidden = computed(() => {
   const relation = profile.value?.relationship;
   return Boolean(relation?.viewer_is_blocking || relation?.viewer_is_blocked || relation?.viewer_is_muting);
@@ -101,12 +104,10 @@ onServerPrefetch(() => load());
     <template v-else-if="profile">
       <Card>
         <CardContent class="flex flex-col gap-6 p-6 sm:flex-row sm:items-start sm:p-8">
-          <div
-            class="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary text-3xl font-semibold text-primary-foreground"
-            :aria-label="`${profile.display_name} 的合成头像标识 ${profile.avatar_seed.slice(0, 8)}`"
-          >
-            {{ avatarInitial }}
-          </div>
+          <Avatar class="h-20 w-20 shrink-0 border-2 border-background shadow-md">
+            <AvatarImage v-if="avatarSrc" :src="avatarSrc" :alt="`${profile.display_name} 的头像`" />
+            <AvatarFallback class="bg-primary text-3xl font-semibold text-primary-foreground">{{ avatarInitial }}</AvatarFallback>
+          </Avatar>
           <div class="min-w-0 flex-1 space-y-4">
             <div class="space-y-2">
               <div class="flex flex-wrap items-center gap-2">

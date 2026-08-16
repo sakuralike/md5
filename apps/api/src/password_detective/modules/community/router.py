@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from password_detective.core.config import Settings, get_settings
 from password_detective.core.idempotency import (
     abandon_idempotency,
     acquire_idempotency,
@@ -114,12 +115,14 @@ from password_detective.modules.community.service import (
     set_mute,
     set_post_bookmark,
     set_post_like,
+    set_uploaded_avatar,
     update_comment,
     update_notification_preferences,
     update_post,
     update_privacy_preferences,
     update_public_profile,
 )
+from password_detective.modules.site.assets import store_community_avatar
 
 router = APIRouter(prefix="/community", tags=["community"])
 
@@ -189,6 +192,27 @@ def community_my_profile(
     principal: Annotated[Principal, Depends(get_current_principal)],
 ) -> CommunityOwnProfileResponse:
     return get_own_profile(db, principal=principal)
+
+
+@router.post(
+    "/me/avatar",
+    response_model=CommunityOwnProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("community.avatar.upload", limit=20, window_seconds=3600))],
+)
+async def community_my_avatar_upload(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> CommunityOwnProfileResponse:
+    stored = await store_community_avatar(request, settings)
+    return set_uploaded_avatar(
+        db,
+        avatar_url=stored.url,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @router.patch(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import secrets
@@ -13,6 +14,7 @@ from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
+    CommunityAvatarKind,
     CommunityBoard,
     CommunityBoardStatus,
     CommunityComment,
@@ -1030,6 +1032,7 @@ def get_own_profile(db: Session, *, principal: Principal) -> CommunityOwnProfile
         following_visibility=profile.following_visibility,
         message_policy=profile.message_policy,
         mention_policy=profile.mention_policy,
+        gravatar_enabled=profile.gravatar_enabled,
     )
 
 
@@ -1043,8 +1046,23 @@ def update_public_profile(
     profile = _ensure_profile(db, principal.user)
     profile.display_name = payload.display_name
     profile.bio = payload.bio
+    if payload.avatar_kind == CommunityAvatarKind.UPLOAD and not profile.avatar_url:
+        raise AppError(
+            "community.avatar_upload_required", "请先上传头像图片后再选择上传头像", status_code=422
+        )
+    if payload.avatar_kind == CommunityAvatarKind.GRAVATAR and not payload.gravatar_enabled:
+        raise AppError(
+            "community.gravatar_not_enabled",
+            "启用 Gravatar 前需要确认公开头像服务",
+            status_code=422,
+        )
+    profile.avatar_kind = payload.avatar_kind
+    profile.gravatar_enabled = payload.gravatar_enabled
     if payload.regenerate_avatar:
         profile.avatar_seed = _new_avatar_seed()
+        profile.avatar_kind = CommunityAvatarKind.GENERATED
+        profile.avatar_url = None
+        profile.gravatar_enabled = False
     write_audit_log(
         db,
         actor_id=principal.user.id,
@@ -1058,6 +1076,8 @@ def update_public_profile(
             "fields": [
                 "display_name",
                 "bio",
+                "avatar_kind",
+                "gravatar_enabled",
                 *(["avatar_seed"] if payload.regenerate_avatar else []),
             ]
         },
@@ -1067,6 +1087,32 @@ def update_public_profile(
         source_type=CommunitySearchSource.USER,
         source_id=principal.user.id,
         document_version=source_document_version(profile),
+    )
+    db.commit()
+    return get_own_profile(db, principal=principal)
+
+
+def set_uploaded_avatar(
+    db: Session,
+    *,
+    avatar_url: str,
+    principal: Principal,
+    context: ClientContext,
+) -> CommunityOwnProfileResponse:
+    profile = _ensure_profile(db, principal.user)
+    profile.avatar_kind = CommunityAvatarKind.UPLOAD
+    profile.avatar_url = avatar_url
+    profile.gravatar_enabled = False
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.avatar.uploaded",
+        target_type="community_public_profile",
+        target_id=principal.user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"avatar_kind": CommunityAvatarKind.UPLOAD.value},
     )
     db.commit()
     return get_own_profile(db, principal=principal)
@@ -1368,6 +1414,9 @@ def _profile_or_default(db: Session, user: User) -> CommunityPublicProfile:
         display_name=user.username,
         bio="",
         avatar_seed=_default_avatar_seed(user.id),
+        avatar_kind=CommunityAvatarKind.GENERATED,
+        avatar_url=None,
+        gravatar_enabled=False,
         follower_visibility=CommunityRelationVisibility.PUBLIC,
         following_visibility=CommunityRelationVisibility.PUBLIC,
         message_policy=CommunityInteractionPolicy.FOLLOWING,
@@ -1501,6 +1550,16 @@ def _public_level(db: Session, user_id: str) -> CommunityPublicLevel:
     return CommunityPublicLevel(code=level.code, name=level.name)
 
 
+def _avatar_url(profile: CommunityPublicProfile, user: User) -> str | None:
+    if profile.avatar_kind == CommunityAvatarKind.UPLOAD:
+        return profile.avatar_url
+    if profile.avatar_kind == CommunityAvatarKind.GRAVATAR and profile.gravatar_enabled:
+        normalized_email = user.email.strip().lower().encode("utf-8")
+        digest = hashlib.md5(normalized_email, usedforsecurity=False).hexdigest()
+        return f"https://www.gravatar.com/avatar/{digest}?d=identicon&r=g&s=256"
+    return None
+
+
 def _public_profile_response(
     db: Session,
     *,
@@ -1515,6 +1574,8 @@ def _public_profile_response(
         display_name=profile.display_name,
         bio=profile.bio,
         avatar_seed=profile.avatar_seed,
+        avatar_kind=profile.avatar_kind,
+        avatar_url=_avatar_url(profile, user),
         role=user.role,
         level=_public_level(db, user.id),
         registered_month=user.created_at.strftime("%Y-%m"),
