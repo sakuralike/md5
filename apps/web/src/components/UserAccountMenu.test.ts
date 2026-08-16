@@ -51,6 +51,8 @@ describe("UserAccountMenu", () => {
       defaultOpen: true,
       unreadCount: 128,
       notificationStatus: "connected",
+      directUnreadCount: 6,
+      directMessageStatus: "connected",
     });
     app.component(
       "RouterLink",
@@ -66,6 +68,9 @@ describe("UserAccountMenu", () => {
     expect(html).toContain("社区通知");
     expect(html).toContain("99+");
     expect(html).toContain("实时连接正常");
+    expect(html).toContain("私信");
+    expect(html).toContain("6");
+    expect(html).toContain("私信实时连接正常");
     expect(html).toContain("退出登录");
     expect(html).toContain("sakura@example.test");
     expect(html).toContain("data:image/svg+xml,synthetic-avatar");
