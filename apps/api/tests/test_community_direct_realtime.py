@@ -181,7 +181,7 @@ def test_event_listing_and_cursor_resolution_are_recipient_scoped(client) -> Non
         assert future.reset_required is True
 
 
-def test_unread_counts_use_message_sequence_minus_member_read_sequence(client) -> None:
+def test_unread_counts_exclude_messages_sent_by_the_reader(client) -> None:
     with client.app.state.database.session_factory() as db:
         alice, bob, conversation = _seed_users_and_conversation(db)
         db.add_all(
@@ -222,4 +222,5 @@ def test_unread_counts_use_message_sequence_minus_member_read_sequence(client) -
         assert total_direct_unread_count(db, user_id=bob.id) == 1
         assert conversation_unread_count(
             db, user_id=alice.id, conversation_id=conversation.id
-        ) == 2
+        ) == 0
+        assert total_direct_unread_count(db, user_id=alice.id) == 0

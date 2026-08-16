@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -176,41 +176,31 @@ def conversation_unread_count(
     )
     if last_read_sequence is None:
         return 0
-    latest_message_sequence = db.scalar(
-        select(func.max(CommunityDirectMessage.sequence)).where(
-            CommunityDirectMessage.conversation_id == conversation_id
+    value = db.scalar(
+        select(func.count(CommunityDirectMessage.id)).where(
+            CommunityDirectMessage.conversation_id == conversation_id,
+            CommunityDirectMessage.sequence > last_read_sequence,
+            CommunityDirectMessage.sender_id != user_id,
         )
     )
-    return max(0, int(latest_message_sequence or 0) - int(last_read_sequence))
+    return int(value or 0)
 
 
 def total_direct_unread_count(db: Session, *, user_id: str) -> int:
-    latest_messages = (
-        select(
-            CommunityDirectMessage.conversation_id.label("conversation_id"),
-            func.max(CommunityDirectMessage.sequence).label("latest_sequence"),
-        )
-        .group_by(CommunityDirectMessage.conversation_id)
-        .subquery()
-    )
-    unread = case(
-        (
-            latest_messages.c.latest_sequence
-            > CommunityDirectConversationMember.last_read_sequence,
-            latest_messages.c.latest_sequence
-            - CommunityDirectConversationMember.last_read_sequence,
-        ),
-        else_=0,
-    )
     value = db.scalar(
-        select(func.coalesce(func.sum(unread), 0))
-        .select_from(CommunityDirectConversationMember)
+        select(func.count(CommunityDirectMessage.id))
+        .select_from(CommunityDirectMessage)
         .join(
-            latest_messages,
-            latest_messages.c.conversation_id
-            == CommunityDirectConversationMember.conversation_id,
+            CommunityDirectConversationMember,
+            CommunityDirectConversationMember.conversation_id
+            == CommunityDirectMessage.conversation_id,
         )
-        .where(CommunityDirectConversationMember.user_id == user_id)
+        .where(
+            CommunityDirectConversationMember.user_id == user_id,
+            CommunityDirectMessage.sequence
+            > CommunityDirectConversationMember.last_read_sequence,
+            CommunityDirectMessage.sender_id != user_id,
+        )
     )
     return int(value or 0)
 
