@@ -703,3 +703,103 @@ class CommunityUserMute(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
+
+
+class CommunitySearchSource(StrEnum):
+    POST = "post"
+    USER = "user"
+    BOARD = "board"
+    GROUP = "group"
+
+
+class CommunitySearchOutboxStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class CommunitySearchRebuildStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class CommunitySearchDocument(Base):
+    __tablename__ = "community_search_documents"
+    __table_args__ = (
+        UniqueConstraint("source_type", "source_id", name="uq_community_search_document_source"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_type: Mapped[CommunitySearchSource] = mapped_column(
+        Enum(CommunitySearchSource, native_enum=False, length=16), index=True
+    )
+    source_id: Mapped[str] = mapped_column(String(36), index=True)
+    document_version: Mapped[int] = mapped_column(Integer, default=1)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(Text, default="")
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    board_code: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    group_slug: Mapped[str | None] = mapped_column(String(48), nullable=True, index=True)
+    author_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunitySearchOutbox(Base):
+    __tablename__ = "community_search_outbox"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key", name="uq_community_search_outbox_dedupe"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    event_type: Mapped[str] = mapped_column(String(16))
+    source_type: Mapped[CommunitySearchSource] = mapped_column(
+        Enum(CommunitySearchSource, native_enum=False, length=16), index=True
+    )
+    source_id: Mapped[str] = mapped_column(String(36), index=True)
+    document_version: Mapped[int] = mapped_column(Integer, default=1)
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    status: Mapped[CommunitySearchOutboxStatus] = mapped_column(
+        Enum(CommunitySearchOutboxStatus, native_enum=False, length=16),
+        default=CommunitySearchOutboxStatus.PENDING,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunitySearchRebuildRun(Base):
+    __tablename__ = "community_search_rebuild_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    scope: Mapped[str] = mapped_column(String(64), default="all")
+    status: Mapped[CommunitySearchRebuildStatus] = mapped_column(
+        Enum(CommunitySearchRebuildStatus, native_enum=False, length=16),
+        default=CommunitySearchRebuildStatus.PENDING,
+        index=True,
+    )
+    cursor: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    expected_count: Mapped[int] = mapped_column(Integer, default=0)
+    indexed_count: Mapped[int] = mapped_column(Integer, default=0)
+    missing_count: Mapped[int] = mapped_column(Integer, default=0)
+    extra_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_summary: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )

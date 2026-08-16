@@ -1794,6 +1794,50 @@ export interface CommunityHomeResponse {
   posts: CommunityPostListResponse;
 }
 
+
+export const COMMUNITY_SEARCH_RESULT_TYPES = [
+  "post",
+  "user",
+  "board",
+  "group",
+] as const;
+
+export type CommunitySearchResultType =
+  (typeof COMMUNITY_SEARCH_RESULT_TYPES)[number];
+
+export const COMMUNITY_SEARCH_MODES = [
+  "ngram",
+  "prefix_fallback",
+  "test",
+] as const;
+
+export type CommunitySearchMode = (typeof COMMUNITY_SEARCH_MODES)[number];
+
+export interface CommunitySearchResultItem {
+  type: CommunitySearchResultType;
+  source_id: string;
+  title: string;
+  preview: string;
+  username: string | null;
+  board_code: CommunityBoardCode | null;
+  group_slug: string | null;
+  updated_at: string;
+}
+
+export interface CommunitySearchProviderState {
+  mode: CommunitySearchMode;
+  degraded: boolean;
+}
+
+export interface CommunitySearchResponse {
+  query: string;
+  items: CommunitySearchResultItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  provider: CommunitySearchProviderState;
+}
+
 export interface CommunityPostInteractionResponse {
   post_id: string;
   like_count: number;

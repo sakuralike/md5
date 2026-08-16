@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
+from types import SimpleNamespace
 
 from sqlalchemy import select
 
@@ -121,3 +123,47 @@ def test_private_blocked_or_muted_sources_never_appear_in_search(client):
     serialized = str(result.json())
     assert private_post["id"] not in serialized
     assert "sealed recovery guide" not in serialized
+
+MIGRATION_PATH = (
+    Path(__file__).parents[1]
+    / "alembic"
+    / "versions"
+    / "20260816_0042_community_search.py"
+)
+
+
+def test_search_migration_round_trip_declares_required_tables(monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("migration_20260816_0042", MIGRATION_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    created_tables: list[str] = []
+    dropped_tables: list[str] = []
+    connection = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+    monkeypatch.setattr(migration.op, "get_bind", lambda: connection)
+    monkeypatch.setattr(
+        migration.op,
+        "create_table",
+        lambda table_name, *columns: created_tables.append(table_name),
+    )
+    monkeypatch.setattr(migration.op, "create_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        migration.op,
+        "drop_table",
+        lambda table_name: dropped_tables.append(table_name),
+    )
+
+    assert migration.revision == "20260816_0042"
+    assert migration.down_revision == "20260815_0041"
+    migration.upgrade()
+    assert set(created_tables) == {
+        "community_search_documents",
+        "community_search_outbox",
+        "community_search_rebuild_runs",
+    }
+    migration.downgrade()
+    assert set(dropped_tables) == set(created_tables)
