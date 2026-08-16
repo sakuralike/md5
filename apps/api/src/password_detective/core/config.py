@@ -18,6 +18,8 @@ FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "candidate_secret_key_version": "CANDIDATE_SECRET_KEY_VERSION",
     "candidate_secret_keyring": "CANDIDATE_SECRET_KEYRING",
     "candidate_secret_dedup_key": "CANDIDATE_SECRET_DEDUP_KEY",
+    "direct_message_key_version": "DIRECT_MESSAGE_KEY_VERSION",
+    "direct_message_keyring": "DIRECT_MESSAGE_KEYRING",
     "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
     "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
 }
@@ -64,6 +66,8 @@ class Settings(BaseSettings):
     candidate_secret_key_version: str = Field(default="v1", min_length=1, max_length=32)
     candidate_secret_keyring: SecretStr = SecretStr("")
     candidate_secret_dedup_key: SecretStr = SecretStr("")
+    direct_message_key_version: str = Field(default="v1", min_length=1, max_length=32)
+    direct_message_keyring: SecretStr = SecretStr("")
     daily_reveal_quota: int = Field(default=5, ge=1, le=1000)
     authorization_declaration_version: str = Field(
         default="authorization-v1", min_length=1, max_length=32
@@ -171,6 +175,26 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_direct_message_keys(self) -> Settings:
+        version_pattern = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+        if not version_pattern.fullmatch(self.direct_message_key_version):
+            raise ValueError("私信密钥版本只能包含字母、数字、点、下划线和连字符")
+        keyring = self.direct_message_key_map
+        if keyring and self.direct_message_key_version not in keyring:
+            raise ValueError("DIRECT_MESSAGE_KEYRING 必须包含当前密钥版本")
+        if len(keyring) > 8:
+            raise ValueError("DIRECT_MESSAGE_KEYRING 最多允许 8 个版本")
+        for version, secret in keyring.items():
+            if not version_pattern.fullmatch(version):
+                raise ValueError(f"私信密钥版本无效: {version}")
+            if not secret:
+                raise ValueError(f"私信密钥不能为空: {version}")
+            if self.app_env not in {"local", "test"} and len(secret) < 32:
+                raise ValueError(f"非本地环境的私信密钥至少需要 32 个字符: {version}")
+        return self
+
+
+    @model_validator(mode="after")
     def validate_notification_backend(self) -> Settings:
         if self.notification_backend == "webhook":
             if not self.notification_webhook_url.startswith("https://"):
@@ -230,6 +254,31 @@ class Settings(BaseSettings):
         ):
             raise ValueError("CANDIDATE_SECRET_KEYRING 必须是字符串到字符串的 JSON 对象")
         return parsed
+
+    @property
+    def direct_message_key_map(self) -> dict[str, str]:
+        raw = self.direct_message_keyring.get_secret_value().strip()
+        if not raw:
+            return {}
+
+        def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"DIRECT_MESSAGE_KEYRING 存在重复版本: {key}")
+                result[key] = value
+            return result
+
+        try:
+            parsed = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError("DIRECT_MESSAGE_KEYRING 必须是无重复键的 JSON 对象") from exc
+        if not isinstance(parsed, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
+        ):
+            raise ValueError("DIRECT_MESSAGE_KEYRING 必须是字符串到字符串的 JSON 对象")
+        return parsed
+
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -64,3 +64,13 @@ def test_secret_file_size_limit_is_enforced(
 
     with pytest.raises(ValidationError, match="超过允许的大小限制"):
         Settings()
+
+def test_direct_message_keyring_loads_from_secret_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keyring = _write(tmp_path / "direct_message_keyring", '{"v1":"' + "d" * 48 + '"}\n')
+    monkeypatch.setenv("DIRECT_MESSAGE_KEYRING_FILE", str(keyring))
+
+    settings = Settings(app_env="production", browser_cookie_secure=True)
+
+    assert settings.direct_message_key_map == {"v1": "d" * 48}
