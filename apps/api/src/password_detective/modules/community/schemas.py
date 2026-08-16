@@ -461,3 +461,28 @@ class CommunityRelationListResponse(BaseModel):
     items: list[CommunityRelationUser]
     next_cursor: str | None = None
     has_more: bool = False
+
+
+class CommunitySearchResultItem(BaseModel):
+    type: str
+    source_id: str
+    title: str
+    preview: str
+    username: str | None = None
+    board_code: str | None = None
+    group_slug: str | None = None
+    updated_at: datetime
+
+
+class CommunitySearchProviderState(BaseModel):
+    mode: str
+    degraded: bool
+
+
+class CommunitySearchResponse(BaseModel):
+    query: str
+    items: list[CommunitySearchResultItem]
+    page: int
+    page_size: int
+    total: int
+    provider: CommunitySearchProviderState

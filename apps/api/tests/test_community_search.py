@@ -167,3 +167,30 @@ def test_search_migration_round_trip_declares_required_tables(monkeypatch):
     }
     migration.downgrade()
     assert set(dropped_tables) == set(created_tables)
+
+
+def test_normalize_search_query_folds_whitespace_and_rejects_invalid_input():
+    import pytest
+
+    from password_detective.core.errors import AppError
+    from password_detective.modules.community.search_service import normalize_search_query
+
+    assert normalize_search_query("  recover\n\tguide  ") == "recover guide"
+
+    with pytest.raises(AppError) as error:
+        normalize_search_query("x")
+    assert error.value.code == "community.search_invalid_query"
+
+    with pytest.raises(AppError) as error:
+        normalize_search_query("recovery\x00guide")
+    assert error.value.code == "community.search_invalid_query"
+
+
+def test_sqlite_search_provider_reports_test_mode(client):
+    from password_detective.modules.community.search_provider import SQLiteCommunitySearchProvider
+
+    with client.app.state.database.session_factory() as db:
+        state = SQLiteCommunitySearchProvider(max_prefix_candidates=50).preflight(db)
+
+    assert state.mode == "test"
+    assert state.degraded is False
