@@ -270,6 +270,91 @@ def test_replay_and_rebuild_converge_on_the_same_document_set(client):
     assert rebuilt.mismatch_count == 0
 
 
+def test_rebuild_dry_run_reports_projection_drift_and_persists_aggregate_run(client):
+    from password_detective.db.models.community import (
+        CommunitySearchRebuildRun,
+        CommunitySearchRebuildStatus,
+    )
+    from password_detective.modules.community.search_index import rebuild_search_index
+
+    author = register_and_login(
+        client,
+        username="search_drift_author",
+        email="search-drift-author@synthetic.example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json={
+            "board_code": "general",
+            "title": "drift recovery guide",
+            "content": "Synthetic public content used to verify rebuild drift reporting.",
+            "rules_accepted": True,
+        },
+        headers=request_headers(author, "search-drift-post"),
+    )
+    assert created.status_code == 201, created.text
+
+    with client.app.state.database.session_factory() as db:
+        dry_run = rebuild_search_index(db, apply=False, batch_size=1)
+        run = db.get(CommunitySearchRebuildRun, dry_run.run_id)
+
+    assert dry_run.operation == "dry-run"
+    assert dry_run.mismatch_count >= 1
+    assert run is not None
+    assert run.status is CommunitySearchRebuildStatus.COMPLETED
+    assert run.missing_count >= 1
+
+
+def test_rebuild_apply_can_resume_a_bounded_running_run(client):
+    from password_detective.db.models.community import (
+        CommunitySearchRebuildRun,
+        CommunitySearchRebuildStatus,
+    )
+    from password_detective.modules.community.search_index import rebuild_search_index
+
+    author = register_and_login(
+        client,
+        username="search_resume_author",
+        email="search-resume-author@synthetic.example.com",
+    )
+    for ordinal in range(2):
+        created = client.post(
+            "/api/v1/community/posts",
+            json={
+                "board_code": "general",
+                "title": f"resume recovery guide {ordinal}",
+                "content": "Synthetic public content used to verify bounded rebuild resume.",
+                "rules_accepted": True,
+            },
+            headers=request_headers(author, f"search-resume-post-{ordinal}"),
+        )
+        assert created.status_code == 201, created.text
+
+    with client.app.state.database.session_factory() as db:
+        partial = rebuild_search_index(
+            db,
+            apply=True,
+            batch_size=1,
+            max_batches=1,
+        )
+        run = db.get(CommunitySearchRebuildRun, partial.run_id)
+        assert partial.resume_cursor is not None
+        assert run is not None
+        assert run.status is CommunitySearchRebuildStatus.RUNNING
+
+        completed = rebuild_search_index(
+            db,
+            apply=True,
+            batch_size=1,
+            resume_run_id=partial.run_id,
+        )
+        db.refresh(run)
+
+    assert completed.resume_cursor is None
+    assert completed.mismatch_count == 0
+    assert run.status is CommunitySearchRebuildStatus.COMPLETED
+
+
 def test_public_search_returns_dispatched_public_post_projection(client):
     from password_detective.modules.community.search_index import dispatch_pending_search_events
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
@@ -20,6 +21,8 @@ from password_detective.db.models.community import (
     CommunitySearchDocument,
     CommunitySearchOutbox,
     CommunitySearchOutboxStatus,
+    CommunitySearchRebuildRun,
+    CommunitySearchRebuildStatus,
     CommunitySearchSource,
 )
 from password_detective.db.models.user import User, UserStatus
@@ -45,6 +48,7 @@ class SearchRebuildResult:
     upserted: int
     deleted: int
     mismatch_count: int
+    run_id: str | None = None
     resume_cursor: str | None = None
 
     def as_dict(self) -> dict[str, int | str | None]:
@@ -54,6 +58,7 @@ class SearchRebuildResult:
             "upserted": self.upserted,
             "deleted": self.deleted,
             "mismatch_count": self.mismatch_count,
+            "run_id": self.run_id,
             "resume_cursor": self.resume_cursor,
         }
 
@@ -146,18 +151,39 @@ def rebuild_search_index(
     *,
     apply: bool,
     batch_size: int = 200,
+    resume_run_id: str | None = None,
+    max_batches: int | None = None,
 ) -> SearchRebuildResult:
-    # The current bounded dataset scan is deterministic; batching is added with resume runs.
-    del batch_size
+    if batch_size < 1 or batch_size > 1_000:
+        raise ValueError("batch_size must be between 1 and 1000")
+    if max_batches is not None and max_batches < 1:
+        raise ValueError("max_batches must be positive when provided")
+
+    operation = "apply" if apply else "dry-run"
+    run = _load_rebuild_run(db, operation=operation, resume_run_id=resume_run_id)
+    source_keys = _all_source_keys(db)
+    resume_after = _parse_rebuild_cursor(run.cursor)
+    pending_keys = [
+        key for key in source_keys if resume_after is None or _source_key_value(key) > resume_after
+    ]
     scanned = 0
     upserted = 0
-    source_keys: set[tuple[CommunitySearchSource, str]] = set()
-    for source_type, source_ids in _all_source_ids(db):
-        for source_id in source_ids:
-            scanned += 1
-            source_keys.add((source_type, source_id))
-            payload = _build_document_payload(db, source_type=source_type, source_id=source_id)
-            if payload is not None:
+    processed_batches = 0
+
+    try:
+        for offset in range(0, len(pending_keys), batch_size):
+            if max_batches is not None and processed_batches >= max_batches:
+                break
+            batch = pending_keys[offset : offset + batch_size]
+            for source_type, source_id in batch:
+                scanned += 1
+                payload = _build_document_payload(
+                    db,
+                    source_type=source_type,
+                    source_id=source_id,
+                )
+                if payload is None:
+                    continue
                 upserted += 1
                 if apply:
                     _upsert_document(
@@ -167,28 +193,184 @@ def rebuild_search_index(
                         document_version=_source_version(db, source_type, source_id),
                         payload=payload,
                     )
-    documents = db.scalars(select(CommunitySearchDocument)).all()
-    stale = [
-        document
-        for document in documents
-        if (document.source_type, document.source_id) not in source_keys
-        or _build_document_payload(
-            db, source_type=document.source_type, source_id=document.source_id
+            run.cursor = _serialize_rebuild_cursor(batch[-1])
+            run.status = CommunitySearchRebuildStatus.RUNNING
+            run.error_summary = None
+            db.flush()
+            processed_batches += 1
+
+        completed = processed_batches * batch_size >= len(pending_keys)
+        if not completed:
+            db.commit()
+            return SearchRebuildResult(
+                operation=operation,
+                scanned=scanned,
+                upserted=upserted,
+                deleted=0,
+                mismatch_count=0,
+                run_id=run.id,
+                resume_cursor=run.cursor,
+            )
+
+        expected = _expected_documents(db)
+        missing_count, extra_documents, stale_count, indexed_count = _projection_drift(
+            db,
+            expected,
         )
-        is None
-    ]
-    if apply:
-        for document in stale:
-            db.delete(document)
+        deleted = 0
+        if apply:
+            for document in extra_documents:
+                db.delete(document)
+            deleted = len(extra_documents)
+            db.flush()
+            missing_count, _remaining_extra, stale_count, indexed_count = _projection_drift(
+                db,
+                expected,
+            )
+
+        extra_count = len(extra_documents if not apply else _remaining_extra)
+        mismatch_count = missing_count + extra_count + stale_count
+        run.expected_count = len(expected)
+        run.indexed_count = indexed_count
+        run.missing_count = missing_count
+        run.extra_count = extra_count
+        run.cursor = None
+        run.status = CommunitySearchRebuildStatus.COMPLETED
+        run.error_summary = None
+        run.finished_at = utc_now()
         db.commit()
-    return SearchRebuildResult(
-        operation="apply" if apply else "dry-run",
-        scanned=scanned,
-        upserted=upserted,
-        deleted=len(stale),
-        mismatch_count=0,
+        return SearchRebuildResult(
+            operation=operation,
+            scanned=scanned,
+            upserted=upserted,
+            deleted=deleted,
+            mismatch_count=mismatch_count,
+            run_id=run.id,
+        )
+    except Exception as exc:
+        run.status = CommunitySearchRebuildStatus.FAILED
+        run.error_summary = type(exc).__name__[:256]
+        run.finished_at = utc_now()
+        db.commit()
+        raise
+
+
+def _load_rebuild_run(
+    db: Session,
+    *,
+    operation: str,
+    resume_run_id: str | None,
+) -> CommunitySearchRebuildRun:
+    if resume_run_id is not None:
+        run = db.get(CommunitySearchRebuildRun, resume_run_id)
+        if run is None:
+            raise ValueError("search rebuild run was not found")
+        if run.status is not CommunitySearchRebuildStatus.RUNNING:
+            raise ValueError("search rebuild run is not resumable")
+        if run.scope != operation:
+            raise ValueError("search rebuild operation does not match resumable run")
+        return run
+
+    run = CommunitySearchRebuildRun(
+        scope=operation,
+        status=CommunitySearchRebuildStatus.RUNNING,
+        started_at=utc_now(),
+    )
+    db.add(run)
+    db.flush()
+    return run
+
+
+def _all_source_keys(db: Session) -> list[tuple[CommunitySearchSource, str]]:
+    keys = [
+        (source_type, source_id)
+        for source_type, source_ids in _all_source_ids(db)
+        for source_id in source_ids
+    ]
+    return sorted(keys, key=_source_key_value)
+
+
+def _source_key_value(key: tuple[CommunitySearchSource, str]) -> tuple[str, str]:
+    return key[0].value, key[1]
+
+
+def _serialize_rebuild_cursor(key: tuple[CommunitySearchSource, str]) -> str:
+    source_type, source_id = key
+    return json.dumps(
+        {"source_type": source_type.value, "source_id": source_id},
+        separators=(",", ":"),
+        sort_keys=True,
     )
 
+
+def _parse_rebuild_cursor(cursor: str | None) -> tuple[str, str] | None:
+    if cursor is None:
+        return None
+    try:
+        payload = json.loads(cursor)
+        source_type = CommunitySearchSource(payload["source_type"])
+        source_id = payload["source_id"]
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("search rebuild cursor is invalid") from exc
+    if not isinstance(source_id, str):
+        raise ValueError("search rebuild cursor is invalid")
+    return source_type.value, source_id
+
+
+def _expected_documents(
+    db: Session,
+) -> dict[tuple[CommunitySearchSource, str], tuple[int, _DocumentPayload]]:
+    expected: dict[tuple[CommunitySearchSource, str], tuple[int, _DocumentPayload]] = {}
+    for source_type, source_id in _all_source_keys(db):
+        payload = _build_document_payload(db, source_type=source_type, source_id=source_id)
+        if payload is not None:
+            expected[(source_type, source_id)] = (
+                _source_version(db, source_type, source_id),
+                payload,
+            )
+    return expected
+
+
+def _projection_drift(
+    db: Session,
+    expected: dict[tuple[CommunitySearchSource, str], tuple[int, _DocumentPayload]],
+) -> tuple[int, list[CommunitySearchDocument], int, int]:
+    documents = db.scalars(select(CommunitySearchDocument)).all()
+    by_key = {(document.source_type, document.source_id): document for document in documents}
+    expected_keys = set(expected)
+    document_keys = set(by_key)
+    missing_count = len(expected_keys - document_keys)
+    extra_documents = [document for key, document in by_key.items() if key not in expected_keys]
+    stale_count = sum(
+        1
+        for key in expected_keys & document_keys
+        if not _document_matches(
+            by_key[key],
+            document_version=expected[key][0],
+            payload=expected[key][1],
+        )
+    )
+    indexed_count = len(expected_keys & document_keys)
+    return missing_count, extra_documents, stale_count, indexed_count
+
+
+def _document_matches(
+    document: CommunitySearchDocument,
+    *,
+    document_version: int,
+    payload: _DocumentPayload,
+) -> bool:
+    return (
+        document.document_version == document_version
+        and document.title == payload.title
+        and document.body == payload.body
+        and document.username == payload.username
+        and document.board_code == payload.board_code
+        and document.group_slug == payload.group_slug
+        and document.author_id == payload.author_id
+        and document.is_public is True
+        and document.source_updated_at == payload.source_updated_at
+    )
 
 def _apply_search_event(db: Session, event: CommunitySearchOutbox) -> None:
     if event.event_type == "delete":

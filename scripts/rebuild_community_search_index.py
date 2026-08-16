@@ -23,6 +23,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--apply", action="store_true")
     parser.add_argument("--batch-size", type=int, default=200)
+    parser.add_argument("--max-batches", type=int)
+    parser.add_argument("--resume-run-id")
     return parser.parse_args(argv)
 
 
@@ -30,11 +32,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.batch_size < 1 or args.batch_size > 1_000:
         raise SystemExit("--batch-size must be between 1 and 1000")
+    if args.max_batches is not None and args.max_batches < 1:
+        raise SystemExit("--max-batches must be positive when provided")
     database = Database(get_settings())
     try:
         with database.session_factory() as db:
             result = rebuild_search_index(
-                db, apply=args.apply, batch_size=args.batch_size
+                db,
+                apply=args.apply,
+                batch_size=args.batch_size,
+                max_batches=args.max_batches,
+                resume_run_id=args.resume_run_id,
             )
     finally:
         database.dispose()
