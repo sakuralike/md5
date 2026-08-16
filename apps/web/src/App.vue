@@ -7,6 +7,7 @@ import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCommunityAvatar } from "./composables/useCommunityAvatar";
+import { useCommunityDirectMessageStream } from "./composables/useCommunityDirectMessageStream";
 import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
 import { getPublicSiteConfig } from "./services/site";
 import { useAuthStore } from "./stores/auth";
@@ -21,6 +22,7 @@ interface BackgroundOption {
 
 const auth = useAuthStore();
 const communityNotifications = useCommunityNotificationStream();
+const communityDirectMessages = useCommunityDirectMessageStream();
 const communityAvatar = useCommunityAvatar();
 const currentAvatarSrc = communityAvatar.avatarSrc;
 const siteConfig = ref<PublicSiteConfig>({
@@ -230,6 +232,8 @@ onBeforeUnmount(releaseCustomBackground);
           :avatar-src="currentAvatarSrc"
           :unread-count="communityNotifications.unreadCount.value"
           :notification-status="communityNotifications.status.value"
+          :direct-unread-count="communityDirectMessages.totalUnreadCount.value"
+          :direct-message-status="communityDirectMessages.status.value"
           @logout="auth.logout()"
         />
       </div>

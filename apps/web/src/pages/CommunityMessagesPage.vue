@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CommunityDirectConversationResponse } from "@password-detective/api-contract";
-import { onMounted, onServerPrefetch, ref } from "vue";
+import { onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,10 @@ import {
   updateCommunityDirectMemberState,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
+import { useCommunityDirectMessagesStore } from "../stores/communityDirectMessages";
 
 const auth = useAuthStore();
+const directMessages = useCommunityDirectMessagesStore();
 const items = ref<CommunityDirectConversationResponse[]>([]);
 const nextCursor = ref<string | null>(null);
 const hasMore = ref(false);
@@ -21,6 +23,7 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const mutatingIds = ref(new Set<string>());
 const error = ref("");
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -106,8 +109,30 @@ async function toggleMuted(item: CommunityDirectConversationResponse): Promise<v
   }
 }
 
+function scheduleRealtimeRefresh(): void {
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void load();
+  }, 100);
+}
+
+watch(
+  () => [
+    directMessages.resetRevision,
+    Object.values(directMessages.conversationRevision).reduce(
+      (total, revision) => total + revision,
+      0,
+    ),
+  ],
+  scheduleRealtimeRefresh,
+);
+
 onMounted(() => void load());
 onServerPrefetch(() => load());
+onBeforeUnmount(() => {
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+});
 </script>
 
 <template>

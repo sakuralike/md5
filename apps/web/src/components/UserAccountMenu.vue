@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import type { CommunityNotificationStreamStatus, User } from "@password-detective/api-contract";
+import type {
+  CommunityDirectStreamStatus,
+  CommunityNotificationStreamStatus,
+  User,
+} from "@password-detective/api-contract";
 import { computed } from "vue";
-import { Bell, LogOut, UserRound } from "lucide-vue-next";
+import { Bell, LogOut, MessageCircle, UserRound } from "lucide-vue-next";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +25,8 @@ const props = withDefaults(
     defaultOpen?: boolean;
     unreadCount?: number;
     notificationStatus?: CommunityNotificationStreamStatus;
+    directUnreadCount?: number;
+    directMessageStatus?: CommunityDirectStreamStatus;
     avatarSrc?: string | null;
   }>(),
   {
@@ -28,6 +34,8 @@ const props = withDefaults(
     defaultOpen: false,
     unreadCount: 0,
     notificationStatus: "idle",
+    directUnreadCount: 0,
+    directMessageStatus: "idle",
     avatarSrc: null,
   },
 );
@@ -36,12 +44,22 @@ const emit = defineEmits<{ logout: [] }>();
 
 const initials = computed(() => props.user.username.slice(0, 1).toUpperCase());
 const unreadLabel = computed(() => (props.unreadCount > 99 ? "99+" : String(props.unreadCount)));
+const directUnreadLabel = computed(() =>
+  props.directUnreadCount > 99 ? "99+" : String(props.directUnreadCount),
+);
 const notificationStatusLabel = computed(() => {
   if (props.notificationStatus === "connected") return "实时连接正常";
   if (props.notificationStatus === "connecting") return "正在连接通知";
   if (props.notificationStatus === "reconnecting") return "通知正在重连";
   if (props.notificationStatus === "offline") return "通知当前离线";
   return "通知未连接";
+});
+const directMessageStatusLabel = computed(() => {
+  if (props.directMessageStatus === "connected") return "私信实时连接正常";
+  if (props.directMessageStatus === "connecting") return "正在连接私信";
+  if (props.directMessageStatus === "reconnecting") return "私信正在重连";
+  if (props.directMessageStatus === "offline") return "私信当前离线";
+  return "私信未连接";
 });
 </script>
 
@@ -85,6 +103,14 @@ const notificationStatusLabel = computed(() => {
           <span class="flex-1">社区通知</span>
           <Badge v-if="unreadCount > 0" aria-label="未读通知数量">{{ unreadLabel }}</Badge>
           <span class="sr-only">{{ notificationStatusLabel }}</span>
+        </RouterLink>
+      </DropdownMenuItem>
+      <DropdownMenuItem as-child class="rounded-xl px-3 py-2.5">
+        <RouterLink to="/community/messages" class="flex w-full items-center gap-2">
+          <MessageCircle class="h-4 w-4" />
+          <span class="flex-1">私信</span>
+          <Badge v-if="directUnreadCount > 0" aria-label="未读私信数量">{{ directUnreadLabel }}</Badge>
+          <span class="sr-only">{{ directMessageStatusLabel }}</span>
         </RouterLink>
       </DropdownMenuItem>
       <DropdownMenuItem

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CommunityDirectMessageResponse } from "@password-detective/api-contract";
-import { computed, onMounted, onServerPrefetch, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,11 @@ import {
   updateCommunityDirectReadState,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
+import { useCommunityDirectMessagesStore } from "../stores/communityDirectMessages";
 
 const route = useRoute();
 const auth = useAuthStore();
+const directMessages = useCommunityDirectMessagesStore();
 const messages = ref<CommunityDirectMessageResponse[]>([]);
 const nextCursor = ref<string | null>(null);
 const hasMore = ref(false);
@@ -27,10 +29,18 @@ const loadingMore = ref(false);
 const sending = ref(false);
 const body = ref("");
 const error = ref("");
+const counterpartLastReadSequence = ref(0);
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 const conversationId = computed(() => String(route.params.conversationId ?? ""));
 const orderedMessages = computed(() =>
   [...messages.value].sort((left, right) => left.sequence - right.sequence),
+);
+const effectiveCounterpartLastReadSequence = computed(() =>
+  Math.max(
+    counterpartLastReadSequence.value,
+    directMessages.counterpartReadSequence[conversationId.value] ?? 0,
+  ),
 );
 
 function formatDate(value: string): string {
@@ -72,7 +82,12 @@ async function load(reset = true): Promise<void> {
         limit: 30,
       },
     );
-    messages.value = reset ? response.items : [...messages.value, ...response.items];
+    const incoming = reset ? response.items : [...messages.value, ...response.items];
+    messages.value = mergeMessages(incoming);
+    counterpartLastReadSequence.value = Math.max(
+      counterpartLastReadSequence.value,
+      response.counterpart_last_read_sequence,
+    );
     nextCursor.value = response.next_cursor;
     hasMore.value = response.has_more;
     if (reset) await markLoadedMessagesRead(response.items);
@@ -105,8 +120,33 @@ async function send(): Promise<void> {
   }
 }
 
+function mergeMessages(items: CommunityDirectMessageResponse[]): CommunityDirectMessageResponse[] {
+  const byId = new Map<string, CommunityDirectMessageResponse>();
+  for (const item of items) byId.set(item.id, item);
+  return [...byId.values()];
+}
+
+function scheduleRealtimeRefresh(): void {
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void load();
+  }, 100);
+}
+
+watch(
+  () => [
+    directMessages.resetRevision,
+    directMessages.conversationRevision[conversationId.value] ?? 0,
+  ],
+  scheduleRealtimeRefresh,
+);
+
 onMounted(() => void load());
 onServerPrefetch(() => load());
+onBeforeUnmount(() => {
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+});
 </script>
 
 <template>
@@ -163,6 +203,17 @@ onServerPrefetch(() => load());
               </span>
             </div>
             <p class="whitespace-pre-wrap break-words text-sm leading-6">{{ message.body }}</p>
+            <Badge
+              v-if="isOwnMessage(message)"
+              variant="secondary"
+              class="mt-2"
+            >
+              {{
+                message.sequence <= effectiveCounterpartLastReadSequence
+                  ? "对方已读"
+                  : "已发送"
+              }}
+            </Badge>
           </article>
 
           <div
