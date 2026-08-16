@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ApiError,
+  COMMUNITY_SEARCH_MODES,
+  COMMUNITY_SEARCH_RESULT_TYPES,
   isPrivilegedRole,
   THIRD_PARTY_API_V1_PATHS,
   THIRD_PARTY_API_V1_SCOPES,
@@ -25,6 +27,21 @@ describe("shared API contract", () => {
     expect(error.message).toBe("需要登录");
     expect(error.body.request_id).toBe("req_test");
   });
+
+  it("publishes stable community search capability constants", () => {
+    expect(COMMUNITY_SEARCH_RESULT_TYPES).toEqual([
+      "post",
+      "user",
+      "board",
+      "group",
+    ]);
+    expect(COMMUNITY_SEARCH_MODES).toEqual([
+      "ngram",
+      "prefix_fallback",
+      "test",
+    ]);
+  });
+
   it("publishes stable third-party desktop API v1 constants", () => {
     expect(THIRD_PARTY_API_V1_SCOPES).toEqual([
       "profile:read",

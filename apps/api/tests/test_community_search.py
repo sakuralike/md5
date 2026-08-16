@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+from sqlalchemy import select
+
+from password_detective.core.time import utc_now
+from password_detective.db.models.user import User
+
+
+def register_and_login(
+    client,
+    *,
+    username: str,
+    email: str,
+) -> dict[str, str]:
+    password = "SyntheticSearchPass123!"
+    registration = {
+        "username": username,
+        "email": email,
+        "password": password,
+    }
+    assert client.post("/api/v1/auth/register", json=registration).status_code == 201
+    with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        assert user is not None
+        user.email_verified_at = utc_now()
+        db.commit()
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"login": username, "password": password},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def request_headers(tokens: Mapping[str, str], idempotency_key: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "Idempotency-Key": idempotency_key,
+    }
+
+
+def create_private_group_post(
+    client,
+    owner_tokens: Mapping[str, str],
+    *,
+    title: str,
+) -> dict[str, str]:
+    group = client.post(
+        "/api/v1/community/groups",
+        json={
+            "slug": "search-private-lab",
+            "name": "合成私密搜索边界组",
+            "description": "仅用于验证公开搜索不会披露私密群组内容。",
+            "visibility": "private",
+        },
+        headers=request_headers(owner_tokens, "search-private-group-create"),
+    )
+    assert group.status_code == 201, group.text
+    post = client.post(
+        "/api/v1/community/posts",
+        json={
+            "board_code": "general",
+            "group_slug": "search-private-lab",
+            "title": title,
+            "content": "这是一段仅在合成私密群组内可见的恢复流程讨论，不得由公开搜索披露。",
+            "rules_accepted": True,
+        },
+        headers=request_headers(owner_tokens, "search-private-post-create"),
+    )
+    assert post.status_code == 201, post.text
+    return post.json()
+
+
+def test_public_search_rejects_short_or_control_character_queries(client):
+    assert client.get("/api/v1/community/search", params={"q": "a"}).status_code == 422
+    assert client.get("/api/v1/community/search", params={"q": "ab\x00cd"}).status_code == 422
+
+
+def test_public_search_returns_only_requested_public_result_types(client):
+    response = client.get(
+        "/api/v1/community/search",
+        params=[("q", "recovery"), ("types", "post"), ("types", "board")],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["query"] == "recovery"
+    assert {item["type"] for item in body["items"]} <= {"post", "board"}
+    assert body["provider"]["mode"] in {"ngram", "prefix_fallback", "test"}
+
+
+def test_private_blocked_or_muted_sources_never_appear_in_search(client):
+    owner = register_and_login(
+        client,
+        username="search_owner",
+        email="search-owner@synthetic.example.com",
+    )
+    outsider = register_and_login(
+        client,
+        username="search_outsider",
+        email="search-outsider@synthetic.example.com",
+    )
+    private_post = create_private_group_post(
+        client,
+        owner,
+        title="sealed recovery guide",
+    )
+    blocked = client.put(
+        "/api/v1/community/users/search_owner/block",
+        headers=request_headers(outsider, "search-block-owner"),
+    )
+    assert blocked.status_code == 200, blocked.text
+
+    result = client.get(
+        "/api/v1/community/search",
+        params={"q": "recovery"},
+        headers=request_headers(outsider, "search-private-query"),
+    )
+    assert result.status_code == 200, result.text
+    serialized = str(result.json())
+    assert private_post["id"] not in serialized
+    assert "sealed recovery guide" not in serialized
