@@ -585,3 +585,12 @@
 | 独立私信 SSE | `GET /api/v1/community/direct-messages/stream`、function-scope 认证、`Last-Event-ID`、`ready/reset_required` | 本地游标与 Session 测试；Staging 未登录 401、授权 `ready`、跨实例事件和 `Last-Event-ID` CORS 预检 200 | 已验证；长事务为 0 |
 | Web 实时状态 | 独立服务、组合式函数、Pinia Store、App 生命周期、账户菜单/收件箱/会话页 | Web 45 文件 78 测试；Chromium/Firefox/WebKit 3/3；Staging Web 制品含实时游标标记，公网首页与消息页 200 | 已验证 Staging 制品与入口；UAT 仍未验收 |
 | 证据边界 | 本地、远端、Staging、UAT/Production 分层记录 | 本地统一门禁通过；远端提交 `1a59275d042d` 与本地 tree `72337848988a` 等价；Staging 修订独立复验通过 | Staging 通过不等于 UAT/Production；隐私设置 Outbox 溢出缺陷单独跟踪 |
+
+
+## 2026-08-16 搜索 Outbox 文档版本溢出修复追踪
+
+| 需求/风险 | 实现证据 | 自动化与目标环境证据 | 当前状态 |
+|---|---|---|---|
+| 搜索版本 64 位存储 | `CommunitySearchDocument`、`CommunitySearchOutbox` 的 `document_version` 使用 `BigInteger`；Alembic `20260816_0046` 同步修改两张表 | MySQL DDL/模型/迁移测试；完整 API `300 passed, 1 skipped`；Staging `information_schema` 显示两列均为 `bigint` | 已验证 |
+| 隐私设置搜索入队 | `update_privacy_preferences()` 保持现有微秒版本与 Outbox 去重语义 | 资料 API 回归断言 Outbox `document_version > 2_147_483_647`；Staging 合成账号 `PATCH /api/v1/community/me/privacy` 为 200，写入 `1786914188170251` | 已验证 |
+| 投影侧兼容性与回滚 | 搜索文档列与 Outbox 同时扩宽，避免 Worker 投影再次溢出；降级声明保留 | SQLite 实际往返；目标回滚需使用发布前数据库备份，不得将已写入的大整数截断为 32 位 | 已验证修复；UAT/Production 未批准 |
