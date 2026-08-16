@@ -4,6 +4,8 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -221,6 +223,11 @@ class CommunityNotificationSource(StrEnum):
     DIRECT_MESSAGE = "direct_message"
 
 
+class CommunityDirectEventType(StrEnum):
+    MESSAGE_CREATED = "message.created"
+    CONVERSATION_READ = "conversation.read"
+    UNREAD_CHANGED = "unread.changed"
+
 class CommunityDirectConversation(Base):
     __tablename__ = "community_direct_conversations"
     __table_args__ = (
@@ -276,6 +283,62 @@ class CommunityDirectConversationMember(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
+
+class CommunityDirectStreamPosition(Base):
+    __tablename__ = "community_direct_stream_positions"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_sequence: Mapped[int] = mapped_column(BigInteger, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityDirectEvent(Base):
+    __tablename__ = "community_direct_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_id",
+            "sequence",
+            name="uq_community_direct_event_recipient_sequence",
+        ),
+        Index(
+            "ix_community_direct_event_recipient_sequence",
+            "recipient_id",
+            "sequence",
+        ),
+        Index(
+            "ix_community_direct_event_conversation_created",
+            "conversation_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    recipient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    sequence: Mapped[int] = mapped_column(BigInteger)
+    event_type: Mapped[CommunityDirectEventType] = mapped_column(
+        Enum(CommunityDirectEventType, native_enum=False, length=32)
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("community_direct_conversations.id", ondelete="CASCADE"),
+    )
+    actor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_direct_messages.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 class CommunityDirectMessage(Base):
     __tablename__ = "community_direct_messages"
