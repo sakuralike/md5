@@ -1954,7 +1954,58 @@ export interface CommunityDirectMessageListResponse {
   items: CommunityDirectMessageResponse[];
   next_cursor: string | null;
   has_more: boolean;
+  last_read_sequence: number;
+  counterpart_last_read_sequence: number;
+  unread_count: number;
 }
+
+export type CommunityDirectStreamStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "offline";
+
+export interface CommunityDirectStreamReadyEvent {
+  type: "ready";
+  eventId: number;
+  totalUnreadCount: number;
+  resetRequired: boolean;
+}
+
+export interface CommunityDirectMessageCreatedEvent {
+  type: "message.created";
+  eventId: number;
+  conversationId: string;
+  messageId: string;
+  messageSequence: number;
+  senderId: string;
+  createdAt: string;
+}
+
+export interface CommunityDirectConversationReadEvent {
+  type: "conversation.read";
+  eventId: number;
+  conversationId: string;
+  readerId: string;
+  lastReadSequence: number;
+  readAt: string;
+}
+
+export interface CommunityDirectUnreadChangedEvent {
+  type: "unread.changed";
+  eventId: number;
+  conversationId: string;
+  conversationUnreadCount: number;
+  totalUnreadCount: number;
+  changedAt: string;
+}
+
+export type CommunityDirectStreamEvent =
+  | CommunityDirectStreamReadyEvent
+  | CommunityDirectMessageCreatedEvent
+  | CommunityDirectConversationReadEvent
+  | CommunityDirectUnreadChangedEvent;
 
 export interface CommunityDirectReadStateResponse {
   conversation_id: string;
