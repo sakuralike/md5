@@ -14,6 +14,7 @@ export const useCommunityDirectMessagesStore = defineStore(
     const conversationUnread = reactive<Record<string, number>>({});
     const counterpartReadSequence = reactive<Record<string, number>>({});
     const conversationRevision = reactive<Record<string, number>>({});
+    const conversationMessageRevision = reactive<Record<string, number>>({});
     const resetRevision = ref(0);
 
     function setStatus(nextStatus: CommunityDirectStreamStatus): void {
@@ -27,6 +28,7 @@ export const useCommunityDirectMessagesStore = defineStore(
           clearRecord(conversationUnread);
           clearRecord(counterpartReadSequence);
           clearRecord(conversationRevision);
+          clearRecord(conversationMessageRevision);
           resetRevision.value += 1;
         }
         latestEventId.value = event.eventId;
@@ -36,7 +38,10 @@ export const useCommunityDirectMessagesStore = defineStore(
       if (event.eventId <= latestEventId.value) return false;
       latestEventId.value = event.eventId;
 
-      if (event.type === "unread.changed") {
+      if (event.type === "message.created") {
+        conversationMessageRevision[event.conversationId] =
+          (conversationMessageRevision[event.conversationId] ?? 0) + 1;
+      } else if (event.type === "unread.changed") {
         conversationUnread[event.conversationId] = event.conversationUnreadCount;
         totalUnreadCount.value = event.totalUnreadCount;
       } else if (
@@ -63,6 +68,7 @@ export const useCommunityDirectMessagesStore = defineStore(
       clearRecord(conversationUnread);
       clearRecord(counterpartReadSequence);
       clearRecord(conversationRevision);
+      clearRecord(conversationMessageRevision);
       resetRevision.value += 1;
     }
 
@@ -73,6 +79,7 @@ export const useCommunityDirectMessagesStore = defineStore(
       conversationUnread,
       counterpartReadSequence,
       conversationRevision,
+      conversationMessageRevision,
       resetRevision,
       setStatus,
       apply,

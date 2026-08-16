@@ -54,12 +54,19 @@ function isOwnMessage(message: CommunityDirectMessageResponse): boolean {
   return message.sender_username === auth.user?.username;
 }
 
-async function markLoadedMessagesRead(loaded: CommunityDirectMessageResponse[]): Promise<void> {
+async function markLoadedMessagesRead(
+  loaded: CommunityDirectMessageResponse[],
+  currentLastReadSequence: number,
+): Promise<void> {
   const lastReadSequence = loaded.reduce(
     (maximum, message) => Math.max(maximum, message.sequence),
     0,
   );
-  if (!conversationId.value || lastReadSequence === 0) return;
+  if (
+    !conversationId.value ||
+    lastReadSequence === 0 ||
+    lastReadSequence <= currentLastReadSequence
+  ) return;
   await updateCommunityDirectReadState(
     conversationId.value,
     { last_read_sequence: lastReadSequence },
@@ -90,7 +97,7 @@ async function load(reset = true): Promise<void> {
     );
     nextCursor.value = response.next_cursor;
     hasMore.value = response.has_more;
-    if (reset) await markLoadedMessagesRead(response.items);
+    if (reset) await markLoadedMessagesRead(response.items, response.last_read_sequence);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "无法加载私信会话";
   } finally {
@@ -137,7 +144,7 @@ function scheduleRealtimeRefresh(): void {
 watch(
   () => [
     directMessages.resetRevision,
-    directMessages.conversationRevision[conversationId.value] ?? 0,
+    directMessages.conversationMessageRevision[conversationId.value] ?? 0,
   ],
   scheduleRealtimeRefresh,
 );

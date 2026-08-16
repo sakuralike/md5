@@ -87,4 +87,37 @@ describe("community direct messages store", () => {
     expect(store.conversationRevision).toEqual({});
     expect(store.resetRevision).toBe(1);
   });
+
+  it("only increments message refresh revisions for created messages", () => {
+    const store = useCommunityDirectMessagesStore();
+
+    store.apply({
+      type: "message.created",
+      eventId: 1,
+      conversationId: "conversation-a",
+      messageId: "message-a",
+      messageSequence: 1,
+      senderId: "sender-a",
+      createdAt: "2026-08-16T00:00:00Z",
+    });
+    store.apply({
+      type: "conversation.read",
+      eventId: 2,
+      conversationId: "conversation-a",
+      readerId: "reader-a",
+      lastReadSequence: 1,
+      readAt: "2026-08-16T00:01:00Z",
+    });
+    store.apply({
+      type: "unread.changed",
+      eventId: 3,
+      conversationId: "conversation-a",
+      conversationUnreadCount: 0,
+      totalUnreadCount: 0,
+      changedAt: "2026-08-16T00:01:00Z",
+    });
+
+    expect(store.conversationMessageRevision["conversation-a"]).toBe(1);
+    expect(store.conversationRevision["conversation-a"]).toBe(3);
+  });
 });

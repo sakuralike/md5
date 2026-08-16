@@ -2,6 +2,7 @@ import { renderToString } from "@vue/server-renderer";
 import { createSSRApp } from "vue";
 import { createPinia } from "pinia";
 import { describe, expect, it, vi } from "vitest";
+import { updateCommunityDirectReadState } from "../services/community";
 import CommunityConversationPage from "./CommunityConversationPage.vue";
 
 vi.mock("vue-router", () => ({
@@ -51,5 +52,6 @@ describe("CommunityConversationPage", () => {
     expect(html).toContain("发送消息");
     expect(html).toContain("端到端加密");
     expect(html).toContain("对方已读");
+    expect(updateCommunityDirectReadState).not.toHaveBeenCalled();
   });
 });
