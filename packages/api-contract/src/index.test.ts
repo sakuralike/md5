@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type {
+  CommunityDirectConversationCreateRequest,
+  CommunityDirectConversationCreateResponse,
+  CommunityDirectMessageResponse,
+  CommunityDirectReadStateUpdateRequest,
+} from "./index";
 import {
   ApiError,
   COMMUNITY_SEARCH_MODES,
@@ -16,6 +22,43 @@ describe("shared API contract", () => {
     expect(isPrivilegedRole("user")).toBe(false);
     expect(isPrivilegedRole("moderator")).toBe(true);
     expect(isPrivilegedRole("admin")).toBe(true);
+  });
+
+  it("defines privacy-safe direct-message contract shapes", () => {
+    const create: CommunityDirectConversationCreateRequest = {
+      recipient_username: "synthetic_receiver",
+    };
+    const message: CommunityDirectMessageResponse = {
+      id: "message-1",
+      conversation_id: "conversation-1",
+      sender_username: "synthetic_sender",
+      body: "仅用于契约测试的合成正文",
+      sequence: 1,
+      created_at: "2026-08-16T00:00:00Z",
+    };
+    const readState: CommunityDirectReadStateUpdateRequest = {
+      last_read_sequence: 1,
+    };
+    const created: CommunityDirectConversationCreateResponse = {
+      created: true,
+      conversation: {
+        id: "conversation-1",
+        counterpart_username: create.recipient_username,
+        counterpart_display_name: "Synthetic Receiver",
+        counterpart_avatar_seed: "synthetic-seed",
+        counterpart_avatar_url: null,
+        last_message_at: "2026-08-16T00:00:00Z",
+        unread_count: 1,
+        last_read_sequence: 0,
+        archived_at: null,
+        muted_until: null,
+        created_at: "2026-08-16T00:00:00Z",
+        updated_at: "2026-08-16T00:00:00Z",
+      },
+    };
+
+    expect(message.sequence).toBe(readState.last_read_sequence);
+    expect(created.conversation.counterpart_username).toBe("synthetic_receiver");
   });
 
   it("preserves standard API error metadata", () => {

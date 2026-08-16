@@ -83,14 +83,14 @@ flowchart LR
 
 | 实体 | 核心字段 | 约束与责任 |
 | --- | --- | --- |
-| `community_direct_conversations` | `id`、`participant_a_id`、`participant_b_id`、`last_message_at`、`created_at` | 用户 ID 按稳定顺序规范化；`(participant_a_id, participant_b_id)` 唯一，确保一对用户只有一个会话。 |
+| `community_direct_conversations` | `id`、`participant_low_id`、`participant_high_id`、`created_at`、`updated_at` | 用户 ID 按稳定顺序规范化；`(participant_low_id, participant_high_id)` 唯一，确保一对用户只有一个会话；发送消息时更新 `updated_at`。 |
 | `community_direct_conversation_members` | `conversation_id`、`user_id`、`last_read_sequence`、`archived_at`、`muted_until` | 每个会话固定两条成员记录；用户专属状态不影响另一成员。 |
 | `community_direct_messages` | `id`、`conversation_id`、`sequence`、`sender_id`、`ciphertext`、`nonce`、`key_version`、`client_message_id`、`created_at` | 正文只以 AES-GCM 密文保存；会话内 `sequence` 单调递增并参与分页；`(sender_id, client_message_id)` 唯一。 |
 | 私信幂等记录 | `actor_id`、`idempotency_key`、请求摘要、消息引用、响应状态、`expires_at` | 复用既有幂等存储能力时使用私信命名空间；相同键相同请求重放原结果，相同键不同请求返回冲突。 |
 
 ### 3.2 索引与游标
 
-- 会话列表按 `last_message_at DESC, id DESC` 排序，游标包含二者，避免同一时间戳引起重复或漏项。
+- 会话列表按 `updated_at DESC, id DESC` 排序，游标包含二者，避免同一时间戳引起重复或漏项。
 - 消息历史按 `sequence DESC, id DESC` 查询，响应携带下一页 `before` 游标；Web 显示时将当前页恢复为时间正序。
 - 已读状态只保存会话内的最大 `last_read_sequence`，更新只能前进不能回退。
 - 发送消息、更新最后活动时间、未读投影和外箱事件必须在同一数据库事务中提交。
@@ -109,11 +109,11 @@ API 挂载在既有 `/api/v1/community` 命名空间，使用项目统一的认�
 
 | 方法与路径 | 说明 | 输入 | 成功结果 |
 | --- | --- | --- | --- |
-| `POST /direct-conversations` | 创建或取得与目标用户的一对一会话 | `recipient_user_id` | 会话摘要、对方公开资料和 `created` 标识。 |
+| `POST /direct-conversations` | 创建或取得与目标用户的一对一会话 | `recipient_username` | 会话摘要、对方公开资料和 `created` 标识；服务端按公开用户名解析内部 ID。 |
 | `GET /direct-conversations` | 查询当前用户的会话列表 | `cursor`、`limit`、可选归档筛选 | 稳定游标分页的会话摘要、未读数、归档/静音状态。 |
 | `GET /direct-conversations/{conversation_id}/messages` | 查询会话历史 | `before`、`limit` | 当前成员可见的已解密消息和下一页游标。 |
 | `POST /direct-conversations/{conversation_id}/messages` | 发送加密消息 | `Idempotency-Key`、`client_message_id`、`body` | 消息 ID、序号、发送时间、重放标识。 |
-| `PATCH /direct-conversations/{conversation_id}/read-state` | 推进当前成员已读游标 | `last_read_message_id` | 当前已读序号和会话未读数。 |
+| `PATCH /direct-conversations/{conversation_id}/read-state` | 推进当前成员已读游标 | `last_read_sequence` | 当前已读序号和会话未读数。 |
 | `PATCH /direct-conversations/{conversation_id}/member-state` | 更新当前成员的归档或静音状态 | `archived`、`muted_until` | 当前成员状态。 |
 
 新增稳定业务错误码：

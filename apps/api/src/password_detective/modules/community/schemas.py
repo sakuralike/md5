@@ -283,6 +283,92 @@ class CommunityMutationResponse(BaseModel):
     version: int
 
 
+class CommunityDirectConversationCreateRequest(BaseModel):
+    recipient_username: str = Field(min_length=3, max_length=64)
+
+    @field_validator("recipient_username")
+    @classmethod
+    def normalize_recipient_username(cls, value: str) -> str:
+        return _normalize(value, "收件人用户名不能为空")
+
+
+class CommunityDirectMessageCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    client_message_id: str = Field(min_length=1, max_length=72)
+
+    @field_validator("body")
+    @classmethod
+    def normalize_body(cls, value: str) -> str:
+        return _normalize(value, "私信正文不能为空")
+
+    @field_validator("client_message_id")
+    @classmethod
+    def normalize_client_message_id(cls, value: str) -> str:
+        return _normalize(value, "客户端消息标识不能为空")
+
+
+class CommunityDirectReadStateUpdateRequest(BaseModel):
+    last_read_sequence: int = Field(ge=0)
+
+
+class CommunityDirectMemberStateUpdateRequest(BaseModel):
+    archived: bool | None = None
+    muted_until: datetime | None = None
+
+
+class CommunityDirectConversationResponse(BaseModel):
+    id: str
+    counterpart_username: str
+    counterpart_display_name: str
+    counterpart_avatar_seed: str
+    counterpart_avatar_url: str | None = None
+    last_message_at: datetime | None = None
+    unread_count: int
+    last_read_sequence: int
+    archived_at: datetime | None = None
+    muted_until: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommunityDirectConversationCreateResponse(BaseModel):
+    conversation: CommunityDirectConversationResponse
+    created: bool
+
+
+class CommunityDirectConversationListResponse(BaseModel):
+    items: list[CommunityDirectConversationResponse]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class CommunityDirectMessageResponse(BaseModel):
+    id: str
+    conversation_id: str
+    sender_username: str
+    body: str
+    sequence: int
+    created_at: datetime
+
+
+class CommunityDirectMessageListResponse(BaseModel):
+    items: list[CommunityDirectMessageResponse]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class CommunityDirectReadStateResponse(BaseModel):
+    conversation_id: str
+    last_read_sequence: int
+    unread_count: int
+
+
+class CommunityDirectMemberStateResponse(BaseModel):
+    conversation_id: str
+    archived_at: datetime | None = None
+    muted_until: datetime | None = None
+
+
 class CommunityNotificationResponse(BaseModel):
     id: str
     kind: CommunityNotificationKind

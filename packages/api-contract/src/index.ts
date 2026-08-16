@@ -1603,8 +1603,14 @@ export type CommunityNotificationKind =
   | "like_summary"
   | "group_application"
   | "group_decision"
-  | "group_role_change";
-export type CommunityNotificationSource = "post" | "comment" | "user" | "group";
+  | "group_role_change"
+  | "direct_message";
+export type CommunityNotificationSource =
+  | "post"
+  | "comment"
+  | "user"
+  | "group"
+  | "direct_message";
 export type CommunityNotificationOutboxStatus = "pending" | "delivered" | "failed";
 export type CommunityActivityFeed = "latest" | "following" | "groups";
 export type CommunityActivityKind =
@@ -1889,6 +1895,77 @@ export interface CommunityBookmarkListResponse {
   items: CommunityBookmarkItem[];
   next_cursor: string | null;
   has_more: boolean;
+}
+
+export interface CommunityDirectConversationCreateRequest {
+  recipient_username: string;
+}
+
+export interface CommunityDirectMessageCreateRequest {
+  body: string;
+  client_message_id: string;
+}
+
+export interface CommunityDirectReadStateUpdateRequest {
+  last_read_sequence: number;
+}
+
+export interface CommunityDirectMemberStateUpdateRequest {
+  archived?: boolean | null;
+  muted_until?: string | null;
+}
+
+export interface CommunityDirectConversationResponse {
+  id: string;
+  counterpart_username: string;
+  counterpart_display_name: string;
+  counterpart_avatar_seed: string;
+  counterpart_avatar_url: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+  last_read_sequence: number;
+  archived_at: string | null;
+  muted_until: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommunityDirectConversationCreateResponse {
+  conversation: CommunityDirectConversationResponse;
+  created: boolean;
+}
+
+export interface CommunityDirectConversationListResponse {
+  items: CommunityDirectConversationResponse[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface CommunityDirectMessageResponse {
+  id: string;
+  conversation_id: string;
+  sender_username: string;
+  body: string;
+  sequence: number;
+  created_at: string;
+}
+
+export interface CommunityDirectMessageListResponse {
+  items: CommunityDirectMessageResponse[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface CommunityDirectReadStateResponse {
+  conversation_id: string;
+  last_read_sequence: number;
+  unread_count: number;
+}
+
+export interface CommunityDirectMemberStateResponse {
+  conversation_id: string;
+  archived_at: string | null;
+  muted_until: string | null;
 }
 
 export interface CommunityNotificationResponse {
