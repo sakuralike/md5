@@ -11,6 +11,8 @@ from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
+    CommunityDirectEvent,
+    CommunityDirectEventType,
     CommunityDirectMessage,
     CommunityInteractionPolicy,
     CommunityNotification,
@@ -316,6 +318,7 @@ def test_send_direct_message_encrypts_storage_replays_and_hides_plaintext(client
     _register_login(client, "dm_send_bob")
     with client.app.state.database.session_factory() as db:
         alice = _principal(db, "dm_send_alice")
+        bob = _principal(db, "dm_send_bob")
         _set_message_policy(
             db,
             username="dm_send_bob",
@@ -376,6 +379,31 @@ def test_send_direct_message_encrypts_storage_replays_and_hides_plaintext(client
         assert notification.preview == "你收到一条新私信"
         assert "合成私信" not in notification.preview
 
+        events = db.scalars(
+            select(CommunityDirectEvent).order_by(
+                CommunityDirectEvent.recipient_id,
+                CommunityDirectEvent.sequence,
+            )
+        ).all()
+        alice_events = [event for event in events if event.recipient_id == alice.user.id]
+        bob_events = [event for event in events if event.recipient_id == bob.user.id]
+        assert [event.event_type for event in alice_events] == [
+            CommunityDirectEventType.MESSAGE_CREATED
+        ]
+        assert [event.sequence for event in alice_events] == [1]
+        assert [event.event_type for event in bob_events] == [
+            CommunityDirectEventType.MESSAGE_CREATED,
+            CommunityDirectEventType.UNREAD_CHANGED,
+        ]
+        assert [event.sequence for event in bob_events] == [1, 2]
+        assert bob_events[0].message_id == sent.id
+        assert bob_events[0].payload["message_sequence"] == 1
+        assert bob_events[1].payload["conversation_unread_count"] == 1
+        assert bob_events[1].payload["total_unread_count"] == 1
+        assert {"body", "ciphertext", "nonce", "key_version"}.isdisjoint(
+            bob_events[0].payload
+        )
+
 
 def test_direct_message_access_read_state_and_member_state_are_private(client) -> None:
     _register_login(client, "dm_state_alice")
@@ -416,7 +444,44 @@ def test_direct_message_access_read_state_and_member_state_are_private(client) -
             conversation_id=conversation.id,
             payload=CommunityDirectReadStateUpdateRequest(last_read_sequence=0),
         )
+        message_page = list_direct_messages(
+            db,
+            principal=bob,
+            conversation_id=conversation.id,
+            cursor=None,
+            limit=20,
+            settings=client.app.state.settings,
+        )
         assert read.last_read_sequence == unchanged.last_read_sequence == 1
+        assert read.unread_count == unchanged.unread_count == 0
+        assert message_page.last_read_sequence == 1
+        assert message_page.counterpart_last_read_sequence == 0
+        assert message_page.unread_count == 0
+
+        events = db.scalars(
+            select(CommunityDirectEvent).order_by(
+                CommunityDirectEvent.recipient_id,
+                CommunityDirectEvent.sequence,
+            )
+        ).all()
+        alice_events = [event for event in events if event.recipient_id == alice.user.id]
+        bob_events = [event for event in events if event.recipient_id == bob.user.id]
+        assert [event.event_type for event in alice_events] == [
+            CommunityDirectEventType.MESSAGE_CREATED,
+            CommunityDirectEventType.CONVERSATION_READ,
+        ]
+        assert [event.sequence for event in alice_events] == [1, 2]
+        assert [event.event_type for event in bob_events] == [
+            CommunityDirectEventType.MESSAGE_CREATED,
+            CommunityDirectEventType.UNREAD_CHANGED,
+            CommunityDirectEventType.CONVERSATION_READ,
+            CommunityDirectEventType.UNREAD_CHANGED,
+        ]
+        assert [event.sequence for event in bob_events] == [1, 2, 3, 4]
+        assert alice_events[1].payload["reader_id"] == bob.user.id
+        assert alice_events[1].payload["last_read_sequence"] == 1
+        assert bob_events[-1].payload["conversation_unread_count"] == 0
+        assert bob_events[-1].payload["total_unread_count"] == 0
 
         update_direct_member_state(
             db,

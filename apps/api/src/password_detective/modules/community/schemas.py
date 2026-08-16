@@ -355,6 +355,9 @@ class CommunityDirectMessageListResponse(BaseModel):
     items: list[CommunityDirectMessageResponse]
     next_cursor: str | None = None
     has_more: bool = False
+    last_read_sequence: int
+    counterpart_last_read_sequence: int
+    unread_count: int
 
 
 class CommunityDirectReadStateResponse(BaseModel):
