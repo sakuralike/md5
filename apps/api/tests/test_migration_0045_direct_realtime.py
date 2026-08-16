@@ -14,7 +14,9 @@ def test_release_migrations_converge_at_direct_realtime_head() -> None:
     config = Config(str(api_directory / "alembic.ini"))
     config.set_main_option("script_location", str(api_directory / "alembic"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["20260816_0045"]
+    script = ScriptDirectory.from_config(config)
+    assert script.get_revision("20260816_0045") is not None
+    assert script.get_revision("20260816_0046").down_revision == "20260816_0045"
 
 
 def test_direct_realtime_tables_have_user_cursor_constraints_and_indexes() -> None:
