@@ -268,3 +268,34 @@ def test_replay_and_rebuild_converge_on_the_same_document_set(client):
     assert incremental.delivered >= 1
     assert document is not None
     assert rebuilt.mismatch_count == 0
+
+
+def test_public_search_returns_dispatched_public_post_projection(client):
+    from password_detective.modules.community.search_index import dispatch_pending_search_events
+
+    author = register_and_login(
+        client,
+        username="search_public_author",
+        email="search-public-author@synthetic.example.com",
+    )
+    created = client.post(
+        "/api/v1/community/posts",
+        json={
+            "board_code": "general",
+            "title": "public projection recovery guide",
+            "content": "Synthetic public search document content.",
+            "rules_accepted": True,
+        },
+        headers=request_headers(author, "search-public-projection-post"),
+    )
+    assert created.status_code == 201, created.text
+    with client.app.state.database.session_factory() as db:
+        assert dispatch_pending_search_events(db).delivered >= 1
+
+    response = client.get(
+        "/api/v1/community/search",
+        params={"q": "projection", "types": "post"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["source_id"] == created.json()["id"]

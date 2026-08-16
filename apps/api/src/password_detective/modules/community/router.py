@@ -23,6 +23,7 @@ from password_detective.db.models.community import (
     CommunityActivityFeed,
     CommunityGroupRole,
     CommunityNotificationKind,
+    CommunitySearchSource,
 )
 from password_detective.modules.auth.context import ClientContext, get_client_context
 from password_detective.modules.auth.dependencies import (
@@ -85,7 +86,9 @@ from password_detective.modules.community.schemas import (
     CommunityRelationshipMutationResponse,
     CommunityReportCreateRequest,
     CommunityReportResponse,
+    CommunitySearchResponse,
 )
+from password_detective.modules.community.search_service import search_community
 from password_detective.modules.community.service import (
     create_comment,
     create_post,
@@ -126,6 +129,29 @@ def community_boards(
     db: Annotated[Session, Depends(get_db)],
 ) -> CommunityBoardListResponse:
     return list_boards(db)
+
+
+@router.get(
+    "/search",
+    response_model=CommunitySearchResponse,
+    dependencies=[Depends(rate_limit("community.search", limit=30, window_seconds=60))],
+)
+def community_search(
+    q: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    types: Annotated[list[CommunitySearchSource] | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=20)] = 20,
+) -> CommunitySearchResponse:
+    return search_community(
+        db,
+        query=q,
+        source_types=tuple(types or ()),
+        page=page,
+        page_size=page_size,
+        principal=principal,
+    )
 
 
 @router.get("/home", response_model=CommunityHomeResponse)
