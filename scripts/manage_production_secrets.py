@@ -23,6 +23,8 @@ REQUIRED_FILES = (
     "candidate_secret_key_version",
     "candidate_secret_keyring",
     "candidate_secret_dedup_key",
+    "direct_message_key_version",
+    "direct_message_keyring",
     "mysql_password",
     "mysql_root_password",
     "redis_password",
@@ -97,6 +99,7 @@ def build_initial_bundle(candidate_version: str = "v1") -> dict[str, str]:
         raise SecretBundleError("候选秘密密钥版本格式无效")
     app_secret = _random_secret()
     candidate_secret = _random_secret()
+    direct_message_secret = _random_secret()
     dedup_secret = _random_secret()
     mysql_password = _random_secret()
     mysql_root_password = _random_secret()
@@ -108,6 +111,10 @@ def build_initial_bundle(candidate_version: str = "v1") -> dict[str, str]:
             {candidate_version: candidate_secret}, ensure_ascii=False, separators=(",", ":")
         ),
         "candidate_secret_dedup_key": dedup_secret,
+        "direct_message_key_version": candidate_version,
+        "direct_message_keyring": json.dumps(
+            {candidate_version: direct_message_secret}, ensure_ascii=False, separators=(",", ":")
+        ),
         "mysql_password": mysql_password,
         "mysql_root_password": mysql_root_password,
         "redis_password": redis_password,
@@ -139,6 +146,7 @@ def initialize_bundle(directory: Path, candidate_version: str = "v1") -> dict[st
         "status": "initialized",
         "directory": str(directory.resolve()),
         "candidate_secret_key_version": candidate_version,
+        "direct_message_key_version": candidate_version,
         "managed_file_count": len(ALL_FILES),
     }
 
@@ -174,6 +182,27 @@ def verify_bundle(directory: Path) -> dict[str, object]:
         if not isinstance(value, str) or len(value) < 32:
             raise SecretBundleError("candidate_secret_keyring 的每个密钥至少需要 32 个字符")
 
+    direct_message_version = values["direct_message_key_version"]
+    if not KEY_VERSION_PATTERN.fullmatch(direct_message_version):
+        raise SecretBundleError("direct_message_key_version 格式无效")
+    try:
+        direct_message_keyring = json.loads(values["direct_message_keyring"])
+    except json.JSONDecodeError as exc:
+        raise SecretBundleError("direct_message_keyring 不是有效 JSON") from exc
+    if not isinstance(direct_message_keyring, dict) or not direct_message_keyring or len(direct_message_keyring) > 8:
+        raise SecretBundleError("direct_message_keyring 必须包含 1 到 8 个版本")
+    if direct_message_version not in direct_message_keyring:
+        raise SecretBundleError("当前私信密钥版本不在密钥环中")
+    for key, value in direct_message_keyring.items():
+        if not isinstance(key, str) or not KEY_VERSION_PATTERN.fullmatch(key):
+            raise SecretBundleError("direct_message_keyring 包含无效版本")
+        if not isinstance(value, str) or len(value) < 32:
+            raise SecretBundleError("direct_message_keyring 的每个密钥至少需要 32 个字符")
+    if set(direct_message_keyring.values()) & set(keyring.values()):
+        raise SecretBundleError("私信密钥环必须独立于候选秘密密钥环")
+    if values["app_secret_key"] in direct_message_keyring.values():
+        raise SecretBundleError("私信密钥不得复用应用主秘密")
+
     for name in ("app_secret_key", "candidate_secret_dedup_key", "mysql_password", "mysql_root_password", "redis_password"):
         if len(values[name]) < 32:
             raise SecretBundleError(f"秘密项长度不足: {name}")
@@ -192,6 +221,8 @@ def verify_bundle(directory: Path) -> dict[str, object]:
         "directory": str(directory.resolve()),
         "candidate_secret_key_version": version,
         "candidate_secret_key_versions": sorted(keyring),
+        "direct_message_key_version": direct_message_version,
+        "direct_message_key_versions": sorted(direct_message_keyring),
         "managed_file_count": len(values),
     }
 

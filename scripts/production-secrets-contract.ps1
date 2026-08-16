@@ -47,6 +47,8 @@ try {
         "DATABASE_URL_FILE: /run/secrets/database_url",
         "REDIS_URL_FILE: /run/secrets/redis_url",
         "CANDIDATE_SECRET_KEYRING_FILE: /run/secrets/candidate_secret_keyring",
+        "DIRECT_MESSAGE_KEY_VERSION_FILE: /run/secrets/direct_message_key_version",
+        "DIRECT_MESSAGE_KEYRING_FILE: /run/secrets/direct_message_keyring",
         "MYSQL_PASSWORD_FILE: /run/secrets/mysql_password",
         "source: redis_password"
     )

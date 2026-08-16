@@ -38,12 +38,34 @@ def test_initialize_and_verify_production_secret_bundle(tmp_path: Path) -> None:
     assert verified["status"] == "valid"
     assert verified["candidate_secret_key_version"] == "v1"
     assert verified["candidate_secret_key_versions"] == ["v1"]
+    assert verified["direct_message_key_version"] == "v1"
+    assert verified["direct_message_key_versions"] == ["v1"]
+    direct_keyring = json.loads((directory / "direct_message_keyring").read_text(encoding="utf-8"))
+    candidate_keyring = json.loads((directory / "candidate_secret_keyring").read_text(encoding="utf-8"))
+    assert direct_keyring["v1"] != candidate_keyring["v1"]
+    assert direct_keyring["v1"] != (directory / "app_secret_key").read_text(encoding="utf-8")
     assert "password_detective_local" not in (directory / "database_url").read_text(
         encoding="utf-8"
     )
     if os.name != "nt":
         assert directory.stat().st_mode & 0o077 == 0
         assert all((directory / name).stat().st_mode & 0o077 == 0 for name in os.listdir(directory))
+
+
+def test_direct_message_keyring_cannot_reuse_candidate_secret(tmp_path: Path) -> None:
+    directory = tmp_path / "secrets"
+    initialize_bundle(directory)
+    candidate_keyring = json.loads(
+        (directory / "candidate_secret_keyring").read_text(encoding="utf-8")
+    )
+    reused_secret = candidate_keyring["v1"]
+    (directory / "direct_message_keyring").write_text(
+        json.dumps({"v1": reused_secret, "legacy": "d" * 48}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SecretBundleError, match="必须独立"):
+        verify_bundle(directory)
 
 
 def test_encrypted_backup_does_not_expose_plaintext_and_restores(tmp_path: Path) -> None:

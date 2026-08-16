@@ -14,6 +14,8 @@ def test_base_compose_exposes_file_setting_hooks_for_all_app_processes() -> None
     assert sum(line.strip().startswith("REDIS_URL_FILE:") for line in lines) == 3
     assert sum(line.strip().startswith("CANDIDATE_SECRET_KEYRING_FILE:") for line in lines) == 3
     assert sum(line.strip().startswith("CANDIDATE_SECRET_DEDUP_KEY_FILE:") for line in lines) == 3
+    assert sum(line.strip().startswith("DIRECT_MESSAGE_KEY_VERSION_FILE:") for line in lines) == 3
+    assert sum(line.strip().startswith("DIRECT_MESSAGE_KEYRING_FILE:") for line in lines) == 3
 
 
 def test_production_override_clears_direct_secrets_and_mounts_file_secrets() -> None:
@@ -24,6 +26,8 @@ def test_production_override_clears_direct_secrets_and_mounts_file_secrets() -> 
         "CANDIDATE_SECRET_KEY_VERSION",
         "CANDIDATE_SECRET_KEYRING",
         "CANDIDATE_SECRET_DEDUP_KEY",
+        "DIRECT_MESSAGE_KEY_VERSION",
+        "DIRECT_MESSAGE_KEYRING",
         "NOTIFICATION_WEBHOOK_SECRET",
         "NOTIFICATION_SMTP_PASSWORD",
     ):
@@ -50,4 +54,6 @@ def test_api_image_copies_root_only_secret_mounts_then_drops_privileges() -> Non
     assert "RUNTIME_SECRET_DIR=/run/password-detective-secrets" in entrypoint
     assert 'chmod 0400 "$destination"' in entrypoint
     assert 'exec su-exec app "$@"' in entrypoint
+    assert "DIRECT_MESSAGE_KEY_VERSION_FILE" in entrypoint
+    assert "DIRECT_MESSAGE_KEYRING_FILE" in entrypoint
     assert "/run/password-detective-secrets:mode=0700" in OVERRIDE
