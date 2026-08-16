@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from redis.exceptions import RedisError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings, get_settings
@@ -22,6 +25,8 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.community import (
     CommunityActivityFeed,
+    CommunityDirectConversation,
+    CommunityDirectStreamPosition,
     CommunityGroupRole,
     CommunityNotificationKind,
     CommunitySearchSource,
@@ -37,6 +42,9 @@ from password_detective.modules.community.activity_service import (
     get_activity_preferences,
     list_activity,
     update_activity_preferences,
+)
+from password_detective.modules.community.direct_message_realtime import (
+    publish_direct_message_wakeups,
 )
 from password_detective.modules.community.direct_message_service import (
     create_direct_conversation,
@@ -143,6 +151,8 @@ from password_detective.modules.community.service import (
 )
 from password_detective.modules.site.assets import store_community_avatar
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/community", tags=["community"])
 
 
@@ -222,7 +232,7 @@ def community_direct_message_create(
     settings: Annotated[Settings, Depends(get_settings)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> CommunityDirectMessageResponse:
-    return _mutate_with_idempotency(
+    response = _mutate_with_idempotency(
         db,
         scope="community.direct.send",
         idempotency_key=idempotency_key,
@@ -238,6 +248,12 @@ def community_direct_message_create(
             settings=settings,
         ),
     )
+    _publish_direct_conversation_wakeups(
+        db,
+        redis_url=settings.redis_url,
+        conversation_id=conversation_id,
+    )
+    return response
 
 
 @router.patch(
@@ -249,9 +265,10 @@ def community_direct_read_state_update(
     payload: CommunityDirectReadStateUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> CommunityDirectReadStateResponse:
-    return _mutate_with_idempotency(
+    response = _mutate_with_idempotency(
         db,
         scope="community.direct.read_state",
         idempotency_key=idempotency_key,
@@ -266,6 +283,12 @@ def community_direct_read_state_update(
             payload=payload,
         ),
     )
+    _publish_direct_conversation_wakeups(
+        db,
+        redis_url=settings.redis_url,
+        conversation_id=conversation_id,
+    )
+    return response
 
 
 @router.patch(
@@ -1425,6 +1448,36 @@ def community_report_create(
         response_type=CommunityReportResponse,
         create=lambda: create_report(db, payload=payload, principal=principal),
     )
+
+
+def _publish_direct_conversation_wakeups(
+    db: Session,
+    *,
+    redis_url: str,
+    conversation_id: str,
+) -> None:
+    conversation = db.get(CommunityDirectConversation, conversation_id)
+    if conversation is None:
+        return
+    participant_ids = (
+        conversation.participant_low_id,
+        conversation.participant_high_id,
+    )
+    user_sequences = {
+        user_id: int(sequence)
+        for user_id, sequence in db.execute(
+            select(
+                CommunityDirectStreamPosition.user_id,
+                CommunityDirectStreamPosition.last_sequence,
+            ).where(CommunityDirectStreamPosition.user_id.in_(participant_ids))
+        )
+    }
+    if not user_sequences:
+        return
+    try:
+        publish_direct_message_wakeups(redis_url, user_sequences)
+    except RedisError:
+        logger.warning("Direct message Redis wakeup failed after commit", exc_info=True)
 
 
 def _mutate_with_idempotency[ResponseModel: BaseModel](

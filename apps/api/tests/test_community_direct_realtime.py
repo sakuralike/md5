@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import asyncio
+
+from redis.exceptions import RedisError
 from sqlalchemy import select
 
+from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
     CommunityDirectEvent,
     CommunityDirectEventType,
     CommunityDirectMessage,
+    CommunityInteractionPolicy,
+    CommunityPublicProfile,
 )
 from password_detective.db.models.user import User
+from password_detective.modules.community import router as community_router
 from password_detective.modules.community.direct_message_events import (
     DirectEventDraft,
     append_direct_events,
@@ -18,6 +25,11 @@ from password_detective.modules.community.direct_message_events import (
     list_direct_events,
     resolve_direct_stream_cursor,
     total_direct_unread_count,
+)
+from password_detective.modules.community.direct_message_realtime import (
+    DirectStreamWakeSubscription,
+    direct_stream_channel,
+    publish_direct_message_wakeups,
 )
 
 
@@ -224,3 +236,169 @@ def test_unread_counts_exclude_messages_sent_by_the_reader(client) -> None:
             db, user_id=alice.id, conversation_id=conversation.id
         ) == 0
         assert total_direct_unread_count(db, user_id=alice.id) == 0
+
+class _FakePublishClient:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, str]] = []
+        self.closed = False
+
+    def publish(self, channel: str, payload: str) -> None:
+        self.published.append((channel, payload))
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeAsyncPubSub:
+    def __init__(self) -> None:
+        self.messages = [None, {"type": "message", "data": '{"max_sequence":12}'}]
+        self.subscribed: list[str] = []
+        self.unsubscribed: list[str] = []
+        self.closed = False
+
+    async def subscribe(self, channel: str) -> None:
+        self.subscribed.append(channel)
+
+    async def get_message(self, **_kwargs):
+        return self.messages.pop(0)
+
+    async def unsubscribe(self, channel: str) -> None:
+        self.unsubscribed.append(channel)
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class _FakeAsyncClient:
+    def __init__(self, pubsub: _FakeAsyncPubSub) -> None:
+        self._pubsub = pubsub
+        self.closed = False
+
+    def pubsub(self) -> _FakeAsyncPubSub:
+        return self._pubsub
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def _register_verified_login(client, username: str) -> dict[str, str]:
+    password = "SyntheticPass123!"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": password,
+        },
+    )
+    assert registered.status_code == 201
+    with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        assert user is not None
+        user.email_verified_at = utc_now()
+        db.commit()
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"login": username, "password": password},
+    )
+    assert login.status_code == 200
+    return login.json()
+
+
+def test_publish_uses_user_channel_without_sensitive_payload() -> None:
+    fake = _FakePublishClient()
+
+    publish_direct_message_wakeups(
+        "redis://synthetic",
+        {"user-b": 7, "user-a": 12},
+        client_factory=lambda *_args, **_kwargs: fake,
+    )
+
+    assert direct_stream_channel("user-a") == "community:direct-stream:user:user-a"
+    assert fake.published == [
+        ("community:direct-stream:user:user-a", '{"max_sequence":12}'),
+        ("community:direct-stream:user:user-b", '{"max_sequence":7}'),
+    ]
+    assert all("body" not in payload for _, payload in fake.published)
+    assert fake.closed is True
+
+
+def test_wake_subscription_connects_to_user_channel_and_closes_client() -> None:
+    pubsub = _FakeAsyncPubSub()
+    client = _FakeAsyncClient(pubsub)
+    subscription = asyncio.run(
+        DirectStreamWakeSubscription.connect(
+            "redis://synthetic",
+            user_id="user-a",
+            client_factory=lambda *_args, **_kwargs: client,
+        )
+    )
+
+    assert pubsub.subscribed == ["community:direct-stream:user:user-a"]
+    asyncio.run(subscription.close())
+    assert client.closed is True
+
+
+def test_wake_subscription_waits_and_closes_user_channel() -> None:
+    pubsub = _FakeAsyncPubSub()
+    subscription = DirectStreamWakeSubscription(user_id="user-a", pubsub=pubsub)
+
+    assert asyncio.run(subscription.wait(0.01)) is False
+    assert asyncio.run(subscription.wait(0.01)) is True
+    asyncio.run(subscription.close())
+
+    assert pubsub.unsubscribed == ["community:direct-stream:user:user-a"]
+    assert pubsub.closed is True
+
+
+def test_redis_publish_failure_does_not_change_committed_message(client, monkeypatch) -> None:
+    alice = _register_verified_login(client, "direct_redis_alice")
+    bob = _register_verified_login(client, "direct_redis_bob")
+    with client.app.state.database.session_factory() as db:
+        bob_user = db.scalar(select(User).where(User.username == "direct_redis_bob"))
+        assert bob_user is not None
+        profile = db.get(CommunityPublicProfile, bob_user.id)
+        if profile is None:
+            profile = CommunityPublicProfile(
+                user_id=bob_user.id,
+                display_name=bob_user.username,
+                avatar_seed=bob_user.id.replace("-", "")[:24].ljust(24, "0"),
+            )
+            db.add(profile)
+        profile.message_policy = CommunityInteractionPolicy.EVERYONE
+        db.commit()
+
+    created = client.post(
+        "/api/v1/community/direct-conversations",
+        json={"recipient_username": "direct_redis_bob"},
+        headers={
+            "Authorization": f"Bearer {alice['access_token']}",
+            "Idempotency-Key": "direct-redis-conversation-1",
+        },
+    )
+    assert created.status_code == 201, created.text
+    conversation_id = created.json()["conversation"]["id"]
+
+    def raise_redis_error(*_args, **_kwargs) -> None:
+        raise RedisError("synthetic Redis outage")
+
+    monkeypatch.setattr(community_router, "publish_direct_message_wakeups", raise_redis_error)
+    sent = client.post(
+        f"/api/v1/community/direct-conversations/{conversation_id}/messages",
+        json={
+            "body": "仅用于 Redis 故障隔离测试的合成私信",
+            "client_message_id": "direct-redis-message-1",
+        },
+        headers={
+            "Authorization": f"Bearer {alice['access_token']}",
+            "Idempotency-Key": "direct-redis-message-http-1",
+        },
+    )
+    assert sent.status_code == 201, sent.text
+
+    listed = client.get(
+        f"/api/v1/community/direct-conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {bob['access_token']}"},
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["items"][0]["body"] == "仅用于 Redis 故障隔离测试的合成私信"
