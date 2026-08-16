@@ -37,6 +37,17 @@ def get_current_principal(
     return _resolve_principal(request, credentials.credentials, db, settings)
 
 
+def get_current_stream_principal(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    db: Annotated[Session, Depends(get_db, scope="function")],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Principal:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise AppError("auth.authentication_required", "需要登录", status_code=401)
+    return _resolve_principal(request, credentials.credentials, db, settings)
+
+
 def get_optional_principal(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
