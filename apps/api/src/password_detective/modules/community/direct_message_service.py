@@ -18,6 +18,7 @@ from password_detective.core.time import utc_now
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
+    CommunityDirectEventType,
     CommunityDirectMessage,
     CommunityInteractionPolicy,
     CommunityNotificationKind,
@@ -28,6 +29,12 @@ from password_detective.db.models.community import (
 )
 from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.community.direct_message_events import (
+    DirectEventDraft,
+    append_direct_events,
+    conversation_unread_count,
+    total_direct_unread_count,
+)
 from password_detective.modules.community.schemas import (
     CommunityDirectConversationCreateRequest,
     CommunityDirectConversationCreateResponse,
@@ -509,6 +516,52 @@ def send_direct_message(
         create_when_disabled=True,
     )
     db.flush()
+
+    event_at = utc_now()
+    message_payload = {
+        "message_sequence": message.sequence,
+        "sender_id": sender.id,
+        "created_at": message.created_at.isoformat(),
+    }
+    recipient_conversation_unread = conversation_unread_count(
+        db,
+        user_id=recipient.id,
+        conversation_id=locked.id,
+    )
+    recipient_total_unread = total_direct_unread_count(db, user_id=recipient.id)
+    append_direct_events(
+        db,
+        drafts=[
+            DirectEventDraft(
+                recipient_id=sender.id,
+                event_type=CommunityDirectEventType.MESSAGE_CREATED,
+                conversation_id=locked.id,
+                actor_id=sender.id,
+                message_id=message.id,
+                payload=message_payload,
+            ),
+            DirectEventDraft(
+                recipient_id=recipient.id,
+                event_type=CommunityDirectEventType.MESSAGE_CREATED,
+                conversation_id=locked.id,
+                actor_id=sender.id,
+                message_id=message.id,
+                payload=message_payload,
+            ),
+            DirectEventDraft(
+                recipient_id=recipient.id,
+                event_type=CommunityDirectEventType.UNREAD_CHANGED,
+                conversation_id=locked.id,
+                actor_id=sender.id,
+                message_id=message.id,
+                payload={
+                    "conversation_unread_count": recipient_conversation_unread,
+                    "total_unread_count": recipient_total_unread,
+                    "changed_at": event_at.isoformat(),
+                },
+            ),
+        ],
+    )
     return _message_response(db, message=message, vault=vault)
 
 
@@ -538,10 +591,24 @@ def list_direct_messages(
     has_more = len(messages) > page_size
     page = messages[:page_size]
     vault = build_direct_message_vault(settings or get_settings())
+    member = _get_member(db, conversation_id=conversation.id, user_id=user.id)
+    counterpart = _counterpart_user(db, conversation=conversation, user_id=user.id)
+    counterpart_member = _get_member(
+        db,
+        conversation_id=conversation.id,
+        user_id=counterpart.id,
+    )
     return CommunityDirectMessageListResponse(
         items=[_message_response(db, message=message, vault=vault) for message in page],
         next_cursor=_encode_message_cursor(page[-1].sequence) if has_more and page else None,
         has_more=has_more,
+        last_read_sequence=member.last_read_sequence,
+        counterpart_last_read_sequence=counterpart_member.last_read_sequence,
+        unread_count=conversation_unread_count(
+            db,
+            user_id=user.id,
+            conversation_id=conversation.id,
+        ),
     )
 
 
@@ -555,31 +622,93 @@ def update_direct_read_state(
     user = _active_user(db, principal.user.id)
     conversation = _get_member_conversation(db, conversation_id=conversation_id, user_id=user.id)
     _require_existing_conversation_access(db, conversation=conversation, user_id=user.id)
-    member = _get_member(db, conversation_id=conversation.id, user_id=user.id)
+    locked = db.scalar(
+        select(CommunityDirectConversation)
+        .where(CommunityDirectConversation.id == conversation.id)
+        .with_for_update()
+    )
+    if locked is None:
+        raise AppError(
+            "DIRECT_MESSAGE_NOT_PARTICIPANT",
+            "无权访问该私信会话",
+            status_code=404,
+        )
+    member = db.scalar(
+        select(CommunityDirectConversationMember)
+        .where(
+            CommunityDirectConversationMember.conversation_id == locked.id,
+            CommunityDirectConversationMember.user_id == user.id,
+        )
+        .with_for_update()
+    )
+    if member is None:
+        raise AppError(
+            "DIRECT_MESSAGE_NOT_PARTICIPANT",
+            "无权访问该私信会话",
+            status_code=404,
+        )
     last_sequence = int(
         db.scalar(
             select(func.max(CommunityDirectMessage.sequence)).where(
-                CommunityDirectMessage.conversation_id == conversation.id
+                CommunityDirectMessage.conversation_id == locked.id
             )
         )
         or 0
     )
-    member.last_read_sequence = max(
-        member.last_read_sequence, min(payload.last_read_sequence, last_sequence)
-    )
+    previous_sequence = member.last_read_sequence
+    next_sequence = max(previous_sequence, min(payload.last_read_sequence, last_sequence))
+    member.last_read_sequence = next_sequence
     db.flush()
-    unread_count = int(
-        db.scalar(
-            select(func.count(CommunityDirectMessage.id)).where(
-                CommunityDirectMessage.conversation_id == conversation.id,
-                CommunityDirectMessage.sequence > member.last_read_sequence,
-                CommunityDirectMessage.sender_id != user.id,
-            )
-        )
-        or 0
+    unread_count = conversation_unread_count(
+        db,
+        user_id=user.id,
+        conversation_id=locked.id,
     )
+    if next_sequence > previous_sequence:
+        counterpart = _counterpart_user(db, conversation=locked, user_id=user.id)
+        event_at = utc_now()
+        read_payload = {
+            "reader_id": user.id,
+            "last_read_sequence": next_sequence,
+            "read_at": event_at.isoformat(),
+        }
+        append_direct_events(
+            db,
+            drafts=[
+                DirectEventDraft(
+                    recipient_id=user.id,
+                    event_type=CommunityDirectEventType.CONVERSATION_READ,
+                    conversation_id=locked.id,
+                    actor_id=user.id,
+                    message_id=None,
+                    payload=read_payload,
+                ),
+                DirectEventDraft(
+                    recipient_id=counterpart.id,
+                    event_type=CommunityDirectEventType.CONVERSATION_READ,
+                    conversation_id=locked.id,
+                    actor_id=user.id,
+                    message_id=None,
+                    payload=read_payload,
+                ),
+                DirectEventDraft(
+                    recipient_id=user.id,
+                    event_type=CommunityDirectEventType.UNREAD_CHANGED,
+                    conversation_id=locked.id,
+                    actor_id=user.id,
+                    message_id=None,
+                    payload={
+                        "conversation_unread_count": unread_count,
+                        "total_unread_count": total_direct_unread_count(
+                            db, user_id=user.id
+                        ),
+                        "changed_at": event_at.isoformat(),
+                    },
+                ),
+            ],
+        )
     return CommunityDirectReadStateResponse(
-        conversation_id=conversation.id,
+        conversation_id=locked.id,
         last_read_sequence=member.last_read_sequence,
         unread_count=unread_count,
     )
