@@ -30,6 +30,7 @@ from password_detective.modules.auth.context import ClientContext, get_client_co
 from password_detective.modules.auth.dependencies import (
     Principal,
     get_current_principal,
+    get_current_stream_principal,
     get_optional_principal,
 )
 from password_detective.modules.community.activity_service import (
@@ -885,7 +886,7 @@ def community_notifications(
 )
 async def community_notification_stream(
     request: Request,
-    principal: Annotated[Principal, Depends(get_current_principal)],
+    principal: Annotated[Principal, Depends(get_current_stream_principal)],
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
     return StreamingResponse(
