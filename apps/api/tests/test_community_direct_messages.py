@@ -459,3 +459,48 @@ def test_direct_message_access_read_state_and_member_state_are_private(client) -
                 settings=client.app.state.settings,
             ),
         )
+
+def test_direct_message_router_requires_auth_idempotency_and_enforces_membership(client) -> None:
+    assert client.get("/api/v1/community/direct-conversations").status_code == 401
+    alice = _register_login(client, "dm_router_alice")
+    bob = _register_login(client, "dm_router_bob")
+    missing_key = client.post(
+        "/api/v1/community/direct-conversations",
+        json={"recipient_username": "dm_router_bob"},
+        headers={"Authorization": f"Bearer {alice['access_token']}"},
+    )
+    assert missing_key.status_code == 400
+    assert missing_key.json()["code"] == "request.invalid_idempotency_key"
+    with client.app.state.database.session_factory() as db:
+        _set_message_policy(
+            db,
+            username="dm_router_bob",
+            policy=CommunityInteractionPolicy.EVERYONE,
+        )
+        db.commit()
+    created = client.post(
+        "/api/v1/community/direct-conversations",
+        json={"recipient_username": "dm_router_bob"},
+        headers={
+            "Authorization": f"Bearer {alice['access_token']}",
+            "Idempotency-Key": "dm-router-conversation-1",
+        },
+    )
+    assert created.status_code == 201, created.text
+    conversation_id = created.json()["conversation"]["id"]
+    sent = client.post(
+        f"/api/v1/community/direct-conversations/{conversation_id}/messages",
+        json={"body": "仅用于路由测试的合成正文", "client_message_id": "dm-router-message-1"},
+        headers={
+            "Authorization": f"Bearer {alice['access_token']}",
+            "Idempotency-Key": "dm-router-message-http-1",
+        },
+    )
+    assert sent.status_code == 201, sent.text
+    assert sent.json()["body"] == "仅用于路由测试的合成正文"
+    listed = client.get(
+        f"/api/v1/community/direct-conversations/{conversation_id}/messages",
+        headers={"Authorization": f"Bearer {bob['access_token']}"},
+    )
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["body"] == "仅用于路由测试的合成正文"

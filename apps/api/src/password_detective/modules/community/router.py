@@ -37,6 +37,14 @@ from password_detective.modules.community.activity_service import (
     list_activity,
     update_activity_preferences,
 )
+from password_detective.modules.community.direct_message_service import (
+    create_direct_conversation,
+    list_direct_conversations,
+    list_direct_messages,
+    send_direct_message,
+    update_direct_member_state,
+    update_direct_read_state,
+)
 from password_detective.modules.community.group_service import (
     change_member_role,
     create_group,
@@ -62,6 +70,16 @@ from password_detective.modules.community.schemas import (
     CommunityCommentLikeResponse,
     CommunityCommentListResponse,
     CommunityCommentUpdateRequest,
+    CommunityDirectConversationCreateRequest,
+    CommunityDirectConversationCreateResponse,
+    CommunityDirectConversationListResponse,
+    CommunityDirectMemberStateResponse,
+    CommunityDirectMemberStateUpdateRequest,
+    CommunityDirectMessageCreateRequest,
+    CommunityDirectMessageListResponse,
+    CommunityDirectMessageResponse,
+    CommunityDirectReadStateResponse,
+    CommunityDirectReadStateUpdateRequest,
     CommunityGroupCreateRequest,
     CommunityGroupDetail,
     CommunityGroupListResponse,
@@ -126,6 +144,155 @@ from password_detective.modules.site.assets import store_community_avatar
 
 router = APIRouter(prefix="/community", tags=["community"])
 
+
+@router.post(
+    "/direct-conversations",
+    response_model=CommunityDirectConversationCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("community.direct.create", limit=20, window_seconds=3600))],
+)
+def community_direct_conversation_create(
+    payload: CommunityDirectConversationCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityDirectConversationCreateResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.direct.create",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        principal=principal,
+        response_type=CommunityDirectConversationCreateResponse,
+        create=lambda: create_direct_conversation(db, principal=principal, payload=payload),
+    )
+
+
+@router.get("/direct-conversations", response_model=CommunityDirectConversationListResponse)
+def community_direct_conversation_list(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    cursor: str | None = None,
+    include_archived: bool = False,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> CommunityDirectConversationListResponse:
+    return list_direct_conversations(
+        db,
+        principal=principal,
+        cursor=cursor,
+        include_archived=include_archived,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/direct-conversations/{conversation_id}/messages",
+    response_model=CommunityDirectMessageListResponse,
+)
+def community_direct_message_list(
+    conversation_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> CommunityDirectMessageListResponse:
+    return list_direct_messages(
+        db,
+        principal=principal,
+        conversation_id=conversation_id,
+        cursor=cursor,
+        limit=limit,
+        settings=settings,
+    )
+
+
+@router.post(
+    "/direct-conversations/{conversation_id}/messages",
+    response_model=CommunityDirectMessageResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("community.direct.send", limit=30, window_seconds=60))],
+)
+def community_direct_message_create(
+    conversation_id: str,
+    payload: CommunityDirectMessageCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityDirectMessageResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.direct.send",
+        idempotency_key=idempotency_key,
+        request_payload={"conversation_id": conversation_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityDirectMessageResponse,
+        create=lambda: send_direct_message(
+            db,
+            principal=principal,
+            conversation_id=conversation_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            settings=settings,
+        ),
+    )
+
+
+@router.patch(
+    "/direct-conversations/{conversation_id}/read-state",
+    response_model=CommunityDirectReadStateResponse,
+)
+def community_direct_read_state_update(
+    conversation_id: str,
+    payload: CommunityDirectReadStateUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityDirectReadStateResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.direct.read_state",
+        idempotency_key=idempotency_key,
+        request_payload={"conversation_id": conversation_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityDirectReadStateResponse,
+        response_status=status.HTTP_200_OK,
+        create=lambda: update_direct_read_state(
+            db,
+            principal=principal,
+            conversation_id=conversation_id,
+            payload=payload,
+        ),
+    )
+
+
+@router.patch(
+    "/direct-conversations/{conversation_id}/member-state",
+    response_model=CommunityDirectMemberStateResponse,
+)
+def community_direct_member_state_update(
+    conversation_id: str,
+    payload: CommunityDirectMemberStateUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityDirectMemberStateResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.direct.member_state",
+        idempotency_key=idempotency_key,
+        request_payload={"conversation_id": conversation_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityDirectMemberStateResponse,
+        response_status=status.HTTP_200_OK,
+        create=lambda: update_direct_member_state(
+            db,
+            principal=principal,
+            conversation_id=conversation_id,
+            payload=payload,
+        ),
+    )
 
 @router.get("/boards", response_model=CommunityBoardListResponse)
 def community_boards(
