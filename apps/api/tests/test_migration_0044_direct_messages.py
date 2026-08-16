@@ -13,12 +13,14 @@ from password_detective.db.models.community import (
 )
 
 
-def test_release_migrations_converge_at_direct_messages_head() -> None:
+def test_direct_messages_revision_remains_in_release_history() -> None:
     api_directory = Path(__file__).resolve().parents[1]
     config = Config(str(api_directory / "alembic.ini"))
     config.set_main_option("script_location", str(api_directory / "alembic"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["20260816_0044"]
+    script = ScriptDirectory.from_config(config)
+    assert script.get_revision("20260816_0044") is not None
+    assert script.get_revision("20260816_0045").down_revision == "20260816_0044"
 
 
 def test_direct_message_tables_have_canonical_pair_constraints_and_indexes() -> None:
