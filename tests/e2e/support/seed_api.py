@@ -39,7 +39,9 @@ from password_detective.db.models.community import (
     CommunityGroup,
     CommunityGroupStatus,
     CommunityGroupVisibility,
+    CommunityInteractionPolicy,
     CommunityPost,
+    CommunityPublicProfile,
     CommunitySearchSource,
 )
 from password_detective.db.models.password_candidate import (
@@ -108,6 +110,19 @@ def ensure_user(
         user.totp_enabled_at = utc_now()
     db.add(user)
     return user
+
+
+def ensure_direct_message_profile(db: Session, *, user: User) -> CommunityPublicProfile:
+    profile = db.get(CommunityPublicProfile, user.id)
+    if profile is None:
+        profile = CommunityPublicProfile(
+            user_id=user.id,
+            display_name=user.username,
+            avatar_seed=user.id.replace("-", "")[:24].ljust(24, "0"),
+        )
+        db.add(profile)
+    profile.message_policy = CommunityInteractionPolicy.EVERYONE
+    return profile
 
 
 def ensure_email_verification_token(
@@ -311,7 +326,7 @@ def ensure_community_search_fixtures(db: Session, *, author: User) -> None:
             name="E2E 社区搜索板块",
             description="浏览器验收用的公开社区搜索合成数据。",
             sort_order=999,
-            minimum_role="guest",
+            minimum_role=UserRole.USER.value,
             status=CommunityBoardStatus.ACTIVE,
             is_read_only=False,
         )
@@ -421,6 +436,15 @@ def main() -> None:
     privacy_username = os.environ["E2E_WEB_PRIVACY_USERNAME"]
     privacy_email = os.environ["E2E_WEB_PRIVACY_EMAIL"]
     privacy_password = os.environ["E2E_WEB_PRIVACY_PASSWORD"]
+    dm_sender_username = os.environ["E2E_WEB_DM_SENDER_USERNAME"]
+    dm_sender_email = os.environ["E2E_WEB_DM_SENDER_EMAIL"]
+    dm_sender_password = os.environ["E2E_WEB_DM_SENDER_PASSWORD"]
+    dm_recipient_username = os.environ["E2E_WEB_DM_RECIPIENT_USERNAME"]
+    dm_recipient_email = os.environ["E2E_WEB_DM_RECIPIENT_EMAIL"]
+    dm_recipient_password = os.environ["E2E_WEB_DM_RECIPIENT_PASSWORD"]
+    dm_outsider_username = os.environ["E2E_WEB_DM_OUTSIDER_USERNAME"]
+    dm_outsider_email = os.environ["E2E_WEB_DM_OUTSIDER_EMAIL"]
+    dm_outsider_password = os.environ["E2E_WEB_DM_OUTSIDER_PASSWORD"]
     accessibility_security_username = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_USERNAME"]
     accessibility_security_email = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_EMAIL"]
     accessibility_security_password = os.environ["E2E_WEB_ACCESSIBILITY_SECURITY_PASSWORD"]
@@ -569,6 +593,24 @@ def main() -> None:
             email=privacy_email,
             password=privacy_password,
         )
+        dm_sender_user = ensure_user(
+            db,
+            username=dm_sender_username,
+            email=dm_sender_email,
+            password=dm_sender_password,
+        )
+        dm_recipient_user = ensure_user(
+            db,
+            username=dm_recipient_username,
+            email=dm_recipient_email,
+            password=dm_recipient_password,
+        )
+        ensure_user(
+            db,
+            username=dm_outsider_username,
+            email=dm_outsider_email,
+            password=dm_outsider_password,
+        )
         accessibility_security_user = ensure_user(
             db,
             username=accessibility_security_username,
@@ -595,6 +637,9 @@ def main() -> None:
             password=email_verify_password,
             email_verified=False,
         )
+        db.flush()
+        ensure_direct_message_profile(db, user=dm_sender_user)
+        ensure_direct_message_profile(db, user=dm_recipient_user)
         db.flush()
         ensure_email_verification_token(
             db,

@@ -166,6 +166,7 @@ function kindLabel(value: CommunityNotificationKind): string {
   const labels: Record<CommunityNotificationKind, string> = {
     mention: "提及",
     reply: "回复",
+    direct_message: "私信",
     follow: "关注",
     like_summary: "点赞汇总",
     group_application: "群组申请",
@@ -248,6 +249,7 @@ function kindLabel(value: CommunityNotificationKind): string {
               <SelectItem value="all">全部类型</SelectItem>
               <SelectItem value="mention">提及</SelectItem>
               <SelectItem value="reply">回复</SelectItem>
+              <SelectItem value="direct_message">私信</SelectItem>
               <SelectItem value="follow">关注</SelectItem>
               <SelectItem value="like_summary">点赞汇总</SelectItem>
               <SelectItem value="group_application">群组申请</SelectItem>

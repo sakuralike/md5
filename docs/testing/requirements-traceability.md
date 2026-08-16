@@ -407,7 +407,7 @@
 | COMMUNITY-55～61 | 动态信息流 | `test_activity_feeds_and_reply_follow_notifications`、偏好未来事件测试、群组动态断言、Web 页面/服务测试 | 本地编码完成；目标 MySQL/浏览器部署回归待验证 |
 | COMMUNITY-62～68 | 社区搜索 | `CommunitySearchProvider`、权限复核、Outbox 重放/续跑重建、管理最小披露测试；Web/Admin 渲染测试；Chromium、Firefox、WebKit 各 2 条定向 Playwright 旅程；`scripts/check.ps1 -SkipInstall` | 本地实现与统一门禁已完成：公开主题/用户/板块/公开群组、受限前缀降级、事务 Outbox、差异核对和健康聚合均有代码与自动化证据；目标 MySQL `ngram`、容量/降级演练、Staging、远端同步和发布验收仍未验证 |
 | COMMUNITY-69～76 | 通知中心 | 通知去重、类型过滤、屏蔽、偏好、已读和 Web 页面测试 | 提及/回复/关注和站内/邮件偏好子集已实现；点赞、群组、私信/治理、邮件投递与 SSE 待后续 |
-| COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、断线补偿、最小披露治理测试 | 已规划，未编码 |
+| COMMUNITY-77～93 | 一对一私信、实时增强、举报和直接互动一致性 | AES-GCM 密文、会话成员授权、幂等发送、Web 收件箱/会话、三浏览器主旅程、非成员 404、最小披露治理测试 | 异步一对一私信基础已实现并完成本地三浏览器与统一门禁；实时 Pub/Sub、消息举报和治理收口留待 WP5-I10 |
 
 详细验收标准、数据模型、API 和迭代顺序见 `项目文档/密码侦探社社区完整功能开发计划-v1.0.md`；上述条目不计入当前完成度，直至代码、迁移、自动化和目标环境证据齐备。
 
@@ -573,4 +573,4 @@
 |---|---|---|---|
 | COMMUNITY-77～93 导出边界 | `build_privacy_export` 仅查询请求人参与的私信会话；导出 `direct_conversations` 与 `direct_messages` 时只投影公开身份、正文、序号和时间 | `test_privacy_export_contains_only_requesters_direct_message_records`；断言不含 `ciphertext` | 本地已实现并通过定向测试；目标环境导出回归待部署 |
 | COMMUNITY-77～93 删除清理 | `process_due_deletion_requests` 按通知 Outbox、通知、消息、成员、会话顺序清理私信数据；不把正文写入审计详情 | `test_account_deletion_removes_direct_message_rows`；断言消息、成员、会话、私信通知和 Outbox 清零 | 本地已实现并通过定向测试；目标环境删除回归待部署 |
-| I9 全闭环状态 | 加密、授权、幂等、通知、导出/删除的代码与迁移已在本地分切片完成 | 私信专项 API 测试、N1 隐私专项测试、Ruff；Web、三浏览器和统一门禁尚未完成 | 部分实现；不可标记为远端/Staging/UAT 完成 |
+| I9 全闭环状态 | 加密、授权、幂等、通知、导出/删除、Web 收件箱和会话页面均已实现 | 私信专项 API、N1 隐私、CORS、Web 单元测试；Chromium/Firefox/WebKit 私信旅程 3/3；统一门禁 Chromium Web/Admin 42/42、Desktop 29/29 | 本地闭环完成；远端和 Staging 证据在本轮发布后补记，UAT/Production 未完成 |

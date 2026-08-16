@@ -42,6 +42,15 @@ process.env.E2E_WEB_TOTP_PASSWORD ??= "Synthetic-E2E-Totp-2026";
 process.env.E2E_WEB_PRIVACY_USERNAME ??= "synthetic_e2e_privacy";
 process.env.E2E_WEB_PRIVACY_EMAIL ??= "synthetic-e2e-privacy@example.com";
 process.env.E2E_WEB_PRIVACY_PASSWORD ??= "Synthetic-E2E-Privacy-2026";
+process.env.E2E_WEB_DM_SENDER_USERNAME ??= "synthetic_e2e_dm_sender";
+process.env.E2E_WEB_DM_SENDER_EMAIL ??= "synthetic-e2e-dm-sender@example.com";
+process.env.E2E_WEB_DM_SENDER_PASSWORD ??= "Synthetic-E2E-Dm-Sender-2026";
+process.env.E2E_WEB_DM_RECIPIENT_USERNAME ??= "synthetic_e2e_dm_recipient";
+process.env.E2E_WEB_DM_RECIPIENT_EMAIL ??= "synthetic-e2e-dm-recipient@example.com";
+process.env.E2E_WEB_DM_RECIPIENT_PASSWORD ??= "Synthetic-E2E-Dm-Recipient-2026";
+process.env.E2E_WEB_DM_OUTSIDER_USERNAME ??= "synthetic_e2e_dm_outsider";
+process.env.E2E_WEB_DM_OUTSIDER_EMAIL ??= "synthetic-e2e-dm-outsider@example.com";
+process.env.E2E_WEB_DM_OUTSIDER_PASSWORD ??= "Synthetic-E2E-Dm-Outsider-2026";
 process.env.E2E_WEB_EMAIL_VERIFY_USER_ID ??= "10000000-0000-4000-8000-000000000005";
 process.env.E2E_WEB_EMAIL_VERIFY_USERNAME ??= "synthetic_e2e_email_verify";
 process.env.E2E_WEB_EMAIL_VERIFY_EMAIL ??= "synthetic-e2e-email-verify@example.com";
@@ -156,7 +165,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         ...process.env,
-        VITE_API_BASE_URL: `http://127.0.0.1:${apiPort}/api/v1`,
+        VITE_API_BASE_URL: "/api/v1",
         VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
       },
     },
