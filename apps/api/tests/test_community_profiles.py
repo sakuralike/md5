@@ -7,6 +7,8 @@ from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.community import (
     CommunityPost,
     CommunityPublicProfile,
+    CommunitySearchOutbox,
+    CommunitySearchSource,
     CommunityUserBlock,
     CommunityUserFollow,
     CommunityUserMute,
@@ -105,6 +107,13 @@ def test_public_profile_update_privacy_and_safe_projection(client):
             )
         )
         assert profile is not None
+        search_events = db.scalars(
+            select(CommunitySearchOutbox).where(
+                CommunitySearchOutbox.source_type == CommunitySearchSource.USER,
+                CommunitySearchOutbox.source_id == profile.user_id,
+            )
+        ).all()
+        assert any(event.document_version > 2_147_483_647 for event in search_events)
         actions = db.scalars(
             select(AuditLog).where(
                 AuditLog.action.in_(["community.profile.updated", "community.privacy.updated"])
