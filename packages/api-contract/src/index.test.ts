@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import type {
   CommunityDirectConversationCreateRequest,
   CommunityDirectConversationCreateResponse,
+  CommunityDirectMessageCreatedEvent,
+  CommunityDirectMessageListResponse,
   CommunityDirectMessageResponse,
   CommunityDirectReadStateUpdateRequest,
+  CommunityDirectStreamReadyEvent,
+  CommunityDirectUnreadChangedEvent,
 } from "./index";
 import {
   ApiError,
@@ -59,6 +63,44 @@ describe("shared API contract", () => {
 
     expect(message.sequence).toBe(readState.last_read_sequence);
     expect(created.conversation.counterpart_username).toBe("synthetic_receiver");
+  });
+
+  it("exports direct-message stream snapshots and domain events", () => {
+    const list: CommunityDirectMessageListResponse = {
+      items: [],
+      next_cursor: null,
+      has_more: false,
+      last_read_sequence: 2,
+      counterpart_last_read_sequence: 3,
+      unread_count: 1,
+    };
+    const ready: CommunityDirectStreamReadyEvent = {
+      type: "ready",
+      eventId: 8,
+      totalUnreadCount: 1,
+      resetRequired: false,
+    };
+    const created: CommunityDirectMessageCreatedEvent = {
+      type: "message.created",
+      eventId: 9,
+      conversationId: "conversation-1",
+      messageId: "message-2",
+      messageSequence: 4,
+      senderId: "user-1",
+      createdAt: "2026-08-16T00:00:00Z",
+    };
+    const unread: CommunityDirectUnreadChangedEvent = {
+      type: "unread.changed",
+      eventId: 10,
+      conversationId: "conversation-1",
+      conversationUnreadCount: 0,
+      totalUnreadCount: 0,
+      changedAt: "2026-08-16T00:00:01Z",
+    };
+
+    expect(list.counterpart_last_read_sequence).toBe(3);
+    expect([ready.eventId, created.eventId, unread.eventId]).toEqual([8, 9, 10]);
+    expect(JSON.stringify(created)).not.toContain("body");
   });
 
   it("preserves standard API error metadata", () => {
