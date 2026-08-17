@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   getCurrentSettings,
   getEmailDeliverySettings,
@@ -126,22 +125,6 @@ function removeNavigationItem(index: number): void {
   if (form.value.site_navigation.length > 1) form.value.site_navigation.splice(index, 1);
 }
 
-function addUserLevel(): void {
-  if (form.value.user_levels.length >= 20) return;
-  const sequence = form.value.user_levels.length + 1;
-  form.value.user_levels.push({
-    code: `level_${sequence}`,
-    name: `等级 ${sequence}`,
-    description: "请填写该等级的权益说明。",
-    min_growth_points: form.value.user_levels.at(-1)?.min_growth_points ?? 0,
-    daily_reveal_quota: form.value.daily_reveal_quota,
-    can_submit: true,
-  });
-}
-
-function removeUserLevel(index: number): void {
-  if (form.value.user_levels.length > 1) form.value.user_levels.splice(index, 1);
-}
 
 async function handleLogoUpload(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
@@ -264,11 +247,6 @@ onMounted(refreshPage);
       <section id="operational-policy" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5"><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Server class="size-5 text-primary" />运行参数</h2><p class="mt-1 text-sm text-muted-foreground">这些设置会在保存后直接更新运行时配置。</p></div>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div class="space-y-2"><Label for="daily-quota">每日明文查看配额</Label><Input id="daily-quota" v-model.number="form.daily_reveal_quota" type="number" min="1" max="1000" /></div><div class="space-y-2"><Label for="reauth-ttl">再认证有效期（分钟）</Label><Input id="reauth-ttl" v-model.number="form.reauthentication_ttl_minutes" type="number" min="1" max="15" /></div><div class="space-y-2"><Label for="deletion-grace">账号删除宽限期（小时）</Label><Input id="deletion-grace" v-model.number="form.privacy_deletion_grace_hours" type="number" min="1" max="720" /></div><div class="space-y-2"><Label for="min-client">桌面端最低版本</Label><Input id="min-client" v-model="form.desktop_min_client_version" placeholder="1.0.0" /></div><div class="space-y-2"><Label for="download-cache">升级下载缓存（秒）</Label><Input id="download-cache" v-model.number="form.desktop_update_download_cache_seconds" type="number" min="60" max="31536000" /></div></div>
-      </section>
-
-      <section id="user-levels" class="glass-panel scroll-mt-28 p-6">
-        <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Settings2 class="size-5 text-primary" />用户等级规则</h2><p class="mt-1 text-sm text-muted-foreground">保存后将同步重建用户等级权益。</p></div><Button type="button" variant="outline" :disabled="form.user_levels.length >= 20" @click="addUserLevel"><Plus class="mr-2 size-4" />新增等级</Button></div>
-        <div class="space-y-3"><div v-for="(level, index) in form.user_levels" :key="`${level.code}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div class="space-y-2"><Label :for="`level-code-${index}`">代码</Label><Input :id="`level-code-${index}`" v-model="level.code" /></div><div class="space-y-2"><Label :for="`level-name-${index}`">名称</Label><Input :id="`level-name-${index}`" v-model="level.name" /></div><div class="space-y-2"><Label :for="`level-growth-${index}`">成长值门槛</Label><Input :id="`level-growth-${index}`" v-model.number="level.min_growth_points" type="number" min="0" /></div><div class="space-y-2"><Label :for="`level-quota-${index}`">每日配额</Label><Input :id="`level-quota-${index}`" v-model.number="level.daily_reveal_quota" type="number" min="1" max="1000" /></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="level.can_submit" @update:model-value="level.can_submit = $event === true" />允许提交</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.user_levels.length <= 1" @click="removeUserLevel(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div><div class="mt-3 space-y-2"><Label :for="`level-description-${index}`">说明</Label><Textarea :id="`level-description-${index}`" v-model="level.description" rows="2" /></div></div></div>
       </section>
 
       <section id="email-delivery" class="glass-panel scroll-mt-28 p-6">

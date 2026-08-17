@@ -53,8 +53,9 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("系统配置工作台");
     expect(html).toContain("站点品牌");
     expect(html).toContain("站点导航");
-    expect(html).toContain("用户等级规则");
-    expect(html).toContain('id="user-levels"');
+    expect(html).not.toContain("用户等级规则");
+    expect(html).not.toContain("用户等级与权益");
+    expect(html).not.toContain('id="user-levels"');
     expect(html).toContain("上传 Logo 图片");
     expect(html).toContain("image/png,image/jpeg,image/webp");
     expect(html).toContain("SMTP 邮件投递");

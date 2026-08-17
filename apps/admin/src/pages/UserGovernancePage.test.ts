@@ -24,6 +24,9 @@ describe("UserGovernancePage", () => {
     expect(html).toContain("手动创建用户");
     expect(html).toContain("用户名、邮箱或 UID");
     expect(html).toContain("用户等级与权益");
+    expect(html).toContain('id="user-levels"');
+    expect(html).toContain("直接保存当前等级配置");
+    expect(html).toContain("重置当前编辑");
     expect(html).toContain("一次性再认证");
     expect(html).toContain("原因码");
     expect(html).toContain("可选 TOTP");

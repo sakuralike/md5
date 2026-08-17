@@ -18,6 +18,7 @@ describe("UserLevelsManagement", () => {
 
     expect(html).toContain('id="user-levels"');
     expect(html).toContain("用户等级与权益");
+    expect(html).toContain("成长值门槛需唯一且升序");
     expect(html).toContain("新增等级");
     expect(html).toContain("直接保存当前等级配置");
     expect(html).toContain("重置当前编辑");

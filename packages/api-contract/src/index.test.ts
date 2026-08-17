@@ -8,6 +8,8 @@ import type {
   CommunityDirectReadStateUpdateRequest,
   CommunityDirectStreamReadyEvent,
   CommunityDirectUnreadChangedEvent,
+  HomeDiscoveryResponse,
+  PublicSiteConfig,
 } from "./index";
 import {
   ApiError,
@@ -103,6 +105,31 @@ describe("shared API contract", () => {
     expect(JSON.stringify(created)).not.toContain("body");
   });
 
+  it("exports public site configuration and home discovery response shapes", () => {
+    const config: PublicSiteConfig = {
+      site_name: "合成侦探站",
+      site_logo_url: "/brand/logo.svg",
+      navigation: [{ label: "首页", path: "/", enabled: true, requires_auth: false }],
+    };
+    const discovery: HomeDiscoveryResponse = {
+      hot_hashes: [
+        {
+          algorithm: "sha256",
+          digest: "a".repeat(64),
+          like_count: 2,
+          comment_count: 1,
+          useful_vote_count: 3,
+          heat_score: 12,
+        },
+      ],
+      contribution_leaders: [{ rank: 1, uid: "user-1", username: "synthetic_user", score: 8 }],
+      points_leaders: [{ rank: 1, uid: "user-2", username: "synthetic_points", score: 10 }],
+    };
+
+    expect(config.navigation[0]?.path).toBe("/");
+    expect(discovery.hot_hashes[0]?.algorithm).toBe("sha256");
+    expect(discovery.points_leaders[0]?.score).toBe(10);
+  });
   it("preserves standard API error metadata", () => {
     const error = new ApiError(401, {
       code: "auth.authentication_required",
