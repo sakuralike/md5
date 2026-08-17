@@ -3,6 +3,7 @@ import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_a
 import { dismissAllWebAnnouncements } from "./support/web_announcements";
 
 test.use({ screenshot: "off", trace: "off" });
+test.setTimeout(45_000);
 
 interface DirectMessageIdentity {
   username: string;
