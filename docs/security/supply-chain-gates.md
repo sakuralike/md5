@@ -55,7 +55,7 @@ pnpm security:audit
 
 ## 首轮修复
 
-- pnpm 工作区通过 `pnpm-workspace.yaml` 覆盖将受影响的 `nanoid` 3.3.16 收口到 3.3.17。
+- pnpm 工作区通过 `pnpm-workspace.yaml` 覆盖将受影响的 `nanoid` `<3.3.18` 收口到 `3.3.18`。
 - API 将 `cryptography` 下限提高到 50.0.0，并限制在 51 之前。
 - 测试工具将 pytest 下限提高到 9.0.3，并验证现有 API 回归保持通过。
 
