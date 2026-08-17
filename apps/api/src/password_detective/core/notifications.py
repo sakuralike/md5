@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from email.utils import format_datetime, formataddr, make_msgid
+from html import escape
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.request import Request, urlopen
 
@@ -408,6 +410,9 @@ class SMTPNotificationGateway:
         password: str,
         sender_email: str,
         sender_name: str,
+        subject_prefix: str = EMAIL_SUBJECT_PREFIX,
+        footer_text: str = EMAIL_FOOTER_TEXT,
+        footer_html: str = "",
         timeout_seconds: float = 10.0,
         smtp_factory: Any | None = None,
         ssl_context_factory: Any = ssl.create_default_context,
@@ -419,12 +424,17 @@ class SMTPNotificationGateway:
         self._password = password
         self._sender_email = sender_email
         self._sender_name = sender_name
+        self._subject_prefix = subject_prefix
+        self._footer_text = footer_text
+        self._footer_html = sanitize_email_footer_html(footer_html)
         self._timeout_seconds = timeout_seconds
         self._smtp_factory = smtp_factory
         self._ssl_context_factory = ssl_context_factory
 
     def send_account_token(self, *, kind: str, recipient: str, token: str) -> str | None:
-        subject, content = _account_token_email(kind=kind, token=token)
+        subject, content = _account_token_email(
+            kind=kind, token=token, subject_prefix=self._subject_prefix
+        )
         message = self._build_message(
             recipient=recipient,
             subject=subject,
@@ -437,12 +447,11 @@ class SMTPNotificationGateway:
     def send_test_email(self, *, recipient: str) -> str:
         message = self._build_message(
             recipient=recipient,
-            subject=f"{EMAIL_SUBJECT_PREFIX} 邮件投递测试",
+            subject=f"{self._subject_prefix} 邮件投递测试",
             content=(
                 "这是一封由密码侦探社管理端发起的 SMTP 测试邮件。\n\n"
                 "如果您收到此邮件，表示 SMTP 会话配置有效。\n"
-                "服务器地址、端口、加密方式、认证凭据和发件人配置均已通过。\n\n"
-                f"{EMAIL_FOOTER_TEXT}"
+                "服务器地址、端口、加密方式、认证凭据和发件人配置均已通过。"
             ),
             notification_type="smtp_test",
             message_key=f"smtp-test-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
@@ -462,7 +471,7 @@ class SMTPNotificationGateway:
         due_at_text = _isoformat_utc(due_at) or "未设置"
         message = self._build_message(
             recipient=recipient,
-            subject=f"{EMAIL_SUBJECT_PREFIX} {severity.upper()} 风险告警",
+            subject=f"{self._subject_prefix} {severity.upper()} 风险告警",
             content=(
                 "检测到需要管理员处理的风险告警。\n\n"
                 f"告警编号：{alert_id}\n"
@@ -490,7 +499,7 @@ class SMTPNotificationGateway:
     ) -> str | None:
         message = self._build_message(
             recipient=recipient,
-            subject=f"{EMAIL_SUBJECT_PREFIX} 举报与申诉处理结果",
+            subject=f"{self._subject_prefix} 举报与申诉处理结果",
             content=(
                 "您的举报或申诉案件已有处理结果。\n\n"
                 f"案件编号：{case_id}\n"
@@ -519,6 +528,8 @@ class SMTPNotificationGateway:
             window_started_at=window_started_at,
             window_ends_at=window_ends_at,
             items=items,
+            subject_prefix=self._subject_prefix,
+            footer_text=self._footer_text,
         )
         message = self._build_message(
             recipient=recipient,
@@ -559,7 +570,14 @@ class SMTPNotificationGateway:
         message["X-Password-Detective-Notification-Type"] = notification_type
         for name, value in (extra_headers or {}).items():
             message[name] = value
-        message.set_content(content, charset="utf-8")
+        plain_content = _append_email_footer(content, self._footer_text)
+        message.set_content(plain_content, charset="utf-8")
+        if self._footer_html:
+            message.add_alternative(
+                _email_html_document(plain_content, self._footer_html),
+                subtype="html",
+                charset="utf-8",
+            )
         return message
 
     def _send_message(self, *, message: EmailMessage, recipient: str) -> str:
@@ -602,6 +620,84 @@ class SMTPNotificationGateway:
         return client
 
 
+def _append_email_footer(content: str, footer_text: str) -> str:
+    normalized = content.rstrip()
+    if not footer_text or normalized.endswith(footer_text):
+        return normalized
+    return f"{normalized}\n\n{footer_text}"
+
+
+def _email_html_document(plain_content: str, footer_html: str) -> str:
+    paragraphs = [
+        f"<p>{escape(paragraph)}</p>"
+        for paragraph in plain_content.split("\n\n")
+        if paragraph
+    ]
+    footer = f'<div class="email-footer">{footer_html}</div>' if footer_html else ""
+    return "<html><body>" + "".join(paragraphs) + footer + "</body></html>"
+
+
+class _EmailFooterSanitizer(HTMLParser):
+    _allowed_tags = {"a", "br", "em", "p", "span", "strong"}
+    _void_tags = {"br"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._result: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag not in self._allowed_tags:
+            self._ignored_depth += 1
+            return
+        if self._ignored_depth:
+            return
+        if tag == "a":
+            href = next((value for name, value in attrs if name.lower() == "href"), None)
+            if href and href.strip().startswith(("https://", "http://")):
+                safe_href = escape(href.strip(), quote=True)
+                self._result.append(
+                    f'<a href="{safe_href}" rel="noopener noreferrer">'
+                )
+            else:
+                self._result.append("<a>")
+            return
+        self._result.append(f"<{tag}>")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag.lower() not in self._void_tags:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag not in self._allowed_tags:
+            if self._ignored_depth:
+                self._ignored_depth -= 1
+            return
+        if self._ignored_depth or tag in self._void_tags:
+            return
+        self._result.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth:
+            self._result.append(escape(data))
+
+    @property
+    def html(self) -> str:
+        return "".join(self._result)
+
+
+def sanitize_email_footer_html(value: str) -> str:
+    if not value:
+        return ""
+    sanitizer = _EmailFooterSanitizer()
+    sanitizer.feed(value)
+    sanitizer.close()
+    return sanitizer.html
+
+
 def _close_smtp_client(client: Any) -> None:
     try:
         client.quit()
@@ -624,6 +720,8 @@ def _community_notification_digest_email(
     window_started_at: datetime,
     window_ends_at: datetime,
     items: list[CommunityNotificationDigestEmailItem],
+    subject_prefix: str = EMAIL_SUBJECT_PREFIX,
+    footer_text: str = EMAIL_FOOTER_TEXT,
 ) -> tuple[str, str]:
     lines = [
         "您有新的社区通知摘要。",
@@ -639,10 +737,10 @@ def _community_notification_digest_email(
             "",
             "请登录密码侦探社通知中心查看详情。为保护隐私，邮件不包含密码、令牌、私信正文或其他敏感凭据。",
             "",
-            EMAIL_FOOTER_TEXT,
+            footer_text,
         ]
     )
-    return f"{EMAIL_SUBJECT_PREFIX} 社区通知摘要", "\n".join(lines)
+    return f"{subject_prefix} 社区通知摘要", "\n".join(lines)
 
 
 def _stable_message_id(*, message_key: str, domain: str) -> str:
@@ -650,16 +748,18 @@ def _stable_message_id(*, message_key: str, domain: str) -> str:
     return f"<community-digest-{digest}@{domain}>"
 
 
-def _account_token_email(*, kind: str, token: str) -> tuple[str, str]:
+def _account_token_email(
+    *, kind: str, token: str, subject_prefix: str = EMAIL_SUBJECT_PREFIX
+) -> tuple[str, str]:
     if kind == "email_verification":
         purpose = "验证邮箱"
-        subject = f"{EMAIL_SUBJECT_PREFIX} 验证邮箱"
+        subject = f"{subject_prefix} 验证邮箱"
     elif kind == "password_reset":
         purpose = "重置账户密码"
-        subject = f"{EMAIL_SUBJECT_PREFIX} 重置账户密码"
+        subject = f"{subject_prefix} 重置账户密码"
     else:
         purpose = "完成账户操作"
-        subject = f"{EMAIL_SUBJECT_PREFIX} 账户安全通知"
+        subject = f"{subject_prefix} 账户安全通知"
     content = (
         f"请使用以下一次性令牌{purpose}：\n\n{token}\n\n"
         "令牌具有有效期且只能使用一次。若非本人操作，请忽略此邮件，不要将令牌转发给他人。"

@@ -47,6 +47,7 @@ from password_detective.modules.admin.dashboard import get_dashboard_summary
 from password_detective.modules.admin.dashboard_schemas import AdminDashboardSummary
 from password_detective.modules.admin.email_delivery import (
     describe_email_delivery,
+    save_email_delivery_settings,
     send_email_delivery_test,
 )
 from password_detective.modules.admin.role_change_schemas import (
@@ -62,6 +63,7 @@ from password_detective.modules.admin.role_changes import (
 )
 from password_detective.modules.admin.setting_schemas import (
     EmailDeliverySettingsResponse,
+    EmailDeliverySettingsUpdate,
     EmailDeliveryTestRequest,
     EmailDeliveryTestResponse,
     OperationalSettingsResponse,
@@ -615,10 +617,32 @@ async def admin_site_logo_upload(
 
 @router.get("/settings/email-delivery", response_model=EmailDeliverySettingsResponse)
 def admin_email_delivery_settings(
+    db: Annotated[Session, Depends(get_db)],
     _: Annotated[Principal, Depends(require_user_governance_admin)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> EmailDeliverySettingsResponse:
-    return describe_email_delivery(settings)
+    return describe_email_delivery(settings, db)
+
+
+@router.put(
+    "/settings/email-delivery",
+    response_model=EmailDeliverySettingsResponse,
+    dependencies=[Depends(rate_limit("admin.email_delivery.save", limit=30, window_seconds=60))],
+)
+def admin_email_delivery_settings_save(
+    payload: EmailDeliverySettingsUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmailDeliverySettingsResponse:
+    return save_email_delivery_settings(
+        db,
+        settings=settings,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @router.post(

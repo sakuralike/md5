@@ -17,6 +17,7 @@ from password_detective.modules.account_privacy.service import (
     build_privacy_export,
     process_due_deletion_requests,
 )
+from password_detective.modules.admin.email_delivery import build_email_delivery_gateway
 from password_detective.modules.community.notification_service import (
     dispatch_pending_email_digests,
     dispatch_pending_notification_events,
@@ -133,9 +134,13 @@ def queue_risk_alert_sla_notifications() -> dict[str, int]:
 @celery_app.task(name="risk_alerts.dispatch_notifications")
 def dispatch_risk_alert_notifications() -> dict[str, int]:
     database = Database(settings)
-    gateway = build_notification_gateway(settings)
     try:
         with database.session_factory() as db:
+            gateway = build_email_delivery_gateway(
+                db,
+                settings=settings,
+                fallback=build_notification_gateway(settings),
+            )
             return dispatch_pending_notifications(db, gateway)
     finally:
         database.dispose()
@@ -154,9 +159,13 @@ def dispatch_community_notification_events() -> dict[str, int]:
 @celery_app.task(name="community.dispatch_email_digests")
 def dispatch_community_email_digests() -> dict[str, int]:
     database = Database(settings)
-    gateway = build_notification_gateway(settings)
     try:
         with database.session_factory() as db:
+            gateway = build_email_delivery_gateway(
+                db,
+                settings=settings,
+                fallback=build_notification_gateway(settings),
+            )
             return dispatch_pending_email_digests(db, gateway)
     finally:
         database.dispose()
@@ -185,9 +194,13 @@ def escalate_overdue_trust_cases() -> dict[str, int]:
 @celery_app.task(name="trust_cases.dispatch_notifications")
 def dispatch_trust_case_notifications() -> dict[str, int]:
     database = Database(settings)
-    gateway = build_notification_gateway(settings)
     try:
         with database.session_factory() as db:
+            gateway = build_email_delivery_gateway(
+                db,
+                settings=settings,
+                fallback=build_notification_gateway(settings),
+            )
             return dispatch_pending_case_notifications(db, gateway)
     finally:
         database.dispose()

@@ -34,4 +34,11 @@ def get_client_context(request: Request) -> ClientContext:
 
 
 def get_notification_gateway(request: Request):  # noqa: ANN201
-    return request.app.state.notification_gateway
+    from password_detective.modules.admin.email_delivery import build_email_delivery_gateway
+
+    with request.app.state.database.session_factory() as db:
+        return build_email_delivery_gateway(
+            db,
+            settings=request.app.state.settings,
+            fallback=request.app.state.notification_gateway,
+        )

@@ -1,5 +1,6 @@
 import {
   type EmailDeliverySettings,
+  type EmailDeliverySettingsUpdate,
   type EmailDeliveryTestResponse,
   type OperationalSettingsResponse,
   type OperationalSettingsSnapshot,
@@ -30,6 +31,23 @@ export function saveCurrentSettings(
 export function getEmailDeliverySettings(token: string): Promise<EmailDeliverySettings> {
   return apiRequest<EmailDeliverySettings>("/admin/settings/email-delivery", {}, token);
 }
+
+export function saveEmailDeliverySettings(
+  payload: EmailDeliverySettingsUpdate,
+  token: string,
+  idempotencyKey: string,
+): Promise<EmailDeliverySettings> {
+  return apiRequest<EmailDeliverySettings>(
+    "/admin/settings/email-delivery",
+    {
+      method: "PUT",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
 
 export function sendEmailDeliveryTest(
   recipient: string,

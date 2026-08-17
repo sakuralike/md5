@@ -159,6 +159,49 @@ class SiteLogoUploadResponse(BaseModel):
     sha256: str
 
 
+class EmailDeliverySettingsUpdate(BaseModel):
+    enabled: bool
+    sender_name: str = Field(min_length=1, max_length=120)
+    sender_email: EmailStr
+    subject_prefix: str = Field(min_length=1, max_length=120)
+    footer_text: str = Field(default="", max_length=1200)
+    footer_html: str = Field(default="", max_length=4000)
+    smtp_host: str = Field(min_length=1, max_length=255)
+    smtp_port: int = Field(ge=1, le=65535)
+    smtp_security: Literal["starttls", "ssl", "none"]
+    smtp_username: str = Field(default="", max_length=255)
+    smtp_auth_enabled: bool
+    smtp_timeout_seconds: float = Field(ge=1, le=60)
+    smtp_password: str | None = Field(default=None, max_length=1024)
+    clear_smtp_password: bool = False
+
+    @field_validator("sender_name", "subject_prefix", "smtp_host", "smtp_username")
+    @classmethod
+    def normalize_single_line_email_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if "\r" in normalized or "\n" in normalized:
+            raise ValueError("邮件头部和服务器配置不能包含换行符")
+        return normalized
+
+    @field_validator("footer_text", "footer_html")
+    @classmethod
+    def normalize_email_footer(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("smtp_password")
+    @classmethod
+    def normalize_smtp_password(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value or None
+
+    @model_validator(mode="after")
+    def validate_password_update(self) -> EmailDeliverySettingsUpdate:
+        if self.clear_smtp_password and self.smtp_password is not None:
+            raise ValueError("不能同时设置和清除 SMTP 授权码")
+        return self
+
+
 class EmailDeliverySettingsResponse(BaseModel):
     backend: Literal["memory", "log", "webhook", "smtp"]
     enabled: bool
@@ -167,7 +210,8 @@ class EmailDeliverySettingsResponse(BaseModel):
     sender_email: str
     subject_prefix: str
     footer_text: str
-    content_format: Literal["plain_text"] = "plain_text"
+    footer_html: str = ""
+    content_format: Literal["multipart"] = "multipart"
     smtp_host: str
     smtp_port: int
     smtp_security: Literal["starttls", "ssl", "none"]
@@ -175,7 +219,7 @@ class EmailDeliverySettingsResponse(BaseModel):
     smtp_auth_enabled: bool
     smtp_password_configured: bool
     smtp_timeout_seconds: float
-    configuration_source: Literal["deployment_environment"] = "deployment_environment"
+    configuration_source: Literal["database", "deployment_environment"]
 
 
 class EmailDeliveryTestRequest(BaseModel):

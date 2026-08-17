@@ -3,6 +3,7 @@ import { createClientId } from "@/lib/clientId";
 import {
   ApiError,
   type EmailDeliverySettings,
+  type EmailDeliverySettingsUpdate,
   type OperationalSettingsSnapshot,
   type UserLevelDefinition,
 } from "@password-detective/api-contract";
@@ -26,10 +27,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   getCurrentSettings,
   getEmailDeliverySettings,
   saveCurrentSettings,
+  saveEmailDeliverySettings,
   sendEmailDeliveryTest,
   uploadSiteLogo,
 } from "../services/settings";
@@ -66,6 +69,9 @@ const mutationBusy = ref(false);
 const error = ref("");
 const success = ref("");
 const emailSettings = ref<EmailDeliverySettings | null>(null);
+const emailForm = ref<EmailDeliverySettingsUpdate | null>(null);
+const emailBaseline = ref<EmailDeliverySettingsUpdate | null>(null);
+const emailSaveBusy = ref(false);
 const emailLoading = ref(false);
 const emailTestBusy = ref(false);
 const emailRecipient = ref("");
@@ -77,6 +83,31 @@ const logoUploadMessage = ref("");
 
 function describeError(value: unknown): string {
   return value instanceof ApiError ? value.message : "请求失败，请稍后重试";
+}
+
+function emailFormFromSettings(settings: EmailDeliverySettings): EmailDeliverySettingsUpdate {
+  return {
+    enabled: settings.enabled,
+    sender_name: settings.sender_name,
+    sender_email: settings.sender_email,
+    subject_prefix: settings.subject_prefix,
+    footer_text: settings.footer_text,
+    footer_html: settings.footer_html,
+    smtp_host: settings.smtp_host,
+    smtp_port: settings.smtp_port,
+    smtp_security: settings.smtp_security,
+    smtp_username: settings.smtp_username,
+    smtp_auth_enabled: settings.smtp_auth_enabled,
+    smtp_timeout_seconds: settings.smtp_timeout_seconds,
+    smtp_password: null,
+    clear_smtp_password: false,
+  };
+}
+
+function resetEmailEdits(): void {
+  if (emailBaseline.value) emailForm.value = structuredClone(emailBaseline.value);
+  emailError.value = "";
+  emailMessage.value = "已恢复到当前已保存的 SMTP 设置。";
 }
 
 function resetMessages(): void {
@@ -171,13 +202,48 @@ async function loadEmailSettings(): Promise<void> {
   emailLoading.value = true;
   emailError.value = "";
   try {
-    emailSettings.value = await getEmailDeliverySettings(auth.accessToken);
+    const settings = await getEmailDeliverySettings(auth.accessToken);
+    emailSettings.value = settings;
+    emailBaseline.value = emailFormFromSettings(settings);
+    emailForm.value = structuredClone(emailBaseline.value);
   } catch (value) {
     emailError.value = describeError(value);
   } finally {
     emailLoading.value = false;
   }
 }
+
+async function saveEmailSettings(): Promise<void> {
+  if (!emailForm.value) return;
+  emailError.value = "";
+  emailMessage.value = "";
+  emailSaveBusy.value = true;
+  try {
+    const payload: EmailDeliverySettingsUpdate = {
+      ...emailForm.value,
+      sender_name: emailForm.value.sender_name.trim(),
+      sender_email: emailForm.value.sender_email.trim(),
+      subject_prefix: emailForm.value.subject_prefix.trim(),
+      footer_text: emailForm.value.footer_text.trim(),
+      footer_html: emailForm.value.footer_html.trim(),
+      smtp_host: emailForm.value.smtp_host.trim(),
+      smtp_username: emailForm.value.smtp_username.trim(),
+      smtp_port: Number(emailForm.value.smtp_port),
+      smtp_timeout_seconds: Number(emailForm.value.smtp_timeout_seconds),
+      smtp_password: emailForm.value.smtp_password?.trim() || null,
+    };
+    const saved = await saveEmailDeliverySettings(payload, auth.accessToken, createClientId());
+    emailSettings.value = saved;
+    emailBaseline.value = emailFormFromSettings(saved);
+    emailForm.value = structuredClone(emailBaseline.value);
+    emailMessage.value = "SMTP 邮件投递设置已直接保存并立即生效。";
+  } catch (value) {
+    emailError.value = describeError(value);
+  } finally {
+    emailSaveBusy.value = false;
+  }
+}
+
 
 async function sendEmailTest(): Promise<void> {
   emailError.value = "";
@@ -250,9 +316,32 @@ onMounted(refreshPage);
       </section>
 
       <section id="email-delivery" class="glass-panel scroll-mt-28 p-6">
-        <div class="mb-5"><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><MailCheck class="size-5 text-primary" />SMTP 邮件投递</h2><p class="mt-1 text-sm text-muted-foreground">邮件服务凭据由服务器环境变量管理，此处仅显示状态与发送测试邮件。</p></div>
-        <div v-if="emailLoading" class="text-sm text-muted-foreground">正在加载邮件配置…</div><div v-else-if="emailSettings" class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><p><span class="text-muted-foreground">服务器：</span>{{ emailSettings.smtp_host }}:{{ emailSettings.smtp_port }}</p><p><span class="text-muted-foreground">发件地址：</span>{{ emailSettings.sender_email }}</p><p><span class="text-muted-foreground">投递状态：</span>{{ emailSettings.enabled ? "已启用" : "未启用" }}</p></div>
-        <div class="mt-5 flex flex-col gap-3 sm:flex-row"><Input v-model="emailRecipient" type="email" placeholder="recipient@synthetic.example.com" aria-label="测试邮件收件人" /><Button :disabled="emailTestBusy || !emailRecipient.trim()" @click="sendEmailTest"><Send class="mr-2 size-4" />发送测试邮件</Button></div><p v-if="emailMessage" class="mt-3 text-sm text-primary">{{ emailMessage }}</p><p v-if="emailError" class="mt-3 text-sm text-destructive">{{ emailError }}</p>
+        <div class="mb-5"><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><MailCheck class="size-5 text-primary" />SMTP 邮件投递</h2><p class="mt-1 text-sm text-muted-foreground">参照主题邮件设置管理发件人、标题前缀、邮件底部内容与 SMTP 传输参数。授权码只可写入，不会回显。</p></div>
+        <div v-if="emailLoading" class="text-sm text-muted-foreground">正在加载邮件配置…</div>
+        <div v-else-if="emailForm" class="space-y-5">
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="space-y-2"><Label for="smtp-enabled">启用 SMTP 投递</Label><Label class="flex h-10 items-center gap-2"><Checkbox id="smtp-enabled" :model-value="emailForm.enabled" @update:model-value="emailForm.enabled = $event === true" />启用后，邮件通知将使用当前配置投递。</Label></div>
+            <div class="space-y-2"><Label for="smtp-sender-name">自定义发件人</Label><Input id="smtp-sender-name" v-model="emailForm.sender_name" /></div>
+            <div class="space-y-2"><Label for="smtp-sender-email">发信人邮箱账号</Label><Input id="smtp-sender-email" v-model="emailForm.sender_email" type="email" /></div>
+            <div class="space-y-2"><Label for="smtp-subject-prefix">自定义标题前缀</Label><Input id="smtp-subject-prefix" v-model="emailForm.subject_prefix" /></div>
+            <div class="space-y-2"><Label for="smtp-host">邮件服务器地址</Label><Input id="smtp-host" v-model="emailForm.smtp_host" placeholder="smtp.example.com" /></div>
+            <div class="space-y-2"><Label for="smtp-port">SMTP 服务器端口</Label><Input id="smtp-port" v-model.number="emailForm.smtp_port" type="number" min="1" max="65535" /></div>
+            <div class="space-y-2"><Label for="smtp-security">加密方式</Label><Input id="smtp-security" v-model="emailForm.smtp_security" placeholder="starttls、ssl 或 none" /></div>
+            <div class="space-y-2"><Label for="smtp-username">SMTP 用户名</Label><Input id="smtp-username" v-model="emailForm.smtp_username" /></div>
+            <div class="space-y-2"><Label for="smtp-password">SMTP 授权码</Label><Input id="smtp-password" :model-value="emailForm.smtp_password ?? ''" @update:model-value="emailForm.smtp_password = String($event)" type="password" autocomplete="new-password" placeholder="留空则保留原授权码" /></div>
+            <div class="space-y-2"><Label for="smtp-auth">SMTPAuth 服务</Label><Label class="flex h-10 items-center gap-2"><Checkbox id="smtp-auth" :model-value="emailForm.smtp_auth_enabled" @update:model-value="emailForm.smtp_auth_enabled = $event === true" />使用用户名与授权码认证。</Label></div>
+            <div class="space-y-2"><Label for="smtp-timeout">连接超时（秒）</Label><Input id="smtp-timeout" v-model.number="emailForm.smtp_timeout_seconds" type="number" min="1" max="60" /></div>
+            <div class="space-y-2"><Label for="smtp-clear-password">清除保存的授权码</Label><Label class="flex h-10 items-center gap-2"><Checkbox id="smtp-clear-password" :model-value="emailForm.clear_smtp_password" @update:model-value="emailForm.clear_smtp_password = $event === true" />下一次保存时清除授权码。</Label></div>
+          </div>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <div class="space-y-2"><Label for="smtp-footer-text">邮件底部额外内容</Label><Textarea id="smtp-footer-text" v-model="emailForm.footer_text" rows="4" /></div>
+            <div class="space-y-2"><Label for="smtp-footer-html">邮件底部链接（支持基础 HTML）</Label><Textarea id="smtp-footer-html" v-model="emailForm.footer_html" rows="4" placeholder='<a href="https://example.com">访问网站</a>' /></div>
+          </div>
+          <div class="flex flex-wrap gap-3"><Button :disabled="emailSaveBusy" @click="saveEmailSettings"><Save class="mr-2 size-4" />保存 SMTP 设置</Button><Button type="button" variant="outline" :disabled="emailSaveBusy" @click="resetEmailEdits"><RotateCcw class="mr-2 size-4" />重置 SMTP 编辑</Button></div>
+          <div class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><p><span class="text-muted-foreground">配置来源：</span>{{ emailSettings?.configuration_source === "database" ? "后台保存" : "部署环境" }}</p><p><span class="text-muted-foreground">投递状态：</span>{{ emailSettings?.smtp_configured ? "配置完整" : "配置待完善" }}</p><p><span class="text-muted-foreground">授权码：</span>{{ emailSettings?.smtp_password_configured ? "已保存" : "未保存" }}</p></div>
+          <div class="flex flex-col gap-3 sm:flex-row"><Input v-model="emailRecipient" type="email" placeholder="recipient@synthetic.example.com" aria-label="测试邮件收件人" /><Button :disabled="emailTestBusy || !emailRecipient.trim()" @click="sendEmailTest"><Send class="mr-2 size-4" />发送测试邮件</Button></div>
+        </div>
+        <p v-if="emailMessage" class="mt-3 text-sm text-primary">{{ emailMessage }}</p><p v-if="emailError" class="mt-3 text-sm text-destructive">{{ emailError }}</p>
       </section>
 
       <section class="glass-panel flex flex-wrap justify-end gap-3 p-6"><Button type="button" variant="outline" :disabled="loading || mutationBusy" @click="resetCurrentEdits"><RotateCcw class="mr-2 size-4" />重置当前编辑</Button><Button :disabled="loading || mutationBusy" @click="saveSettings"><Save class="mr-2 size-4" />保存设置</Button></section>

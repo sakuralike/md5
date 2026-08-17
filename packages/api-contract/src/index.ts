@@ -1517,7 +1517,8 @@ export interface EmailDeliverySettings {
   sender_email: string;
   subject_prefix: string;
   footer_text: string;
-  content_format: "plain_text";
+  footer_html: string;
+  content_format: "multipart";
   smtp_host: string;
   smtp_port: number;
   smtp_security: SmtpSecurityMode;
@@ -1525,7 +1526,24 @@ export interface EmailDeliverySettings {
   smtp_auth_enabled: boolean;
   smtp_password_configured: boolean;
   smtp_timeout_seconds: number;
-  configuration_source: "deployment_environment";
+  configuration_source: "database" | "deployment_environment";
+}
+
+export interface EmailDeliverySettingsUpdate {
+  enabled: boolean;
+  sender_name: string;
+  sender_email: string;
+  subject_prefix: string;
+  footer_text: string;
+  footer_html: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_security: SmtpSecurityMode;
+  smtp_username: string;
+  smtp_auth_enabled: boolean;
+  smtp_timeout_seconds: number;
+  smtp_password?: string | null;
+  clear_smtp_password: boolean;
 }
 
 export interface EmailDeliveryTestResponse {
