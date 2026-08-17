@@ -64,21 +64,11 @@ from password_detective.modules.admin.setting_schemas import (
     EmailDeliverySettingsResponse,
     EmailDeliveryTestRequest,
     EmailDeliveryTestResponse,
-    SettingVersionCreateRequest,
-    SettingVersionDetail,
-    SettingVersionListResponse,
-    SettingVersionMutationResponse,
-    SettingVersionPublishRequest,
-    SettingVersionRollbackRequest,
+    OperationalSettingsResponse,
+    OperationalSettingsSnapshot,
     SiteLogoUploadResponse,
 )
-from password_detective.modules.admin.settings import (
-    create_setting_version,
-    get_setting_version,
-    list_setting_versions,
-    publish_setting_version,
-    rollback_setting_version,
-)
+from password_detective.modules.admin.settings import get_current_settings, save_current_settings
 from password_detective.modules.admin.user_schemas import (
     AdminReauthenticationRequest,
     AdminReauthenticationResponse,
@@ -654,153 +644,41 @@ def admin_email_delivery_test(
     )
 
 
-@router.get("/settings/versions", response_model=SettingVersionListResponse)
-def admin_setting_version_list(
+@router.get("/settings/current", response_model=OperationalSettingsResponse)
+def admin_current_settings(
     db: Annotated[Session, Depends(get_db)],
     _: Annotated[Principal, Depends(require_user_governance_admin)],
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> SettingVersionListResponse:
-    return list_setting_versions(db, page=page, page_size=page_size)
+) -> OperationalSettingsResponse:
+    return get_current_settings(db)
 
 
-@router.get("/settings/versions/{version_id}", response_model=SettingVersionDetail)
-def admin_setting_version_detail(
-    version_id: str,
-    db: Annotated[Session, Depends(get_db)],
-    _: Annotated[Principal, Depends(require_user_governance_admin)],
-) -> SettingVersionDetail:
-    return get_setting_version(db, version_id)
-
-
-@router.post(
-    "/settings/versions",
-    response_model=SettingVersionMutationResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(rate_limit("admin.settings.create", limit=30, window_seconds=60))],
+@router.put(
+    "/settings/current",
+    response_model=OperationalSettingsResponse,
+    dependencies=[Depends(rate_limit("admin.settings.save", limit=30, window_seconds=60))],
 )
-def admin_setting_version_create(
-    payload: SettingVersionCreateRequest,
+def admin_current_settings_save(
+    payload: OperationalSettingsSnapshot,
     request: Request,
     response: Response,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(require_user_governance_admin)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
-) -> SettingVersionMutationResponse:
+) -> OperationalSettingsResponse:
     request_hash = payload_digest(payload.model_dump(mode="json"))
     lease = acquire_idempotency(
         db,
-        scope="admin.settings.create",
+        scope="admin.settings.save",
         owner_key=principal.user.id,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
     )
     if lease.cached_response is not None:
-        response.status_code = lease.cached_status or status.HTTP_201_CREATED
-        return SettingVersionMutationResponse.model_validate(lease.cached_response)
+        return OperationalSettingsResponse.model_validate(lease.cached_response)
     try:
-        result = create_setting_version(
-            db, payload=payload, principal=principal, context=get_client_context(request)
-        )
-        complete_idempotency(
+        result = save_current_settings(
             db,
-            lease,
-            response_status=status.HTTP_201_CREATED,
-            response_body=result.model_dump(mode="json"),
-        )
-        return result
-    except Exception:
-        db.rollback()
-        abandon_idempotency(db, lease)
-        raise
-
-
-@router.post(
-    "/settings/versions/{version_id}/publish",
-    response_model=SettingVersionMutationResponse,
-    dependencies=[Depends(rate_limit("admin.settings.publish", limit=20, window_seconds=60))],
-)
-def admin_setting_version_publish(
-    version_id: str,
-    payload: SettingVersionPublishRequest,
-    request: Request,
-    response: Response,
-    db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(require_user_governance_admin)],
-    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
-) -> SettingVersionMutationResponse:
-    request_hash = payload_digest(
-        {
-            "version_id": version_id,
-            "expected_published_version_id": payload.expected_published_version_id,
-            "reason_code": payload.reason_code.value,
-        }
-    )
-    lease = acquire_idempotency(
-        db,
-        scope="admin.settings.publish",
-        owner_key=principal.user.id,
-        idempotency_key=idempotency_key,
-        request_hash=request_hash,
-    )
-    if lease.cached_response is not None:
-        return SettingVersionMutationResponse.model_validate(lease.cached_response)
-    try:
-        result = publish_setting_version(
-            db,
-            version_id=version_id,
-            payload=payload,
-            principal=principal,
-            context=get_client_context(request),
-        )
-        complete_idempotency(
-            db,
-            lease,
-            response_status=status.HTTP_200_OK,
-            response_body=result.model_dump(mode="json"),
-        )
-        return result
-    except Exception:
-        db.rollback()
-        abandon_idempotency(db, lease)
-        raise
-
-
-@router.post(
-    "/settings/versions/{version_id}/rollback",
-    response_model=SettingVersionMutationResponse,
-    dependencies=[Depends(rate_limit("admin.settings.rollback", limit=20, window_seconds=60))],
-)
-def admin_setting_version_rollback(
-    version_id: str,
-    payload: SettingVersionRollbackRequest,
-    request: Request,
-    response: Response,
-    db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(require_user_governance_admin)],
-    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
-) -> SettingVersionMutationResponse:
-    request_hash = payload_digest(
-        {
-            "version_id": version_id,
-            "expected_published_version_id": payload.expected_published_version_id,
-            "reason_code": payload.reason_code.value,
-        }
-    )
-    lease = acquire_idempotency(
-        db,
-        scope="admin.settings.rollback",
-        owner_key=principal.user.id,
-        idempotency_key=idempotency_key,
-        request_hash=request_hash,
-    )
-    if lease.cached_response is not None:
-        return SettingVersionMutationResponse.model_validate(lease.cached_response)
-    try:
-        result = rollback_setting_version(
-            db,
-            version_id=version_id,
-            payload=payload,
+            snapshot=payload,
             principal=principal,
             context=get_client_context(request),
         )

@@ -1451,13 +1451,12 @@ export interface RoleChangeMutationResponse {
   request_id: string | null;
 }
 
-export type SettingVersionStatus = "draft" | "published" | "superseded";
-export type SettingChangeReasonCode =
-  | "security_hardening"
-  | "capacity_adjustment"
-  | "product_policy"
-  | "incident_response"
-  | "rollback";
+export interface SiteNavigationItem {
+  label: string;
+  path: string;
+  enabled: boolean;
+  requires_auth: boolean;
+}
 
 export interface UserLevelDefinition {
   code: string;
@@ -1466,6 +1465,18 @@ export interface UserLevelDefinition {
   min_growth_points: number;
   daily_reveal_quota: number;
   can_submit: boolean;
+}
+
+export interface OperationalSettingsSnapshot {
+  site_name: string;
+  site_logo_url: string;
+  site_navigation: SiteNavigationItem[];
+  daily_reveal_quota: number;
+  reauthentication_ttl_minutes: number;
+  privacy_deletion_grace_hours: number;
+  desktop_min_client_version: string;
+  desktop_update_download_cache_seconds: number;
+  user_levels: UserLevelDefinition[];
 }
 
 export type NotificationBackend = "memory" | "log" | "webhook" | "smtp";
@@ -1494,92 +1505,10 @@ export interface EmailDeliveryTestResponse {
   message: string;
   provider_message_id: string;
 }
-
-export interface SiteNavigationItem {
-  label: string;
-  path: string;
-  enabled: boolean;
-  requires_auth: boolean;
-}
-
-export interface PublicSiteConfig {
-  site_name: string;
-  site_logo_url: string;
-  navigation: SiteNavigationItem[];
-}
-
-export interface HotHashSummary {
-  algorithm: FingerprintAlgorithm;
-  digest: string;
-  like_count: number;
-  comment_count: number;
-  useful_vote_count: number;
-  heat_score: number;
-}
-
-export interface UserRankingSummary {
-  rank: number;
-  uid: string;
-  username: string;
-  score: number;
-}
-
-export interface HomeDiscoveryResponse {
-  hot_hashes: HotHashSummary[];
-  contribution_leaders: UserRankingSummary[];
-  points_leaders: UserRankingSummary[];
-}
-
-export interface OperationalSettingsSnapshot {
-  site_name: string;
-  site_logo_url: string;
-  site_navigation: SiteNavigationItem[];
-  daily_reveal_quota: number;
-  reauthentication_ttl_minutes: number;
-  privacy_deletion_grace_hours: number;
-  desktop_min_client_version: string;
-  desktop_update_download_cache_seconds: number;
-  user_levels: UserLevelDefinition[];
-}
-
-export interface SettingDifference {
-  key: keyof OperationalSettingsSnapshot;
-  previous: number | string | UserLevelDefinition[] | SiteNavigationItem[] | null;
-  current: number | string | UserLevelDefinition[] | SiteNavigationItem[];
-}
-
-export interface SettingVersionSummary {
-  id: string;
-  status: SettingVersionStatus;
-  schema_version: string;
-  snapshot_hash: string;
-  base_version_id: string | null;
-  rollback_of_id: string | null;
-  reason_code: string;
-  created_by: string;
-  published_by: string | null;
-  created_at: string;
-  published_at: string | null;
-  effective_at: string | null;
-}
-
-export interface SettingVersionDetail extends SettingVersionSummary {
-  snapshot: OperationalSettingsSnapshot;
-  differences: SettingDifference[];
-}
-
-export interface SettingVersionListResponse {
-  items: SettingVersionSummary[];
-  page: number;
-  page_size: number;
-  total: number;
-  published_version_id: string | null;
-}
-
-export interface SettingVersionMutationResponse {
-  version: SettingVersionDetail;
-  audit_id: string;
-  request_id: string | null;
+export interface OperationalSettingsResponse {
+  settings: OperationalSettingsSnapshot;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface SiteLogoUploadResponse {

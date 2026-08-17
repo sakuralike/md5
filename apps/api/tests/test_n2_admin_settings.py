@@ -4,8 +4,7 @@ import pyotp
 from sqlalchemy import select
 
 from password_detective.db.models.audit_log import AuditLog
-from password_detective.db.models.reauthentication_grant import ReauthenticationGrant
-from password_detective.db.models.setting_version import SettingVersionStatus, SystemSettingVersion
+from password_detective.db.models.setting_version import SystemSettingVersion
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User, UserRole
 
@@ -47,305 +46,87 @@ def _admin_session(client, suffix: str, role: UserRole = UserRole.ADMIN):
             "totp_code": pyotp.TOTP(secret).now(),
         },
     )
-    return {"Authorization": f"Bearer {authenticated.json()['access_token']}"}, user_id, secret
+    return {"Authorization": f"Bearer {authenticated.json()['access_token']}"}, user_id
 
 
-def _snapshot(
-    quota: int, *, user_levels: list[dict[str, object]] | None = None
-) -> dict[str, object]:
-    snapshot: dict[str, object] = {
+def _snapshot(quota: int) -> dict[str, object]:
+    return {
+        "site_name": "合成侦探站",
+        "site_logo_url": "/api/v1/site/assets/logo/synthetic.png",
+        "site_navigation": [
+            {"label": "首页", "path": "/", "enabled": True, "requires_auth": False},
+            {"label": "社区", "path": "/community", "enabled": True, "requires_auth": False},
+        ],
         "daily_reveal_quota": quota,
         "reauthentication_ttl_minutes": 5,
         "privacy_deletion_grace_hours": 168,
         "desktop_min_client_version": "0.1.0",
         "desktop_update_download_cache_seconds": 86400,
-    }
-    if user_levels is not None:
-        snapshot["user_levels"] = user_levels
-    return snapshot
-
-
-def _reauth(client, headers: dict[str, str], secret: str) -> str:
-    response = client.post(
-        "/api/v1/admin/auth/reauthenticate",
-        headers=headers,
-        json={
-            "purpose": "admin_settings_governance",
-            "current_password": PASSWORD,
-            "totp_code": pyotp.TOTP(secret).now(),
-        },
-    )
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
-    assert response.json()["purpose"] == "admin_settings_governance"
-    return response.json()["reauth_token"]
-
-
-def _create(client, headers: dict[str, str], *, base: str | None, quota: int, key: str):
-    return client.post(
-        "/api/v1/admin/settings/versions",
-        headers={**headers, "Idempotency-Key": key},
-        json={
-            "expected_base_version_id": base,
-            "reason_code": "product_policy",
-            "snapshot": _snapshot(quota),
-        },
-    )
-
-
-def test_setting_versions_require_admin_and_publish_immutable_projection(client):
-    moderator_headers, _, _ = _admin_session(client, "moderator", UserRole.MODERATOR)
-    assert (
-        client.get("/api/v1/admin/settings/versions", headers=moderator_headers).status_code == 403
-    )
-
-    headers, admin_id, secret = _admin_session(client, "publisher")
-    created = _create(client, headers, base=None, quota=9, key="settings-create-0001")
-    assert created.status_code == 201
-    draft = created.json()["version"]
-    assert draft["status"] == "draft"
-    assert draft["differences"][0]["previous"] is None
-
-    replay = _create(client, headers, base=None, quota=9, key="settings-create-0001")
-    assert replay.status_code == 201
-    assert replay.json() == created.json()
-
-    token = _reauth(client, headers, secret)
-    published = client.post(
-        f"/api/v1/admin/settings/versions/{draft['id']}/publish",
-        headers={**headers, "Idempotency-Key": "settings-publish-0001"},
-        json={
-            "expected_published_version_id": None,
-            "reason_code": "product_policy",
-            "reauth_token": token,
-        },
-    )
-    assert published.status_code == 200
-    body = published.json()
-    assert body["version"]["status"] == "published"
-    assert body["version"]["effective_at"] is not None
-
-    with client.app.state.database.session_factory() as db:
-        projection = db.get(SystemSetting, "daily_reveal_quota")
-        assert projection is not None
-        assert projection.value_json == {"value": 9}
-        assert projection.updated_by == admin_id
-        record = db.get(SystemSettingVersion, draft["id"])
-        assert record is not None and record.status == SettingVersionStatus.PUBLISHED
-        grant = db.scalar(
-            select(ReauthenticationGrant).where(ReauthenticationGrant.user_id == admin_id)
-        )
-        assert grant is not None and grant.purpose == "admin_settings_governance"
-        audit = db.scalar(select(AuditLog).where(AuditLog.action == "admin.settings.published"))
-        assert audit is not None
-        assert "reauth_token" not in str(audit.details)
-
-
-def test_setting_publish_conflict_preserves_grant_and_rollback_creates_new_version(client):
-    headers, _, secret = _admin_session(client, "rollback")
-    first = _create(client, headers, base=None, quota=7, key="settings-create-first")
-    first_id = first.json()["version"]["id"]
-    token = _reauth(client, headers, secret)
-    assert (
-        client.post(
-            f"/api/v1/admin/settings/versions/{first_id}/publish",
-            headers={**headers, "Idempotency-Key": "settings-publish-first"},
-            json={
-                "expected_published_version_id": None,
-                "reason_code": "product_policy",
-                "reauth_token": token,
-            },
-        ).status_code
-        == 200
-    )
-
-    second = _create(client, headers, base=first_id, quota=13, key="settings-create-second")
-    second_id = second.json()["version"]["id"]
-    token = _reauth(client, headers, secret)
-    conflict = client.post(
-        f"/api/v1/admin/settings/versions/{second_id}/publish",
-        headers={**headers, "Idempotency-Key": "settings-publish-conflict"},
-        json={
-            "expected_published_version_id": None,
-            "reason_code": "capacity_adjustment",
-            "reauth_token": token,
-        },
-    )
-    assert conflict.status_code == 409
-    published = client.post(
-        f"/api/v1/admin/settings/versions/{second_id}/publish",
-        headers={**headers, "Idempotency-Key": "settings-publish-second"},
-        json={
-            "expected_published_version_id": first_id,
-            "reason_code": "capacity_adjustment",
-            "reauth_token": token,
-        },
-    )
-    assert published.status_code == 200
-
-    rollback_token = _reauth(client, headers, secret)
-    rolled_back = client.post(
-        f"/api/v1/admin/settings/versions/{first_id}/rollback",
-        headers={**headers, "Idempotency-Key": "settings-rollback-first"},
-        json={
-            "expected_published_version_id": second_id,
-            "reason_code": "rollback",
-            "reauth_token": rollback_token,
-        },
-    )
-    assert rolled_back.status_code == 200
-    rollback_version = rolled_back.json()["version"]
-    assert rollback_version["id"] not in {first_id, second_id}
-    assert rollback_version["rollback_of_id"] == first_id
-    assert rollback_version["snapshot"]["daily_reveal_quota"] == 7
-
-    versions = client.get("/api/v1/admin/settings/versions", headers=headers)
-    assert versions.status_code == 200
-    assert versions.json()["published_version_id"] == rollback_version["id"]
-    with client.app.state.database.session_factory() as db:
-        assert db.get(SystemSetting, "daily_reveal_quota").value_json == {"value": 7}
-
-
-def test_level_rules_publish_rebuilds_profiles_and_rejects_invalid_thresholds(client):
-    headers, admin_id, secret = _admin_session(client, "level_rules")
-    levels = [
-        {
-            "code": "rookie",
-            "name": "新手侦探",
-            "description": "合成测试基础等级。",
-            "min_growth_points": 0,
-            "daily_reveal_quota": 10,
-            "can_submit": True,
-        },
-        {
-            "code": "active",
-            "name": "活跃侦探",
-            "description": "完成当日活跃后的合成测试等级。",
-            "min_growth_points": 5,
-            "daily_reveal_quota": 35,
-            "can_submit": True,
-        },
-    ]
-    created = client.post(
-        "/api/v1/admin/settings/versions",
-        headers={**headers, "Idempotency-Key": "settings-level-create-0001"},
-        json={
-            "expected_base_version_id": None,
-            "reason_code": "product_policy",
-            "snapshot": _snapshot(20, user_levels=levels),
-        },
-    )
-    assert created.status_code == 201
-    draft = created.json()["version"]
-    level_difference = next(item for item in draft["differences"] if item["key"] == "user_levels")
-    assert level_difference["current"] == levels
-
-    published = client.post(
-        f"/api/v1/admin/settings/versions/{draft['id']}/publish",
-        headers={**headers, "Idempotency-Key": "settings-level-publish-0001"},
-        json={
-            "expected_published_version_id": None,
-            "reason_code": "product_policy",
-            "reauth_token": _reauth(client, headers, secret),
-        },
-    )
-    assert published.status_code == 200
-    profile = client.get("/api/v1/me/level", headers=headers)
-    assert profile.status_code == 200
-    assert profile.json()["growth_points"] == 5
-    assert profile.json()["current"]["code"] == "active"
-    with client.app.state.database.session_factory() as db:
-        stored = db.get(SystemSetting, "user_levels")
-        assert stored is not None
-        assert stored.value_json == {"value": levels}
-        audit = db.scalar(
-            select(AuditLog)
-            .where(AuditLog.action == "admin.settings.published")
-            .order_by(AuditLog.created_at.desc())
-        )
-        assert audit is not None
-        assert audit.details["rebuilt_level_profiles"] >= 1
-        assert db.get(User, admin_id) is not None
-
-    invalid_levels = [levels[1], levels[0]]
-    invalid = client.post(
-        "/api/v1/admin/settings/versions",
-        headers={**headers, "Idempotency-Key": "settings-level-invalid-0001"},
-        json={
-            "expected_base_version_id": draft["id"],
-            "reason_code": "product_policy",
-            "snapshot": _snapshot(20, user_levels=invalid_levels),
-        },
-    )
-    assert invalid.status_code == 422
-
-
-def test_site_brand_and_navigation_validation_are_versioned(client):
-    headers, _, secret = _admin_session(client, "site_brand")
-    snapshot = _snapshot(20)
-    snapshot.update(
-        {
-            "site_name": "合成侦探站",
-            "site_logo_url": "/assets/synthetic-logo.svg",
-            "site_navigation": [
-                {
-                    "label": "首页",
-                    "path": "/",
-                    "enabled": True,
-                    "requires_auth": False,
-                },
-                {
-                    "label": "社区",
-                    "path": "/community",
-                    "enabled": True,
-                    "requires_auth": False,
-                },
-                {
-                    "label": "用户中心",
-                    "path": "/account",
-                    "enabled": True,
-                    "requires_auth": True,
-                },
-            ],
-        }
-    )
-    created = client.post(
-        "/api/v1/admin/settings/versions",
-        headers={**headers, "Idempotency-Key": "settings-site-brand-create"},
-        json={
-            "expected_base_version_id": None,
-            "reason_code": "product_policy",
-            "snapshot": snapshot,
-        },
-    )
-    assert created.status_code == 201
-    draft = created.json()["version"]
-    assert {item["key"] for item in draft["differences"]} >= {
-        "site_name",
-        "site_logo_url",
-        "site_navigation",
+        "user_levels": [
+            {
+                "code": "rookie",
+                "name": "新手侦探",
+                "description": "合成用户等级",
+                "min_growth_points": 0,
+                "daily_reveal_quota": quota,
+                "can_submit": True,
+            }
+        ],
     }
 
-    published = client.post(
-        f"/api/v1/admin/settings/versions/{draft['id']}/publish",
-        headers={**headers, "Idempotency-Key": "settings-site-brand-publish"},
-        json={
-            "expected_published_version_id": None,
-            "reason_code": "product_policy",
-            "reauth_token": _reauth(client, headers, secret),
-        },
-    )
-    assert published.status_code == 200
-    config = client.get("/api/v1/site/config")
-    assert config.status_code == 200
-    assert config.json()["site_name"] == "合成侦探站"
-    assert [item["path"] for item in config.json()["navigation"]] == [
-        "/",
-        "/community",
-        "/account",
-    ]
 
-    invalid = dict(snapshot)
+def test_current_settings_require_admin_and_save_directly(client) -> None:
+    moderator_headers, _ = _admin_session(client, "moderator", UserRole.MODERATOR)
+    assert (
+        client.get("/api/v1/admin/settings/current", headers=moderator_headers).status_code == 403
+    )
+
+    headers, admin_id = _admin_session(client, "directsave")
+    initial = client.get("/api/v1/admin/settings/current", headers=headers)
+    assert initial.status_code == 200
+    assert initial.json()["settings"]["site_name"] == "密码侦探社"
+
+    snapshot = _snapshot(9)
+    saved = client.put(
+        "/api/v1/admin/settings/current",
+        headers={**headers, "Idempotency-Key": "settings-current-save-0001"},
+        json=snapshot,
+    )
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["settings"] == snapshot
+    assert body["updated_by"] == admin_id
+
+    replay = client.put(
+        "/api/v1/admin/settings/current",
+        headers={**headers, "Idempotency-Key": "settings-current-save-0001"},
+        json=snapshot,
+    )
+    assert replay.status_code == 200
+    assert replay.json() == body
+
+    current = client.get("/api/v1/admin/settings/current", headers=headers)
+    assert current.status_code == 200
+    assert current.json()["settings"] == snapshot
+
+    site_config = client.get("/api/v1/site/config")
+    assert site_config.status_code == 200
+    assert site_config.json()["site_name"] == "合成侦探站"
+    assert [item["path"] for item in site_config.json()["navigation"]] == ["/", "/community"]
+
+    with client.app.state.database.session_factory() as db:
+        persisted = db.get(SystemSetting, "daily_reveal_quota")
+        assert persisted is not None and persisted.value_json == {"value": 9}
+        assert db.scalar(select(SystemSettingVersion)) is None
+        audit = db.scalar(select(AuditLog).where(AuditLog.action == "admin.settings.saved"))
+        assert audit is not None
+        assert audit.target_type == "system_settings"
+        assert audit.actor_id == admin_id
+
+
+def test_current_settings_validate_input_and_retire_version_routes(client) -> None:
+    headers, _ = _admin_session(client, "validation")
+    invalid = _snapshot(9)
     invalid["site_navigation"] = [
         {
             "label": "外部入口",
@@ -354,19 +135,26 @@ def test_site_brand_and_navigation_validation_are_versioned(client):
             "requires_auth": False,
         }
     ]
-    rejected = client.post(
-        "/api/v1/admin/settings/versions",
-        headers={**headers, "Idempotency-Key": "settings-site-brand-invalid"},
-        json={
-            "expected_base_version_id": draft["id"],
-            "reason_code": "product_policy",
-            "snapshot": invalid,
-        },
+    rejected = client.put(
+        "/api/v1/admin/settings/current",
+        headers={**headers, "Idempotency-Key": "settings-current-invalid"},
+        json=invalid,
     )
     assert rejected.status_code == 422
 
+    assert client.get("/api/v1/admin/settings/versions", headers=headers).status_code == 404
+    assert (
+        client.post(
+            "/api/v1/admin/settings/versions",
+            headers={**headers, "Idempotency-Key": "retired-version-endpoint"},
+            json={"snapshot": _snapshot(9)},
+        ).status_code
+        == 404
+    )
+
+
 def test_admin_can_upload_and_serve_content_addressed_site_logo(client) -> None:
-    headers, _, _ = _admin_session(client, "logo")
+    headers, _ = _admin_session(client, "logo")
     payload = b"\x89PNG\r\n\x1a\n" + b"synthetic-logo-payload"
 
     uploaded = client.post(
@@ -409,7 +197,7 @@ def test_admin_can_upload_and_serve_content_addressed_site_logo(client) -> None:
 
 
 def test_site_logo_upload_rejects_type_and_signature_mismatch(client) -> None:
-    headers, _, _ = _admin_session(client, "logoinvalid")
+    headers, _ = _admin_session(client, "logoinvalid")
     response = client.post(
         "/api/v1/admin/settings/logo",
         headers={**headers, "Content-Type": "image/jpeg"},
