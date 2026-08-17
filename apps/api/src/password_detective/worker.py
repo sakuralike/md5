@@ -18,6 +18,7 @@ from password_detective.modules.account_privacy.service import (
     process_due_deletion_requests,
 )
 from password_detective.modules.community.notification_service import (
+    dispatch_pending_email_digests,
     dispatch_pending_notification_events,
 )
 from password_detective.modules.community.search_index import dispatch_pending_search_events
@@ -57,6 +58,10 @@ celery_app.conf.update(
         "dispatch-community-notification-events": {
             "task": "community.dispatch_notification_events",
             "schedule": 2.0,
+        },
+        "dispatch-community-email-digests": {
+            "task": "community.dispatch_email_digests",
+            "schedule": 120.0,
         },
         "dispatch-community-search-events": {
             "task": "community.dispatch_search_events",
@@ -142,6 +147,17 @@ def dispatch_community_notification_events() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return dispatch_pending_notification_events(db)
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="community.dispatch_email_digests")
+def dispatch_community_email_digests() -> dict[str, int]:
+    database = Database(settings)
+    gateway = build_notification_gateway(settings)
+    try:
+        with database.session_factory() as db:
+            return dispatch_pending_email_digests(db, gateway)
     finally:
         database.dispose()
 

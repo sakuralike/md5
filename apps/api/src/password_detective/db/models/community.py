@@ -215,6 +215,13 @@ class CommunityNotificationOutboxStatus(StrEnum):
     FAILED = "failed"
 
 
+class CommunityNotificationEmailDigestStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    SUPPRESSED = "suppressed"
+
+
 class CommunityNotificationSource(StrEnum):
     POST = "post"
     COMMENT = "comment"
@@ -227,6 +234,7 @@ class CommunityDirectEventType(StrEnum):
     MESSAGE_CREATED = "message.created"
     CONVERSATION_READ = "conversation.read"
     UNREAD_CHANGED = "unread.changed"
+
 
 class CommunityDirectConversation(Base):
     __tablename__ = "community_direct_conversations"
@@ -329,9 +337,7 @@ class CommunityDirectEvent(Base):
         String(36),
         ForeignKey("community_direct_conversations.id", ondelete="CASCADE"),
     )
-    actor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE")
-    )
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"))
     message_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("community_direct_messages.id", ondelete="CASCADE"),
@@ -339,6 +345,7 @@ class CommunityDirectEvent(Base):
     )
     payload: Mapped[dict[str, object]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
 
 class CommunityDirectMessage(Base):
     __tablename__ = "community_direct_messages"
@@ -697,6 +704,70 @@ class CommunityNotificationOutbox(Base):
     )
 
 
+class CommunityNotificationEmailDigest(Base):
+    __tablename__ = "community_notification_email_digests"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_id",
+            "window_started_at",
+            name="uq_community_notification_email_digest_window",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    recipient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    window_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[CommunityNotificationEmailDigestStatus] = mapped_column(
+        Enum(CommunityNotificationEmailDigestStatus, native_enum=False, length=16),
+        default=CommunityNotificationEmailDigestStatus.PENDING,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suppressed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_name: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityNotificationEmailDigestItem(Base):
+    __tablename__ = "community_notification_email_digest_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "digest_id",
+            "notification_id",
+            "delivery_version",
+            name="uq_community_notification_email_digest_item_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    digest_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("community_notification_email_digests.id", ondelete="CASCADE"),
+        index=True,
+    )
+    notification_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("community_notifications.id", ondelete="CASCADE"),
+        index=True,
+    )
+    delivery_version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class CommunityNotificationPreference(Base):
     __tablename__ = "community_notification_preferences"
     __table_args__ = (
@@ -936,9 +1007,7 @@ class CommunitySearchDocument(Base):
 
 class CommunitySearchOutbox(Base):
     __tablename__ = "community_search_outbox"
-    __table_args__ = (
-        UniqueConstraint("dedupe_key", name="uq_community_search_outbox_dedupe"),
-    )
+    __table_args__ = (UniqueConstraint("dedupe_key", name="uq_community_search_outbox_dedupe"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     event_type: Mapped[str] = mapped_column(String(16))

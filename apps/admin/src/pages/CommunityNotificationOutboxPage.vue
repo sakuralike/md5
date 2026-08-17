@@ -227,6 +227,29 @@ function kindLabel(value: CommunityNotificationKind): string {
       </article>
     </section>
 
+    <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="邮件摘要投递指标">
+      <article class="rounded-xl border bg-card p-5 shadow-sm">
+        <p class="text-sm text-muted-foreground">邮件摘要待发送</p>
+        <p class="mt-2 text-3xl font-semibold">{{ metrics?.email_digest_pending_count ?? "—" }}</p>
+      </article>
+      <article class="rounded-xl border bg-card p-5 shadow-sm">
+        <p class="text-sm text-muted-foreground">邮件摘要已发送</p>
+        <p class="mt-2 text-3xl font-semibold">{{ metrics?.email_digest_sent_count ?? "—" }}</p>
+      </article>
+      <article class="rounded-xl border bg-card p-5 shadow-sm">
+        <p class="text-sm text-muted-foreground">邮件摘要失败</p>
+        <p class="mt-2 text-3xl font-semibold text-destructive">{{ metrics?.email_digest_failed_count ?? "—" }}</p>
+      </article>
+      <article class="rounded-xl border bg-card p-5 shadow-sm">
+        <p class="text-sm text-muted-foreground">邮件摘要已抑制</p>
+        <p class="mt-2 text-3xl font-semibold">{{ metrics?.email_digest_suppressed_count ?? "—" }}</p>
+      </article>
+      <article class="rounded-xl border bg-card p-5 shadow-sm">
+        <p class="text-sm text-muted-foreground">最近摘要发送</p>
+        <p class="mt-2 text-xl font-semibold">{{ formatTime(metrics?.email_digest_last_sent_at ?? null) }}</p>
+      </article>
+    </section>
+
     <section class="rounded-2xl border bg-card p-5 shadow-sm">
       <div class="grid gap-4 md:grid-cols-4">
         <div class="space-y-2">

@@ -24,6 +24,11 @@ describe("CommunityNotificationOutboxPage", () => {
 
     expect(html).toContain("社区通知 Outbox 工作台");
     expect(html).toContain("24 小时失败");
+    expect(html).toContain("邮件摘要待发送");
+    expect(html).toContain("邮件摘要已发送");
+    expect(html).toContain("邮件摘要失败");
+    expect(html).toContain("邮件摘要已抑制");
+    expect(html).toContain("最近摘要发送");
     expect(html).toContain("错误代码");
     expect(html).toContain("受控单条重放");
     expect(html).toContain("当前密码");

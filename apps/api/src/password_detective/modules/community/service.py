@@ -58,6 +58,8 @@ from password_detective.modules.community.group_service import (
 )
 from password_detective.modules.community.notification_service import (
     create_notification,
+    in_app_notification_visibility_condition,
+    notification_enabled,
     notification_preview,
     sync_like_summary,
 )
@@ -838,6 +840,7 @@ def list_notifications(
     conditions = [
         CommunityNotification.recipient_id == principal.user.id,
         _notification_visibility_condition(principal.user.id),
+        in_app_notification_visibility_condition(principal.user.id),
     ]
     if unread_only:
         conditions.append(CommunityNotification.read_at.is_(None))
@@ -867,6 +870,7 @@ def list_notifications(
                 CommunityNotification.recipient_id == principal.user.id,
                 CommunityNotification.read_at.is_(None),
                 _notification_visibility_condition(principal.user.id),
+                in_app_notification_visibility_condition(principal.user.id),
             )
         )
         or 0
@@ -892,7 +896,11 @@ def mark_notification_read(
             CommunityNotification.recipient_id == principal.user.id,
         )
     )
-    if notification is None or not _notification_is_visible(db, notification, principal.user.id):
+    if (
+        notification is None
+        or not _notification_is_visible(db, notification, principal.user.id)
+        or not notification_enabled(db, principal.user.id, notification.kind)
+    ):
         raise AppError("community.notification_not_found", "社区通知不存在", status_code=404)
     if notification.read_at is None:
         notification.read_at = utc_now()
@@ -913,6 +921,7 @@ def mark_all_notifications_read(
             CommunityNotification.recipient_id == principal.user.id,
             CommunityNotification.read_at.is_(None),
             _notification_visibility_condition(principal.user.id),
+            in_app_notification_visibility_condition(principal.user.id),
         )
     ).all()
     now = utc_now()
@@ -1830,6 +1839,7 @@ def _unread_notification_count(db: Session, user_id: str) -> int:
                 CommunityNotification.recipient_id == user_id,
                 CommunityNotification.read_at.is_(None),
                 _notification_visibility_condition(user_id),
+                in_app_notification_visibility_condition(user_id),
             )
         )
         or 0

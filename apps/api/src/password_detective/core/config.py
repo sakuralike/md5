@@ -113,6 +113,7 @@ class Settings(BaseSettings):
     notification_smtp_sender_email: str = ""
     notification_smtp_sender_name: str = Field(default="密码侦探社", max_length=128)
     notification_smtp_timeout_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
+    community_notification_digest_window_minutes: int = Field(default=60, ge=15, le=1440)
     browser_cookie_secure: bool = False
     max_json_body_bytes: int = Field(default=1_048_576, ge=1_024, le=16_777_216)
     cors_origins: str = "http://localhost:5173,http://localhost:5174"

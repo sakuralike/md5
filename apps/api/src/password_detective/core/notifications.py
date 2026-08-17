@@ -50,6 +50,19 @@ class DeliveredTrustCaseNotification:
     resolution_code: str
 
 
+
+@dataclass(frozen=True)
+class CommunityNotificationDigestEmailItem:
+    kind: str
+    preview: str
+
+
+@dataclass(frozen=True)
+class DeliveredCommunityNotificationDigest:
+    digest_id: str
+    item_count: int
+
+
 class NotificationGateway(Protocol):
     provider_name: str
 
@@ -77,6 +90,16 @@ class NotificationGateway(Protocol):
         resolution_code: str,
     ) -> str | None: ...
 
+    def send_community_notification_digest(
+        self,
+        *,
+        digest_id: str,
+        recipient: str,
+        window_started_at: datetime,
+        window_ends_at: datetime,
+        items: list[CommunityNotificationDigestEmailItem],
+    ) -> str | None: ...
+
 
 class MemoryNotificationGateway:
     """Only for local development and tests; messages are never logged."""
@@ -87,6 +110,7 @@ class MemoryNotificationGateway:
         self.messages: list[DeliveredNotification] = []
         self.risk_alert_messages: list[DeliveredRiskAlertNotification] = []
         self.trust_case_messages: list[DeliveredTrustCaseNotification] = []
+        self.community_digest_messages: list[DeliveredCommunityNotificationDigest] = []
 
     def send_account_token(self, *, kind: str, recipient: str, token: str) -> str | None:
         self.messages.append(DeliveredNotification(kind=kind, recipient=recipient, token=token))
@@ -132,6 +156,24 @@ class MemoryNotificationGateway:
                 case_kind=case_kind,
                 case_status=case_status,
                 resolution_code=resolution_code,
+            )
+        )
+        return None
+
+    def send_community_notification_digest(
+        self,
+        *,
+        digest_id: str,
+        recipient: str,
+        window_started_at: datetime,
+        window_ends_at: datetime,
+        items: list[CommunityNotificationDigestEmailItem],
+    ) -> str | None:
+        del recipient, window_started_at, window_ends_at
+        self.community_digest_messages.append(
+            DeliveredCommunityNotificationDigest(
+                digest_id=digest_id,
+                item_count=len(items),
             )
         )
         return None
@@ -195,6 +237,28 @@ class LoggingNotificationGateway:
                 "case_kind": case_kind,
                 "case_status": case_status,
                 "resolution_code": resolution_code,
+            },
+        )
+        return None
+
+
+    def send_community_notification_digest(
+        self,
+        *,
+        digest_id: str,
+        recipient: str,
+        window_started_at: datetime,
+        window_ends_at: datetime,
+        items: list[CommunityNotificationDigestEmailItem],
+    ) -> str | None:
+        del recipient, window_started_at, window_ends_at
+        logger.info(
+            "community_notification_digest_accepted_by_log_sink",
+            extra={
+                "event": "community_notification_digest_delivered",
+                "digest_id": digest_id,
+                "item_count": len(items),
+                "kind_counts": _community_notification_digest_kind_counts(items),
             },
         )
         return None
@@ -272,6 +336,28 @@ class WebhookNotificationGateway:
                 "case_kind": case_kind,
                 "case_status": case_status,
                 "resolution_code": resolution_code,
+            }
+        )
+
+    def send_community_notification_digest(
+        self,
+        *,
+        digest_id: str,
+        recipient: str,
+        window_started_at: datetime,
+        window_ends_at: datetime,
+        items: list[CommunityNotificationDigestEmailItem],
+    ) -> str | None:
+        return self._send(
+            {
+                "version": "notification-webhook-v1",
+                "type": "community_notification_digest",
+                "digest_id": digest_id,
+                "recipient": recipient,
+                "window_started_at": _isoformat_utc(window_started_at),
+                "window_ends_at": _isoformat_utc(window_ends_at),
+                "item_count": len(items),
+                "kind_counts": _community_notification_digest_kind_counts(items),
             }
         )
 
@@ -420,6 +506,34 @@ class SMTPNotificationGateway:
         )
         return self._send_message(message=message, recipient=recipient)
 
+    def send_community_notification_digest(
+        self,
+        *,
+        digest_id: str,
+        recipient: str,
+        window_started_at: datetime,
+        window_ends_at: datetime,
+        items: list[CommunityNotificationDigestEmailItem],
+    ) -> str | None:
+        subject, content = _community_notification_digest_email(
+            window_started_at=window_started_at,
+            window_ends_at=window_ends_at,
+            items=items,
+        )
+        message = self._build_message(
+            recipient=recipient,
+            subject=subject,
+            content=content,
+            notification_type="community_notification_digest",
+            message_key=digest_id,
+            extra_headers={
+                "X-Password-Detective-Digest-ID": digest_id,
+                "X-Password-Detective-Digest-Item-Count": str(len(items)),
+            },
+            stable_message_id=True,
+        )
+        return self._send_message(message=message, recipient=recipient)
+
     def _build_message(
         self,
         *,
@@ -429,6 +543,7 @@ class SMTPNotificationGateway:
         notification_type: str,
         message_key: str,
         extra_headers: dict[str, str] | None = None,
+        stable_message_id: bool = False,
     ) -> EmailMessage:
         sender_domain = self._sender_email.rsplit("@", maxsplit=1)[-1]
         message = EmailMessage()
@@ -436,7 +551,11 @@ class SMTPNotificationGateway:
         message["To"] = recipient
         message["Subject"] = subject
         message["Date"] = format_datetime(datetime.now(UTC))
-        message["Message-ID"] = make_msgid(idstring=message_key, domain=sender_domain)
+        message["Message-ID"] = (
+            _stable_message_id(message_key=message_key, domain=sender_domain)
+            if stable_message_id
+            else make_msgid(idstring=message_key, domain=sender_domain)
+        )
         message["X-Password-Detective-Notification-Type"] = notification_type
         for name, value in (extra_headers or {}).items():
             message[name] = value
@@ -489,6 +608,46 @@ def _close_smtp_client(client: Any) -> None:
     except Exception:
         with suppress(Exception):
             client.close()
+
+
+def _community_notification_digest_kind_counts(
+    items: list[CommunityNotificationDigestEmailItem],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item.kind] = counts.get(item.kind, 0) + 1
+    return counts
+
+
+def _community_notification_digest_email(
+    *,
+    window_started_at: datetime,
+    window_ends_at: datetime,
+    items: list[CommunityNotificationDigestEmailItem],
+) -> tuple[str, str]:
+    lines = [
+        "您有新的社区通知摘要。",
+        "",
+        f"摘要窗口：{_isoformat_utc(window_started_at)} 至 {_isoformat_utc(window_ends_at)}",
+        f"通知数量：{len(items)}",
+        "",
+        "通知摘要：",
+    ]
+    lines.extend(f"- [{item.kind}] {item.preview}" for item in items)
+    lines.extend(
+        [
+            "",
+            "请登录密码侦探社通知中心查看详情。为保护隐私，邮件不包含密码、令牌、私信正文或其他敏感凭据。",
+            "",
+            EMAIL_FOOTER_TEXT,
+        ]
+    )
+    return f"{EMAIL_SUBJECT_PREFIX} 社区通知摘要", "\n".join(lines)
+
+
+def _stable_message_id(*, message_key: str, domain: str) -> str:
+    digest = hashlib.sha256(message_key.encode("utf-8")).hexdigest()
+    return f"<community-digest-{digest}@{domain}>"
 
 
 def _account_token_email(*, kind: str, token: str) -> tuple[str, str]:

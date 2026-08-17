@@ -14,6 +14,9 @@ from password_detective.db.models.community import (
 )
 from password_detective.db.models.user import User
 from password_detective.modules.community.group_service import post_visibility_condition
+from password_detective.modules.community.notification_service import (
+    in_app_notification_visibility_condition,
+)
 from password_detective.modules.community.schemas import (
     CommunityAuthor,
     CommunityNotificationResponse,
@@ -30,9 +33,16 @@ class NotificationEventBatch:
 def latest_delivered_event_id(db: Session, recipient_id: str) -> str | None:
     return db.scalar(
         select(CommunityNotificationOutbox.id)
+        .join(
+            CommunityNotification,
+            CommunityNotification.id == CommunityNotificationOutbox.notification_id,
+        )
         .where(
             CommunityNotificationOutbox.recipient_id == recipient_id,
             CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.DELIVERED,
+            CommunityNotification.recipient_id == recipient_id,
+            _notification_visibility_condition(recipient_id),
+            in_app_notification_visibility_condition(recipient_id),
         )
         .order_by(
             CommunityNotificationOutbox.created_at.desc(),
@@ -54,6 +64,7 @@ def list_delivered_events(
         CommunityNotificationOutbox.status == CommunityNotificationOutboxStatus.DELIVERED,
         CommunityNotification.recipient_id == recipient_id,
         _notification_visibility_condition(recipient_id),
+        in_app_notification_visibility_condition(recipient_id),
     ]
     if after_event_id:
         cursor = db.get(CommunityNotificationOutbox, after_event_id)
@@ -143,6 +154,7 @@ def unread_notification_count(db: Session, user_id: str) -> int:
                 CommunityNotification.recipient_id == user_id,
                 CommunityNotification.read_at.is_(None),
                 _notification_visibility_condition(user_id),
+                in_app_notification_visibility_condition(user_id),
             )
         )
         or 0

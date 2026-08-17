@@ -2345,6 +2345,11 @@ export interface AdminCommunityNotificationOutboxMetrics {
   failed_last_24_hours: number;
   retry_due_count: number;
   oldest_pending_seconds: number | null;
+  email_digest_pending_count: number;
+  email_digest_sent_count: number;
+  email_digest_failed_count: number;
+  email_digest_suppressed_count: number;
+  email_digest_last_sent_at: string | null;
 }
 
 export interface AdminCommunityNotificationReplayResponse {

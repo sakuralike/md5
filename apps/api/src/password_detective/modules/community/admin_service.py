@@ -14,6 +14,8 @@ from password_detective.db.models.community import (
     CommunityContentStatus,
     CommunityModerationAction,
     CommunityNotification,
+    CommunityNotificationEmailDigest,
+    CommunityNotificationEmailDigestStatus,
     CommunityNotificationKind,
     CommunityNotificationOutbox,
     CommunityNotificationOutboxStatus,
@@ -626,6 +628,16 @@ def get_admin_notification_outbox_metrics(
         if oldest_pending_at is not None
         else None
     )
+    digest_counts = {
+        item_status: int(count)
+        for item_status, count in db.execute(
+            select(
+                CommunityNotificationEmailDigest.status,
+                func.count(CommunityNotificationEmailDigest.id),
+            ).group_by(CommunityNotificationEmailDigest.status)
+        ).all()
+    }
+    digest_last_sent_at = db.scalar(select(func.max(CommunityNotificationEmailDigest.sent_at)))
     return AdminCommunityNotificationOutboxMetrics(
         generated_at=now,
         pending_count=counts.get(CommunityNotificationOutboxStatus.PENDING, 0),
@@ -634,6 +646,17 @@ def get_admin_notification_outbox_metrics(
         failed_last_24_hours=failed_last_24_hours,
         retry_due_count=retry_due_count,
         oldest_pending_seconds=oldest_pending_seconds,
+        email_digest_pending_count=digest_counts.get(
+            CommunityNotificationEmailDigestStatus.PENDING, 0
+        ),
+        email_digest_sent_count=digest_counts.get(CommunityNotificationEmailDigestStatus.SENT, 0),
+        email_digest_failed_count=digest_counts.get(
+            CommunityNotificationEmailDigestStatus.FAILED, 0
+        ),
+        email_digest_suppressed_count=digest_counts.get(
+            CommunityNotificationEmailDigestStatus.SUPPRESSED, 0
+        ),
+        email_digest_last_sent_at=digest_last_sent_at,
     )
 
 

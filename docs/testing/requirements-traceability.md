@@ -463,7 +463,7 @@
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
 | COMMUNITY-30 提及用户 | `service._sync_mention_notifications`、`community_notifications`、Alembic `20260812_0029` | 主题提及去重、自提及/未知用户过滤、回复提及测试 | 已实现主题/回复发布和编辑触发；屏蔽/提及偏好依赖后续社交关系模块 |
-| COMMUNITY-69～72 提及通知子集 | 通知业务唯一键、最小化摘要、本人列表、未读数、单条/全部已读 | 越权已读阻断、幂等重放、游标列表、批量已读测试 | 部分实现：提及类型闭环完成；回复、点赞、关注、群组、私信、治理通知和类型偏好仍待 WP5-I7 |
+| COMMUNITY-36、69～76 通知与摘要投递 | `CommunityNotificationEmailDigest*`、`notification_service.py`、`notifications.py`、Worker、Admin 摘要聚合指标 | 邮件专属偏好/站内隔离、Memory/SMTP 摘要、迁移往返、完整 API 分片、前端 lint/typecheck/Vitest/build | 本地已实现并通过门禁；真实 Staging SMTP 接收、目标 MySQL/Redis 与容量验证待本轮部署后记录 |
 | Web 通知中心 | `CommunityNotificationsPage.vue`、`/community/notifications`、`services/community.ts` | 页面渲染、认证头、URL 编码、幂等键、lint/typecheck/Vitest | 已实现 |
 
 
@@ -475,7 +475,7 @@
 | COMMUNITY-33 私有主题收藏 | `community_post_bookmarks`、本人收藏列表 API 和 `/community/bookmarks` | `test_bookmarks_are_private_paginated_and_removed_targets_are_cleanup_only`、`CommunityBookmarksPage.test.ts` | 已通过 |
 | COMMUNITY-34 唯一关系和计数投影 | 数据库唯一约束、写后从事实表重新计数 | 重放同一幂等请求及重复关系测试 | 已通过 |
 | COMMUNITY-35 移除内容互动约束 | 新增互动校验、取消互动保留、失效收藏返回空内容 | 后端负向测试覆盖新增阻断和清理成功 | 已通过 |
-| COMMUNITY-36 点赞摘要通知 | 尚无代码 | 留待 Outbox、聚合和偏好测试 | 未实现，归入 WP5-I7 |
+| COMMUNITY-36 点赞摘要通知 | `sync_like_summary`、邮件摘要关联项与投递前 `delivery_version` 复核 | `test_community_notification_email_digest.py`、SMTP 摘要测试 | 已实现本地闭环；真实 Staging SMTP 接收待部署后记录 |
 
 
 ## 2026-08-12 WP5-I5 第 1 个开发切片：公开主页与关系图谱
@@ -594,3 +594,11 @@
 | 搜索版本 64 位存储 | `CommunitySearchDocument`、`CommunitySearchOutbox` 的 `document_version` 使用 `BigInteger`；Alembic `20260816_0046` 同步修改两张表 | MySQL DDL/模型/迁移测试；完整 API `300 passed, 1 skipped`；Staging `information_schema` 显示两列均为 `bigint` | 已验证 |
 | 隐私设置搜索入队 | `update_privacy_preferences()` 保持现有微秒版本与 Outbox 去重语义 | 资料 API 回归断言 Outbox `document_version > 2_147_483_647`；Staging 合成账号 `PATCH /api/v1/community/me/privacy` 为 200，写入 `1786914188170251` | 已验证 |
 | 投影侧兼容性与回滚 | 搜索文档列与 Outbox 同时扩宽，避免 Worker 投影再次溢出；降级声明保留 | SQLite 实际往返；目标回滚需使用发布前数据库备份，不得将已写入的大整数截断为 32 位 | 已验证修复；UAT/Production 未批准 |
+
+## 2026-08-17 WP5-I7 真实邮件摘要投递（方案 B）
+
+| 需求 | 代码证据 | 自动化/验收证据 | 状态与剩余风险 |
+|---|---|---|---|
+| 独立站内/邮件通道 | `notification_channels`、`in_app_notification_visibility_condition`、通知读取/已读/SSE 过滤 | 邮件专属偏好创建摘要、不创建站内事件；历史站内事件在切换为邮件专属后不再可列出、计未读或标记已读 | 本地已通过；Staging 运行时待复验 |
+| 持久化摘要与可靠投递 | `community_notification_email_digests`、`community_notification_email_digest_items`、Worker 任务、稳定 Message-ID | Memory 与 SMTP 最小披露摘要测试；SQLite `upgrade head -> downgrade -1 -> upgrade head` | 本地已通过；真实 SMTP 接收待安全测试收件人和 Staging 配置确认 |
+| 运营与隐私 | Admin 摘要批次聚合指标、隐私删除时按收件人清理摘要批次 | 后端 API 全量分片、前端 lint/typecheck/Vitest/build | 本地已通过；目标 MySQL/Redis 及容量验证待部署后记录 |

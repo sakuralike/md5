@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from password_detective.core.config import Settings
 from password_detective.core.notifications import (
+    CommunityNotificationDigestEmailItem,
     SMTPNotificationGateway,
     build_notification_gateway,
 )
@@ -227,3 +228,48 @@ def test_smtp_gateway_sends_admin_test_email_without_secrets():
     assert client.sent_message["X-Password-Detective-Notification-Type"] == "smtp_test"
     assert "synthetic-app-password" not in client.sent_message.as_string()
     assert message_id == str(client.sent_message["Message-ID"])
+
+
+def test_smtp_gateway_sends_stable_minimum_disclosure_community_digest() -> None:
+    client = _FakeSMTPClient()
+    gateway = _gateway(client)
+    window_started_at = datetime(2026, 8, 17, 9, 0, tzinfo=UTC)
+
+    message_id = gateway.send_community_notification_digest(
+        digest_id="digest-synthetic-001",
+        recipient="digest-user@synthetic.example.com",
+        window_started_at=window_started_at,
+        window_ends_at=datetime(2026, 8, 17, 10, 0, tzinfo=UTC),
+        items=[
+            CommunityNotificationDigestEmailItem(
+                kind="reply",
+                preview="合成回复通知",
+            )
+        ],
+    )
+
+    assert client.sent_message is not None
+    assert str(client.sent_message["Subject"]) == "[密码侦探社] 社区通知摘要"
+    assert client.sent_message["X-Password-Detective-Notification-Type"] == (
+        "community_notification_digest"
+    )
+    assert client.sent_message["X-Password-Detective-Digest-ID"] == "digest-synthetic-001"
+    assert client.sent_message.get_content().count("合成回复通知") == 1
+    assert "synthetic-app-password" not in client.sent_message.as_string()
+    assert message_id == str(client.sent_message["Message-ID"])
+
+    repeated_client = _FakeSMTPClient()
+    repeated_gateway = _gateway(repeated_client)
+    repeated_message_id = repeated_gateway.send_community_notification_digest(
+        digest_id="digest-synthetic-001",
+        recipient="digest-user@synthetic.example.com",
+        window_started_at=window_started_at,
+        window_ends_at=datetime(2026, 8, 17, 10, 0, tzinfo=UTC),
+        items=[
+            CommunityNotificationDigestEmailItem(
+                kind="reply",
+                preview="合成回复通知",
+            )
+        ],
+    )
+    assert repeated_message_id == message_id

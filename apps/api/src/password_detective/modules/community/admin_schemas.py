@@ -181,6 +181,11 @@ class AdminCommunityNotificationOutboxMetrics(BaseModel):
     failed_last_24_hours: int
     retry_due_count: int
     oldest_pending_seconds: int | None
+    email_digest_pending_count: int
+    email_digest_sent_count: int
+    email_digest_failed_count: int
+    email_digest_suppressed_count: int
+    email_digest_last_sent_at: datetime | None
 
 
 class AdminCommunityNotificationReplayRequest(BaseModel):

@@ -30,6 +30,7 @@ from password_detective.db.models.community import (
     CommunityDirectConversationMember,
     CommunityDirectMessage,
     CommunityNotification,
+    CommunityNotificationEmailDigest,
     CommunityNotificationKind,
     CommunityNotificationOutbox,
     CommunityNotificationSource,
@@ -701,6 +702,11 @@ def process_due_deletion_requests(db: Session) -> int:
                 or_(*direct_notification_conditions),
             )
         ).all()
+        db.execute(
+            delete(CommunityNotificationEmailDigest).where(
+                CommunityNotificationEmailDigest.recipient_id == user.id
+            )
+        )
         if direct_notification_ids:
             db.execute(
                 delete(CommunityNotificationOutbox).where(
