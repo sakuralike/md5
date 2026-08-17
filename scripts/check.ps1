@@ -21,7 +21,8 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Api = Join-Path $Root "apps/api"
-$Python = Join-Path $Api ".venv/Scripts/python.exe"
+. (Join-Path $PSScriptRoot "lib/Resolve-ApiVenvPython.ps1")
+$Python = Resolve-ApiVenvPython -ApiPath $Api
 $PnpmCommand = Get-Command pnpm -ErrorAction SilentlyContinue
 $Pnpm = if ($PnpmCommand) { $PnpmCommand.Source } else { $null }
 $MigrationDatabase = Join-Path $Api ".local/migration-check.db"
@@ -37,7 +38,8 @@ function Invoke-Checked {
     }
 }
 
-if (-not (Test-Path $Python)) { & (Join-Path $PSScriptRoot "setup-api.ps1") }
+if (-not $Python) { & (Join-Path $PSScriptRoot "setup-api.ps1"); $Python = Resolve-ApiVenvPython -ApiPath $Api }
+if (-not $Python) { throw "API 虚拟环境中未找到 Python 可执行文件。" }
 if (-not $Pnpm) { throw "pnpm was not found." }
 
 if (-not $SkipInstall -or -not (Test-Path (Join-Path $Root "node_modules"))) {
@@ -78,8 +80,8 @@ try {
 
 Push-Location $Root
 try {
-    Invoke-Checked $Python -m ruff check ./scripts/rebuild_community_reply_counts.py ./scripts/tests/test_rebuild_community_reply_counts.py
-    Invoke-Checked $Python -m pytest ./scripts/tests/test_rebuild_community_reply_counts.py
+    Invoke-Checked $Python -m ruff check ./scripts/rebuild_community_reply_counts.py ./scripts/tests/test_rebuild_community_reply_counts.py ./scripts/tests/test_api_venv_python_resolver.py
+    Invoke-Checked $Python -m pytest ./scripts/tests/test_rebuild_community_reply_counts.py ./scripts/tests/test_api_venv_python_resolver.py
     Invoke-Checked $Pnpm lint
     Invoke-Checked $Pnpm typecheck
     Invoke-Checked $Pnpm test
