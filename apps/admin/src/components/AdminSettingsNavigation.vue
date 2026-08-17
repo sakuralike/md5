@@ -6,7 +6,6 @@ import {
   MailCheck,
   Menu,
   Settings2,
-  ShieldCheck,
   type LucideIcon,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -40,7 +39,6 @@ const systemSettingsSections: readonly SystemSettingsSectionItem[] = [
   { label: "邮件投递", to: "/settings#email-delivery", icon: MailCheck },
   { label: "版本历史", to: "/settings#version-history", icon: History },
   { label: "运行策略", to: "/settings#operational-policy", icon: Settings2 },
-  { label: "发布门禁", to: "/settings#publish-gate", icon: ShieldCheck },
 ];
 
 function itemsForGroup(

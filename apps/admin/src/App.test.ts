@@ -48,7 +48,7 @@ describe("App", () => {
     expect(html).toContain('aria-label="系统配置二级导航"');
     expect(html).toContain("站点外观");
     expect(html).toContain("用户等级与权益");
-    expect(html).toContain("发布门禁");
+    expect(html).not.toContain("发布门禁");
     expect(html).toContain("lg:pl-[18rem]");
     expect(html).toContain("focus-visible:ring-2");
     expect(html).toContain("bg-gradient-to-br from-primary to-accent");

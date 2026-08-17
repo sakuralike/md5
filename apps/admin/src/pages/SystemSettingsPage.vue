@@ -14,7 +14,6 @@ import {
 import {
   ArrowDownUp,
   CheckCircle2,
-  FileClock,
   Globe2,
   History,
   ImageUp,
@@ -23,13 +22,11 @@ import {
   Navigation,
   Plus,
   RefreshCw,
-  Rocket,
   RotateCcw,
   Save,
   Send,
   Server,
   Settings2,
-  ShieldCheck,
   Trash2,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
@@ -61,12 +58,9 @@ import {
   getEmailDeliverySettings,
   getSettingVersion,
   listSettingVersions,
-  publishSettingVersion,
-  rollbackSettingVersion,
   sendEmailDeliveryTest,
   uploadSiteLogo,
 } from "../services/settings";
-import { reauthenticateAdmin } from "../services/users";
 import { useAdminAuthStore } from "../stores/auth";
 
 const defaultUserLevels: UserLevelDefinition[] = [
@@ -139,9 +133,8 @@ const mutationBusy = ref(false);
 const error = ref("");
 const success = ref("");
 const reasonCode = ref<SettingChangeReasonCode>("product_policy");
-const currentPassword = ref("");
-const totpCode = ref("");
 const form = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
+const baselineSnapshot = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
 const emailSettings = ref<EmailDeliverySettings | null>(null);
 const emailLoading = ref(false);
 const emailTestBusy = ref(false);
@@ -178,13 +171,6 @@ const settingLabels: Record<keyof OperationalSettingsSnapshot, string> = {
   user_levels: "用户等级规则",
 };
 
-const canPublish = computed(() => selected.value?.status === "draft");
-const canRollback = computed(
-  () => selected.value?.status === "superseded" && Boolean(publishedVersionId.value),
-);
-const currentVersion = computed(() =>
-  versions.value.find((item) => item.id === publishedVersionId.value),
-);
 
 function describeError(value: unknown): string {
   if (value instanceof ApiError) return value.body.message;
@@ -208,13 +194,18 @@ function resetMessages(): void {
   success.value = "";
 }
 
-function clearCredentials(): void {
-  currentPassword.value = "";
-  totpCode.value = "";
+function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
+  const immutableSnapshot = structuredClone(snapshot);
+  baselineSnapshot.value = immutableSnapshot;
+  form.value = structuredClone(immutableSnapshot);
 }
 
-function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
-  form.value = structuredClone(snapshot);
+function resetCurrentEdits(): void {
+  useSnapshot(baselineSnapshot.value);
+  resetMessages();
+  logoUploadError.value = "";
+  logoUploadMessage.value = "";
+  success.value = "已将当前编辑恢复至所选不可变版本。";
 }
 
 async function handleLogoUpload(event: Event): Promise<void> {
@@ -238,7 +229,7 @@ async function handleLogoUpload(event: Event): Promise<void> {
   try {
     const uploaded = await uploadSiteLogo(file, auth.accessToken);
     form.value.site_logo_url = uploaded.url;
-    logoUploadMessage.value = "图片已上传并写入当前配置表单，请创建草稿并发布后生效。";
+    logoUploadMessage.value = "图片已上传并写入当前配置表单，保存时会创建新的不可变版本。";
   } catch (value) {
     logoUploadError.value = describeError(value);
   } finally {
@@ -286,8 +277,38 @@ function removeNavigationItem(index: number): void {
   form.value.site_navigation.splice(index, 1);
 }
 
+type SettingsDifferenceValue = number | string | UserLevelDefinition[] | SiteNavigationItem[];
+
+interface EditingDifference {
+  key: keyof OperationalSettingsSnapshot;
+  previous: SettingsDifferenceValue;
+  current: SettingsDifferenceValue;
+}
+
+const snapshotKeys: readonly (keyof OperationalSettingsSnapshot)[] = [
+  "site_name",
+  "site_logo_url",
+  "site_navigation",
+  "daily_reveal_quota",
+  "reauthentication_ttl_minutes",
+  "privacy_deletion_grace_hours",
+  "desktop_min_client_version",
+  "desktop_update_download_cache_seconds",
+  "user_levels",
+];
+
+const editingDifferences = computed<EditingDifference[]>(() => {
+  const currentSnapshot = normalizedSnapshot();
+  return snapshotKeys.flatMap((key) => {
+    const previous = baselineSnapshot.value[key];
+    const current = currentSnapshot[key];
+    if (JSON.stringify(previous) === JSON.stringify(current)) return [];
+    return [{ key, previous, current }];
+  });
+});
+
 function formatDifferenceValue(
-  value: number | string | UserLevelDefinition[] | SiteNavigationItem[] | null,
+  value: SettingsDifferenceValue | null,
 ): string {
   if (value === null) return "未设置";
   if (!Array.isArray(value)) return String(value);
@@ -341,7 +362,7 @@ async function loadVersions(preferredId?: string): Promise<void> {
   }
 }
 
-async function createDraft(): Promise<void> {
+async function saveVersion(): Promise<void> {
   mutationBusy.value = true;
   resetMessages();
   try {
@@ -355,81 +376,10 @@ async function createDraft(): Promise<void> {
       createClientId(),
     );
     await loadVersions(response.version.id);
-    success.value = `不可变草稿 ${shortId(response.version.id)} 已创建，可在差异确认后发布。`;
+    success.value = `不可变版本 ${shortId(response.version.id)} 已保存，可在历史中查看其完整快照。`;
   } catch (value) {
     error.value = describeError(value);
   } finally {
-    mutationBusy.value = false;
-  }
-}
-
-async function acquireSettingsGrant(): Promise<string> {
-  if (!currentPassword.value) {
-    throw new Error("发布或回滚前必须输入当前密码");
-  }
-  if (totpCode.value && !/^\d{6,8}$/.test(totpCode.value)) {
-    throw new Error("TOTP 动态码必须为 6 至 8 位数字");
-  }
-  const response = await reauthenticateAdmin(
-    {
-      currentPassword: currentPassword.value,
-      ...(totpCode.value ? { totpCode: totpCode.value } : {}),
-      purpose: "admin_settings_governance",
-    },
-    auth.accessToken,
-  );
-  return response.reauth_token;
-}
-
-async function publishSelected(): Promise<void> {
-  if (!selected.value || !canPublish.value) return;
-  mutationBusy.value = true;
-  resetMessages();
-  try {
-    const reauthToken = await acquireSettingsGrant();
-    const response = await publishSettingVersion(
-      selected.value.id,
-      {
-        expectedPublishedVersionId: publishedVersionId.value,
-        reasonCode: reasonCode.value,
-        reauthToken,
-      },
-      auth.accessToken,
-      createClientId(),
-    );
-    await loadVersions(response.version.id);
-    success.value = `版本 ${shortId(response.version.id)} 已发布并写入运行时配置投影。`;
-  } catch (value) {
-    error.value = describeError(value);
-  } finally {
-    clearCredentials();
-    mutationBusy.value = false;
-  }
-}
-
-async function rollbackSelected(): Promise<void> {
-  if (!selected.value || !canRollback.value || !publishedVersionId.value) return;
-  mutationBusy.value = true;
-  resetMessages();
-  try {
-    const reauthToken = await acquireSettingsGrant();
-    const historicalVersionId = selected.value.id;
-    const response = await rollbackSettingVersion(
-      historicalVersionId,
-      {
-        expectedPublishedVersionId: publishedVersionId.value,
-        reasonCode: "rollback",
-        reauthToken,
-      },
-      auth.accessToken,
-      createClientId(),
-    );
-    await loadVersions(response.version.id);
-    success.value = `已从历史版本 ${shortId(historicalVersionId)} 创建新的不可变回滚版本。`;
-  } catch (value) {
-    error.value = describeError(value);
-  } finally {
-    clearCredentials();
     mutationBusy.value = false;
   }
 }
@@ -485,7 +435,7 @@ onMounted(() => {
           </div>
           <h1 class="text-3xl font-semibold tracking-tight text-slate-950">系统配置治理工作台</h1>
           <p class="text-sm leading-6 text-slate-600">
-            通过不可变版本完成草稿、差异预览、发布与回滚；账号已启用 TOTP 时必须完成动态验证，所有发布操作均要求一次性再认证，并记录最小披露审计事件。
+            通过保存不可变版本、预览编辑差异和追溯版本历史治理系统配置。版本历史仅供查看；此工作台不提供发布、回滚或再认证门禁操作。
           </p>
         </div>
         <Button variant="outline" :disabled="loading || emailLoading" @click="refreshPage">
@@ -728,9 +678,12 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="mt-5 flex justify-end">
-            <Button :disabled="mutationBusy" @click="createDraft">
-              <Save class="mr-2 size-4" />保存为不可变草稿
+          <div class="mt-5 flex flex-wrap justify-end gap-3">
+            <Button type="button" variant="outline" :disabled="mutationBusy" @click="resetCurrentEdits">
+              <RotateCcw class="mr-2 size-4" />重置当前编辑
+            </Button>
+            <Button :disabled="mutationBusy" @click="saveVersion">
+              <Save class="mr-2 size-4" />保存不可变版本
             </Button>
           </div>
         </section>
@@ -751,67 +704,63 @@ onMounted(() => {
           </div>
 
           <div v-if="detailLoading" class="py-10 text-center text-sm text-slate-500">正在加载版本详情…</div>
-          <div v-else-if="selected" class="space-y-3">
+          <div v-else-if="selected" class="space-y-5">
+            <div>
+              <h3 class="text-sm font-medium text-foreground">版本快照差异</h3>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">以下内容比较选中不可变版本与其创建基线；历史记录不会被编辑器改写。</p>
+            </div>
             <div
               v-for="difference in selected.differences"
               :key="difference.key"
-              class="rounded-xl border border-white/70 bg-white/65 p-4"
+              class="rounded-xl border border-border/70 bg-card/65 p-4"
             >
-              <p class="text-sm font-medium text-slate-800">{{ settingLabels[difference.key] }}</p>
+              <p class="text-sm font-medium text-foreground">{{ settingLabels[difference.key] }}</p>
               <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
                 <code class="rounded bg-muted px-2 py-1 text-muted-foreground">{{ formatDifferenceValue(difference.previous) }}</code>
-                <span class="text-slate-400">→</span>
-                <code class="rounded bg-sky-50 px-2 py-1 text-sky-700">{{ formatDifferenceValue(difference.current) }}</code>
+                <span class="text-muted-foreground">→</span>
+                <code class="rounded bg-secondary px-2 py-1 text-secondary-foreground">{{ formatDifferenceValue(difference.current) }}</code>
               </div>
             </div>
-            <div v-if="selected.differences.length === 0" class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-700">
-              <CheckCircle2 class="mr-2 inline size-4" />该版本与基线没有字段差异。
+            <div v-if="selected.differences.length === 0" class="rounded-xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
+              <CheckCircle2 class="mr-2 inline size-4" />该版本与其创建基线没有字段差异。
             </div>
-            <dl class="grid grid-cols-2 gap-3 border-t border-slate-200/70 pt-4 text-xs text-slate-500">
+
+            <div class="border-t border-border/70 pt-5">
+              <h3 class="text-sm font-medium text-foreground">编辑中的字段差异</h3>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">比较当前表单与所选不可变版本。保存只会追加新版本，重置会恢复此基线。</p>
+            </div>
+            <div
+              v-for="difference in editingDifferences"
+              :key="`editing-${difference.key}`"
+              class="rounded-xl border border-border/70 bg-card/65 p-4"
+            >
+              <p class="text-sm font-medium text-foreground">{{ settingLabels[difference.key] }}</p>
+              <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
+                <code class="rounded bg-muted px-2 py-1 text-muted-foreground">{{ formatDifferenceValue(difference.previous) }}</code>
+                <span class="text-muted-foreground">→</span>
+                <code class="rounded bg-primary/10 px-2 py-1 text-foreground">{{ formatDifferenceValue(difference.current) }}</code>
+              </div>
+            </div>
+            <div v-if="editingDifferences.length === 0" class="rounded-xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
+              <CheckCircle2 class="mr-2 inline size-4" />当前编辑与所选不可变版本一致。
+            </div>
+            <dl class="grid grid-cols-2 gap-3 border-t border-border/70 pt-4 text-xs text-muted-foreground">
               <div><dt>快照哈希</dt><dd class="mt-1 font-mono">{{ selected.snapshot_hash.slice(0, 16) }}…</dd></div>
               <div><dt>生效时间</dt><dd class="mt-1">{{ formatDate(selected.effective_at) }}</dd></div>
               <div><dt>基线版本</dt><dd class="mt-1 font-mono">{{ shortId(selected.base_version_id) }}</dd></div>
               <div><dt>回滚来源</dt><dd class="mt-1 font-mono">{{ shortId(selected.rollback_of_id) }}</dd></div>
             </dl>
           </div>
-          <div v-else class="py-10 text-center text-sm text-slate-500">暂无可预览版本。</div>
-        </section>
-
-        <section id="publish-gate" class="glass-panel scroll-mt-28 p-6">
-          <div class="mb-5">
-            <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-950">
-              <ShieldCheck class="size-5 text-sky-600" />发布与回滚门禁
-            </h2>
-            <p class="mt-1 text-sm text-slate-500">一次性再认证令牌仅用于当前配置操作，成功或失败后立即清空凭据。</p>
-          </div>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2">
-              <Label for="settings-password">当前密码</Label>
-              <Input id="settings-password" v-model="currentPassword" type="password" autocomplete="current-password" />
-            </div>
-            <div class="space-y-2">
-              <Label for="settings-totp">TOTP 动态码（已启用时填写）</Label>
-              <Input id="settings-totp" v-model="totpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
-            </div>
-          </div>
-          <div class="mt-5 flex flex-wrap gap-3">
-            <Button :disabled="mutationBusy || !canPublish" @click="publishSelected">
-              <Rocket class="mr-2 size-4" />发布选中草稿
-            </Button>
-            <Button variant="destructive" :disabled="mutationBusy || !canRollback" @click="rollbackSelected">
-              <RotateCcw class="mr-2 size-4" />回滚到选中历史版本
-            </Button>
-          </div>
-          <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50/75 p-3 text-xs leading-5 text-amber-800">
-            <FileClock class="mr-1 inline size-4" />
-            发布使用乐观并发校验。若当前生效版本已变化，服务端会拒绝操作且不会消耗一次性再认证授权。
+          <div v-else class="py-10 text-center text-sm text-muted-foreground">
+            <p>暂无可预览版本。</p>
+            <p class="mt-2 text-xs">选择一个不可变版本后可查看版本快照与编辑中的字段差异。</p>
           </div>
         </section>
 
-        <section class="glass-panel p-5 text-sm text-slate-600">
-          <div class="flex items-center gap-2 font-medium text-slate-900"><CheckCircle2 class="size-4 text-emerald-600" />运行时投影</div>
+        <section class="glass-panel p-5 text-sm text-muted-foreground">
+          <div class="flex items-center gap-2 font-medium text-foreground"><CheckCircle2 class="size-4 text-primary" />不可变存档约束</div>
           <p class="mt-2 leading-6">
-            当前版本 {{ shortId(currentVersion?.id ?? null) }} 发布后会原子更新系统配置投影，历史快照保持不可变，回滚也会创建一个新版本而不是改写旧记录。
+            保存只会追加新的配置快照；版本历史仅供查看，当前工作台不会提供发布、回滚或再认证输入，也不会改写任何既有版本。
           </p>
         </section>
       </div>
