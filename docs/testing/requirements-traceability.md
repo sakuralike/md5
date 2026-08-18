@@ -613,12 +613,12 @@
 
 ## 2026-08-18 SEO 设置首阶段需求追踪
 
-| 需求 | 计划代码证据 | 计划自动化证据 | 当前状态 |
+| 需求 | 代码证据 | 自动化/运行证据 | 当前状态 |
 |---|---|---|---|
-| SEO-01 当前配置直接保存 | `modules/admin/seo_settings.py`、`GET/PUT /admin/settings/seo` | `tests/test_seo_settings.py`：Pydantic 边界、默认值、管理员权限、持久化与审计摘要测试 | 后端已实现并通过定向 API 测试；Admin 工作台待实现 |
-| SEO-02 管理端 SEO 工作台 | `SystemSettingsPage.vue`、`AdminSettingsNavigation.vue`、`services/settings.ts` | Vitest 渲染、校验、保存、重置与错误态测试 | 规格已确认；待实现 |
-| SEO-03 公开 SEO 配置 | `modules/site/schemas.py`、`service.py`、`packages/api-contract` | `tests/test_seo_settings.py`、`tests/test_site_discovery.py`：公开字段白名单、异常存储安全默认和秘密字段排除测试 | 后端已实现并通过定向 API 测试；Web 元标签待实现 |
-| SEO-04 Web 页面元信息 | `apps/web/src/services/seo.ts`、`router/index.ts`、`App.vue` | 路由白名单、title/description/keywords/canonical/OG/robots 单元与浏览器测试 | 规格已确认；待实现 |
-| SEO-05 索引安全规则 | 路由 `seoIndexable` 元数据与集中判定 | 认证、账户、私信、通知、发帖、OAuth、搜索和管理页面 `noindex, nofollow` 测试 | 规格已确认；待实现 |
-| SEO-06 robots 与 sitemap | 根路径 `/robots.txt`、`/sitemap.xml` | Content-Type、全局禁抓、Sitemap 指令、XML 白名单与敏感路径排除测试 | 规格已确认；待实现 |
-| SEO-07 SPA 验收边界 | v3.0 规格 18.22、SEO 实施计划 | 真实浏览器运行后 head 断言；SSR/预渲染单列后续范围 | 边界已确认；不宣称 SSR 收录保证 |
+| SEO-01 当前配置直接保存 | `apps/api/src/password_detective/modules/admin/seo_settings.py`、`apps/api/src/password_detective/modules/admin/router.py` 的 `GET/PUT /api/v1/admin/settings/seo` | `apps/api/tests/test_seo_settings.py` 覆盖校验、默认值、管理员权限、持久化、幂等与审计摘要 | 已实现并通过定向后端测试；保存直接更新当前配置，无发布、版本、差异或回滚快照 |
+| SEO-02 管理端 SEO 工作台 | `apps/admin/src/pages/SystemSettingsPage.vue`、`apps/admin/src/lib/seoSettingsForm.ts`、`apps/admin/src/services/settings.ts`、`apps/admin/src/components/AdminSettingsNavigation.vue` | Admin Vitest 46 文件/93 测试；`tests/e2e/admin-seo-settings.spec.ts` 覆盖真实浏览器保存与重置 | 已实现；`#seo-settings` 提供直接保存、重置与本地预览 |
+| SEO-03 公开 SEO 配置 | `apps/api/src/password_detective/modules/site/schemas.py`、`service.py`、`packages/api-contract` | `test_seo_settings.py`、`test_site_discovery.py` 覆盖公开白名单、异常存储安全默认和秘密字段排除 | 已实现；仅向公开站点投影清洗后的 SEO 字段 |
+| SEO-04 Web 页面元信息 | `apps/web/src/lib/seo.ts`、`apps/web/src/App.vue`、`apps/web/src/router/index.ts`、`apps/web/src/services/site.ts`、`apps/web/index.html` | `apps/web/src/lib/seo.test.ts` 与 `tests/e2e/web-seo-journeys.spec.ts` 覆盖 title、description、keywords、canonical、OG、robots、旧标签清理及路由切换 | 已实现；配置失败时安全回退 `noindex, nofollow` |
+| SEO-05 索引安全规则 | 路由 `meta.seoScope` 与 `buildSeoMetadata` 集中判定 | Web 单元测试与 Chromium/Firefox/WebKit 浏览器旅程验证公开、访客、私密和未列入白名单页面 | 已实现；仅 `/`、`/community` 可在开关允许时索引，其余路由默认 `noindex, nofollow` |
+| SEO-06 robots 与 sitemap | `apps/api/src/password_detective/modules/site/` 路由/服务及 `infra/nginx/spa.conf` 根路径映射 | 后端 `test_site_seo_files.py`；Staging 网站/API 根路径均返回 HTTP 200，robots 为 `text/plain; charset=utf-8`，sitemap 为 `application/xml` | 已实现；默认关闭索引时全站禁止抓取并输出合法空站点地图 |
+| SEO-07 SPA 验收边界 | v3.0 规格 18.22、SEO 实施计划及 Web 运行时 head 管理 | 真实浏览器运行后 head 断言共 9 项通过；静态 HTML 保持安全默认 | 已实现首阶段浏览器运行时元信息；不宣称 SSR/预渲染收录保证 |
