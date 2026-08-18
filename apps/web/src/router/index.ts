@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import type { SeoRouteScope } from "../lib/seo";
 import AccountActivityPage from "../pages/AccountActivityPage.vue";
 import AccountPrivacyPage from "../pages/AccountPrivacyPage.vue";
 import CommunityPage from "../pages/CommunityPage.vue";
@@ -32,73 +33,84 @@ import UserCenterPage from "../pages/UserCenterPage.vue";
 import DeveloperApplicationsPage from "../pages/DeveloperApplicationsPage.vue";
 import VerifyEmailPage from "../pages/VerifyEmailPage.vue";
 
+declare module "vue-router" {
+  interface RouteMeta {
+    seoScope?: SeoRouteScope;
+    seoTitle?: string;
+  }
+}
+
+const publicSeo = { seoScope: "public" as const };
+const guestSeo = { seoScope: "guest" as const };
+const privateSeo = { seoScope: "private" as const };
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", component: HomePage },
-    { path: "/hash/:algorithm/:digest", component: HashDetailPage },
-    { path: "/login", component: LoginPage, meta: { guestOnly: true } },
-    { path: "/register", component: RegisterPage, meta: { guestOnly: true } },
-    { path: "/forgot-password", component: ForgotPasswordPage, meta: { guestOnly: true } },
-    { path: "/reset-password", component: ResetPasswordPage },
-    { path: "/verify-email", component: VerifyEmailPage },
-    { path: "/security", component: SecurityPage, meta: { requiresAuth: true } },
-    { path: "/user-center", component: UserCenterPage, meta: { requiresAuth: true } },
-    { path: "/developer", redirect: "/developer/applications" },
-    { path: "/developer/apply", component: DeveloperApplicationsPage, meta: { requiresAuth: true } },
-    { path: "/developer/applications", component: DeveloperApplicationsPage, meta: { requiresAuth: true } },
-    { path: "/community", component: CommunityHomePage },
-    { path: "/community/search", component: CommunitySearchPage },
-    { path: "/community/activity", component: CommunityActivityPage },
-    { path: "/community/new", component: CommunityPostComposerPage, meta: { requiresAuth: true } },
-    { path: "/community/groups", component: CommunityGroupsPage },
-    { path: "/community/groups/:slug", component: CommunityGroupPage },
+    { path: "/", component: HomePage, meta: publicSeo },
+    { path: "/hash/:algorithm/:digest", component: HashDetailPage, meta: privateSeo },
+    { path: "/login", component: LoginPage, meta: { ...guestSeo, guestOnly: true } },
+    { path: "/register", component: RegisterPage, meta: { ...guestSeo, guestOnly: true } },
+    { path: "/forgot-password", component: ForgotPasswordPage, meta: { ...guestSeo, guestOnly: true } },
+    { path: "/reset-password", component: ResetPasswordPage, meta: guestSeo },
+    { path: "/verify-email", component: VerifyEmailPage, meta: guestSeo },
+    { path: "/security", component: SecurityPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/user-center", component: UserCenterPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/developer", redirect: "/developer/applications", meta: privateSeo },
+    { path: "/developer/apply", component: DeveloperApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/developer/applications", component: DeveloperApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/community", component: CommunityHomePage, meta: { ...publicSeo, seoTitle: "社区" } },
+    { path: "/community/search", component: CommunitySearchPage, meta: privateSeo },
+    { path: "/community/activity", component: CommunityActivityPage, meta: privateSeo },
+    { path: "/community/new", component: CommunityPostComposerPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/community/groups", component: CommunityGroupsPage, meta: privateSeo },
+    { path: "/community/groups/:slug", component: CommunityGroupPage, meta: privateSeo },
     {
       path: "/community/bookmarks",
       component: CommunityBookmarksPage,
-      meta: { requiresAuth: true },
+      meta: { ...privateSeo, requiresAuth: true },
     },
     {
       path: "/community/notifications",
       component: CommunityNotificationsPage,
-      meta: { requiresAuth: true },
+      meta: { ...privateSeo, requiresAuth: true },
     },
     {
       path: "/community/messages",
       component: CommunityMessagesPage,
-      meta: { requiresAuth: true },
+      meta: { ...privateSeo, requiresAuth: true },
     },
     {
       path: "/community/messages/:conversationId",
       component: CommunityConversationPage,
-      meta: { requiresAuth: true },
+      meta: { ...privateSeo, requiresAuth: true },
     },
-    { path: "/community/posts/:postId", component: CommunityPostPage },
+    { path: "/community/posts/:postId", component: CommunityPostPage, meta: privateSeo },
     {
       path: "/community/users/:username/followers",
       component: CommunityRelationsPage,
-      meta: { direction: "followers" },
+      meta: { ...privateSeo, direction: "followers" },
     },
     {
       path: "/community/users/:username/following",
       component: CommunityRelationsPage,
-      meta: { direction: "following" },
+      meta: { ...privateSeo, direction: "following" },
     },
-    { path: "/community/users/:username", component: CommunityProfilePage },
+    { path: "/community/users/:username", component: CommunityProfilePage, meta: privateSeo },
     {
       path: "/community/settings",
       component: CommunitySettingsPage,
-      meta: { requiresAuth: true },
+      meta: { ...privateSeo, requiresAuth: true },
     },
-    { path: "/community/legacy", component: CommunityPage },
-    { path: "/account/profile", redirect: "/user-center" },
-    { path: "/account/activity", component: AccountActivityPage, meta: { requiresAuth: true } },
-    { path: "/account/privacy", component: AccountPrivacyPage, meta: { requiresAuth: true } },
-    { path: "/submissions", component: SubmissionsPage, meta: { requiresAuth: true } },
-    { path: "/reputation", component: ReputationPage, meta: { requiresAuth: true } },
-    { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAuth: true } },
-    { path: "/oauth/authorize", component: ThirdPartyAuthorizePage, meta: { requiresAuth: true } },
-    { path: "/account/authorized-applications", component: AuthorizedApplicationsPage, meta: { requiresAuth: true } },
+    { path: "/community/legacy", component: CommunityPage, meta: privateSeo },
+    { path: "/account/profile", redirect: "/user-center", meta: privateSeo },
+    { path: "/account/activity", component: AccountActivityPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/account/privacy", component: AccountPrivacyPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/submissions", component: SubmissionsPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/reputation", component: ReputationPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/trust-cases", component: TrustCasesPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/oauth/authorize", component: ThirdPartyAuthorizePage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/account/authorized-applications", component: AuthorizedApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },
   ],
 });
 

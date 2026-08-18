@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { useCommunityAvatar } from "./composables/useCommunityAvatar";
 import { useCommunityDirectMessageStream } from "./composables/useCommunityDirectMessageStream";
 import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
-import { getPublicSiteConfig } from "./services/site";
+import { applySeoMetadata, buildSeoMetadata, type SeoRouteScope } from "./lib/seo";
+import { createDefaultPublicSiteConfig, getPublicSiteConfig } from "./services/site";
+import { useRoute } from "vue-router";
 import { useAuthStore } from "./stores/auth";
 
 type BackgroundPreset = "frost" | "grid" | "aurora" | "halo" | "custom";
@@ -21,36 +23,36 @@ interface BackgroundOption {
 }
 
 const auth = useAuthStore();
+const route = useRoute();
 const communityNotifications = useCommunityNotificationStream();
 const communityDirectMessages = useCommunityDirectMessageStream();
 const communityAvatar = useCommunityAvatar();
 const currentAvatarSrc = communityAvatar.avatarSrc;
-const siteConfig = ref<PublicSiteConfig>({
-  site_name: "密码侦探社",
-  site_logo_url: "",
-  navigation: [
-    { label: "首页", path: "/", enabled: true, requires_auth: false },
-    { label: "社区", path: "/community", enabled: true, requires_auth: false },
-  ],
-  seo: {
-    enabled: false,
-    indexing_enabled: false,
-    home_title: "密码侦探社",
-    keywords: [],
-    description: "",
-    title_separator: "-",
-    default_image_url: "",
-    open_graph_enabled: false,
-  },
-});
+const siteConfig = ref<PublicSiteConfig>(createDefaultPublicSiteConfig());
+
 const visibleNavigation = computed(() =>
   siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
 );
 
+function applyCurrentSeo(): void {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  applySeoMetadata(
+    document,
+    buildSeoMetadata({
+      path: route.path,
+      seo: siteConfig.value.seo,
+      siteName: siteConfig.value.site_name,
+      origin: window.location.origin,
+      scope: route.meta.seoScope as SeoRouteScope | undefined,
+      title: typeof route.meta.seoTitle === "string" ? route.meta.seoTitle : undefined,
+    }),
+    siteConfig.value.site_name,
+  );
+}
+
 async function loadSiteConfig(): Promise<void> {
   try {
     siteConfig.value = await getPublicSiteConfig();
-    document.title = siteConfig.value.site_name;
   } catch {
     // 公共配置不可用时继续使用内置安全默认值。
   }
@@ -111,6 +113,11 @@ function releaseCustomBackground(): void {
 }
 
 onMounted(() => {
+  watch(
+    () => [route.path, route.meta.seoScope, route.meta.seoTitle, siteConfig.value] as const,
+    applyCurrentSeo,
+    { immediate: true },
+  );
   void loadSiteConfig();
   watch(
     () => [auth.isAuthenticated, auth.user?.id ?? "", auth.accessToken] as const,
