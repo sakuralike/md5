@@ -32,6 +32,16 @@ const siteConfig = ref<PublicSiteConfig>({
     { label: "首页", path: "/", enabled: true, requires_auth: false },
     { label: "社区", path: "/community", enabled: true, requires_auth: false },
   ],
+  seo: {
+    enabled: false,
+    indexing_enabled: false,
+    home_title: "密码侦探社",
+    keywords: [],
+    description: "",
+    title_separator: "-",
+    default_image_url: "",
+    open_graph_enabled: false,
+  },
 });
 const visibleNavigation = computed(() =>
   siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
