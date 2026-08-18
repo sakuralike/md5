@@ -610,3 +610,15 @@
 | 当前配置重置 | `apps/admin/src/lib/operationalSettingsForm.ts`、`SystemSettingsPage.vue` | 响应式快照深复制单元测试；Admin Chromium、Firefox、WebKit 保存后编辑再重置旅程；Staging Chromium 重置 | 已修复 Vue Proxy `DataCloneError`，嵌套导航和用户等级不共享引用；Staging 已验证 |
 | SMTP 后台设置可见 | `SystemSettingsPage.vue` 的全量 SMTP 表单 | Admin Chromium、Firefox、WebKit 断言 Host、Port、Password、保存、重置和无发布/回滚控件；Staging Chromium 同项验证 | 本地三浏览器和 Staging 真实页面均通过 |
 | 设置页移动端基线 | `admin-authenticated-accessibility.spec.ts` | 当前工作台、运行参数、SMTP 区块与每日配额关键区域 | Chromium 定向可访问性与视觉基线通过；统一门禁通过 |
+
+## 2026-08-18 SEO 设置首阶段需求追踪
+
+| 需求 | 计划代码证据 | 计划自动化证据 | 当前状态 |
+|---|---|---|---|
+| SEO-01 当前配置直接保存 | `modules/admin/seo_settings.py`、`GET/PUT /admin/settings/seo` | Pydantic 边界、默认值、管理员权限、持久化与审计摘要测试 | 规格已确认；待实现 |
+| SEO-02 管理端 SEO 工作台 | `SystemSettingsPage.vue`、`AdminSettingsNavigation.vue`、`services/settings.ts` | Vitest 渲染、校验、保存、重置与错误态测试 | 规格已确认；待实现 |
+| SEO-03 公开 SEO 配置 | `modules/site/schemas.py`、`service.py`、`packages/api-contract` | 公开字段白名单、关闭 SEO 降级和秘密字段排除测试 | 规格已确认；待实现 |
+| SEO-04 Web 页面元信息 | `apps/web/src/services/seo.ts`、`router/index.ts`、`App.vue` | 路由白名单、title/description/keywords/canonical/OG/robots 单元与浏览器测试 | 规格已确认；待实现 |
+| SEO-05 索引安全规则 | 路由 `seoIndexable` 元数据与集中判定 | 认证、账户、私信、通知、发帖、OAuth、搜索和管理页面 `noindex, nofollow` 测试 | 规格已确认；待实现 |
+| SEO-06 robots 与 sitemap | 根路径 `/robots.txt`、`/sitemap.xml` | Content-Type、全局禁抓、Sitemap 指令、XML 白名单与敏感路径排除测试 | 规格已确认；待实现 |
+| SEO-07 SPA 验收边界 | v3.0 规格 18.22、SEO 实施计划 | 真实浏览器运行后 head 断言；SSR/预渲染单列后续范围 | 边界已确认；不宣称 SSR 收录保证 |
