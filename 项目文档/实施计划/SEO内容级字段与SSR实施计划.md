@@ -100,18 +100,19 @@
 ```json
 {
   "seo": {
+    "eligible": true,
+    "indexable": false,
     "title": "公开标题",
     "description": "公开摘要",
     "keywords": [],
-    "canonical": "/community/posts/123",
-    "ogImage": null,
-    "indexable": true,
-    "reason": "published_public"
+    "canonical_path": "/community/posts/123",
+    "og_image_url": null
   }
 }
 ```
 
-- 公开详情响应只返回 `indexable=true` 的可公开字段；`indexable=false` 时可以返回安全的 `noindex` 投影，但不得返回内部拒绝原因、审核备注或权限细节。
+- `eligible` 表示资源通过公开资格矩阵；`indexable` 还必须满足 SSR/预渲染和公开 sitemap 验收。当前 Vue SPA 阶段允许返回安全的 `eligible=true/indexable=false` 投影，但不得把动态详情切换为可索引。
+- `eligible=false` 时只返回空的安全投影，不得返回内部拒绝原因、审核备注或权限细节。
 - 写入接口必须使用现有身份与资源授权链；推荐使用 `PATCH /.../{id}/seo`，避免把 SEO 写入混入不相关的状态变更。
 - 写接口需支持 `Idempotency-Key` 与 `If-Match`/版本号；冲突返回明确的并发错误，不能静默覆盖。
 - 所有写入记录资源、操作者、字段摘要、结果和关联请求 ID；日志中不得记录完整敏感内容。
@@ -166,9 +167,17 @@
 
 ### 阶段 7-A：公开资格与 SEO 投影
 
-- 固定帖子、群组、用户和板块的资格矩阵。
-- 新增纯服务层测试，覆盖发布/删除/私密/审批/停用/隐私和异常状态。
-- 详情接口返回受控 `seo` 投影；不改变现有前端索引开关。
+- [x] 固定帖子、群组、用户和板块的资格矩阵。
+- [x] 新增测试，覆盖公开、删除/审批/私密、停用板块和安全空投影。
+- [x] 详情接口返回受控 `seo` 投影；不改变现有前端索引开关。
+- [x] `eligible` 与 `indexable` 分离：当前动态内容 `indexable=false`，不修改动态 sitemap 白名单。
+
+#### 2026-08-18 阶段 7-A 实现记录
+
+- 新增 `apps/api/src/password_detective/modules/community/seo_projection.py`，统一计算帖子、群组和用户公开资格、标题、摘要、canonical 路径与安全默认值。
+- `CommunityPostDetail`、`CommunityGroupDetail`、`CommunityPublicProfileResponse` 和共享 TypeScript 合同新增 `seo` 投影；不新增数据库字段、迁移、快照或回滚数据。
+- 帖子必须为已发布、板块有效且状态为 ACTIVE；归属群组还必须为 ACTIVE/PUBLIC。群组必须为 ACTIVE/PUBLIC；用户资料只对 ACTIVE 用户生成公开投影。拒绝原因不出现在响应中。
+- 后端定向社区回归测试通过；当前 SPA 仍不宣称 SSR/预渲染收录能力，robots/sitemap 安全默认保持不变。
 
 ### 阶段 7-B：字段与权限
 
@@ -189,7 +198,7 @@
 
 ## 10. 回滚与发布边界
 
-- 本轮为文档规划轮，无数据库迁移、API 合同、Web 路由或运行镜像变化；无需运行时回滚。
+- 阶段 7-A 无数据库迁移和可逆数据写入；回滚时移除详情响应 `seo` 投影并恢复旧 API 镜像即可，robots/sitemap 继续保持安全默认。
 - 后续实现应按阶段独立提交和部署；若公开资格判断或 sitemap 生成异常，默认关闭动态内容索引并保留合法空 sitemap。
 - 字段迁移回滚必须使用发布前数据库备份，不能把已经写入的内容截断为旧长度或旧类型。
 - SSR/预渲染回滚应先切回 SPA 安全的 `noindex` 策略，再撤除缓存/静态产物，避免私密页面继续被公共缓存提供。
@@ -200,6 +209,6 @@
 - [x] 完成 SEO 字段、校验、回退、API 投影和审计方案设计。
 - [x] 明确当前 SPA 不宣称 SSR/预渲染，并拆分后续评审阶段。
 - [x] 明确百度推送暂缓及凭据安全前置条件。
-- [x] 未修改运行时代码、数据库和部署镜像。
+- [x] 阶段 7-A 已完成公开资格与受控 `seo` 投影；未新增数据库字段、迁移、动态 sitemap 或 SSR/预渲染。
 
 > 下一轮默认从阶段 7-A 开始，但在写入数据库或开放动态索引前，必须先确认本计划中的公开资格矩阵与 API 合同。

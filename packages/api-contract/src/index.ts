@@ -1657,6 +1657,16 @@ export interface CommunityAuthor {
   role: UserRole;
 }
 
+export interface CommunitySeoProjection {
+  eligible: boolean;
+  indexable: boolean;
+  title: string | null;
+  description: string | null;
+  keywords: string[];
+  canonical_path: string | null;
+  og_image_url: string | null;
+}
+
 export interface CommunityGroupSummary {
   slug: string;
   name: string;
@@ -1680,6 +1690,7 @@ export interface CommunityGroupListResponse {
 }
 
 export interface CommunityGroupDetail extends CommunityGroupSummary {
+  seo: CommunitySeoProjection;
   owner_username: string;
   members: CommunityGroupMember[];
 }
@@ -1799,6 +1810,7 @@ export interface CommunityPostDetail {
   last_activity_at: string;
   created_at: string;
   comments: CommunityCommentResponse[];
+  seo: CommunitySeoProjection;
 }
 
 export interface CommunityHomeResponse {
@@ -2164,6 +2176,7 @@ export interface CommunityPublicProfileResponse {
   relationship: CommunityRelationshipState;
   recent_posts: CommunityPostSummary[];
   recent_comments: CommunityPublicCommentSummary[];
+  seo: CommunitySeoProjection;
 }
 
 export interface CommunityOwnProfileResponse extends CommunityPublicProfileResponse {

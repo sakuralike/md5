@@ -76,6 +76,16 @@ class CommunityGroupMember(BaseModel):
     status: CommunityGroupMembershipStatus
 
 
+class CommunitySeoProjection(BaseModel):
+    eligible: bool
+    indexable: bool = False
+    title: str | None = None
+    description: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    canonical_path: str | None = None
+    og_image_url: str | None = None
+
+
 class CommunityGroupSummary(BaseModel):
     slug: str
     name: str
@@ -93,6 +103,7 @@ class CommunityGroupListResponse(BaseModel):
 
 
 class CommunityGroupDetail(CommunityGroupSummary):
+    seo: CommunitySeoProjection
     owner_username: str
     members: list[CommunityGroupMember]
     posts: CommunityPostListResponse | None = None
@@ -246,6 +257,7 @@ class CommunityPostDetail(BaseModel):
     last_activity_at: datetime
     created_at: datetime
     comments: list[CommunityCommentResponse]
+    seo: CommunitySeoProjection
 
 
 class CommunityHomeResponse(BaseModel):
@@ -530,6 +542,7 @@ class CommunityPublicProfileResponse(BaseModel):
     relationship: CommunityRelationshipState
     recent_posts: list[CommunityPostSummary]
     recent_comments: list[CommunityPublicCommentSummary]
+    seo: CommunitySeoProjection
 
 
 class CommunityOwnProfileResponse(CommunityPublicProfileResponse):

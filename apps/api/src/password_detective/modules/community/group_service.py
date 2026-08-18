@@ -40,6 +40,7 @@ from password_detective.modules.community.search_index import (
     enqueue_search_event,
     source_document_version,
 )
+from password_detective.modules.community.seo_projection import group_seo_projection
 
 
 def list_groups(db: Session, *, principal: Principal | None) -> CommunityGroupListResponse:
@@ -650,6 +651,7 @@ def _build_group_detail(
         **_group_summary(group, membership).model_dump(),
         owner_username=owner.username,
         members=members,
+        seo=group_seo_projection(group),
     )
 
 
