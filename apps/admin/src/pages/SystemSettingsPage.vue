@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { createClientId } from "@/lib/clientId";
 import {
+  cloneEmailDeliveryForm,
+  emailFormFromSettings,
+} from "@/lib/emailDeliveryForm";
+import {
   ApiError,
   type EmailDeliverySettings,
   type EmailDeliverySettingsUpdate,
@@ -85,27 +89,8 @@ function describeError(value: unknown): string {
   return value instanceof ApiError ? value.message : "请求失败，请稍后重试";
 }
 
-function emailFormFromSettings(settings: EmailDeliverySettings): EmailDeliverySettingsUpdate {
-  return {
-    enabled: settings.enabled,
-    sender_name: settings.sender_name,
-    sender_email: settings.sender_email,
-    subject_prefix: settings.subject_prefix,
-    footer_text: settings.footer_text,
-    footer_html: settings.footer_html,
-    smtp_host: settings.smtp_host,
-    smtp_port: settings.smtp_port,
-    smtp_security: settings.smtp_security,
-    smtp_username: settings.smtp_username,
-    smtp_auth_enabled: settings.smtp_auth_enabled,
-    smtp_timeout_seconds: settings.smtp_timeout_seconds,
-    smtp_password: null,
-    clear_smtp_password: false,
-  };
-}
-
 function resetEmailEdits(): void {
-  if (emailBaseline.value) emailForm.value = structuredClone(emailBaseline.value);
+  if (emailBaseline.value) emailForm.value = cloneEmailDeliveryForm(emailBaseline.value);
   emailError.value = "";
   emailMessage.value = "已恢复到当前已保存的 SMTP 设置。";
 }
@@ -204,8 +189,9 @@ async function loadEmailSettings(): Promise<void> {
   try {
     const settings = await getEmailDeliverySettings(auth.accessToken);
     emailSettings.value = settings;
-    emailBaseline.value = emailFormFromSettings(settings);
-    emailForm.value = structuredClone(emailBaseline.value);
+    const baseline = emailFormFromSettings(settings);
+    emailBaseline.value = baseline;
+    emailForm.value = cloneEmailDeliveryForm(baseline);
   } catch (value) {
     emailError.value = describeError(value);
   } finally {
@@ -234,8 +220,9 @@ async function saveEmailSettings(): Promise<void> {
     };
     const saved = await saveEmailDeliverySettings(payload, auth.accessToken, createClientId());
     emailSettings.value = saved;
-    emailBaseline.value = emailFormFromSettings(saved);
-    emailForm.value = structuredClone(emailBaseline.value);
+    const baseline = emailFormFromSettings(saved);
+    emailBaseline.value = baseline;
+    emailForm.value = cloneEmailDeliveryForm(baseline);
     emailMessage.value = "SMTP 邮件投递设置已直接保存并立即生效。";
   } catch (value) {
     emailError.value = describeError(value);
