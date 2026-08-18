@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { createClientId } from "@/lib/clientId";
+import { cloneOperationalSettingsSnapshot } from "@/lib/operationalSettingsForm";
 import {
   cloneEmailDeliveryForm,
   emailFormFromSettings,
@@ -66,8 +67,8 @@ const defaultSnapshot: OperationalSettingsSnapshot = {
 };
 
 const auth = useAdminAuthStore();
-const form = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
-const baselineSnapshot = ref<OperationalSettingsSnapshot>(structuredClone(defaultSnapshot));
+const form = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
+const baselineSnapshot = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
 const loading = ref(false);
 const mutationBusy = ref(false);
 const error = ref("");
@@ -101,9 +102,9 @@ function resetMessages(): void {
 }
 
 function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
-  const persisted = structuredClone(snapshot);
+  const persisted = cloneOperationalSettingsSnapshot(snapshot);
   baselineSnapshot.value = persisted;
-  form.value = structuredClone(persisted);
+  form.value = cloneOperationalSettingsSnapshot(persisted);
 }
 
 function resetCurrentEdits(): void {

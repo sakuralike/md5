@@ -1,59 +1,49 @@
 import { expect, test } from "@playwright/test";
 import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_assertions";
 import { loginWorkflowAdmin } from "./support/admin_session";
-import { currentTotp } from "./support/totp";
 
-// 配置发布和告警处置会短暂输入合成管理员凭据，禁止写入截图与 Trace 制品。
+// 配置保存和告警处置会使用合成管理员会话，禁止写入截图与 Trace 制品。
 test.use({ screenshot: "off", trace: "off" });
 
-async function fillSettingsReauthentication(
-  page: import("@playwright/test").Page,
-  password: string,
-  totpSecret: string,
-): Promise<void> {
-  await page.getByLabel("当前密码").fill(password);
-  await page.getByLabel("TOTP 动态码").fill(currentTotp(totpSecret));
-}
-
-test("Admin 创建并发布配置版本，再从历史版本生成不可变回滚版本", async ({ page }) => {
+test("Admin 直接保存并重置系统配置与 SMTP 设置", async ({ page }) => {
   const browserErrors = observeBrowserErrors(page);
-  const admin = await loginWorkflowAdmin(page);
+  await loginWorkflowAdmin(page);
 
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "系统配置治理工作台" })).toBeVisible();
-  await expect(page.getByText("尚无配置版本，请创建首个草稿。")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "系统配置工作台" })).toBeVisible();
+  await expect(page.getByText("直接保存设置，当前配置将立即生效；不提供版本历史、差异预览或回滚快照。", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("每日明文查看配额")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SMTP 邮件投递" })).toBeVisible();
+  await expect(page.locator("#smtp-host")).toBeVisible();
+  await expect(page.locator("#smtp-port")).toBeVisible();
+  await expect(page.locator("#smtp-password")).toHaveAttribute("type", "password");
+  await expect(page.getByRole("button", { name: "保存 SMTP 设置" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "重置 SMTP 编辑" })).toBeVisible();
 
-  await page.getByLabel("每日明文查看配额").fill("21");
-  await page.getByRole("button", { name: "保存为不可变草稿" }).click();
-  await expect(page.getByText(/不可变草稿 .* 已创建，可在差异确认后发布/u)).toBeVisible();
-  await expect(page.getByRole("table").getByText("草稿", { exact: true })).toBeVisible();
+  const dailyQuota = page.getByLabel("每日明文查看配额");
+  const initialQuota = await dailyQuota.inputValue();
+  const savedQuota = initialQuota === "21" ? "22" : "21";
+  await dailyQuota.fill(savedQuota);
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByText("系统设置已直接保存并立即生效。", { exact: true })).toBeVisible();
 
-  await fillSettingsReauthentication(page, admin.password, admin.totpSecret);
-  await page.getByRole("button", { name: "发布选中草稿" }).click();
-  await expect(page.getByText(/版本 .* 已发布并写入运行时配置投影/u)).toBeVisible();
-  await expect(page.getByRole("table").getByText("当前生效", { exact: true })).toBeVisible();
+  await dailyQuota.fill(savedQuota === "21" ? "23" : "22");
+  await page.getByRole("button", { name: "重置当前编辑", exact: true }).click();
+  await expect(dailyQuota).toHaveValue(savedQuota);
+  await expect(page.getByText("已恢复到当前已保存的系统设置。", { exact: true })).toBeVisible();
 
-  await page.getByLabel("每日明文查看配额").fill("22");
-  await page.getByRole("button", { name: "保存为不可变草稿" }).click();
-  await expect(page.getByText(/不可变草稿 .* 已创建，可在差异确认后发布/u)).toBeVisible();
-  await fillSettingsReauthentication(page, admin.password, admin.totpSecret);
-  await page.getByRole("button", { name: "发布选中草稿" }).click();
-  await expect(page.getByText(/版本 .* 已发布并写入运行时配置投影/u)).toBeVisible();
+  const smtpHost = page.locator("#smtp-host");
+  const savedSmtpHost = await smtpHost.inputValue();
+  await smtpHost.fill("smtp-reset.synthetic.example.com");
+  await page.getByRole("button", { name: "重置 SMTP 编辑" }).click();
+  await expect(smtpHost).toHaveValue(savedSmtpHost);
+  await expect(page.getByText("已恢复到当前已保存的 SMTP 设置。", { exact: true })).toBeVisible();
 
-  const historicalRow = page.getByRole("row").filter({ hasText: "历史版本" });
-  await expect(historicalRow).toHaveCount(1);
-  await historicalRow.click();
-  await expect(page.getByRole("button", { name: "回滚到选中历史版本" })).toBeEnabled();
-  await expect(page.getByLabel("每日明文查看配额")).toHaveValue("21");
-
-  await fillSettingsReauthentication(page, admin.password, admin.totpSecret);
-  await page.getByRole("button", { name: "回滚到选中历史版本" }).click();
-  await expect(page.getByText(/已从历史版本 .* 创建新的不可变回滚版本/u)).toBeVisible();
-  await expect(page.getByLabel("每日明文查看配额")).toHaveValue("21");
-  await expect(page.getByRole("row").filter({ hasText: "版本回滚" })).toContainText("当前生效");
+  await expect(page.getByText("不可变版本历史", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("版本差异预览", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /发布|回滚/u })).toHaveCount(0);
   expectNoBrowserErrors(browserErrors);
 });
-
 test("Admin 指派风险告警、开始核查并确认处置", async ({ page }) => {
   const browserErrors = observeBrowserErrors(page);
   await loginWorkflowAdmin(page);

@@ -82,13 +82,14 @@ test("Admin 候选、案件、配置与风险页面覆盖桌面和移动端无�
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "系统配置治理工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "系统配置工作台" })).toBeVisible();
   await expectPageBaseline(page, testInfo, {
     name: "admin-settings-mobile",
     criticalRegions: [
-      page.getByRole("heading", { name: "系统配置治理工作台" }),
-      page.getByRole("heading", { name: "配置草稿编辑器" }),
-      page.getByLabel("配置变更原因码"),
+      page.getByRole("heading", { name: "系统配置工作台" }),
+      page.getByRole("heading", { name: "运行参数" }),
+      page.getByRole("heading", { name: "SMTP 邮件投递" }),
+      page.getByLabel("每日明文查看配额"),
     ],
   });
 

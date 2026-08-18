@@ -896,3 +896,11 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 远端 | 本地提交 `032f53790dffaaf6e58016c1c2f6f36f00d1cae7` 的 Tree `99cab018963bbb07f2f3c0b71314f3b5e3f70429` 同步为远端等价树提交 `82fef8257ab7d5eb885271b96d13cb63c67e290f` | 已验证 `equivalent_tree=true` |
 | Staging | 备份 `/opt/password-detective-backups/20260816T210230Z-82fef8257ab7`；MySQL `20260816_0046 (head)`；双列 `bigint`；真实隐私更新 200 且 Outbox 版本 `1786914188170251`；API 2、Worker 3、Scheduler、代理 ready 200、保护接口 401、长事务 0 | 已验证 |
 | UAT/Production | 尚无业务验收或生产变更批准 | 未验收 |
+
+## 2026-08-18 系统配置重置与 SMTP 浏览器回归
+
+| 层级 | 当前证据 | 状态 |
+|---|---|---|
+| 系统配置重置 | `cloneOperationalSettingsSnapshot` 在复制前解除 Vue 响应式代理，避免 `structuredClone` 抛出 `DataCloneError` | 单元测试与 Chromium、Firefox、WebKit 直接保存/重置旅程通过 |
+| SMTP 设置可见性 | 浏览器断言服务器地址、端口、授权码密码框、保存与重置控件可见，且页面不出现版本历史、差异预览、发布或回滚控件 | Chromium、Firefox、WebKit 真实 API 旅程通过；Staging 待本轮发布后复验 |
+| 可访问性契约 | 管理端设置页移动端基线更新为“系统配置工作台”“运行参数”“SMTP 邮件投递”和每日配额控件 | 定向 Chromium 可访问性与视觉基线旅程通过；统一门禁通过 |

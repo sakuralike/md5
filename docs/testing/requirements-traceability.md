@@ -602,3 +602,11 @@
 | 独立站内/邮件通道 | `notification_channels`、`in_app_notification_visibility_condition`、通知读取/已读/SSE 过滤 | 邮件专属偏好创建摘要、不创建站内事件；历史站内事件在切换为邮件专属后不再可列出、计未读或标记已读 | 本地已通过；Staging 运行时待复验 |
 | 持久化摘要与可靠投递 | `community_notification_email_digests`、`community_notification_email_digest_items`、Worker 任务、稳定 Message-ID | Memory 与 SMTP 最小披露摘要测试；SQLite `upgrade head -> downgrade -1 -> upgrade head` | 本地已通过；真实 SMTP 接收待安全测试收件人和 Staging 配置确认 |
 | 运营与隐私 | Admin 摘要批次聚合指标、隐私删除时按收件人清理摘要批次 | 后端 API 全量分片、前端 lint/typecheck/Vitest/build | 本地已通过；目标 MySQL/Redis 及容量验证待部署后记录 |
+
+## 2026-08-18 系统配置与 SMTP 回归追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 当前配置重置 | `apps/admin/src/lib/operationalSettingsForm.ts`、`SystemSettingsPage.vue` | 响应式快照深复制单元测试；Admin Chromium 保存后编辑再重置旅程 | 已修复 Vue Proxy `DataCloneError`，嵌套导航和用户等级不共享引用 |
+| SMTP 后台设置可见 | `SystemSettingsPage.vue` 的全量 SMTP 表单 | Admin Chromium、Firefox、WebKit 断言 Host、Port、Password、保存、重置和无发布/回滚控件 | 本地真实 API 三浏览器旅程通过；Staging 将在本轮部署后复验 |
+| 设置页移动端基线 | `admin-authenticated-accessibility.spec.ts` | 当前工作台、运行参数、SMTP 区块与每日配额关键区域 | Chromium 定向可访问性与视觉基线通过；统一门禁通过 |
