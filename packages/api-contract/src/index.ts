@@ -1458,10 +1458,42 @@ export interface SiteNavigationItem {
   requires_auth: boolean;
 }
 
+export type SeoTitleSeparator = "-" | "_" | "|" | "·";
+
+export interface SeoSettings {
+  enabled: boolean;
+  indexing_enabled: boolean;
+  home_title: string;
+  keywords: string[];
+  description: string;
+  title_separator: SeoTitleSeparator;
+  default_image_url: string;
+  open_graph_enabled: boolean;
+  sitemap_enabled: boolean;
+}
+
+export interface SeoSettingsResponse {
+  settings: SeoSettings;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface PublicSeoConfig {
+  enabled: boolean;
+  indexing_enabled: boolean;
+  home_title: string;
+  keywords: string[];
+  description: string;
+  title_separator: SeoTitleSeparator;
+  default_image_url: string;
+  open_graph_enabled: boolean;
+}
+
 export interface PublicSiteConfig {
   site_name: string;
   site_logo_url: string;
   navigation: SiteNavigationItem[];
+  seo: PublicSeoConfig;
 }
 
 export interface HotHashSummary {

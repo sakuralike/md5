@@ -14,13 +14,16 @@ from password_detective.db.models.points_ledger import PointsLedger, PointsLedge
 from password_detective.db.models.submission import Submission
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User, UserStatus
+from password_detective.modules.admin.seo_settings import default_seo_settings
 from password_detective.modules.admin.setting_schemas import (
+    SeoSettings,
     SiteNavigationItem,
     default_site_navigation,
 )
 from password_detective.modules.site.schemas import (
     HomeDiscoveryResponse,
     HotHashSummary,
+    PublicSeoConfig,
     PublicSiteConfigResponse,
     UserRankingSummary,
 )
@@ -31,6 +34,32 @@ def _setting_value(db: Session, key: str, default: object) -> object:
     if record is None:
         return default
     return record.value_json.get("value", default)
+
+
+def _public_seo_config(db: Session) -> PublicSeoConfig:
+    defaults = default_seo_settings()
+    raw_settings = _setting_value(
+        db,
+        "seo_settings",
+        defaults.model_dump(mode="json"),
+    )
+    try:
+        settings = SeoSettings.model_validate(raw_settings)
+    except (TypeError, ValueError):
+        settings = defaults
+
+    if not settings.enabled:
+        settings = SeoSettings(
+            enabled=False,
+            indexing_enabled=False,
+            title_separator=settings.title_separator,
+            open_graph_enabled=False,
+            sitemap_enabled=settings.sitemap_enabled,
+        )
+
+    return PublicSeoConfig.model_validate(
+        settings.model_dump(mode="json", exclude={"sitemap_enabled"})
+    )
 
 
 def get_public_site_config(db: Session) -> PublicSiteConfigResponse:
@@ -47,6 +76,7 @@ def get_public_site_config(db: Session) -> PublicSiteConfigResponse:
         site_name=raw_name if isinstance(raw_name, str) and raw_name.strip() else "密码侦探社",
         site_logo_url=raw_logo if isinstance(raw_logo, str) else "",
         navigation=[item for item in navigation if item.enabled],
+        seo=_public_seo_config(db),
     )
 
 

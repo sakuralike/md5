@@ -152,6 +152,70 @@ class OperationalSettingsResponse(BaseModel):
     updated_by: str | None
 
 
+class SeoSettings(BaseModel):
+    enabled: bool = True
+    indexing_enabled: bool = False
+    home_title: str = Field(default="", max_length=120)
+    keywords: list[str] = Field(default_factory=list, max_length=8)
+    description: str = Field(default="", max_length=320)
+    title_separator: Literal["-", "_", "|", "·"] = "-"
+    default_image_url: str = Field(default="", max_length=500)
+    open_graph_enabled: bool = True
+    sitemap_enabled: bool = True
+
+    @field_validator("home_title", "description")
+    @classmethod
+    def normalize_plain_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("SEO 文本不能包含换行符或控制字符")
+        if "<" in normalized or ">" in normalized:
+            raise ValueError("SEO 文本不能包含 HTML 标签")
+        return normalized
+
+    @field_validator("keywords")
+    @classmethod
+    def normalize_keywords(cls, values: list[str]) -> list[str]:
+        normalized_keywords: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            normalized = value.strip()
+            if not normalized:
+                continue
+            if len(normalized) > 32:
+                raise ValueError("单个 SEO 关键词不能超过 32 个字符")
+            if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+                raise ValueError("SEO 关键词不能包含换行符或控制字符")
+            if "<" in normalized or ">" in normalized:
+                raise ValueError("SEO 关键词不能包含 HTML 标签")
+            if normalized not in seen:
+                normalized_keywords.append(normalized)
+                seen.add(normalized)
+        return normalized_keywords
+
+    @field_validator("default_image_url")
+    @classmethod
+    def validate_default_image_url(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            return normalized
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("默认分享图地址不能包含控制字符")
+        if any(character in normalized for character in ("<", ">", '"', "'", "\\")):
+            raise ValueError("默认分享图地址包含不允许的字符")
+        if normalized.startswith("/") and not normalized.startswith("//"):
+            return normalized
+        if normalized.startswith(("https://", "http://")):
+            return normalized
+        raise ValueError("默认分享图地址必须是站内路径或 HTTP(S) 地址")
+
+
+class SeoSettingsResponse(BaseModel):
+    settings: SeoSettings
+    updated_at: datetime | None
+    updated_by: str | None
+
+
 class SiteLogoUploadResponse(BaseModel):
     url: str
     content_type: Literal["image/png", "image/jpeg", "image/webp"]

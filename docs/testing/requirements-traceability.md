@@ -615,9 +615,9 @@
 
 | 需求 | 计划代码证据 | 计划自动化证据 | 当前状态 |
 |---|---|---|---|
-| SEO-01 当前配置直接保存 | `modules/admin/seo_settings.py`、`GET/PUT /admin/settings/seo` | Pydantic 边界、默认值、管理员权限、持久化与审计摘要测试 | 规格已确认；待实现 |
+| SEO-01 当前配置直接保存 | `modules/admin/seo_settings.py`、`GET/PUT /admin/settings/seo` | `tests/test_seo_settings.py`：Pydantic 边界、默认值、管理员权限、持久化与审计摘要测试 | 后端已实现并通过定向 API 测试；Admin 工作台待实现 |
 | SEO-02 管理端 SEO 工作台 | `SystemSettingsPage.vue`、`AdminSettingsNavigation.vue`、`services/settings.ts` | Vitest 渲染、校验、保存、重置与错误态测试 | 规格已确认；待实现 |
-| SEO-03 公开 SEO 配置 | `modules/site/schemas.py`、`service.py`、`packages/api-contract` | 公开字段白名单、关闭 SEO 降级和秘密字段排除测试 | 规格已确认；待实现 |
+| SEO-03 公开 SEO 配置 | `modules/site/schemas.py`、`service.py`、`packages/api-contract` | `tests/test_seo_settings.py`、`tests/test_site_discovery.py`：公开字段白名单、异常存储安全默认和秘密字段排除测试 | 后端已实现并通过定向 API 测试；Web 元标签待实现 |
 | SEO-04 Web 页面元信息 | `apps/web/src/services/seo.ts`、`router/index.ts`、`App.vue` | 路由白名单、title/description/keywords/canonical/OG/robots 单元与浏览器测试 | 规格已确认；待实现 |
 | SEO-05 索引安全规则 | 路由 `seoIndexable` 元数据与集中判定 | 认证、账户、私信、通知、发帖、OAuth、搜索和管理页面 `noindex, nofollow` 测试 | 规格已确认；待实现 |
 | SEO-06 robots 与 sitemap | 根路径 `/robots.txt`、`/sitemap.xml` | Content-Type、全局禁抓、Sitemap 指令、XML 白名单与敏感路径排除测试 | 规格已确认；待实现 |

@@ -110,6 +110,16 @@ describe("shared API contract", () => {
       site_name: "合成侦探站",
       site_logo_url: "/brand/logo.svg",
       navigation: [{ label: "首页", path: "/", enabled: true, requires_auth: false }],
+      seo: {
+        enabled: true,
+        indexing_enabled: false,
+        home_title: "",
+        keywords: [],
+        description: "",
+        title_separator: "-",
+        default_image_url: "",
+        open_graph_enabled: true,
+      },
     };
     const discovery: HomeDiscoveryResponse = {
       hot_hashes: [

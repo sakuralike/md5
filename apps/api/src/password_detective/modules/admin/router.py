@@ -61,6 +61,7 @@ from password_detective.modules.admin.role_changes import (
     list_role_change_requests,
     review_role_change_request,
 )
+from password_detective.modules.admin.seo_settings import get_seo_settings, save_seo_settings
 from password_detective.modules.admin.setting_schemas import (
     EmailDeliverySettingsResponse,
     EmailDeliverySettingsUpdate,
@@ -68,6 +69,8 @@ from password_detective.modules.admin.setting_schemas import (
     EmailDeliveryTestResponse,
     OperationalSettingsResponse,
     OperationalSettingsSnapshot,
+    SeoSettings,
+    SeoSettingsResponse,
     SiteLogoUploadResponse,
 )
 from password_detective.modules.admin.settings import get_current_settings, save_current_settings
@@ -666,6 +669,58 @@ def admin_email_delivery_test(
         principal=principal,
         context=get_client_context(request),
     )
+
+
+@router.get("/settings/seo", response_model=SeoSettingsResponse)
+def admin_seo_settings(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> SeoSettingsResponse:
+    return get_seo_settings(db)
+
+
+@router.put(
+    "/settings/seo",
+    response_model=SeoSettingsResponse,
+    dependencies=[Depends(rate_limit("admin.settings.seo.save", limit=30, window_seconds=60))],
+)
+def admin_seo_settings_save(
+    payload: SeoSettings,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> SeoSettingsResponse:
+    request_hash = payload_digest(payload.model_dump(mode="json"))
+    lease = acquire_idempotency(
+        db,
+        scope="admin.settings.seo.save",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        response.status_code = lease.cached_status or status.HTTP_200_OK
+        return SeoSettingsResponse.model_validate(lease.cached_response)
+    try:
+        result = save_seo_settings(
+            db,
+            settings=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
 
 
 @router.get("/settings/current", response_model=OperationalSettingsResponse)

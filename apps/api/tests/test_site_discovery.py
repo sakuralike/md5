@@ -50,6 +50,16 @@ def test_public_site_config_uses_safe_defaults_and_published_projection(client):
             {"label": "首页", "path": "/", "enabled": True, "requires_auth": False},
             {"label": "社区", "path": "/community", "enabled": True, "requires_auth": False},
         ],
+        "seo": {
+            "enabled": True,
+            "indexing_enabled": False,
+            "home_title": "",
+            "keywords": [],
+            "description": "",
+            "title_separator": "-",
+            "default_image_url": "",
+            "open_graph_enabled": True,
+        },
     }
 
     with client.app.state.database.session_factory() as db:
