@@ -607,6 +607,6 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| 当前配置重置 | `apps/admin/src/lib/operationalSettingsForm.ts`、`SystemSettingsPage.vue` | 响应式快照深复制单元测试；Admin Chromium 保存后编辑再重置旅程 | 已修复 Vue Proxy `DataCloneError`，嵌套导航和用户等级不共享引用 |
-| SMTP 后台设置可见 | `SystemSettingsPage.vue` 的全量 SMTP 表单 | Admin Chromium、Firefox、WebKit 断言 Host、Port、Password、保存、重置和无发布/回滚控件 | 本地真实 API 三浏览器旅程通过；Staging 将在本轮部署后复验 |
+| 当前配置重置 | `apps/admin/src/lib/operationalSettingsForm.ts`、`SystemSettingsPage.vue` | 响应式快照深复制单元测试；Admin Chromium、Firefox、WebKit 保存后编辑再重置旅程；Staging Chromium 重置 | 已修复 Vue Proxy `DataCloneError`，嵌套导航和用户等级不共享引用；Staging 已验证 |
+| SMTP 后台设置可见 | `SystemSettingsPage.vue` 的全量 SMTP 表单 | Admin Chromium、Firefox、WebKit 断言 Host、Port、Password、保存、重置和无发布/回滚控件；Staging Chromium 同项验证 | 本地三浏览器和 Staging 真实页面均通过 |
 | 设置页移动端基线 | `admin-authenticated-accessibility.spec.ts` | 当前工作台、运行参数、SMTP 区块与每日配额关键区域 | Chromium 定向可访问性与视觉基线通过；统一门禁通过 |

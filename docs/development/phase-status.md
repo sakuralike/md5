@@ -901,6 +901,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 层级 | 当前证据 | 状态 |
 |---|---|---|
-| 系统配置重置 | `cloneOperationalSettingsSnapshot` 在复制前解除 Vue 响应式代理，避免 `structuredClone` 抛出 `DataCloneError` | 单元测试与 Chromium、Firefox、WebKit 直接保存/重置旅程通过 |
-| SMTP 设置可见性 | 浏览器断言服务器地址、端口、授权码密码框、保存与重置控件可见，且页面不出现版本历史、差异预览、发布或回滚控件 | Chromium、Firefox、WebKit 真实 API 旅程通过；Staging 待本轮发布后复验 |
+| 系统配置重置 | `cloneOperationalSettingsSnapshot` 在复制前解除 Vue 响应式代理，避免 `structuredClone` 抛出 `DataCloneError` | 单元测试与 Chromium、Firefox、WebKit 直接保存/重置旅程通过；Staging Chromium 重置真实验证通过 |
+| SMTP 设置可见性 | 浏览器断言服务器地址、端口、授权码密码框、保存与重置控件可见，且页面不出现版本历史、差异预览、发布或回滚控件 | Chromium、Firefox、WebKit 本地真实 API 旅程通过；Staging Chromium 可见性与重置验证通过 |
 | 可访问性契约 | 管理端设置页移动端基线更新为“系统配置工作台”“运行参数”“SMTP 邮件投递”和每日配额控件 | 定向 Chromium 可访问性与视觉基线旅程通过；统一门禁通过 |
+| Staging 发布 | 代码提交 `d3f13a2ef3b96904e18506b7d678056e33e16026` 经 SSH 推送并构建 Admin 镜像；API 双实例与 Worker 三实例保持运行 | Admin `/settings` HTTP 200；ready 返回数据库和限流后端正常；诊断管理员验证后已删除 |
