@@ -2,7 +2,6 @@
 import {
   BadgeCheck,
   Globe2,
-  History,
   MailCheck,
   Menu,
   Settings2,
@@ -37,7 +36,7 @@ const props = withDefaults(defineProps<{ mode?: "desktop" | "mobile" }>(), {
 const systemSettingsSections: readonly SystemSettingsSectionItem[] = [
   { label: "站点外观", to: "/settings#site-appearance", icon: Globe2 },
   { label: "邮件投递", to: "/settings#email-delivery", icon: MailCheck },
-  { label: "版本历史", to: "/settings#version-history", icon: History },
+  { label: "SEO 设置", to: "/settings#seo-settings", icon: Globe2 },
   { label: "运行策略", to: "/settings#operational-policy", icon: Settings2 },
 ];
 

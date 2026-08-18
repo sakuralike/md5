@@ -4,6 +4,8 @@ import {
   type EmailDeliveryTestResponse,
   type OperationalSettingsResponse,
   type OperationalSettingsSnapshot,
+  type SeoSettings,
+  type SeoSettingsResponse,
   type SiteLogoUploadResponse,
 } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
@@ -23,6 +25,26 @@ export function saveCurrentSettings(
       method: "PUT",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(snapshot),
+    },
+    token,
+  );
+}
+
+export function getSeoSettings(token: string): Promise<SeoSettingsResponse> {
+  return apiRequest<SeoSettingsResponse>("/admin/settings/seo", {}, token);
+}
+
+export function saveSeoSettings(
+  payload: SeoSettings,
+  token: string,
+  idempotencyKey: string,
+): Promise<SeoSettingsResponse> {
+  return apiRequest<SeoSettingsResponse>(
+    "/admin/settings/seo",
+    {
+      method: "PUT",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
     },
     token,
   );

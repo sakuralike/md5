@@ -6,10 +6,18 @@ import {
   emailFormFromSettings,
 } from "@/lib/emailDeliveryForm";
 import {
+  cloneSeoSettingsForm,
+  createSeoSettingsForm,
+  seoSettingsPayload,
+  type SeoSettingsForm,
+} from "@/lib/seoSettingsForm";
+import {
   ApiError,
   type EmailDeliverySettings,
   type EmailDeliverySettingsUpdate,
   type OperationalSettingsSnapshot,
+  type SeoSettings,
+  type SeoSettingsResponse,
   type UserLevelDefinition,
 } from "@password-detective/api-contract";
 import {
@@ -22,22 +30,32 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   Send,
   Server,
   Settings2,
   Trash2,
 } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   getCurrentSettings,
   getEmailDeliverySettings,
+  getSeoSettings,
   saveCurrentSettings,
   saveEmailDeliverySettings,
+  saveSeoSettings as persistSeoSettings,
   sendEmailDeliveryTest,
   uploadSiteLogo,
 } from "../services/settings";
@@ -66,6 +84,18 @@ const defaultSnapshot: OperationalSettingsSnapshot = {
   user_levels: defaultUserLevels,
 };
 
+const defaultSeoSettings: SeoSettings = {
+  enabled: false,
+  indexing_enabled: false,
+  home_title: "密码侦探社",
+  keywords: [],
+  description: "",
+  title_separator: "-",
+  default_image_url: "",
+  open_graph_enabled: false,
+  sitemap_enabled: false,
+};
+
 const auth = useAdminAuthStore();
 const form = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
 const baselineSnapshot = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
@@ -85,6 +115,23 @@ const emailError = ref("");
 const logoUploadBusy = ref(false);
 const logoUploadError = ref("");
 const logoUploadMessage = ref("");
+const seoSettings = ref<SeoSettingsResponse | null>(null);
+const seoForm = ref<SeoSettingsForm>(createSeoSettingsForm(defaultSeoSettings));
+const seoBaseline = ref<SeoSettingsForm>(createSeoSettingsForm(defaultSeoSettings));
+const seoLoading = ref(false);
+const seoSaveBusy = ref(false);
+const seoError = ref("");
+const seoMessage = ref("");
+const seoPreviewTitle = computed(() => {
+  const siteName = form.value.site_name.trim() || "密码侦探社";
+  const homeTitle = seoForm.value.home_title.trim() || siteName;
+  return homeTitle === siteName
+    ? siteName
+    : `${homeTitle} ${seoForm.value.title_separator} ${siteName}`;
+});
+const seoPreviewKeywords = computed(
+  () => seoSettingsPayload(seoForm.value).keywords.join("、") || "未设置关键词",
+);
 
 function describeError(value: unknown): string {
   return value instanceof ApiError ? value.message : "请求失败，请稍后重试";
@@ -99,6 +146,12 @@ function resetEmailEdits(): void {
 function resetMessages(): void {
   error.value = "";
   success.value = "";
+}
+
+function resetSeoEdits(): void {
+  seoForm.value = cloneSeoSettingsForm(seoBaseline.value);
+  seoError.value = "";
+  seoMessage.value = "已恢复到当前已保存的 SEO 设置。";
 }
 
 function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
@@ -184,6 +237,42 @@ async function saveSettings(): Promise<void> {
   }
 }
 
+async function loadSeoSettings(): Promise<void> {
+  seoLoading.value = true;
+  seoError.value = "";
+  try {
+    const response = await getSeoSettings(auth.accessToken);
+    seoSettings.value = response;
+    seoBaseline.value = createSeoSettingsForm(response.settings);
+    seoForm.value = cloneSeoSettingsForm(seoBaseline.value);
+  } catch (value) {
+    seoError.value = describeError(value);
+  } finally {
+    seoLoading.value = false;
+  }
+}
+
+async function saveSeoSettings(): Promise<void> {
+  seoError.value = "";
+  seoMessage.value = "";
+  seoSaveBusy.value = true;
+  try {
+    const response = await persistSeoSettings(
+      seoSettingsPayload(seoForm.value),
+      auth.accessToken,
+      createClientId(),
+    );
+    seoSettings.value = response;
+    seoBaseline.value = createSeoSettingsForm(response.settings);
+    seoForm.value = cloneSeoSettingsForm(seoBaseline.value);
+    seoMessage.value = "SEO 设置已直接保存并立即生效。";
+  } catch (value) {
+    seoError.value = describeError(value);
+  } finally {
+    seoSaveBusy.value = false;
+  }
+}
+
 async function loadEmailSettings(): Promise<void> {
   emailLoading.value = true;
   emailError.value = "";
@@ -254,6 +343,7 @@ async function refreshPage(): Promise<void> {
     const response = await getCurrentSettings(auth.accessToken);
     useSnapshot(response.settings);
     await loadEmailSettings();
+    await loadSeoSettings();
   } catch (value) {
     error.value = describeError(value);
   } finally {
@@ -296,6 +386,48 @@ onMounted(refreshPage);
       <section id="site-navigation" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Navigation class="size-5 text-primary" />站点导航</h2><p class="mt-1 text-sm text-muted-foreground">至少保留一个已启用的站内导航项。</p></div><Button type="button" variant="outline" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button></div>
         <div class="space-y-3"><div v-for="(item, index) in form.site_navigation" :key="`${item.path}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div class="space-y-2"><Label :for="`navigation-label-${index}`">名称</Label><Input :id="`navigation-label-${index}`" v-model="item.label" /></div><div class="space-y-2"><Label :for="`navigation-path-${index}`">路径</Label><Input :id="`navigation-path-${index}`" v-model="item.path" /></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="item.enabled" @update:model-value="item.enabled = $event === true" />启用</Label><Label class="flex items-center gap-2"><Checkbox :model-value="item.requires_auth" @update:model-value="item.requires_auth = $event === true" />登录后可见</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.site_navigation.length <= 1" @click="removeNavigationItem(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div></div></div>
+      </section>
+
+      <section id="seo-settings" class="glass-panel scroll-mt-28 p-6" data-section="seo-settings">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Search class="size-5 text-primary" />SEO 设置</h2>
+            <p class="mt-1 text-sm leading-6 text-muted-foreground">参考 Zibll 主题的邮件与 SEO 设置方式，保存后当前配置立即生效；不创建版本、发布或回滚快照。</p>
+          </div>
+          <span class="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">直接保存</span>
+        </div>
+
+        <div v-if="seoLoading" class="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground">正在加载 SEO 设置…</div>
+        <div v-else class="space-y-5">
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Label class="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm"><Checkbox id="seo-enabled" :model-value="seoForm.enabled" @update:model-value="seoForm.enabled = $event === true" /><span><span class="block font-medium text-foreground">启用 SEO</span><span class="block text-xs text-muted-foreground">输出站点 SEO 公共配置。</span></span></Label>
+            <Label class="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm"><Checkbox id="seo-indexing-enabled" :model-value="seoForm.indexing_enabled" @update:model-value="seoForm.indexing_enabled = $event === true" /><span><span class="block font-medium text-foreground">允许搜索引擎收录</span><span class="block text-xs text-muted-foreground">关闭时 robots 全站禁止抓取。</span></span></Label>
+            <Label class="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm"><Checkbox id="seo-sitemap-enabled" :model-value="seoForm.sitemap_enabled" @update:model-value="seoForm.sitemap_enabled = $event === true" /><span><span class="block font-medium text-foreground">启用 Sitemap</span><span class="block text-xs text-muted-foreground">仅输出显式公开路由。</span></span></Label>
+            <Label class="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm"><Checkbox id="seo-open-graph-enabled" :model-value="seoForm.open_graph_enabled" @update:model-value="seoForm.open_graph_enabled = $event === true" /><span><span class="block font-medium text-foreground">启用 Open Graph</span><span class="block text-xs text-muted-foreground">为公开页面提供社交分享信息。</span></span></Label>
+          </div>
+
+          <div class="grid gap-4 lg:grid-cols-2">
+            <div class="space-y-2"><Label for="seo-home-title">首页 SEO 标题</Label><Input id="seo-home-title" v-model="seoForm.home_title" maxlength="120" placeholder="密码侦探社" /><p class="text-xs text-muted-foreground">用于首页标题预览和后续 Web 运行时元标签。</p></div>
+            <div class="space-y-2"><Label for="seo-keywords">全站关键词</Label><Input id="seo-keywords" v-model="seoForm.keywords_text" maxlength="500" placeholder="密码, 压缩包, 社区" /><p class="text-xs text-muted-foreground">使用逗号或中文逗号分隔，保存时会去空格、去重。</p></div>
+            <div class="space-y-2 lg:col-span-2"><Label for="seo-description">全站描述</Label><Textarea id="seo-description" v-model="seoForm.description" rows="4" maxlength="320" placeholder="请输入面向搜索引擎的站点描述。" /><p class="text-xs text-muted-foreground">描述只保存为当前 SEO 配置，不会写入版本历史或额外预览对象。</p></div>
+            <div class="space-y-2"><Label for="seo-title-separator">标题连接符</Label><Select v-model="seoForm.title_separator"><SelectTrigger id="seo-title-separator" aria-label="标题连接符"><SelectValue placeholder="选择连接符" /></SelectTrigger><SelectContent><SelectItem value="-">短横线（-）</SelectItem><SelectItem value="_">下划线（_）</SelectItem><SelectItem value="|">竖线（|）</SelectItem><SelectItem value="·">中点（·）</SelectItem></SelectContent></Select><p class="text-xs text-muted-foreground">仅允许有限连接符，避免把任意 HTML 写入标题。</p></div>
+            <div class="space-y-2"><Label for="seo-default-image">默认 SEO/社交图片</Label><Input id="seo-default-image" v-model="seoForm.default_image_url" maxlength="500" placeholder="https://synthetic.example.com/seo.png" /><p class="text-xs text-muted-foreground">仅作为公开页面缺省图片，内容级封面列入后续阶段。</p></div>
+          </div>
+
+          <div class="rounded-xl border border-dashed border-border bg-background p-4" data-seo-preview>
+            <div class="mb-3 flex items-center justify-between gap-3"><div><h3 class="text-sm font-semibold text-foreground">搜索结果预览</h3><p class="text-xs text-muted-foreground">仅为当前编辑状态的本地预览，不会单独提交。</p></div><span class="text-xs text-muted-foreground">/</span></div>
+            <p class="text-lg font-medium text-primary">{{ seoPreviewTitle }}</p>
+            <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{{ seoForm.description.trim() || "保存描述后将在这里显示搜索结果摘要。" }}</p>
+            <p class="mt-2 text-xs text-muted-foreground">关键词：{{ seoPreviewKeywords }}</p>
+          </div>
+
+          <div class="flex flex-wrap gap-3">
+            <Button :disabled="seoSaveBusy || seoLoading" @click="saveSeoSettings"><Save class="mr-2 size-4" />保存 SEO 设置</Button>
+            <Button type="button" variant="outline" :disabled="seoSaveBusy || seoLoading" @click="resetSeoEdits"><RotateCcw class="mr-2 size-4" />重置 SEO 编辑</Button>
+          </div>
+          <p v-if="seoMessage" class="text-sm text-primary">{{ seoMessage }}</p>
+          <p v-if="seoError" class="text-sm text-destructive">{{ seoError }}</p>
+        </div>
       </section>
 
       <section id="operational-policy" class="glass-panel scroll-mt-28 p-6">

@@ -43,6 +43,22 @@ vi.mock("../services/settings", () => ({
     smtp_timeout_seconds: 10,
     configuration_source: "deployment_environment",
   }),
+  getSeoSettings: vi.fn().mockResolvedValue({
+    settings: {
+      enabled: false,
+      indexing_enabled: false,
+      home_title: "密码侦探社",
+      keywords: [],
+      description: "",
+      title_separator: "-",
+      default_image_url: "",
+      open_graph_enabled: false,
+      sitemap_enabled: false,
+    },
+    updated_at: null,
+    updated_by: null,
+  }),
+  saveSeoSettings: vi.fn(),
   sendEmailDeliveryTest: vi.fn(),
   uploadSiteLogo: vi.fn(),
 }));
@@ -60,6 +76,11 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("上传 Logo 图片");
     expect(html).toContain("image/png,image/jpeg,image/webp");
     expect(html).toContain("SMTP 邮件投递");
+    expect(html).toContain("SEO 设置");
+    expect(html).toContain('id="seo-settings"');
+    expect(html).toContain("搜索结果预览");
+    expect(html).toContain("保存 SEO 设置");
+    expect(html).toContain("重置 SEO 编辑");
     expect(html).toContain("直接保存设置");
     expect(html).toContain("当前配置将立即生效");
     expect(html).toContain("保存设置");
