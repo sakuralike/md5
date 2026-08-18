@@ -7,6 +7,7 @@ from email.utils import parseaddr
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -117,6 +118,7 @@ class Settings(BaseSettings):
     browser_cookie_secure: bool = False
     max_json_body_bytes: int = Field(default=1_048_576, ge=1_024, le=16_777_216)
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    public_origin: str = "http://localhost:5173"
     auto_create_tables: bool = True
     log_level: str = "INFO"
 
@@ -143,6 +145,17 @@ class Settings(BaseSettings):
         if env not in {"local", "test"} and len(value) < 32:
             raise ValueError("非本地环境的 APP_SECRET_KEY 至少需要 32 个字符")
         return value
+
+    @field_validator("public_origin")
+    @classmethod
+    def validate_public_origin(cls, value: str) -> str:
+        origin = value.strip().rstrip("/")
+        parsed = urlsplit(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("PUBLIC_ORIGIN 必须是带主机的 HTTP(S) Origin")
+        if parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+            raise ValueError("PUBLIC_ORIGIN 不得包含路径、查询参数、片段或用户凭据")
+        return origin
 
     @field_validator("browser_cookie_secure")
     @classmethod

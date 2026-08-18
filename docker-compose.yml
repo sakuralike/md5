@@ -81,6 +81,7 @@ services:
       PRIVACY_JOB_BACKEND: ${PRIVACY_JOB_BACKEND:-celery}
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       CORS_ORIGINS: http://localhost:5173,http://localhost:5174
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:5173}
       AUTO_CREATE_TABLES: "false"
       SITE_ASSET_STORAGE_PATH: /var/lib/password-detective/site-assets
       SITE_LOGO_MAX_BYTES: ${SITE_LOGO_MAX_BYTES:-2097152}
