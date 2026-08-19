@@ -63,6 +63,7 @@ _ENTITLEMENT_KEYS = {
     "daily_reveal_boost",
 }
 _MAX_FULFILLMENT_RETRIES = 3
+_FULFILLMENT_LEASE_SECONDS = 300
 
 
 def _stock_status(stock: int) -> str:
@@ -756,27 +757,69 @@ def _grant_entitlement(db: Session, order: RewardOrder, *, now: datetime) -> Non
     )
 
 
-def process_pending_fulfillments(db: Session, *, limit: int = 50) -> dict[str, int]:
+def process_pending_fulfillments(
+    db: Session, *, limit: int = 50, worker_id: str = "reward-worker"
+) -> dict[str, int]:
     now = utc_now()
-    fulfillments = db.scalars(
+    recovered = list(db.scalars(
         select(RewardFulfillment)
         .where(
-            RewardFulfillment.status.in_(
-                (RewardFulfillmentStatus.PENDING, RewardFulfillmentStatus.RETRYABLE)
-            ),
-            or_(
-                RewardFulfillment.next_retry_at.is_(None),
-                RewardFulfillment.next_retry_at <= now,
-            ),
+            RewardFulfillment.status == RewardFulfillmentStatus.RUNNING,
+            RewardFulfillment.lease_expires_at.is_not(None),
+            RewardFulfillment.lease_expires_at <= now,
         )
-        .order_by(RewardFulfillment.created_at, RewardFulfillment.id)
-        .limit(limit)
         .with_for_update(skip_locked=True)
-    ).all()
+    ).all())
+    for stale in recovered:
+        stale.status = RewardFulfillmentStatus.RETRYABLE
+        stale.next_retry_at = now
+        stale.lease_owner = None
+        stale.lease_expires_at = None
+        stale.result_code = "fulfillment_lease_expired"
+        stale.safe_message = "履约任务已恢复，将自动重试。"
+        order = db.scalar(
+            select(RewardOrder).where(RewardOrder.id == stale.order_id).with_for_update()
+        )
+        if order is not None and order.status == RewardOrderStatus.PROCESSING:
+            order.status = RewardOrderStatus.PENDING_FULFILLMENT
+            order.updated_at = now
+            _append_order_event(
+                db,
+                order=order,
+                from_status=RewardOrderStatus.PROCESSING,
+                event_type="fulfillment.lease_recovered",
+                actor_type=RewardActorType.SYSTEM,
+                actor_id=None,
+                reason_code="worker_lease_expired",
+                now=now,
+            )
+    recovered_ids = {item.id for item in recovered}
+    fulfillments = list(recovered)
+    remaining = max(limit - len(fulfillments), 0)
+    if remaining:
+        pending = db.scalars(
+            select(RewardFulfillment)
+            .where(
+                RewardFulfillment.id.not_in(recovered_ids) if recovered_ids else True,
+                RewardFulfillment.status.in_(
+                    (RewardFulfillmentStatus.PENDING, RewardFulfillmentStatus.RETRYABLE)
+                ),
+                or_(
+                    RewardFulfillment.next_retry_at.is_(None),
+                    RewardFulfillment.next_retry_at <= now,
+                ),
+            )
+            .order_by(RewardFulfillment.created_at, RewardFulfillment.id)
+            .limit(remaining)
+            .with_for_update(skip_locked=True)
+        ).all()
+        fulfillments.extend(pending)
     succeeded = 0
     retried = 0
     failed = 0
     for fulfillment in fulfillments:
+        fulfillment.lease_owner = worker_id
+        fulfillment.lease_expires_at = now + timedelta(seconds=_FULFILLMENT_LEASE_SECONDS)
         order = db.scalar(
             select(RewardOrder).where(RewardOrder.id == fulfillment.order_id).with_for_update()
         )
@@ -785,15 +828,21 @@ def process_pending_fulfillments(db: Session, *, limit: int = 50) -> dict[str, i
             fulfillment.result_code = "order_missing"
             fulfillment.safe_message = "订单数据异常，请联系管理员。"
             fulfillment.completed_at = now
+            fulfillment.lease_owner = None
+            fulfillment.lease_expires_at = None
             failed += 1
             continue
         if order.status == RewardOrderStatus.CANCELLED:
             fulfillment.status = RewardFulfillmentStatus.CANCELLED
             fulfillment.completed_at = now
+            fulfillment.lease_owner = None
+            fulfillment.lease_expires_at = None
             continue
         if order.status == RewardOrderStatus.FULFILLED:
             fulfillment.status = RewardFulfillmentStatus.SUCCEEDED
             fulfillment.completed_at = order.fulfilled_at or now
+            fulfillment.lease_owner = None
+            fulfillment.lease_expires_at = None
             continue
         previous = order.status
         order.status = RewardOrderStatus.PROCESSING
@@ -815,6 +864,8 @@ def process_pending_fulfillments(db: Session, *, limit: int = 50) -> dict[str, i
             _grant_entitlement(db, order, now=now)
         except Exception as exc:  # noqa: BLE001 - failures become persisted, retryable facts.
             fulfillment.retry_count += 1
+            fulfillment.lease_owner = None
+            fulfillment.lease_expires_at = None
             fulfillment.result_code = type(exc).__name__[:128]
             fulfillment.safe_message = "权益发放暂未完成，请稍后查看。"
             if fulfillment.retry_count < _MAX_FULFILLMENT_RETRIES:
@@ -852,6 +903,8 @@ def process_pending_fulfillments(db: Session, *, limit: int = 50) -> dict[str, i
         fulfillment.safe_message = "虚拟权益已发放。"
         fulfillment.next_retry_at = None
         fulfillment.completed_at = now
+        fulfillment.lease_owner = None
+        fulfillment.lease_expires_at = None
         order.status = RewardOrderStatus.FULFILLED
         order.fulfilled_at = now
         order.updated_at = now

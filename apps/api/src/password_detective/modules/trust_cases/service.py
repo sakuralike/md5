@@ -25,6 +25,7 @@ from password_detective.db.models.verification import RecordStateEvent, StateTra
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.reputation.adjustments import reconcile_candidate_rewards
+from password_detective.modules.rewards.entitlements import reward_priority_case_review_enabled
 from password_detective.modules.trust_cases.notifications import (
     notification_response,
     queue_resolution_notification,
@@ -73,6 +74,12 @@ _ALLOWED_RESOLUTION_CODES = {
     TrustCaseKind.ACCOUNT_APPEAL: {CaseResolutionCode.REVIEW_STARTED},
 }
 
+
+def _case_priority(db: Session, *, user_id: str) -> tuple[int, str | None]:
+    if reward_priority_case_review_enabled(db, user_id=user_id):
+        return 100, "reward.priority_case_review"
+    return 0, None
+
 _FINAL_RESOLUTIONS = {
     TrustCaseKind.REPORT: {
         CaseResolutionCode.ACTION_TAKEN: TrustCaseStatus.RESOLVED,
@@ -118,6 +125,7 @@ def create_report(
     candidate = db.get(PasswordCandidate, payload.candidate_id)
     if candidate is None:
         raise AppError("trust.candidate_not_found", "未找到举报目标候选", status_code=404)
+    priority_score, priority_reason = _case_priority(db, user_id=principal.user.id)
     case = TrustCase(
         kind=TrustCaseKind.REPORT,
         subject_type=TrustCaseSubjectType.CANDIDATE,
@@ -125,6 +133,8 @@ def create_report(
         candidate_id=candidate.id,
         reason_code=payload.reason_code.value,
         description=payload.description,
+        priority_score=priority_score,
+        priority_reason=priority_reason,
         sla_due_at=_sla_due_at(TrustCaseKind.REPORT),
     )
     db.add(case)
@@ -173,6 +183,7 @@ def create_appeal(
             raise AppError(
                 "trust.related_case_not_found", "关联案件不存在或目标不一致", status_code=404
             )
+    priority_score, priority_reason = _case_priority(db, user_id=principal.user.id)
     case = TrustCase(
         kind=TrustCaseKind.APPEAL,
         subject_type=TrustCaseSubjectType.CANDIDATE,
@@ -181,6 +192,8 @@ def create_appeal(
         related_case_id=payload.related_case_id,
         reason_code=payload.reason_code.value,
         description=payload.description,
+        priority_score=priority_score,
+        priority_reason=priority_reason,
         sla_due_at=_sla_due_at(TrustCaseKind.APPEAL),
     )
     db.add(case)
@@ -208,6 +221,7 @@ def create_account_appeal(
     principal: Principal,
     context: ClientContext,
 ) -> TrustCaseDetail:
+    priority_score, priority_reason = _case_priority(db, user_id=principal.user.id)
     case = TrustCase(
         kind=TrustCaseKind.ACCOUNT_APPEAL,
         subject_type=TrustCaseSubjectType.ACCOUNT,
@@ -217,6 +231,8 @@ def create_account_appeal(
         requested_action=payload.requested_action.value,
         description=payload.description,
         evidence_summary=payload.evidence_summary,
+        priority_score=priority_score,
+        priority_reason=priority_reason,
         sla_due_at=_sla_due_at(TrustCaseKind.ACCOUNT_APPEAL),
     )
     db.add(case)
@@ -869,7 +885,7 @@ def _list_cases(
         select(TrustCase, User.username)
         .join(User, User.id == TrustCase.reporter_id)
         .where(*filters)
-        .order_by(TrustCase.created_at.desc())
+        .order_by(TrustCase.priority_score.desc(), TrustCase.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
@@ -888,6 +904,8 @@ def _summary(case: TrustCase, reporter_username: str) -> TrustCaseSummary:
         kind=case.kind,
         subject_type=case.subject_type,
         status=case.status,
+        priority_score=case.priority_score,
+        priority_reason=case.priority_reason,
         reporter_id=case.reporter_id,
         reporter_username=reporter_username,
         candidate_id=case.candidate_id,

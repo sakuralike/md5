@@ -26,6 +26,7 @@ from password_detective.modules.reputation.schemas import (
     UserLevelProfileResponse,
     UserLevelSummary,
 )
+from password_detective.modules.rewards.entitlements import reward_daily_reveal_bonus
 
 GROWTH_RULE_VERSION = "growth-v1"
 DAILY_ACTIVITY_GROWTH = 5
@@ -260,7 +261,8 @@ def rebuild_all_level_profiles(db: Session) -> int:
 
 def daily_reveal_quota_for_user(db: Session, *, user_id: str, baseline: int) -> int:
     profile = get_user_level_profile(db, user_id=user_id)
-    return max(baseline, profile.current.entitlements.daily_reveal_quota)
+    base_quota = max(baseline, profile.current.entitlements.daily_reveal_quota)
+    return base_quota + reward_daily_reveal_bonus(db, user_id=user_id)
 
 
 def require_submission_entitlement(db: Session, *, user_id: str) -> None:

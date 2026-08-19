@@ -113,6 +113,7 @@ from password_detective.modules.community.search_index import (
     source_document_version,
 )
 from password_detective.modules.community.seo_projection import post_seo_projection
+from password_detective.modules.rewards.entitlements import reward_community_supporter_enabled
 
 _MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,32})")
 _MAX_MENTIONS_PER_CONTENT = 10
@@ -1598,6 +1599,7 @@ def _public_profile_response(
         avatar_url=_avatar_url(profile, user),
         role=user.role,
         level=_public_level(db, user.id),
+        supporter_badge=reward_community_supporter_enabled(db, user_id=user.id),
         registered_month=user.created_at.strftime("%Y-%m"),
         stats=CommunityProfileStats(
             post_count=int(

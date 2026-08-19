@@ -237,6 +237,6 @@ def process_reward_fulfillments() -> dict[str, int]:
     database = Database(settings)
     try:
         with database.session_factory() as db:
-            return process_pending_fulfillments(db)
+            return process_pending_fulfillments(db, worker_id=worker_instance_id)
     finally:
         database.dispose()

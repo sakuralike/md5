@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pyotp
 from sqlalchemy import func, select
 
+from password_detective.core.time import utc_now
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.reward_catalog import RewardCatalogItem
 from password_detective.db.models.reward_order import (
     RewardEntitlementGrant,
+    RewardEntitlementStatus,
+    RewardFulfillment,
+    RewardFulfillmentStatus,
     RewardInventoryEvent,
     RewardOrder,
+    RewardOrderStatus,
 )
 from password_detective.db.models.user import User, UserRole
+from password_detective.modules.reputation.levels import daily_reveal_quota_for_user
+from password_detective.modules.rewards.entitlements import (
+    has_active_reward_entitlement,
+    reward_daily_reveal_bonus,
+)
 from password_detective.modules.rewards.service import process_pending_fulfillments
 
 PASSWORD = "SyntheticRewardOrdersPass123!"
@@ -63,7 +75,14 @@ def _admin_session(client, suffix: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
-def _create_catalog(client, admin_headers: dict[str, str], slug: str) -> dict[str, object]:
+def _create_catalog(
+    client,
+    admin_headers: dict[str, str],
+    slug: str,
+    *,
+    entitlement_key: str = "community_supporter",
+    duration_days: int | None = 30,
+) -> dict[str, object]:
     response = client.post(
         "/api/v1/admin/rewards/catalog",
         headers={**admin_headers, "Idempotency-Key": f"reward-catalog-{slug}-0001"},
@@ -78,8 +97,8 @@ def _create_catalog(client, admin_headers: dict[str, str], slug: str) -> dict[st
             "category": "community",
             "tags": ["featured", "community"],
             "sort_weight": 10,
-            "entitlement_key": "community_supporter",
-            "entitlement_duration_days": 30,
+            "entitlement_key": entitlement_key,
+            "entitlement_duration_days": duration_days,
             "redeem_start_at": None,
             "redeem_end_at": None,
             "status": "active",
@@ -246,3 +265,97 @@ def test_inventory_adjustment_and_operations_stats_require_admin_mfa(client):
     stats = client.get("/api/v1/admin/rewards/operations/stats", headers=admin_headers)
     assert stats.status_code == 200
     assert stats.json()["total_orders"] == 0
+
+
+def test_reward_entitlement_is_consumed_by_daily_quota_and_expires(client):
+    admin_headers = _admin_session(client, "daily_boost")
+    item = _create_catalog(
+        client,
+        admin_headers,
+        "synthetic-daily-reveal-boost",
+        entitlement_key="daily_reveal_boost",
+        duration_days=30,
+    )
+    user_headers, user_id = _register_and_login(client, "daily_boost")
+    _credit_points(client, user_id, 100, "synthetic-daily-boost-credit")
+
+    created = client.post(
+        "/api/v1/rewards/orders",
+        headers={**user_headers, "Idempotency-Key": "reward-daily-boost-order-0001"},
+        json={"catalog_item_id": item["id"], "quantity": 2},
+    )
+    assert created.status_code == 201
+    with client.app.state.database.session_factory() as db:
+        assert process_pending_fulfillments(db)["succeeded"] == 1
+        assert reward_daily_reveal_bonus(db, user_id=user_id) == 2
+        assert daily_reveal_quota_for_user(db, user_id=user_id, baseline=5) == 22
+        assert has_active_reward_entitlement(
+            db, user_id=user_id, entitlement_key="daily_reveal_boost"
+        )
+        grant = db.scalar(
+            select(RewardEntitlementGrant).where(RewardEntitlementGrant.user_id == user_id)
+        )
+        assert grant is not None
+        grant.expires_at = utc_now() - timedelta(seconds=1)
+        db.commit()
+        assert reward_daily_reveal_bonus(db, user_id=user_id) == 0
+        assert not has_active_reward_entitlement(
+            db, user_id=user_id, entitlement_key="daily_reveal_boost"
+        )
+
+
+def test_revoked_reward_entitlement_stops_being_effective(client):
+    admin_headers = _admin_session(client, "revoked_ent")
+    item = _create_catalog(client, admin_headers, "synthetic-revoked-supporter")
+    user_headers, user_id = _register_and_login(client, "revoked_ent")
+    _credit_points(client, user_id, 100, "synthetic-revoked-credit")
+    created = client.post(
+        "/api/v1/rewards/orders",
+        headers={**user_headers, "Idempotency-Key": "reward-revoked-order-0001"},
+        json={"catalog_item_id": item["id"], "quantity": 1},
+    )
+    assert created.status_code == 201
+    with client.app.state.database.session_factory() as db:
+        process_pending_fulfillments(db)
+        grant = db.scalar(
+            select(RewardEntitlementGrant).where(RewardEntitlementGrant.user_id == user_id)
+        )
+        assert grant is not None
+        grant.status = RewardEntitlementStatus.REVOKED
+        grant.revoked_at = utc_now()
+        db.commit()
+
+        assert not has_active_reward_entitlement(
+            db, user_id=user_id, entitlement_key="community_supporter"
+        )
+
+
+def test_expired_fulfillment_lease_is_recovered_by_next_worker(client):
+    admin_headers = _admin_session(client, "lease_recovery")
+    item = _create_catalog(client, admin_headers, "synthetic-lease-recovery")
+    user_headers, user_id = _register_and_login(client, "lease_recovery")
+    _credit_points(client, user_id, 100, "synthetic-lease-credit")
+    created = client.post(
+        "/api/v1/rewards/orders",
+        headers={**user_headers, "Idempotency-Key": "reward-lease-order-0001"},
+        json={"catalog_item_id": item["id"], "quantity": 1},
+    )
+    assert created.status_code == 201
+    with client.app.state.database.session_factory() as db:
+        order = db.get(RewardOrder, created.json()["id"])
+        assert order is not None
+        fulfillment = db.scalar(
+            select(RewardFulfillment).where(RewardFulfillment.order_id == order.id)
+        )
+        assert fulfillment is not None
+        order.status = RewardOrderStatus.PROCESSING
+        fulfillment.status = RewardFulfillmentStatus.RUNNING
+        fulfillment.lease_owner = "crashed-worker"
+        fulfillment.lease_expires_at = utc_now() - timedelta(seconds=1)
+        db.commit()
+
+        result = process_pending_fulfillments(db, worker_id="recovery-worker")
+        assert result["succeeded"] == 1
+        assert order.status == RewardOrderStatus.FULFILLED
+        assert fulfillment.lease_owner is None
+        assert fulfillment.lease_expires_at is None

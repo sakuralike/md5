@@ -77,6 +77,8 @@ class TrustCase(Base):
         index=True,
     )
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    priority_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
+    priority_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reporter_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )

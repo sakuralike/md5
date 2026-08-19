@@ -214,6 +214,8 @@ class TrustCaseSummary(BaseModel):
     kind: TrustCaseKind
     subject_type: TrustCaseSubjectType
     status: TrustCaseStatus
+    priority_score: int = 0
+    priority_reason: str | None = None
     reporter_id: str
     reporter_username: str
     candidate_id: str | None

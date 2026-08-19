@@ -654,6 +654,7 @@ class CommunityPublicProfileResponse(BaseModel):
     avatar_url: str | None = None
     role: UserRole
     level: CommunityPublicLevel
+    supporter_badge: bool = False
     registered_month: str
     stats: CommunityProfileStats
     relationship: CommunityRelationshipState

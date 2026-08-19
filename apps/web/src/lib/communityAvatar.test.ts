@@ -12,6 +12,7 @@ function profile(overrides: Partial<CommunityPublicProfileResponse> = {}): Commu
     avatar_url: null,
     role: "user",
     level: { code: "rookie", name: "新手侦探" },
+    supporter_badge: false,
     registered_month: "2026-08",
     stats: { post_count: 0, comment_count: 0, follower_count: 0, following_count: 0 },
     relationship: {

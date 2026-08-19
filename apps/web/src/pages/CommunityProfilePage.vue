@@ -136,6 +136,7 @@ onServerPrefetch(() => load());
                 <h1 class="text-2xl font-semibold tracking-tight">{{ profile.display_name }}</h1>
                 <Badge variant="secondary">{{ profile.role }}</Badge>
                 <Badge variant="outline">{{ profile.level.name }}</Badge>
+                <Badge v-if="profile.supporter_badge" variant="default">社区支持者</Badge>
               </div>
               <p class="text-sm text-muted-foreground">@{{ profile.username }} · 加入于 {{ profile.registered_month }}</p>
               <p v-if="profile.bio" class="max-w-3xl text-sm leading-6 text-foreground">{{ profile.bio }}</p>

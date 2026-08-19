@@ -923,6 +923,8 @@ export interface TrustCaseSummary {
   kind: TrustCaseKind;
   subject_type: TrustCaseSubjectType;
   status: TrustCaseStatus;
+  priority_score: number;
+  priority_reason: string | null;
   reporter_id: string;
   reporter_username: string;
   candidate_id: string | null;
@@ -2620,6 +2622,7 @@ export interface CommunityPublicProfileResponse {
   avatar_url: string | null;
   role: UserRole;
   level: CommunityPublicLevel;
+  supporter_badge: boolean;
   registered_month: string;
   stats: CommunityProfileStats;
   relationship: CommunityRelationshipState;

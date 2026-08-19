@@ -396,6 +396,9 @@ onMounted(() => loadCases(true));
             <small class="text-muted-foreground">
               {{ item.reporter_username }} · {{ formatTime(item.created_at) }}
             </small>
+            <Badge v-if="item.priority_score > 0" variant="default" class="w-fit">
+              优先审核
+            </Badge>
             <small class="break-all text-muted-foreground">{{ subjectLabel(item) }}</small>
           </span>
         </Button>
@@ -421,6 +424,7 @@ onMounted(() => loadCases(true));
 
         <dl class="grid gap-4 sm:grid-cols-2">
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">提交用户</dt><dd>{{ selected.reporter_username }}</dd></div>
+          <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">审核优先级</dt><dd>{{ selected.priority_score > 0 ? `优先审核（${selected.priority_reason}）` : "普通" }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">主体类型</dt><dd>{{ selected.subject_type }}</dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">主体 ID</dt><dd><code class="break-all text-sm">{{ selected.candidate_id || selected.target_user_id || selected.risk_alert_id || "—" }}</code></dd></div>
           <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">期望动作</dt><dd><code class="break-all text-sm">{{ selected.requested_action || "—" }}</code></dd></div>
