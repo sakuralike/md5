@@ -615,6 +615,12 @@ class CommunityInteractionPolicy(StrEnum):
     NOBODY = "nobody"
 
 
+class CommunityAvatarKind(StrEnum):
+    GENERATED = "generated"
+    UPLOAD = "upload"
+    GRAVATAR = "gravatar"
+
+
 class CommunityPublicProfile(Base):
     __tablename__ = "community_public_profiles"
 
@@ -624,6 +630,13 @@ class CommunityPublicProfile(Base):
     display_name: Mapped[str] = mapped_column(String(48))
     bio: Mapped[str] = mapped_column(String(300), default="")
     avatar_seed: Mapped[str] = mapped_column(String(32))
+    avatar_kind: Mapped[CommunityAvatarKind] = mapped_column(
+        Enum(CommunityAvatarKind, native_enum=False, length=16),
+        default=CommunityAvatarKind.GENERATED,
+        index=True,
+    )
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    gravatar_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     follower_visibility: Mapped[CommunityRelationVisibility] = mapped_column(
         Enum(CommunityRelationVisibility, native_enum=False, length=16),
         default=CommunityRelationVisibility.PUBLIC,

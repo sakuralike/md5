@@ -47,6 +47,7 @@ describe("UserAccountMenu", () => {
   it("renders the avatar trigger and account actions", async () => {
     const app = createSSRApp(UserAccountMenu, {
       user,
+      avatarSrc: "data:image/svg+xml,synthetic-avatar",
       defaultOpen: true,
       unreadCount: 128,
       notificationStatus: "connected",
@@ -67,6 +68,7 @@ describe("UserAccountMenu", () => {
     expect(html).toContain("实时连接正常");
     expect(html).toContain("退出登录");
     expect(html).toContain("sakura@example.test");
+    expect(html).toContain("data:image/svg+xml,synthetic-avatar");
   });
 });
 

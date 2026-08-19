@@ -1942,11 +1942,15 @@ export interface CommunityPublicCommentSummary {
   created_at: string;
 }
 
+export type CommunityAvatarKind = "generated" | "upload" | "gravatar";
+
 export interface CommunityPublicProfileResponse {
   username: string;
   display_name: string;
   bio: string;
   avatar_seed: string;
+  avatar_kind: CommunityAvatarKind;
+  avatar_url: string | null;
   role: UserRole;
   level: CommunityPublicLevel;
   registered_month: string;
@@ -1961,12 +1965,15 @@ export interface CommunityOwnProfileResponse extends CommunityPublicProfileRespo
   following_visibility: CommunityRelationVisibility;
   message_policy: CommunityInteractionPolicy;
   mention_policy: CommunityInteractionPolicy;
+  gravatar_enabled: boolean;
 }
 
 export interface CommunityProfileUpdateRequest {
   display_name: string;
   bio: string;
   regenerate_avatar: boolean;
+  avatar_kind: CommunityAvatarKind;
+  gravatar_enabled: boolean;
 }
 
 export interface CommunityPrivacyUpdateRequest {
@@ -2157,6 +2164,11 @@ export type ThirdPartyAppSource = "admin" | "developer_self_service";
 export const THIRD_PARTY_API_V1_SCOPES = [
   "profile:read",
   "hash:read",
+<<<<<<< HEAD
+=======
+  "announcements:read",
+  "updates:read",
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
   "desktop:installations",
   "desktop:verification",
   "desktop:verification:trusted",
@@ -2164,6 +2176,49 @@ export const THIRD_PARTY_API_V1_SCOPES = [
 
 export type ThirdPartyScope = (typeof THIRD_PARTY_API_V1_SCOPES)[number];
 
+<<<<<<< HEAD
+=======
+export const THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS = [
+  {
+    value: "profile:read",
+    label: "读取已授权用户的公开资料",
+    description: "仅用于显示当前已授权用户的基础资料。",
+  },
+  {
+    value: "hash:read",
+    label: "读取已公开的哈希资料",
+    description: "查询公开哈希条目及其公开评论。",
+  },
+  {
+    value: "announcements:read",
+    label: "读取桌面端公告",
+    description: "获取面向桌面端的公告内容与图片链接。",
+  },
+  {
+    value: "updates:read",
+    label: "检查桌面端版本更新",
+    description: "检查当前桌面程序是否有可用更新。",
+  },
+  {
+    value: "desktop:installations",
+    label: "登记与管理本机安装实例",
+    description: "登记当前设备安装实例以完成桌面端可信调用。",
+  },
+  {
+    value: "desktop:verification",
+    label: "验证压缩包密码并提交回执",
+    description: "提交本地验证结果；默认进入待验证池。",
+  },
+] as const satisfies ReadonlyArray<{
+  value: Exclude<ThirdPartyScope, "desktop:verification:trusted">;
+  label: string;
+  description: string;
+}>;
+
+export type ThirdPartyRequestableScope =
+  (typeof THIRD_PARTY_REQUESTABLE_SCOPE_OPTIONS)[number]["value"];
+
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 export const THIRD_PARTY_OAUTH_GRANT_TYPES = [
   "authorization_code",
   "refresh_token",
@@ -2179,11 +2234,59 @@ export const THIRD_PARTY_API_V1_PATHS = {
   oauthToken: "/third-party/oauth/token",
   oauthRevoke: "/third-party/oauth/revoke",
   oauthMe: "/third-party/oauth/me",
+<<<<<<< HEAD
+=======
+  hashDetail: "/third-party/hashes/{algorithm}/{digest}",
+  hashComments: "/third-party/hashes/{algorithm}/{digest}/comments",
+  announcements: "/third-party/announcements",
+  updatesCheck: "/third-party/updates/check",
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
   installations: "/third-party/installations",
   challenges: "/third-party/challenges",
   verificationReceipts: "/third-party/verification-receipts",
 } as const;
 
+<<<<<<< HEAD
+=======
+export interface ThirdPartyAnnouncementItem {
+  id: string;
+  title: string;
+  content: string;
+  content_type: DesktopAnnouncementContentType;
+  image_urls: string[];
+  action_label: string | null;
+  action_url: string | null;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+export interface ThirdPartyAnnouncementListResponse {
+  items: ThirdPartyAnnouncementItem[];
+}
+
+export interface ThirdPartyUpdateCheckResponse {
+  update_available: boolean;
+  mandatory: boolean;
+  current_version: string;
+  latest_version: string | null;
+  minimum_supported_version: string | null;
+  channel: DesktopReleaseChannel;
+  platform: string;
+  architecture: DesktopArchitecture;
+  release_id: string | null;
+  release_notes: string;
+  published_at: string | null;
+  download_url: string | null;
+  artifact_filename: string | null;
+  artifact_sha256: string | null;
+  artifact_size_bytes: number | null;
+  artifact_integrity: "sha256-verified" | null;
+}
+
+export type ThirdPartyHashDetailResponse = HashDetailResponse;
+export type ThirdPartyHashCommentListResponse = HashCommentListResponse;
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 export const THIRD_PARTY_RECEIPT_CANONICAL_PAYLOAD_VERSION =
   "desktop-receipt-v1" as const;
 

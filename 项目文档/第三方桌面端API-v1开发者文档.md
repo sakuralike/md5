@@ -47,19 +47,32 @@ v1 当前稳定开放：
 | 授权码换 Token / 刷新轮换 | `POST /third-party/oauth/token` | 无 Bearer Token |
 | 主动撤销 Token 会话 | `POST /third-party/oauth/revoke` | 无 Bearer Token |
 | 当前第三方 Principal 探针 | `GET /third-party/oauth/me` | `profile:read` |
+<<<<<<< HEAD
+=======
+| 查询哈希详情 | `GET /third-party/hashes/{algorithm}/{digest}` | `hash:read` |
+| 分页读取哈希评论 | `GET /third-party/hashes/{algorithm}/{digest}/comments` | `hash:read` |
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 | 安装实例注册与列表 | `POST/GET /third-party/installations` | `desktop:installations` |
 | 撤销安装实例 | `POST /third-party/installations/{installation_id}/revoke` | `desktop:installations` |
 | 创建验证挑战 | `POST /third-party/challenges` | `desktop:verification` |
 | 提交签名回执 | `POST /third-party/verification-receipts` | `desktop:verification` |
 
+<<<<<<< HEAD
 `hash:read` 已进入应用与 Token Scope 合同，用于后续兼容扩展；当前版本尚未公开哈希详情/评论只读路由，客户端不能把获得该 Scope 等同于相关接口已上线。桌面公告、更新检查和下载适配也属于后续开发切片，不在本次稳定端点表内。
+=======
+`hash:read` 哈希详情与评论只读路由已进入 v1 稳定合同。桌面公告、更新检查和下载适配仍属于后续开发切片，不在本次稳定端点表内。
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ## 3. Scope
 
 | Scope | 当前用途 | 授予规则 |
 | --- | --- | --- |
 | `profile:read` | 调用 `/third-party/oauth/me` 验证当前用户、应用和授权会话 | 管理员创建应用时登记，用户授权确认 |
+<<<<<<< HEAD
 | `hash:read` | 为后续哈希详情与评论只读接口预留 | 当前可进入 Token，但相关只读路由尚未公开 |
+=======
+| `hash:read` | 查询哈希匹配详情、当前授权用户状态与稳定游标评论列表 | 管理员登记，用户授权确认 |
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 | `desktop:installations` | 注册、列出、撤销当前用户在当前应用下的安装实例 | 管理员登记，用户授权确认 |
 | `desktop:verification` | 创建挑战、提交本地验证签名回执 | 管理员登记，用户授权确认 |
 | `desktop:verification:trusted` | 成功回执允许进入可信验证通道 | 只能由管理员审核时明确授予，且应用必须同时具备 `desktop:verification` |
@@ -80,9 +93,58 @@ third_party_trusted
 
 可信通道资格会同时检查应用状态和 Token Scope；应用暂停、撤销或授权失效后，既有 Token 不能继续调用。
 
+<<<<<<< HEAD
 ## 4. PKCE 授权流程
 
 ### 4.1 生成 PKCE 参数
+=======
+## 4. 哈希详情与评论只读
+
+第三方桌面端必须使用带有 `hash:read` 的第三方 Access Token 调用专用只读路由，不能改用 Web 登录态或直接调用站点内部接口。应用暂停、应用撤销、用户撤销授权或 Token 会话失效后，共用的第三方 Principal 校验会立即拒绝调用。
+
+### 4.1 查询哈希详情
+
+```http
+GET /third-party/hashes/{algorithm}/{digest}
+Authorization: Bearer synthetic_access_token
+```
+
+- `algorithm`：`md5`、`sha1`、`sha256` 或 `sha512`。
+- `digest`：与算法长度匹配的十六进制摘要；示例不得使用真实密码生成的摘要。
+- 命中时返回总哈希池中的安全投影、评论汇总以及当前授权用户的点赞/投票状态。
+- 未命中时返回 `matched: false` 和 `archive: null`，不以 404 区分是否存在。
+- 候选密码仅返回既有的 `masked_secret` 掩码；响应不会返回明文、密文、nonce、密钥材料或内部解密字段。
+
+合成请求示例：
+
+```bash
+curl -H "Authorization: Bearer synthetic_access_token" \
+  "https://password-detective.example/api/v1/third-party/hashes/md5/00000000000000000000000000000000"
+```
+
+### 4.2 分页读取评论
+
+```http
+GET /third-party/hashes/{algorithm}/{digest}/comments?limit=20&cursor={cursor}
+Authorization: Bearer synthetic_access_token
+```
+
+- `limit` 取值范围为 1～50，默认 20。
+- `cursor` 使用服务端返回的稳定游标；客户端不能解析或自行构造。
+- 响应包含 `items` 和可选的 `next_cursor`。没有下一页时 `next_cursor` 为 `null`。
+- 摘要不存在时返回 404；游标无效时返回统一的 400 业务错误。客户端应丢弃无效游标并从第一页重新读取。
+
+### 4.3 隐私、缓存、限流与审计
+
+- 两个接口均返回 `Cache-Control: private, no-store`，客户端不得写入共享缓存。
+- 详情接口按来源地址限制为 60 次/分钟，评论接口限制为 120 次/分钟；429 时使用指数退避和随机抖动。
+- 服务端按第三方应用和授权用户记录只读审计，只记录应用、算法、命中状态和返回数量等元数据，不记录摘要、候选密码或 Token。
+- `viewer_has_liked`、`viewer_vote` 等用户态字段以当前第三方授权用户为准，不代表应用开发者或管理员状态。
+
+## 5. PKCE 授权流程
+
+### 5.1 生成 PKCE 参数
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 客户端生成：
 
@@ -97,7 +159,11 @@ code_challenge_method=S256
 response_type=code
 ```
 
+<<<<<<< HEAD
 ### 4.2 打开系统浏览器
+=======
+### 5.2 打开系统浏览器
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```text
 GET https://password-detective.example/oauth/authorize
@@ -117,7 +183,11 @@ GET https://password-detective.example/oauth/authorize
 - 回调中的 `state` 必须与本地保存值恒等比较；不一致时立即终止。
 - 用户拒绝时，回调包含 OAuth 错误参数，客户端不得继续换 Token。
 
+<<<<<<< HEAD
 ### 4.3 授权码换 Token
+=======
+### 5.3 授权码换 Token
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```http
 POST /api/v1/third-party/oauth/token
@@ -148,7 +218,11 @@ Content-Type: application/json
 
 授权码有效期为 5 分钟且只能使用一次。Access Token 当前有效期为 15 分钟；Refresh Token 当前有效期为 30 天。
 
+<<<<<<< HEAD
 ### 4.4 Refresh Token 轮换
+=======
+### 5.4 Refresh Token 轮换
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```json
 {
@@ -167,7 +241,11 @@ Content-Type: application/json
 3. 确认持久化成功后删除旧 Token。
 4. 任一步失败时重新走系统浏览器授权，不反复重放旧 Token。
 
+<<<<<<< HEAD
 ### 4.5 撤销
+=======
+### 5.5 撤销
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```http
 POST /api/v1/third-party/oauth/revoke
@@ -184,7 +262,11 @@ Content-Type: application/json
 
 撤销接口是幂等操作。用户也可以在 Web `/account/authorized-applications` 页面撤销应用授权；该操作会同时使关联第三方会话失效。
 
+<<<<<<< HEAD
 ## 5. Bearer Token 与 Principal
+=======
+## 6. Bearer Token 与 Principal
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 后续请求携带：
 
@@ -213,7 +295,11 @@ GET /api/v1/third-party/oauth/me
 
 API 会在每次请求重新检查用户、应用、授权关系、Token 会话和有效期。应用暂停或撤销后，不需要等待 Access Token 自然过期。
 
+<<<<<<< HEAD
 ## 6. 安装实例与公钥
+=======
+## 7. 安装实例与公钥
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 第三方桌面端为每个本地安装实例生成独立 ECDSA P-256 密钥对：
 
@@ -257,9 +343,15 @@ Authorization: Bearer synthetic_access_token_not_for_production
 
 撤销后的安装实例不能恢复，客户端应生成新安装 ID 和新密钥对。
 
+<<<<<<< HEAD
 ## 7. 挑战、canonical payload 与签名回执
 
 ### 7.1 创建挑战
+=======
+## 8. 挑战、canonical payload 与签名回执
+
+### 8.1 创建挑战
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```http
 POST /api/v1/third-party/challenges
@@ -279,7 +371,11 @@ Content-Type: application/json
 
 客户端必须使用服务端返回的 `challenge_id`、`challenge_nonce`、`account_id`、候选与指纹绑定字段生成回执，不能自行替换。
 
+<<<<<<< HEAD
 ### 7.2 canonical payload v1
+=======
+### 8.2 canonical payload v1
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 协议版本：
 
@@ -337,7 +433,11 @@ client_version=1.0.0
 verified_at=2026-08-15T12:00:00Z
 ```
 
+<<<<<<< HEAD
 ### 7.3 提交回执
+=======
+### 8.3 提交回执
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```http
 POST /api/v1/third-party/verification-receipts
@@ -356,7 +456,11 @@ third_party_trusted
 
 挑战已使用、挑战过期、字段不匹配、签名错误、时间偏移过大或重复回执都会被拒绝。
 
+<<<<<<< HEAD
 ## 8. 错误格式与重试
+=======
+## 9. 错误格式与重试
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 统一错误结构：
 
@@ -393,7 +497,11 @@ third_party_trusted
 
 仅网络中断、网关 502/503/504 和明确允许重试的 429 可以自动重试。授权码交换、Refresh Token 轮换和签名回执属于防重放操作；客户端必须保存幂等业务状态，不能在无法判断服务端是否接收时无限重放。
 
+<<<<<<< HEAD
 ## 9. Python 合成示例：PKCE 与 Token 交换
+=======
+## 10. Python 合成示例：PKCE 与 Token 交换
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```python
 from __future__ import annotations
@@ -448,7 +556,11 @@ request = urllib.request.Request(
 # response = json.loads(urllib.request.urlopen(request, timeout=15).read())
 ```
 
+<<<<<<< HEAD
 ## 10. C# 合成示例：生成 PKCE
+=======
+## 11. C# 合成示例：生成 PKCE
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```csharp
 using System;
@@ -480,7 +592,11 @@ string authorizeUrl =
 Console.WriteLine(authorizeUrl); // 使用系统浏览器打开
 ```
 
+<<<<<<< HEAD
 ## 11. TypeScript 合成示例：构造 canonical payload
+=======
+## 12. TypeScript 合成示例：构造 canonical payload
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 ```typescript
 const canonicalFields = [
@@ -510,7 +626,11 @@ const payloadBytes = new TextEncoder().encode(canonicalPayload);
 console.log(payloadBytes.byteLength);
 ```
 
+<<<<<<< HEAD
 ## 12. 安全检查清单
+=======
+## 13. 安全检查清单
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 - [ ] 使用系统浏览器和 PKCE S256，不在桌面端收集官方账号密码。
 - [ ] 回调地址与管理员登记值精确一致，并校验 `state`。
@@ -522,9 +642,92 @@ console.log(payloadBytes.byteLength);
 - [ ] 遇到应用暂停、授权撤销或会话失效时清除本地 Token。
 - [ ] 发布前验证错误处理、限流退避、时钟偏差和断网恢复。
 
+<<<<<<< HEAD
 ## 13. 兼容性与变更
+=======
+## 14. 兼容性与变更
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
 
 - v1 内新增可选字段和新端点属于向后兼容扩展。
 - 既有字段语义、canonical payload 字段顺序或签名协议如需破坏性调整，必须发布新的协议版本。
 - 客户端应忽略不认识的响应字段，但不能忽略未知 `trust_channel`、签名协议版本或错误码对应的安全失败。
 - 稳定 TypeScript 合同位于 `packages/api-contract/src/index.ts`，端点常量、Scope、Grant Type 和 canonical 字段顺序应从该包引用，而不是在多个客户端内手工复制。
+<<<<<<< HEAD
+=======
+
+
+## 15. 桌面公告与版本检查
+
+### 15.1 公告
+
+请求：
+
+```http
+GET /api/v1/third-party/announcements?limit=10
+Authorization: Bearer <access_token>
+```
+
+需要 `announcements:read` Scope。响应只包含客户端展示所需字段：
+
+```json
+{
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000501",
+      "title": "合成桌面公告",
+      "content": "公告正文",
+      "content_type": "text",
+      "image_urls": ["https://synthetic.example/notice.png"],
+      "action_label": "查看说明",
+      "action_url": "https://synthetic.example/guide",
+      "sort_order": 10,
+      "starts_at": null,
+      "ends_at": null
+    }
+  ]
+}
+```
+
+服务端只返回已经发布且处于有效时间窗的桌面公告；`action_url` 与图片地址必须是已通过服务端校验的 HTTP(S) 地址或桌面公告图片资源路径。响应使用 `Cache-Control: private, no-store`。
+
+### 15.2 更新检查
+
+请求：
+
+```http
+GET /api/v1/third-party/updates/check?current_version=0.1.0&channel=stable&platform=windows&architecture=x64
+Authorization: Bearer <access_token>
+```
+
+需要 `updates:read` Scope。响应示例：
+
+```json
+{
+  "update_available": true,
+  "mandatory": false,
+  "current_version": "0.1.0",
+  "latest_version": "0.2.0",
+  "minimum_supported_version": "0.1.0",
+  "channel": "stable",
+  "platform": "windows",
+  "architecture": "x64",
+  "release_id": "00000000-0000-4000-8000-000000000502",
+  "release_notes": "合成版本说明",
+  "published_at": "2026-08-15T12:00:00Z",
+  "download_url": "https://synthetic.example/api/v1/desktop/updates/00000000-0000-4000-8000-000000000502/download",
+  "artifact_filename": "password-detective-0.2.0-x64.msix",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_size_bytes": 123456,
+  "artifact_integrity": "sha256-verified"
+}
+```
+
+更新筛选沿用官方桌面更新通道：制品必须已上传、已发布、分发授权有效且具备法律声明。客户端下载后必须再次校验 `artifact_sha256`，不能仅凭 `update_available` 或文件名安装。
+
+### 15.3 最小权限与错误
+
+- 只有 `announcements:read` 的令牌访问更新检查时返回 `third_party_oauth.insufficient_scope`。
+- 只有 `updates:read` 的令牌访问公告时返回 `third_party_oauth.insufficient_scope`。
+- 缺少 Bearer Token 或 Token 已失效返回 HTTP 401。
+- 两个适配端点均采用独立限流和应用级审计；客户端应遵守 429 的 `Retry-After` 并使用退避重试。
+>>>>>>> d62e3c2523995be8cd5ce68eb67421fca37b2a2d
