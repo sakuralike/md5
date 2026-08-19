@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { PublicSiteConfig } from "@password-detective/api-contract";
+import { CircleHelp } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
 import MaintenancePage from "./components/MaintenancePage.vue";
+import OnboardingTour from "./components/OnboardingTour.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,10 +34,12 @@ const communityAvatar = useCommunityAvatar();
 const communitySeo = provideCommunitySeo();
 const currentAvatarSrc = communityAvatar.avatarSrc;
 const siteConfig = ref<PublicSiteConfig>(createDefaultPublicSiteConfig());
+const onboardingTour = ref<{ open: () => void } | null>(null);
 
 const visibleNavigation = computed(() =>
   siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
 );
+const hasToolsNavigation = computed(() => visibleNavigation.value.some((item) => item.path === "/tools"));
 
 function applyCurrentSeo(): void {
   if (typeof document === "undefined" || typeof window === "undefined") return;
@@ -203,9 +207,20 @@ onBeforeUnmount(releaseCustomBackground);
 
       <nav class="nav" aria-label="主导航">
         <RouterLink v-for="item in visibleNavigation" :key="item.path" :to="item.path">{{ item.label }}</RouterLink>
+        <RouterLink v-if="!hasToolsNavigation" to="/tools">安全工具</RouterLink>
       </nav>
 
       <div class="topbar-actions">
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
+          title="打开新手引导"
+          aria-label="打开新手引导"
+          @click="onboardingTour?.open()"
+        >
+          <CircleHelp class="size-4" />
+        </Button>
         <div class="background-control">
           <Button
             class="icon-button"
@@ -289,6 +304,7 @@ onBeforeUnmount(releaseCustomBackground);
     </main>
 
     <AnnouncementPopup />
+    <OnboardingTour ref="onboardingTour" />
 
     <footer class="site-footer">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">

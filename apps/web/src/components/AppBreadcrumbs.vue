@@ -36,6 +36,7 @@ const entries = computed<BreadcrumbEntry[]>(() => {
     return [{ label: "首页", to: "/" }, { label: "用户中心", to: "/user-center" }, { label: "已授权应用" }];
   }
   if (path === "/security") return [{ label: "首页", to: "/" }, { label: "账号安全" }];
+  if (path === "/tools") return [{ label: "首页", to: "/" }, { label: "本地安全工具" }];
   return [{ label: "首页", to: "/" }];
 });
 </script>

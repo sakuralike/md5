@@ -24,5 +24,7 @@ describe("CommunitySearchPage", () => {
     expect(html).toContain("搜索社区");
     expect(html).toContain("主题");
     expect(html).toContain("没有找到公开结果");
+    expect(html).toContain('aria-autocomplete="list"');
+    expect(html).toContain("公开搜索建议");
   });
 });

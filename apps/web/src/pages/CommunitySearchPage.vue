@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { getPublicSearchSuggestions, type SearchSuggestion } from "@/lib/searchSuggestions";
 import { searchCommunity } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
@@ -35,10 +36,18 @@ const provider = ref<CommunitySearchProviderState | null>(null);
 const loading = ref(false);
 const searched = ref(false);
 const error = ref("");
+const suggestionsOpen = ref(false);
+const activeSuggestionIndex = ref(-1);
 
 const canSearch = computed(() => query.value.trim().length >= 2);
 const hasPreviousPage = computed(() => currentPage.value > 1);
 const hasNextPage = computed(() => currentPage.value * PAGE_SIZE < total.value);
+const suggestions = computed(() => getPublicSearchSuggestions(query.value));
+const visibleSuggestions = computed(() => suggestionsOpen.value && suggestions.value.length > 0 ? suggestions.value : []);
+const activeSuggestionId = computed(() => {
+  const suggestion = visibleSuggestions.value[activeSuggestionIndex.value];
+  return suggestion ? `community-search-suggestion-${suggestion.id}` : undefined;
+});
 
 onMounted(() => {
   if (canSearch.value) void loadSearch();
@@ -67,7 +76,51 @@ async function submitSearch(): Promise<void> {
     error.value = "请输入至少 2 个字符后再搜索。";
     return;
   }
+  suggestionsOpen.value = false;
+  activeSuggestionIndex.value = -1;
   await updateRoute(1);
+}
+
+function openSuggestions(): void {
+  suggestionsOpen.value = true;
+  activeSuggestionIndex.value = -1;
+}
+
+function updateSuggestionQuery(): void {
+  activeSuggestionIndex.value = -1;
+  suggestionsOpen.value = true;
+}
+
+function selectSuggestion(suggestion: SearchSuggestion): void {
+  query.value = suggestion.value;
+  suggestionsOpen.value = false;
+  activeSuggestionIndex.value = -1;
+}
+
+function handleSuggestionKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape") {
+    suggestionsOpen.value = false;
+    activeSuggestionIndex.value = -1;
+    return;
+  }
+  if (!visibleSuggestions.value.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % visibleSuggestions.value.length;
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    activeSuggestionIndex.value = activeSuggestionIndex.value <= 0
+      ? visibleSuggestions.value.length - 1
+      : activeSuggestionIndex.value - 1;
+  } else if (event.key === "Enter" && activeSuggestionIndex.value >= 0) {
+    event.preventDefault();
+    const suggestion = visibleSuggestions.value[activeSuggestionIndex.value];
+    if (suggestion) selectSuggestion(suggestion);
+  }
+}
+
+function suggestionKindLabel(kind: SearchSuggestion["kind"]): string {
+  return { algorithm: "算法", board: "板块", filter: "筛选", navigation: "导航" }[kind];
 }
 
 async function goToPage(page: number): Promise<void> {
@@ -168,11 +221,49 @@ function readPage(value: unknown): number {
     <Card>
       <CardHeader>
         <CardTitle>搜索条件</CardTitle>
-        <CardDescription>输入至少 2 个字符，可按内容类型收窄结果。</CardDescription>
+        <CardDescription>输入至少 2 个字符，可按内容类型收窄结果。公开搜索建议只来自审核过的算法、板块、筛选项和导航词。</CardDescription>
       </CardHeader>
       <CardContent class="space-y-5">
         <form class="flex flex-col gap-3 sm:flex-row" @submit.prevent="submitSearch">
-          <Input id="community-search-query" v-model="query" aria-label="搜索社区" placeholder="例如：恢复指南、数据安全" />
+          <div class="relative min-w-0 flex-1">
+            <Input
+              id="community-search-query"
+              v-model="query"
+              role="combobox"
+              aria-label="搜索社区"
+              aria-autocomplete="list"
+              aria-controls="community-search-suggestions"
+              :aria-expanded="visibleSuggestions.length > 0"
+              :aria-activedescendant="activeSuggestionId"
+              placeholder="例如：恢复指南、数据安全"
+              @focus="openSuggestions"
+              @input="updateSuggestionQuery"
+              @keydown="handleSuggestionKeydown"
+              @blur="suggestionsOpen = false"
+            />
+            <div
+              v-if="visibleSuggestions.length"
+              id="community-search-suggestions"
+              class="absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+              role="listbox"
+              aria-label="公开搜索建议"
+            >
+              <Button
+                v-for="(suggestion, index) in visibleSuggestions"
+                :id="`community-search-suggestion-${suggestion.id}`"
+                :key="suggestion.id"
+                variant="ghost"
+                class="h-auto w-full justify-start rounded-sm px-3 py-2 text-left"
+                role="option"
+                :aria-selected="activeSuggestionIndex === index"
+                type="button"
+                @mousedown.prevent="selectSuggestion(suggestion)"
+              >
+                <span class="min-w-0 flex-1"><strong class="block truncate">{{ suggestion.label }}</strong><small class="block text-muted-foreground">{{ suggestion.description }}</small></span>
+                <Badge variant="outline">{{ suggestionKindLabel(suggestion.kind) }}</Badge>
+              </Button>
+            </div>
+          </div>
           <Button type="submit" :disabled="loading || !canSearch">{{ loading ? "搜索中…" : "搜索" }}</Button>
         </form>
         <div class="flex flex-wrap gap-x-5 gap-y-3">
