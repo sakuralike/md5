@@ -51,6 +51,8 @@ from password_detective.modules.hash_pool.router import router as hash_pool_rout
 from password_detective.modules.health.router import router as health_router
 from password_detective.modules.moderation.router import router as moderation_router
 from password_detective.modules.reputation.router import router as reputation_router
+from password_detective.modules.rewards.router import admin_router as rewards_admin_router
+from password_detective.modules.rewards.router import public_router as rewards_router
 from password_detective.modules.risk_alerts.router import router as risk_alerts_router
 from password_detective.modules.site.router import router as site_router
 from password_detective.modules.third_party_announcements.router import (
@@ -193,6 +195,8 @@ def create_app(
     app.include_router(community_admin_router, prefix="/api/v1")
     app.include_router(verification_router, prefix="/api/v1")
     app.include_router(reputation_router, prefix="/api/v1")
+    app.include_router(rewards_router, prefix="/api/v1")
+    app.include_router(rewards_admin_router, prefix="/api/v1")
     app.include_router(risk_alerts_router, prefix="/api/v1")
     app.include_router(desktop_router, prefix="/api/v1")
     app.include_router(desktop_announcements_router, prefix="/api/v1")

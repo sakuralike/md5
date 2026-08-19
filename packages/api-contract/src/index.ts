@@ -1813,6 +1813,67 @@ export interface CommunityGroupUpdateRequest {
   status: CommunityGroupStatus;
 }
 
+export type RewardCatalogKind = "virtual";
+export type RewardCatalogStatus = "draft" | "active" | "inactive";
+export type RewardStockStatus = "available" | "limited" | "out_of_stock";
+
+export interface RewardCatalogItem {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  kind: RewardCatalogKind;
+  cost_points: number;
+  per_user_limit: number;
+  stock_status: RewardStockStatus;
+}
+
+export interface RewardCatalogResponse {
+  items: RewardCatalogItem[];
+  available_points: number | null;
+}
+
+export interface AdminRewardCatalogItem extends RewardCatalogItem {
+  stock: number;
+  status: RewardCatalogStatus;
+  version: number;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminRewardCatalogListResponse {
+  items: AdminRewardCatalogItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RewardCatalogCreateRequest {
+  slug: string;
+  name: string;
+  description: string;
+  kind: RewardCatalogKind;
+  cost_points: number;
+  stock: number;
+  per_user_limit: number;
+  status: RewardCatalogStatus;
+  reason_code: string;
+}
+
+export interface RewardCatalogUpdateRequest {
+  name: string;
+  description: string;
+  kind: RewardCatalogKind;
+  cost_points: number;
+  stock: number;
+  per_user_limit: number;
+  status: RewardCatalogStatus;
+  expected_version: number;
+  reason_code: string;
+}
+
 export interface AlgorithmDistributionItem {
   algorithm: FingerprintAlgorithm;
   count_band: string;

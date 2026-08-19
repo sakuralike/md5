@@ -121,6 +121,11 @@ from password_detective.db.models.reward_adjustment_event import (
     RewardAdjustmentEvent,
     RewardKind,
 )
+from password_detective.db.models.reward_catalog import (
+    RewardCatalogItem,
+    RewardCatalogKind,
+    RewardCatalogStatus,
+)
 from password_detective.db.models.risk_alert import (
     RiskAlert,
     RiskAlertEvent,
@@ -303,6 +308,9 @@ __all__ = [
     "RiskAlertSeverity",
     "RiskAlertStatus",
     "ReputationEvent",
+    "RewardCatalogItem",
+    "RewardCatalogKind",
+    "RewardCatalogStatus",
     "RegistrationInvite",
     "RegistrationInviteUse",
     "RoleChangeRequest",

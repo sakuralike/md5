@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   MonitorUp,
   Megaphone,
+  ShoppingBag,
   Settings2,
   ShieldAlert,
   SlidersHorizontal,
@@ -151,6 +152,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "配置站点、邮件、策略与发布门禁。",
     group: "系统管理",
     icon: Settings2,
+  },
+  {
+    label: "积分商城",
+    path: "/rewards/catalog",
+    description: "治理虚拟积分商品目录、价格、库存和上架状态。",
+    group: "系统管理",
+    icon: ShoppingBag,
   },
 ];
 

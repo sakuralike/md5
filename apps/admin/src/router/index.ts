@@ -13,6 +13,7 @@ import WebAnnouncementsPage from "../pages/WebAnnouncementsPage.vue";
 import HashPoolPage from "../pages/HashPoolPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
+import RewardCatalogPage from "../pages/RewardCatalogPage.vue";
 import RoleChangesPage from "../pages/RoleChangesPage.vue";
 import SystemSettingsPage from "../pages/SystemSettingsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
@@ -47,6 +48,7 @@ const router = createRouter({
     { path: "/community/search-health", component: CommunitySearchHealthPage, meta: { requiresAdmin: true } },
     { path: "/analytics/heatmap", component: DataHeatmapPage, meta: { requiresAdmin: true } },
     { path: "/risk-alerts", component: RiskAlertsPage, meta: { requiresAdmin: true } },
+    { path: "/rewards/catalog", component: RewardCatalogPage, meta: { requiresAdmin: true } },
     { path: "/desktop-releases", component: DesktopReleasesPage, meta: { requiresAdmin: true } },
     { path: "/desktop-announcements", component: DesktopAnnouncementsPage, meta: { requiresAdmin: true } },
     { path: "/web-announcements", component: WebAnnouncementsPage, meta: { requiresAdmin: true } },
