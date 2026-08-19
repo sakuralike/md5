@@ -1,5 +1,6 @@
 import {
   BellRing,
+  ClipboardList,
   Database,
   FileCheck2,
   Flag,
@@ -159,6 +160,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "治理虚拟积分商品目录、价格、库存和上架状态。",
     group: "系统管理",
     icon: ShoppingBag,
+  },
+  {
+    label: "商城订单",
+    path: "/rewards/orders",
+    description: "查看积分兑换订单、履约状态、补偿与运营指标。",
+    group: "系统管理",
+    icon: ClipboardList,
   },
 ];
 

@@ -1825,16 +1825,26 @@ export interface RewardCatalogItem {
   kind: RewardCatalogKind;
   cost_points: number;
   per_user_limit: number;
+  category: string;
+  tags: string[];
+  entitlement_key: string;
+  entitlement_duration_days: number | null;
+  redeem_start_at: string | null;
+  redeem_end_at: string | null;
   stock_status: RewardStockStatus;
+  redeem_status: "available" | "scheduled" | "ended" | "out_of_stock";
 }
 
 export interface RewardCatalogResponse {
   items: RewardCatalogItem[];
   available_points: number | null;
+  categories: string[];
+  tags: string[];
 }
 
 export interface AdminRewardCatalogItem extends RewardCatalogItem {
   stock: number;
+  sort_weight: number;
   status: RewardCatalogStatus;
   version: number;
   created_by: string;
@@ -1858,6 +1868,13 @@ export interface RewardCatalogCreateRequest {
   cost_points: number;
   stock: number;
   per_user_limit: number;
+  category: string;
+  tags: string[];
+  sort_weight: number;
+  entitlement_key: string;
+  entitlement_duration_days: number | null;
+  redeem_start_at: string | null;
+  redeem_end_at: string | null;
   status: RewardCatalogStatus;
   reason_code: string;
 }
@@ -1867,11 +1884,165 @@ export interface RewardCatalogUpdateRequest {
   description: string;
   kind: RewardCatalogKind;
   cost_points: number;
-  stock: number;
   per_user_limit: number;
+  category: string;
+  tags: string[];
+  sort_weight: number;
+  entitlement_key: string;
+  entitlement_duration_days: number | null;
+  redeem_start_at: string | null;
+  redeem_end_at: string | null;
   status: RewardCatalogStatus;
   expected_version: number;
   reason_code: string;
+}
+
+export type RewardOrderStatus =
+  | "pending_fulfillment"
+  | "processing"
+  | "fulfilled"
+  | "failed"
+  | "cancelled";
+export type RewardFulfillmentStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "retryable"
+  | "failed"
+  | "cancelled";
+
+export interface RewardFulfillmentSummary {
+  status: RewardFulfillmentStatus;
+  attempt_no: number;
+  result_code: string | null;
+  safe_message: string | null;
+  completed_at: string | null;
+}
+
+export interface RewardOrderSummary {
+  id: string;
+  order_no: string;
+  status: RewardOrderStatus;
+  catalog_item_id: string;
+  item_slug: string;
+  item_name: string;
+  quantity: number;
+  unit_cost_points: number;
+  total_cost_points: number;
+  created_at: string;
+  updated_at: string;
+  fulfilled_at: string | null;
+  cancelled_at: string | null;
+  compensated_at: string | null;
+  fulfillment: RewardFulfillmentSummary | null;
+}
+
+export interface RewardOrderListResponse {
+  items: RewardOrderSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RewardOrderTimelineEvent {
+  id: string;
+  from_status: RewardOrderStatus | null;
+  to_status: RewardOrderStatus;
+  event_type: string;
+  reason_code: string;
+  created_at: string;
+}
+
+export interface RewardEntitlementGrant {
+  entitlement_key: string;
+  status: string;
+  starts_at: string;
+  expires_at: string | null;
+}
+
+export interface RewardOrderDetail extends RewardOrderSummary {
+  available_points: number;
+  timeline: RewardOrderTimelineEvent[];
+  entitlement: RewardEntitlementGrant | null;
+}
+
+export interface RewardOrderCreateRequest {
+  catalog_item_id: string;
+  quantity: number;
+}
+
+export interface RewardInventoryAdjustmentRequest {
+  delta: number;
+  reason_code: "initial_stock" | "restock" | "correction" | "campaign";
+  expected_version: number;
+  note?: string | null;
+}
+
+export interface RewardInventoryEvent {
+  id: string;
+  catalog_item_id: string;
+  order_id: string | null;
+  event_type: "redeemed" | "released" | "admin_adjusted";
+  delta: number;
+  stock_before: number;
+  stock_after: number;
+  actor_type: "user" | "admin" | "system";
+  actor_id: string | null;
+  reason_code: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface RewardInventoryEventListResponse {
+  items: RewardInventoryEvent[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RewardAdminOrderActionRequest {
+  expected_version: number;
+  reason_code: string;
+}
+
+export interface RewardAdminFulfillment extends RewardFulfillmentSummary {
+  id: string;
+  attempt_no: number;
+  delivery_kind: "internal_entitlement";
+  retry_count: number;
+  next_retry_at: string | null;
+  started_at: string | null;
+  created_at: string;
+}
+
+export interface RewardAdminOrder extends RewardOrderSummary {
+  user_id: string;
+  version: number;
+  failure_code: string | null;
+  points_ledger_entry_id: string;
+  compensation_ledger_entry_id: string | null;
+  fulfillments: RewardAdminFulfillment[];
+  inventory_events: RewardInventoryEvent[];
+  timeline: RewardOrderTimelineEvent[];
+}
+
+export interface RewardAdminOrderListResponse {
+  items: RewardAdminOrder[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface RewardOperationsStatsResponse {
+  total_orders: number;
+  pending_orders: number;
+  fulfilled_orders: number;
+  failed_orders: number;
+  cancelled_orders: number;
+  redeemed_points: number;
+  compensated_points: number;
+  fulfillment_success_rate: number;
+  low_stock_items: number;
 }
 
 export interface AlgorithmDistributionItem {

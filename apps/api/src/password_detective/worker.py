@@ -23,6 +23,7 @@ from password_detective.modules.community.notification_service import (
     dispatch_pending_notification_events,
 )
 from password_detective.modules.community.search_index import dispatch_pending_search_events
+from password_detective.modules.rewards.service import process_pending_fulfillments
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
     queue_due_sla_notifications,
@@ -79,6 +80,10 @@ celery_app.conf.update(
         "process-account-deletion-requests": {
             "task": "privacy.process_deletions",
             "schedule": 300.0,
+        },
+        "process-reward-fulfillments": {
+            "task": "rewards.process_fulfillments",
+            "schedule": 5.0,
         },
     },
 )
@@ -223,5 +228,15 @@ def process_account_deletions() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return {"processed": process_due_deletion_requests(db)}
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="rewards.process_fulfillments")
+def process_reward_fulfillments() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return process_pending_fulfillments(db)
     finally:
         database.dispose()

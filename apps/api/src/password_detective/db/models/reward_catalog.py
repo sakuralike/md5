@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -36,6 +36,17 @@ class RewardCatalogItem(Base):
     cost_points: Mapped[int] = mapped_column(Integer)
     stock: Mapped[int] = mapped_column(Integer)
     per_user_limit: Mapped[int] = mapped_column(Integer)
+    category: Mapped[str] = mapped_column(String(64), default="general", index=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    sort_weight: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    entitlement_key: Mapped[str] = mapped_column(String(64), default="community_supporter")
+    entitlement_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    redeem_start_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    redeem_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     status: Mapped[RewardCatalogStatus] = mapped_column(
         Enum(RewardCatalogStatus, native_enum=False, length=16),
         default=RewardCatalogStatus.DRAFT,

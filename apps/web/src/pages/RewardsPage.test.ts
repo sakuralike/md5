@@ -17,7 +17,7 @@ describe("RewardsPage", () => {
 
     expect(html).toContain("积分商城");
     expect(html).toContain("虚拟权益目录");
-    expect(html).toContain("订单、扣积分和履约功能将在目录治理稳定后开放");
+    expect(html).toContain("使用已结算积分兑换虚拟权益，订单和发放状态可以在当前页面追踪");
     expect(html).toContain("刷新");
   });
 });
