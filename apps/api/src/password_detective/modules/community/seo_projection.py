@@ -48,9 +48,12 @@ def group_seo_projection(group: CommunityGroup) -> CommunitySeoProjection:
     if not _is_public_group(group):
         return _not_eligible()
     return _eligible(
-        title=group.name,
-        description=_compact_description(group.description),
-        canonical_path=f"/community/groups/{quote(group.slug, safe='-')}",
+        title=_safe_text(group.seo_title) or group.name,
+        description=_safe_text(group.seo_description) or _compact_description(group.description),
+        keywords=_safe_keywords(group.seo_keywords),
+        canonical_path=_safe_canonical(group.seo_canonical_path)
+        or f"/community/groups/{quote(group.slug, safe='-')}",
+        og_image_url=_safe_og_image(group.og_image_url),
     )
 
 

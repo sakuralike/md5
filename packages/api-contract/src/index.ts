@@ -1690,6 +1690,12 @@ export interface CommunityGroupListResponse {
 }
 
 export interface CommunityGroupDetail extends CommunityGroupSummary {
+  seo_version: number;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_keywords: string[] | null;
+  seo_canonical_path: string | null;
+  og_image_url: string | null;
   seo: CommunitySeoProjection;
   owner_username: string;
   members: CommunityGroupMember[];
@@ -1707,6 +1713,15 @@ export interface CommunityGroupUpdateRequest {
   description: string;
   visibility: CommunityGroupVisibility;
   status: CommunityGroupStatus;
+}
+
+export interface CommunityGroupSeoUpdateRequest {
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string[] | null;
+  seo_canonical_path?: string | null;
+  og_image_url?: string | null;
+  expected_seo_version: number;
 }
 
 export interface CommunityGroupMembershipResponse {

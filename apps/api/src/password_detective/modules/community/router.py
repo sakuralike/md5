@@ -97,6 +97,7 @@ from password_detective.modules.community.schemas import (
     CommunityGroupListResponse,
     CommunityGroupMemberDecisionRequest,
     CommunityGroupMembershipResponse,
+    CommunityGroupSeoUpdateRequest,
     CommunityGroupUpdateRequest,
     CommunityHomeResponse,
     CommunityMuteRequest,
@@ -121,7 +122,7 @@ from password_detective.modules.community.schemas import (
     CommunitySearchResponse,
 )
 from password_detective.modules.community.search_service import search_community
-from password_detective.modules.community.seo_service import update_post_seo
+from password_detective.modules.community.seo_service import update_group_seo, update_post_seo
 from password_detective.modules.community.service import (
     create_comment,
     create_post,
@@ -803,6 +804,34 @@ def community_group_update(
             payload=payload,
             principal=principal,
             context=get_client_context(request),
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.patch("/groups/{group_slug}/seo", response_model=CommunityGroupDetail)
+def community_group_seo_update(
+    group_slug: str,
+    payload: CommunityGroupSeoUpdateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityGroupDetail:
+    context = get_client_context(request)
+    return _mutate_with_idempotency(
+        db,
+        scope="community.group.seo.update",
+        idempotency_key=idempotency_key,
+        request_payload={"group_slug": group_slug, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityGroupDetail,
+        create=lambda: update_group_seo(
+            db,
+            group_slug=group_slug,
+            payload=payload,
+            principal=principal,
+            context=context,
         ),
         response_status=status.HTTP_200_OK,
     )

@@ -26,6 +26,7 @@ import type {
   CommunityGroupMemberDecisionRequest,
   CommunityGroupMembershipResponse,
   CommunityGroupRole,
+  CommunityGroupSeoUpdateRequest,
   CommunityGroupUpdateRequest,
   CommunityHomeResponse,
   CommunityNotificationKind,
@@ -84,6 +85,7 @@ export function createCommunityIdempotencyKey(
     | "unmute"
     | "group-create"
     | "group-update"
+    | "group-seo-update"
     | "group-join"
     | "group-leave"
     | "group-member-decision"
@@ -268,6 +270,23 @@ export function updateCommunityGroup(
   return apiRequest<CommunityGroupDetail>(`/community/groups/${encodeURIComponent(slug)}`, {
     method: "PATCH", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload),
   }, token);
+}
+
+export function updateCommunityGroupSeo(
+  slug: string,
+  payload: CommunityGroupSeoUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityGroupDetail> {
+  return apiRequest<CommunityGroupDetail>(
+    `/community/groups/${encodeURIComponent(slug)}/seo`,
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
 }
 
 export function setCommunityGroupMembership(

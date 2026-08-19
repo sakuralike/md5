@@ -649,6 +649,12 @@ def _build_group_detail(
         raise AppError("community.group_owner_missing", "群组所有者不存在", status_code=500)
     return CommunityGroupDetail(
         **_group_summary(group, membership).model_dump(),
+        seo_version=group.seo_version,
+        seo_title=group.seo_title,
+        seo_description=group.seo_description,
+        seo_keywords=group.seo_keywords,
+        seo_canonical_path=group.seo_canonical_path,
+        og_image_url=group.og_image_url,
         owner_username=owner.username,
         members=members,
         seo=group_seo_projection(group),

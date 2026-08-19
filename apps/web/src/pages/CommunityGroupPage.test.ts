@@ -9,7 +9,11 @@ vi.mock("vue-router", () => ({
 }));
 
 vi.mock("../stores/auth", () => ({
-  useAuthStore: () => ({ accessToken: "", isAuthenticated: false }),
+  useAuthStore: () => ({
+    accessToken: "synthetic-access-token",
+    isAuthenticated: true,
+    user: { id: "synthetic-owner-id", role: "user" },
+  }),
 }));
 
 vi.mock("../services/community", () => ({
@@ -21,8 +25,23 @@ vi.mock("../services/community", () => ({
     status: "active",
     member_count: 1,
     post_count: 0,
-    viewer_role: null,
-    viewer_membership_status: null,
+    viewer_role: "owner",
+    viewer_membership_status: "active",
+    seo_version: 1,
+    seo_title: null,
+    seo_description: null,
+    seo_keywords: null,
+    seo_canonical_path: null,
+    og_image_url: null,
+    seo: {
+      eligible: false,
+      indexable: false,
+      title: null,
+      description: null,
+      keywords: [],
+      canonical_path: null,
+      og_image_url: null,
+    },
     owner_username: "synthetic-owner",
     members: [],
   }),
@@ -30,6 +49,7 @@ vi.mock("../services/community", () => ({
   setCommunityGroupMembership: vi.fn(),
   decideCommunityGroupMember: vi.fn(),
   createCommunityIdempotencyKey: vi.fn(() => "synthetic-key"),
+  updateCommunityGroupSeo: vi.fn(),
 }));
 
 describe("CommunityGroupPage", () => {
@@ -39,5 +59,8 @@ describe("CommunityGroupPage", () => {
     expect(html).toContain("合成数据研究组");
     expect(html).toContain("申请审批");
     expect(html).toContain("群组权限说明");
+    expect(html).toContain("群组 SEO");
+    expect(html).toContain("编辑 SEO");
+    expect(html).toContain("动态内容仍保持不索引");
   });
 });

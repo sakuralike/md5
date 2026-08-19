@@ -24,6 +24,7 @@ import {
   updateCommunityDirectMemberState,
   updateCommunityDirectReadState,
   updateCommunityNotificationPreferences,
+  updateCommunityGroupSeo,
   updateCommunityPostSeo,
 } from "./community";
 
@@ -201,6 +202,34 @@ describe("web community service", () => {
       og_image_url: null,
       expected_seo_version: 3,
     });
+  });
+
+  it("updates community group SEO with optimistic concurrency and idempotency", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ slug: "synthetic-lab", seo_version: 2 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await updateCommunityGroupSeo(
+      "group/with space",
+      {
+        seo_title: "合成群组搜索标题",
+        seo_description: null,
+        seo_keywords: ["合成", "群组"],
+        seo_canonical_path: "/community/groups/synthetic-lab",
+        og_image_url: null,
+        expected_seo_version: 1,
+      },
+      "access-token",
+      "stable-group-seo-key",
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/community/groups/group%2Fwith%20space/seo");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer access-token");
+    expect((init.headers as Headers).get("Idempotency-Key")).toBe("stable-group-seo-key");
   });
 
   it("keeps notification reads authenticated and idempotent", async () => {

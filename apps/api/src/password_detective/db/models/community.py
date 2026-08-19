@@ -100,6 +100,12 @@ class CommunityGroup(Base):
     )
     member_count: Mapped[int] = mapped_column(Integer, default=1)
     post_count: Mapped[int] = mapped_column(Integer, default=0)
+    seo_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    seo_description: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    seo_keywords: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    seo_canonical_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    og_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    seo_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )

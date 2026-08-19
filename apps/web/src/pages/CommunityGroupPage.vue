@@ -6,7 +6,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { createCommunityIdempotencyKey, decideCommunityGroupMember, getCommunityGroup, listCommunityPosts, setCommunityGroupMembership } from "../services/community";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { createCommunityIdempotencyKey, decideCommunityGroupMember, getCommunityGroup, listCommunityPosts, setCommunityGroupMembership, updateCommunityGroupSeo } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
@@ -18,7 +21,18 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref("");
 const success = ref("");
+const editingSeo = ref(false);
+const seoTitle = ref("");
+const seoDescription = ref("");
+const seoKeywords = ref("");
+const seoCanonicalPath = ref("");
+const seoOgImageUrl = ref("");
 const isGovernor = computed(() => group.value?.viewer_role === "owner" || group.value?.viewer_role === "moderator");
+const canEditSeo = computed(() => Boolean(
+  group.value?.viewer_role === "owner"
+  || auth.user?.role === "moderator"
+  || auth.user?.role === "admin",
+));
 const activeMembers = computed(() => group.value?.members.filter((item) => item.status === "active") ?? []);
 const pendingMembers = computed(() => group.value?.members.filter((item) => item.status === "pending") ?? []);
 
@@ -33,11 +47,68 @@ async function loadGroup(): Promise<void> {
   try {
     const token = auth.isAuthenticated ? auth.accessToken : undefined;
     group.value = await getCommunityGroup(slug.value, token);
+    editingSeo.value = false;
     posts.value = (await listCommunityPosts(undefined, token, slug.value)).items;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "群组加载失败或无权访问";
   } finally {
     loading.value = false;
+  }
+}
+
+function loadSeoForm(): void {
+  if (!group.value) return;
+  seoTitle.value = group.value.seo_title ?? "";
+  seoDescription.value = group.value.seo_description ?? "";
+  seoKeywords.value = (group.value.seo_keywords ?? []).join(", ");
+  seoCanonicalPath.value = group.value.seo_canonical_path ?? "";
+  seoOgImageUrl.value = group.value.og_image_url ?? "";
+}
+
+function beginSeoEdit(): void {
+  if (!group.value || !canEditSeo.value) return;
+  loadSeoForm();
+  editingSeo.value = true;
+  error.value = "";
+}
+
+function normalizedOptional(value: string): string | null {
+  return value.trim() || null;
+}
+
+function normalizedSeoKeywords(): string[] | null {
+  const keywords = seoKeywords.value
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter((item, index, items) => Boolean(item) && items.indexOf(item) === index);
+  return keywords.length ? keywords : null;
+}
+
+async function saveSeo(): Promise<void> {
+  if (!group.value || !canEditSeo.value) return;
+  busy.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    group.value = await updateCommunityGroupSeo(
+      group.value.slug,
+      {
+        seo_title: normalizedOptional(seoTitle.value),
+        seo_description: normalizedOptional(seoDescription.value),
+        seo_keywords: normalizedSeoKeywords(),
+        seo_canonical_path: normalizedOptional(seoCanonicalPath.value),
+        og_image_url: normalizedOptional(seoOgImageUrl.value),
+        expected_seo_version: group.value.seo_version,
+      },
+      auth.accessToken,
+      createCommunityIdempotencyKey("group-seo-update"),
+    );
+    editingSeo.value = false;
+    success.value = "群组 SEO 设置已保存。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "群组 SEO 设置保存失败";
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -113,6 +184,35 @@ function formatDate(value: string): string { return new Date(value).toLocaleStri
         </Card>
 
         <div class="space-y-6">
+          <Card v-if="canEditSeo">
+            <CardHeader>
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <CardTitle>群组 SEO</CardTitle>
+                  <CardDescription>配置群组搜索摘要与分享信息。动态内容仍保持不索引。</CardDescription>
+                </div>
+                <Button v-if="!editingSeo" size="sm" variant="outline" @click="beginSeoEdit">编辑 SEO</Button>
+              </div>
+            </CardHeader>
+            <CardContent class="space-y-4">
+              <template v-if="editingSeo">
+                <div class="space-y-2"><Label for="community-group-seo-title">搜索标题</Label><Input id="community-group-seo-title" v-model="seoTitle" :maxlength="120" :placeholder="group.name" /></div>
+                <div class="space-y-2"><Label for="community-group-seo-description">搜索摘要</Label><Textarea id="community-group-seo-description" v-model="seoDescription" :maxlength="320" :placeholder="group.description" /></div>
+                <div class="space-y-2"><Label for="community-group-seo-keywords">关键词</Label><Input id="community-group-seo-keywords" v-model="seoKeywords" placeholder="例如：安全研究, 社区群组" /></div>
+                <div class="space-y-2"><Label for="community-group-seo-canonical">站内规范路径</Label><Input id="community-group-seo-canonical" v-model="seoCanonicalPath" :maxlength="512" :placeholder="`/community/groups/${group.slug}`" /></div>
+                <div class="space-y-2"><Label for="community-group-seo-og-image">分享图片地址</Label><Input id="community-group-seo-og-image" v-model="seoOgImageUrl" :maxlength="1024" placeholder="站内路径或 HTTPS 地址" /></div>
+                <div class="flex flex-wrap gap-2">
+                  <Button :disabled="busy" @click="saveSeo">{{ busy ? "保存中…" : "保存 SEO" }}</Button>
+                  <Button variant="outline" :disabled="busy" @click="loadSeoForm">重置</Button>
+                  <Button variant="ghost" :disabled="busy" @click="editingSeo = false">取消</Button>
+                </div>
+              </template>
+              <div v-else class="space-y-2 text-sm">
+                <p><span class="text-muted-foreground">搜索标题：</span>{{ group.seo.title ?? "不具备公开资格" }}</p>
+                <p><span class="text-muted-foreground">SEO 版本：</span>{{ group.seo_version }}</p>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>群组权限说明</CardTitle>

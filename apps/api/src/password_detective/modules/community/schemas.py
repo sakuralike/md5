@@ -104,6 +104,12 @@ class CommunityGroupListResponse(BaseModel):
 
 
 class CommunityGroupDetail(CommunityGroupSummary):
+    seo_version: int
+    seo_title: str | None
+    seo_description: str | None
+    seo_keywords: list[str] | None
+    seo_canonical_path: str | None
+    og_image_url: str | None
     seo: CommunitySeoProjection
     owner_username: str
     members: list[CommunityGroupMember]
@@ -221,6 +227,10 @@ class CommunityPostSeoUpdateRequest(BaseModel):
             normalized.append(keyword)
             seen.add(keyword)
         return normalized or None
+
+
+class CommunityGroupSeoUpdateRequest(CommunityPostSeoUpdateRequest):
+    pass
 
 
 class CommunityCommentCreateRequest(BaseModel):
