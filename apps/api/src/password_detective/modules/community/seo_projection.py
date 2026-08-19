@@ -12,9 +12,7 @@ from password_detective.db.models.community import (
     CommunityGroupStatus,
     CommunityGroupVisibility,
     CommunityPost,
-    CommunityPublicProfile,
 )
-from password_detective.db.models.user import User, UserStatus
 from password_detective.modules.community.schemas import CommunitySeoProjection
 
 _DYNAMIC_CONTENT_INDEXING_ENABLED = False
@@ -54,18 +52,6 @@ def group_seo_projection(group: CommunityGroup) -> CommunitySeoProjection:
         canonical_path=_safe_canonical(group.seo_canonical_path)
         or f"/community/groups/{quote(group.slug, safe='-')}",
         og_image_url=_safe_og_image(group.og_image_url),
-    )
-
-
-def profile_seo_projection(
-    user: User, profile: CommunityPublicProfile
-) -> CommunitySeoProjection:
-    if user.status != UserStatus.ACTIVE:
-        return _not_eligible()
-    return _eligible(
-        title=profile.display_name,
-        description=_compact_description(profile.bio),
-        canonical_path=f"/community/users/{quote(user.username, safe='-_')}",
     )
 
 

@@ -90,7 +90,7 @@ def _expected_private_seo() -> dict:
     }
 
 
-def test_public_post_group_and_profile_expose_safe_future_seo_projection(client) -> None:
+def test_public_post_and_group_expose_safe_future_seo_projection(client) -> None:
     owner = _register_and_login(client, "seo_public_owner")
     group = _create_group(client, owner, slug="seo-public-lab", visibility="public")
     post = _create_post(client, owner, group_slug=group["slug"])
@@ -113,11 +113,7 @@ def test_public_post_group_and_profile_expose_safe_future_seo_projection(client)
 
     profile = client.get("/api/v1/community/users/seo_public_owner")
     assert profile.status_code == 200
-    assert profile.json()["seo"] == _expected_public_seo(
-        title="seo_public_owner",
-        description="",
-        canonical_path="/community/users/seo_public_owner",
-    )
+    assert "seo" not in profile.json()
 
 
 def test_approval_group_and_inactive_board_never_emit_discoverable_metadata(client) -> None:

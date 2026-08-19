@@ -24,15 +24,6 @@ function profile(overrides: Partial<CommunityPublicProfileResponse> = {}): Commu
     },
     recent_posts: [],
     recent_comments: [],
-    seo: {
-      eligible: true,
-      indexable: false,
-      title: "樱",
-      description: "",
-      keywords: [],
-      canonical_path: "/community/users/sakura",
-      og_image_url: null,
-    },
     ...overrides,
   };
 }

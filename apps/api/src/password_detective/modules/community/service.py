@@ -108,10 +108,7 @@ from password_detective.modules.community.search_index import (
     enqueue_search_event,
     source_document_version,
 )
-from password_detective.modules.community.seo_projection import (
-    post_seo_projection,
-    profile_seo_projection,
-)
+from password_detective.modules.community.seo_projection import post_seo_projection
 
 _MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,32})")
 _MAX_MENTIONS_PER_CONTENT = 10
@@ -1617,7 +1614,6 @@ def _public_profile_response(
         relationship=relationship,
         recent_posts=recent_posts,
         recent_comments=recent_comments,
-        seo=profile_seo_projection(user, profile),
     )
 
 

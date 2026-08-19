@@ -631,7 +631,6 @@ class CommunityPublicProfileResponse(BaseModel):
     relationship: CommunityRelationshipState
     recent_posts: list[CommunityPostSummary]
     recent_comments: list[CommunityPublicCommentSummary]
-    seo: CommunitySeoProjection
 
 
 class CommunityOwnProfileResponse(CommunityPublicProfileResponse):

@@ -2212,7 +2212,6 @@ export interface CommunityPublicProfileResponse {
   relationship: CommunityRelationshipState;
   recent_posts: CommunityPostSummary[];
   recent_comments: CommunityPublicCommentSummary[];
-  seo: CommunitySeoProjection;
 }
 
 export interface CommunityOwnProfileResponse extends CommunityPublicProfileResponse {
