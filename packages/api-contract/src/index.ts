@@ -1821,6 +1821,12 @@ export interface CommunityPostDetail {
   viewer_has_liked: boolean;
   viewer_has_bookmarked: boolean;
   version: number;
+  seo_version: number;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_keywords: string[] | null;
+  seo_canonical_path: string | null;
+  og_image_url: string | null;
   edited_at: string | null;
   last_activity_at: string;
   created_at: string;

@@ -34,6 +34,7 @@ import {
   setCommunityPostLike,
   updateCommunityComment,
   updateCommunityPost,
+  updateCommunityPostSeo,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
@@ -53,6 +54,12 @@ const success = ref("");
 const editingPost = ref(false);
 const editTitle = ref("");
 const editContent = ref("");
+const editingSeo = ref(false);
+const seoTitle = ref("");
+const seoDescription = ref("");
+const seoKeywords = ref("");
+const seoCanonicalPath = ref("");
+const seoOgImageUrl = ref("");
 const editingCommentId = ref<string | null>(null);
 const editCommentContent = ref("");
 const postDeleteArmed = ref(false);
@@ -66,6 +73,11 @@ const commentLikeBusyIds = ref(new Set<string>());
 const isPostAuthor = computed(
   () => Boolean(auth.user && post.value?.author.user_id === auth.user.id),
 );
+const canEditPostSeo = computed(() => Boolean(
+  auth.user
+  && post.value
+  && (post.value.author.user_id === auth.user.id || ["moderator", "admin"].includes(auth.user.role)),
+));
 
 onMounted(() => void load());
 onServerPrefetch(load);
@@ -232,6 +244,68 @@ async function savePostEdit(): Promise<void> {
   }
 }
 
+function loadSeoForm(): void {
+  if (!post.value) return;
+  seoTitle.value = post.value.seo_title ?? "";
+  seoDescription.value = post.value.seo_description ?? "";
+  seoKeywords.value = (post.value.seo_keywords ?? []).join(", ");
+  seoCanonicalPath.value = post.value.seo_canonical_path ?? "";
+  seoOgImageUrl.value = post.value.og_image_url ?? "";
+}
+
+function beginSeoEdit(): void {
+  if (!post.value || !canEditPostSeo.value) return;
+  loadSeoForm();
+  editingSeo.value = true;
+  error.value = "";
+}
+
+function resetSeoForm(): void {
+  loadSeoForm();
+  error.value = "";
+}
+
+function normalizedOptional(value: string): string | null {
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function normalizedSeoKeywords(): string[] | null {
+  const values = seoKeywords.value
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter((item, index, items) => Boolean(item) && items.indexOf(item) === index);
+  return values.length ? values : null;
+}
+
+async function saveSeoEdit(): Promise<void> {
+  if (!post.value || !canEditPostSeo.value) return;
+  submitting.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    post.value = await updateCommunityPostSeo(
+      post.value.id,
+      {
+        seo_title: normalizedOptional(seoTitle.value),
+        seo_description: normalizedOptional(seoDescription.value),
+        seo_keywords: normalizedSeoKeywords(),
+        seo_canonical_path: normalizedOptional(seoCanonicalPath.value),
+        og_image_url: normalizedOptional(seoOgImageUrl.value),
+        expected_seo_version: post.value.seo_version,
+      },
+      auth.accessToken,
+      createCommunityIdempotencyKey("post-seo-update"),
+    );
+    editingSeo.value = false;
+    success.value = "主题 SEO 设置已保存。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题 SEO 设置保存失败";
+  } finally {
+    submitting.value = false;
+  }
+}
+
 async function removePost(): Promise<void> {
   if (!post.value || !isPostAuthor.value) return;
   if (!postDeleteArmed.value) {
@@ -385,6 +459,7 @@ function resetDetailForms(): void {
   replyParent.value = null;
   rulesAccepted.value = false;
   editingPost.value = false;
+  editingSeo.value = false;
   editingCommentId.value = null;
   postDeleteArmed.value = false;
   commentDeleteArmed.value = null;
@@ -473,6 +548,56 @@ function reportReasonLabel(reason: CommunityReportReason): string {
           <p v-if="!editingPost" class="whitespace-pre-wrap break-words text-sm leading-7">{{ post.content }}</p>
         </CardContent>
       </Card>
+      <Card v-if="canEditPostSeo">
+        <CardHeader>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="space-y-1">
+              <CardTitle>SEO 设置</CardTitle>
+              <CardDescription>为主题配置搜索标题、摘要、关键词、站内规范路径和分享图片。动态内容仍保持不索引。</CardDescription>
+            </div>
+            <Button v-if="!editingSeo" size="sm" variant="outline" @click="beginSeoEdit">编辑 SEO</Button>
+          </div>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div v-if="editingSeo" class="space-y-4">
+            <div class="space-y-2">
+              <Label for="community-post-seo-title">搜索标题</Label>
+              <Input id="community-post-seo-title" v-model="seoTitle" :maxlength="120" :placeholder="post.title" />
+              <p class="text-xs text-muted-foreground">留空时使用主题标题，最多 120 个字符。</p>
+            </div>
+            <div class="space-y-2">
+              <Label for="community-post-seo-description">搜索摘要</Label>
+              <Textarea id="community-post-seo-description" v-model="seoDescription" :maxlength="320" :placeholder="post.seo.description" />
+              <p class="text-xs text-muted-foreground">留空时使用安全正文摘要，最多 320 个字符。</p>
+            </div>
+            <div class="space-y-2">
+              <Label for="community-post-seo-keywords">关键词</Label>
+              <Input id="community-post-seo-keywords" v-model="seoKeywords" placeholder="例如：压缩包, 密码恢复, 安全教程" />
+              <p class="text-xs text-muted-foreground">使用逗号或换行分隔；保存时自动去重和去除空白。</p>
+            </div>
+            <div class="space-y-2">
+              <Label for="community-post-seo-canonical">站内规范路径</Label>
+              <Input id="community-post-seo-canonical" v-model="seoCanonicalPath" :maxlength="512" :placeholder="post.seo.canonical_path ?? `/community/posts/${post.id}`" />
+              <p class="text-xs text-muted-foreground">仅允许不带查询参数或片段的站内绝对路径。</p>
+            </div>
+            <div class="space-y-2">
+              <Label for="community-post-seo-og-image">分享图片地址</Label>
+              <Input id="community-post-seo-og-image" v-model="seoOgImageUrl" :maxlength="1024" placeholder="/assets/community/default-share.png 或 HTTPS 地址" />
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button :disabled="submitting" @click="saveSeoEdit">{{ submitting ? "保存中…" : "保存 SEO" }}</Button>
+              <Button variant="outline" :disabled="submitting" @click="resetSeoForm">重置</Button>
+              <Button variant="ghost" :disabled="submitting" @click="editingSeo = false">取消</Button>
+            </div>
+          </div>
+          <div v-else class="grid gap-3 text-sm sm:grid-cols-2">
+            <div><span class="text-muted-foreground">搜索标题：</span>{{ post.seo.title }}</div>
+            <div><span class="text-muted-foreground">SEO 版本：</span>{{ post.seo_version }}</div>
+            <div class="sm:col-span-2"><span class="text-muted-foreground">规范路径：</span>{{ post.seo.canonical_path ?? "未设置" }}</div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader><CardTitle>评论和回复</CardTitle><CardDescription>{{ post.reply_count }} 条回复，支持两级定向回复。</CardDescription></CardHeader>
         <CardContent class="space-y-4">

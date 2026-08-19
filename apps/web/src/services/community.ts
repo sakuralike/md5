@@ -42,6 +42,7 @@ import type {
   CommunityRelationshipMutationResponse,
   CommunityPostCreateRequest,
   CommunityPostInteractionResponse,
+  CommunityPostSeoUpdateRequest,
   CommunityPostUpdateRequest,
   CommunityPostDetail,
   CommunityPostListResponse,
@@ -57,6 +58,7 @@ export function createCommunityIdempotencyKey(
   kind:
     | "post"
     | "post-update"
+    | "post-seo-update"
     | "post-delete"
     | "comment"
     | "comment-update"
@@ -346,6 +348,23 @@ export function updateCommunityPost(
 ): Promise<CommunityPostDetail> {
   return apiRequest<CommunityPostDetail>(
     `/community/posts/${encodeURIComponent(postId)}`,
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateCommunityPostSeo(
+  postId: string,
+  payload: CommunityPostSeoUpdateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityPostDetail> {
+  return apiRequest<CommunityPostDetail>(
+    `/community/posts/${encodeURIComponent(postId)}/seo`,
     {
       method: "PATCH",
       headers: { "Idempotency-Key": idempotencyKey },

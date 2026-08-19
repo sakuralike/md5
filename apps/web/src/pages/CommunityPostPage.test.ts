@@ -33,10 +33,25 @@ vi.mock("../services/community", () => ({
     viewer_has_liked: false,
     viewer_has_bookmarked: false,
     version: 2,
+    seo_version: 3,
+    seo_title: "合成搜索标题",
+    seo_description: "合成搜索描述",
+    seo_keywords: ["合成", "社区"],
+    seo_canonical_path: "/community/posts/synthetic-post-id",
+    og_image_url: null,
     edited_at: "2026-08-12T03:00:00Z",
     last_activity_at: "2026-08-12T03:00:00Z",
     created_at: "2026-08-12T02:00:00Z",
     comments: [],
+    seo: {
+      eligible: true,
+      indexable: false,
+      title: "合成搜索标题",
+      description: "合成搜索描述",
+      keywords: ["合成", "社区"],
+      canonical_path: "/community/posts/synthetic-post-id",
+      og_image_url: null,
+    },
   })),
   setCommunityCommentLike: vi.fn(),
   setCommunityPostBookmark: vi.fn(),
@@ -65,6 +80,7 @@ vi.mock("../services/community", () => ({
   deleteCommunityPost: vi.fn(),
   updateCommunityComment: vi.fn(),
   updateCommunityPost: vi.fn(),
+  updateCommunityPostSeo: vi.fn(),
 }));
 
 describe("CommunityPostPage", () => {
@@ -74,6 +90,9 @@ describe("CommunityPostPage", () => {
     expect(html).toContain("返回社区首页");
     expect(html).toContain("合成社区主题");
     expect(html).toContain("编辑主题");
+    expect(html).toContain("SEO 设置");
+    expect(html).toContain("编辑 SEO");
+    expect(html).toContain("动态内容仍保持不索引");
     expect(html).toContain("举报主题");
     expect(html).toContain("点赞 2");
     expect(html).toContain("收藏");

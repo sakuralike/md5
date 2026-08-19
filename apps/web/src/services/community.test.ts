@@ -24,6 +24,7 @@ import {
   updateCommunityDirectMemberState,
   updateCommunityDirectReadState,
   updateCommunityNotificationPreferences,
+  updateCommunityPostSeo,
 } from "./community";
 
 function jsonResponse(body: unknown): Response {
@@ -164,6 +165,42 @@ describe("web community service", () => {
     expect((deleteInit.headers as Headers).get("Idempotency-Key")).toBe(
       "stable-delete-key",
     );
+  });
+
+  it("updates community post SEO with optimistic concurrency and idempotency", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ id: "synthetic-post", seo_version: 4 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await updateCommunityPostSeo(
+      "post/with space",
+      {
+        seo_title: "合成 SEO 标题",
+        seo_description: null,
+        seo_keywords: ["合成", "SEO"],
+        seo_canonical_path: "/community/posts/synthetic-post",
+        og_image_url: null,
+        expected_seo_version: 3,
+      },
+      "access-token",
+      "stable-post-seo-key",
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/community/posts/post%2Fwith%20space/seo");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer access-token");
+    expect((init.headers as Headers).get("Idempotency-Key")).toBe("stable-post-seo-key");
+    expect(JSON.parse(String(init.body))).toEqual({
+      seo_title: "合成 SEO 标题",
+      seo_description: null,
+      seo_keywords: ["合成", "SEO"],
+      seo_canonical_path: "/community/posts/synthetic-post",
+      og_image_url: null,
+      expected_seo_version: 3,
+    });
   });
 
   it("keeps notification reads authenticated and idempotent", async () => {
