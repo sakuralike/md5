@@ -3,9 +3,21 @@ import { createSSRApp } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import CommunityGroupPage from "./CommunityGroupPage.vue";
 
+const communitySeo = vi.hoisted(() => ({
+  set: vi.fn(),
+  clear: vi.fn(),
+}));
+
 vi.mock("vue-router", () => ({
   RouterLink: { props: ["to"], template: "<a><slot /></a>" },
-  useRoute: () => ({ params: { slug: "synthetic-lab" } }),
+  useRoute: () => ({
+    path: "/community/groups/synthetic-lab",
+    params: { slug: "synthetic-lab" },
+  }),
+}));
+
+vi.mock("../composables/useCommunitySeo", () => ({
+  useCommunitySeo: () => ({ ...communitySeo, current: { value: null } }),
 }));
 
 vi.mock("../stores/auth", () => ({
@@ -62,5 +74,10 @@ describe("CommunityGroupPage", () => {
     expect(html).toContain("群组 SEO");
     expect(html).toContain("编辑 SEO");
     expect(html).toContain("动态内容仍保持不索引");
+    expect(communitySeo.set).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "group",
+      path: "/community/groups/synthetic-lab",
+      projection: expect.objectContaining({ eligible: false, indexable: false }),
+    }));
   });
 });

@@ -6,6 +6,7 @@ import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { provideCommunitySeo } from "./composables/useCommunitySeo";
 import { useCommunityAvatar } from "./composables/useCommunityAvatar";
 import { useCommunityDirectMessageStream } from "./composables/useCommunityDirectMessageStream";
 import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
@@ -27,6 +28,7 @@ const route = useRoute();
 const communityNotifications = useCommunityNotificationStream();
 const communityDirectMessages = useCommunityDirectMessageStream();
 const communityAvatar = useCommunityAvatar();
+const communitySeo = provideCommunitySeo();
 const currentAvatarSrc = communityAvatar.avatarSrc;
 const siteConfig = ref<PublicSiteConfig>(createDefaultPublicSiteConfig());
 
@@ -36,6 +38,14 @@ const visibleNavigation = computed(() =>
 
 function applyCurrentSeo(): void {
   if (typeof document === "undefined" || typeof window === "undefined") return;
+  const contentState = communitySeo.current.value;
+  const contentKind = route.meta.seoContent;
+  const community = contentState
+    && contentKind
+    && contentState.kind === contentKind
+    && contentState.path === route.path
+    ? { kind: contentKind, projection: contentState.projection }
+    : undefined;
   applySeoMetadata(
     document,
     buildSeoMetadata({
@@ -45,6 +55,7 @@ function applyCurrentSeo(): void {
       origin: window.location.origin,
       scope: route.meta.seoScope as SeoRouteScope | undefined,
       title: typeof route.meta.seoTitle === "string" ? route.meta.seoTitle : undefined,
+      community,
     }),
     siteConfig.value.site_name,
   );
@@ -114,7 +125,14 @@ function releaseCustomBackground(): void {
 
 onMounted(() => {
   watch(
-    () => [route.path, route.meta.seoScope, route.meta.seoTitle, siteConfig.value] as const,
+    () => [
+      route.path,
+      route.meta.seoScope,
+      route.meta.seoTitle,
+      route.meta.seoContent,
+      siteConfig.value,
+      communitySeo.current.value,
+    ] as const,
     applyCurrentSeo,
     { immediate: true },
   );

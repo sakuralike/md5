@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CommunityGroupDetail, CommunityGroupMember, CommunityPostSummary } from "@password-detective/api-contract";
-import { computed, onMounted, onServerPrefetch, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createCommunityIdempotencyKey, decideCommunityGroupMember, getCommunityGroup, listCommunityPosts, setCommunityGroupMembership, updateCommunityGroupSeo } from "../services/community";
 import { useAuthStore } from "../stores/auth";
+import { useCommunitySeo } from "../composables/useCommunitySeo";
 
 const route = useRoute();
 const auth = useAuthStore();
+const communitySeo = useCommunitySeo();
 const slug = computed(() => String(route.params.slug ?? ""));
 const group = ref<CommunityGroupDetail | null>(null);
 const posts = ref<CommunityPostSummary[]>([]);
@@ -27,6 +29,8 @@ const seoDescription = ref("");
 const seoKeywords = ref("");
 const seoCanonicalPath = ref("");
 const seoOgImageUrl = ref("");
+let loadRequestId = 0;
+let publishedSeoPath: string | null = null;
 const isGovernor = computed(() => group.value?.viewer_role === "owner" || group.value?.viewer_role === "moderator");
 const canEditSeo = computed(() => Boolean(
   group.value?.viewer_role === "owner"
@@ -40,19 +44,47 @@ onServerPrefetch(loadGroup);
 onMounted(() => {
   if (!group.value && !error.value) void loadGroup();
 });
+watch(() => route.path, (path, previousPath) => {
+  if (path === previousPath) return;
+  communitySeo.clear(previousPath);
+  void loadGroup();
+});
+onBeforeUnmount(() => {
+  loadRequestId += 1;
+  if (publishedSeoPath) communitySeo.clear(publishedSeoPath);
+});
+
+function publishSeo(): void {
+  if (!group.value || slug.value !== group.value.slug) return;
+  publishedSeoPath = route.path;
+  communitySeo.set({ kind: "group", path: route.path, projection: group.value.seo });
+}
 
 async function loadGroup(): Promise<void> {
+  const requestedSlug = slug.value;
+  if (!requestedSlug) return;
+  const requestId = ++loadRequestId;
   loading.value = true;
   error.value = "";
+  communitySeo.clear(route.path);
+  group.value = null;
+  posts.value = [];
   try {
     const token = auth.isAuthenticated ? auth.accessToken : undefined;
-    group.value = await getCommunityGroup(slug.value, token);
+    const [detail, postPage] = await Promise.all([
+      getCommunityGroup(requestedSlug, token),
+      listCommunityPosts(undefined, token, requestedSlug),
+    ]);
+    if (requestId !== loadRequestId || slug.value !== requestedSlug) return;
     editingSeo.value = false;
-    posts.value = (await listCommunityPosts(undefined, token, slug.value)).items;
+    group.value = detail;
+    posts.value = postPage.items;
+    publishSeo();
   } catch (caught) {
+    if (requestId !== loadRequestId) return;
     error.value = caught instanceof Error ? caught.message : "群组加载失败或无权访问";
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) loading.value = false;
   }
 }
 
@@ -103,6 +135,7 @@ async function saveSeo(): Promise<void> {
       auth.accessToken,
       createCommunityIdempotencyKey("group-seo-update"),
     );
+    publishSeo();
     editingSeo.value = false;
     success.value = "群组 SEO 设置已保存。";
   } catch (caught) {

@@ -1,6 +1,12 @@
-import type { PublicSeoConfig } from "@password-detective/api-contract";
+import type { CommunitySeoProjection, PublicSeoConfig } from "@password-detective/api-contract";
 
 export type SeoRouteScope = "public" | "guest" | "private";
+export type SeoContentKind = "post" | "group";
+
+export interface CommunitySeoMetadataInput {
+  kind: SeoContentKind;
+  projection: CommunitySeoProjection;
+}
 
 export interface SeoMetadataInput {
   path: string;
@@ -9,9 +15,11 @@ export interface SeoMetadataInput {
   origin: string;
   scope?: SeoRouteScope;
   title?: string;
+  community?: CommunitySeoMetadataInput;
 }
 
 export interface SeoOpenGraphMetadata {
+  type: "website" | "article";
   title: string;
   description: string;
   url: string;
@@ -50,6 +58,26 @@ function safeImageUrl(value: string): string | null {
   }
 }
 
+function safeCommunityPathUrl(value: string | null, origin: string | null): string | null {
+  if (!value || !origin || !value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("?") || value.includes("#") || value.includes("\\")) return null;
+  if ([...value].some((character) => character.codePointAt(0)! < 32)) return null;
+  try {
+    const url = new URL(value, `${origin}/`);
+    return url.origin === origin ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeCommunityImageUrl(value: string | null, origin: string | null): string | null {
+  if (!value) return null;
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return safeCommunityPathUrl(value, origin);
+  }
+  return safeImageUrl(value);
+}
+
 function resolvedSiteName(value: string): string {
   return normalizedText(value) || "密码侦探社";
 }
@@ -62,12 +90,29 @@ function resolvedTitle(input: SeoMetadataInput, siteName: string): string {
 
 export function buildSeoMetadata(input: SeoMetadataInput): SeoMetadata {
   const siteName = resolvedSiteName(input.siteName);
-  const title = resolvedTitle(input, siteName);
-  const indexable = input.scope === "public" && input.seo.enabled && input.seo.indexing_enabled;
   const origin = safeOrigin(input.origin);
-  const canonical = indexable && origin ? new URL(input.path, `${origin}/`).toString() : null;
+  const community = input.community;
+  const useCommunityMetadata = Boolean(input.seo.enabled && community?.projection.eligible);
+  const communityTitle = useCommunityMetadata
+    ? normalizedText(community?.projection.title ?? "")
+    : "";
+  const title = communityTitle
+    ? `${communityTitle} ${input.seo.title_separator} ${siteName}`
+    : resolvedTitle(input, siteName);
+  const indexable = input.scope === "public"
+    && input.seo.enabled
+    && input.seo.indexing_enabled
+    && (community?.projection.indexable ?? true);
+  const communityUrl = useCommunityMetadata
+    ? safeCommunityPathUrl(community?.projection.canonical_path ?? null, origin)
+    : null;
+  const canonical = useCommunityMetadata
+    ? communityUrl
+    : indexable && origin
+      ? new URL(input.path, `${origin}/`).toString()
+      : null;
 
-  if (!indexable) {
+  if (!indexable && !useCommunityMetadata) {
     return {
       indexable: false,
       title,
@@ -79,23 +124,34 @@ export function buildSeoMetadata(input: SeoMetadataInput): SeoMetadata {
     };
   }
 
-  const description = normalizedText(input.seo.description) || null;
-  const keywords = input.seo.keywords
+  const description = useCommunityMetadata
+    ? normalizedText(community?.projection.description ?? "") || null
+    : normalizedText(input.seo.description) || null;
+  const keywords = (useCommunityMetadata ? community?.projection.keywords ?? [] : input.seo.keywords)
     .map((keyword) => normalizedText(keyword))
     .filter(Boolean)
     .join(", ") || null;
-  const image = safeImageUrl(input.seo.default_image_url);
+  const image = useCommunityMetadata
+    ? safeCommunityImageUrl(community?.projection.og_image_url ?? null, origin)
+      ?? safeImageUrl(input.seo.default_image_url)
+    : safeImageUrl(input.seo.default_image_url);
 
   return {
-    indexable: true,
+    indexable,
     title,
     description,
     keywords,
     canonical,
-    robots: "index, follow",
+    robots: indexable ? "index, follow" : "noindex, nofollow",
     openGraph:
       input.seo.open_graph_enabled && canonical && description
-        ? { title, description, url: canonical, image }
+        ? {
+            type: community?.kind === "post" ? "article" : "website",
+            title,
+            description,
+            url: canonical,
+            image,
+          }
         : null,
   };
 }
@@ -127,7 +183,7 @@ export function applySeoMetadata(documentRef: Document, metadata: SeoMetadata, s
     documentRef.head.append(link);
   }
   if (metadata.openGraph) {
-    appendMeta(documentRef, "property", "og:type", "website");
+    appendMeta(documentRef, "property", "og:type", metadata.openGraph.type);
     appendMeta(documentRef, "property", "og:site_name", resolvedSiteName(siteName));
     appendMeta(documentRef, "property", "og:title", metadata.openGraph.title);
     appendMeta(documentRef, "property", "og:description", metadata.openGraph.description);

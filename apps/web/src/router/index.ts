@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import type { SeoRouteScope } from "../lib/seo";
+import type { SeoContentKind, SeoRouteScope } from "../lib/seo";
 import AccountActivityPage from "../pages/AccountActivityPage.vue";
 import AccountPrivacyPage from "../pages/AccountPrivacyPage.vue";
 import CommunityPage from "../pages/CommunityPage.vue";
@@ -37,6 +37,7 @@ declare module "vue-router" {
   interface RouteMeta {
     seoScope?: SeoRouteScope;
     seoTitle?: string;
+    seoContent?: SeoContentKind;
   }
 }
 
@@ -64,7 +65,7 @@ const router = createRouter({
     { path: "/community/activity", component: CommunityActivityPage, meta: privateSeo },
     { path: "/community/new", component: CommunityPostComposerPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/community/groups", component: CommunityGroupsPage, meta: privateSeo },
-    { path: "/community/groups/:slug", component: CommunityGroupPage, meta: privateSeo },
+    { path: "/community/groups/:slug", component: CommunityGroupPage, meta: { ...privateSeo, seoContent: "group" } },
     {
       path: "/community/bookmarks",
       component: CommunityBookmarksPage,
@@ -85,7 +86,7 @@ const router = createRouter({
       component: CommunityConversationPage,
       meta: { ...privateSeo, requiresAuth: true },
     },
-    { path: "/community/posts/:postId", component: CommunityPostPage, meta: privateSeo },
+    { path: "/community/posts/:postId", component: CommunityPostPage, meta: { ...privateSeo, seoContent: "post" } },
     {
       path: "/community/users/:username/followers",
       component: CommunityRelationsPage,

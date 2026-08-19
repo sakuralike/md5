@@ -4,7 +4,7 @@ import type {
   CommunityPostDetail,
   CommunityReportReason,
 } from "@password-detective/api-contract";
-import { computed, onMounted, onServerPrefetch, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -37,9 +37,11 @@ import {
   updateCommunityPostSeo,
 } from "../services/community";
 import { useAuthStore } from "../stores/auth";
+import { useCommunitySeo } from "../composables/useCommunitySeo";
 
 const auth = useAuthStore();
 const route = useRoute();
+const communitySeo = useCommunitySeo();
 const post = ref<CommunityPostDetail | null>(null);
 const comments = ref<CommunityCommentResponse[]>([]);
 const nextCursor = ref<string | null>(null);
@@ -69,6 +71,8 @@ const reportReason = ref<CommunityReportReason>("other");
 const reportDetails = ref("");
 const postInteractionBusy = ref(false);
 const commentLikeBusyIds = ref(new Set<string>());
+let loadRequestId = 0;
+let publishedSeoPath: string | null = null;
 
 const isPostAuthor = computed(
   () => Boolean(auth.user && post.value?.author.user_id === auth.user.id),
@@ -81,11 +85,30 @@ const canEditPostSeo = computed(() => Boolean(
 
 onMounted(() => void load());
 onServerPrefetch(load);
-watch(() => route.params.postId, () => void load());
+watch(() => route.path, (path, previousPath) => {
+  if (path === previousPath) return;
+  communitySeo.clear(previousPath);
+  void load();
+});
+onBeforeUnmount(() => {
+  loadRequestId += 1;
+  if (publishedSeoPath) communitySeo.clear(publishedSeoPath);
+});
+
+function publishSeo(): void {
+  if (!post.value || String(route.params.postId ?? "") !== post.value.id) return;
+  publishedSeoPath = route.path;
+  communitySeo.set({ kind: "post", path: route.path, projection: post.value.seo });
+}
 
 async function load(): Promise<void> {
   const postId = typeof route.params.postId === "string" ? route.params.postId : "";
   if (!postId) return;
+  const requestId = ++loadRequestId;
+  communitySeo.clear(route.path);
+  post.value = null;
+  comments.value = [];
+  nextCursor.value = null;
   loading.value = true;
   error.value = "";
   try {
@@ -93,14 +116,17 @@ async function load(): Promise<void> {
       getCommunityPost(postId, auth.accessToken || undefined),
       listCommunityComments(postId, undefined, 20, auth.accessToken || undefined),
     ]);
+    if (requestId !== loadRequestId || String(route.params.postId ?? "") !== postId) return;
     post.value = detail;
+    publishSeo();
     comments.value = page.items;
     nextCursor.value = page.next_cursor;
     resetDetailForms();
   } catch (caught) {
+    if (requestId !== loadRequestId) return;
     error.value = caught instanceof Error ? caught.message : "主题详情加载失败";
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) loading.value = false;
   }
 }
 
@@ -111,6 +137,7 @@ async function refresh(): Promise<void> {
     listCommunityComments(post.value.id, undefined, 20, auth.accessToken || undefined),
   ]);
   post.value = detail;
+  publishSeo();
   comments.value = page.items;
   nextCursor.value = page.next_cursor;
 }

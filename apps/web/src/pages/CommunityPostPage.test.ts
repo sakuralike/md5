@@ -3,12 +3,24 @@ import { createSSRApp } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import CommunityPostPage from "./CommunityPostPage.vue";
 
+const communitySeo = vi.hoisted(() => ({
+  set: vi.fn(),
+  clear: vi.fn(),
+}));
+
 vi.mock("vue-router", () => ({
   RouterLink: {
     props: ["to"],
     template: "<a><slot /></a>",
   },
-  useRoute: () => ({ params: { postId: "synthetic-post-id" } }),
+  useRoute: () => ({
+    path: "/community/posts/synthetic-post-id",
+    params: { postId: "synthetic-post-id" },
+  }),
+}));
+
+vi.mock("../composables/useCommunitySeo", () => ({
+  useCommunitySeo: () => ({ ...communitySeo, current: { value: null } }),
 }));
 
 vi.mock("../stores/auth", () => ({
@@ -98,5 +110,10 @@ describe("CommunityPostPage", () => {
     expect(html).toContain("收藏");
     expect(html).toContain("编辑");
     expect(html).toContain("举报回复");
+    expect(communitySeo.set).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "post",
+      path: "/community/posts/synthetic-post-id",
+      projection: expect.objectContaining({ eligible: true, indexable: false }),
+    }));
   });
 });
