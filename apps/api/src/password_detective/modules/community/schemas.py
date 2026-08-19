@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -150,6 +151,78 @@ class CommunityPostUpdateRequest(BaseModel):
         return _normalize(value, "内容不能为空")
 
 
+def _normalize_seo_optional(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.replace("\x00", "").strip()
+    return normalized or None
+
+
+def _contains_unsafe_seo_text(value: str) -> bool:
+    return any(ord(char) < 32 for char in value) or any(
+        token in value for token in ("<", ">", "{{", "}}")
+    )
+
+
+class CommunityPostSeoUpdateRequest(BaseModel):
+    seo_title: str | None = Field(default=None, max_length=120)
+    seo_description: str | None = Field(default=None, max_length=320)
+    seo_keywords: list[str] | None = Field(default=None, max_length=20)
+    seo_canonical_path: str | None = Field(default=None, max_length=512)
+    og_image_url: str | None = Field(default=None, max_length=1024)
+    expected_seo_version: int = Field(ge=1)
+
+    @field_validator("seo_title", "seo_description")
+    @classmethod
+    def normalize_seo_copy(cls, value: str | None) -> str | None:
+        normalized = _normalize_seo_optional(value)
+        if normalized is not None and _contains_unsafe_seo_text(normalized):
+            raise ValueError("SEO 标题或描述包含不安全内容")
+        return normalized
+
+    @field_validator("seo_canonical_path")
+    @classmethod
+    def normalize_canonical_path(cls, value: str | None) -> str | None:
+        normalized = _normalize_seo_optional(value)
+        if normalized is not None and (
+            not normalized.startswith("/")
+            or normalized.startswith("//")
+            or any(char in normalized for char in ("?", "#", "\\"))
+        ):
+            raise ValueError("canonical 必须是站内路径")
+        return normalized
+
+    @field_validator("og_image_url")
+    @classmethod
+    def normalize_og_image_url(cls, value: str | None) -> str | None:
+        normalized = _normalize_seo_optional(value)
+        if normalized is None:
+            return None
+        if normalized.startswith("/") and not normalized.startswith("//"):
+            return normalized
+        parsed = urlsplit(normalized)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("OG 图片必须是 HTTPS URL 或站内相对路径")
+        return normalized
+
+    @field_validator("seo_keywords")
+    @classmethod
+    def normalize_keywords(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            keyword = item.replace("\x00", "").strip()
+            if keyword and _contains_unsafe_seo_text(keyword):
+                raise ValueError("关键词包含不安全内容")
+            if not keyword or keyword in seen:
+                continue
+            normalized.append(keyword)
+            seen.add(keyword)
+        return normalized or None
+
+
 class CommunityCommentCreateRequest(BaseModel):
     content: str = Field(min_length=2, max_length=2000)
     parent_id: str | None = Field(default=None, max_length=36)
@@ -253,6 +326,12 @@ class CommunityPostDetail(BaseModel):
     viewer_has_liked: bool = False
     viewer_has_bookmarked: bool = False
     version: int
+    seo_version: int
+    seo_title: str | None
+    seo_description: str | None
+    seo_keywords: list[str] | None
+    seo_canonical_path: str | None
+    og_image_url: str | None
     edited_at: datetime | None
     last_activity_at: datetime
     created_at: datetime

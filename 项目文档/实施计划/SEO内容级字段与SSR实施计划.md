@@ -212,3 +212,11 @@
 - [x] 阶段 7-A 已完成公开资格与受控 `seo` 投影；未新增数据库字段、迁移、动态 sitemap 或 SSR/预渲染。
 
 > 下一轮默认从阶段 7-A 开始，但在写入数据库或开放动态索引前，必须先确认本计划中的公开资格矩阵与 API 合同。
+#### 2026-08-19 阶段 7-B 帖子 SEO 字段切片实现记录
+
+- 本轮仅落地 `CommunityPost` 的内容级 SEO 字段与授权写入接口：`seo_title`、`seo_description`、`seo_keywords`、`seo_canonical_path`、`og_image_url` 及 `seo_version`。
+- 新增迁移 `apps/api/alembic/versions/20260818_0048_community_post_seo_fields.py`，字段默认空值、版本默认 1，支持升级/降级；旧帖子继续使用标题、正文摘要和安全 canonical 回退，未自动变为可索引内容。
+- 新增 `PATCH /api/v1/community/posts/{post_id}/seo`。帖子作者、归属群组 owner/moderator、平台 moderator/admin 可编辑；接口保留 `Idempotency-Key`、版本号并发控制、输入安全校验和摘要审计，越权返回 403，版本冲突返回 409。
+- 关键词执行去空白、去重和空值归一化；标题/描述拒绝控制字符与脚本模板标记；canonical 仅接受站内绝对路径；OG 图片仅接受相对路径或 HTTPS 地址。
+- 详情接口和受控 `seo` 投影消费已保存字段，但 `eligible` 与 `indexable` 仍分离，动态内容仍保持 `indexable=false`。
+- 本轮不新增管理端编辑 UI，不实现群组/用户 SEO 字段、动态 sitemap、SSR/预渲染、百度推送、配置快照或回滚；这些仍属于后续独立切片。

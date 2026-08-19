@@ -109,6 +109,7 @@ from password_detective.modules.community.schemas import (
     CommunityPostDetail,
     CommunityPostInteractionResponse,
     CommunityPostListResponse,
+    CommunityPostSeoUpdateRequest,
     CommunityPostUpdateRequest,
     CommunityPrivacyUpdateRequest,
     CommunityProfileUpdateRequest,
@@ -120,6 +121,7 @@ from password_detective.modules.community.schemas import (
     CommunitySearchResponse,
 )
 from password_detective.modules.community.search_service import search_community
+from password_detective.modules.community.seo_service import update_post_seo
 from password_detective.modules.community.service import (
     create_comment,
     create_post,
@@ -1123,6 +1125,33 @@ def community_post_update(
         principal=principal,
         response_type=CommunityPostDetail,
         create=lambda: update_post(
+            db, post_id=post_id, payload=payload, principal=principal, context=context
+        ),
+        response_status=status.HTTP_200_OK,
+    )
+
+
+@router.patch(
+    "/posts/{post_id}/seo",
+    response_model=CommunityPostDetail,
+    dependencies=[Depends(rate_limit("community.post.seo.update", limit=30, window_seconds=3600))],
+)
+def community_post_seo_update(
+    post_id: str,
+    payload: CommunityPostSeoUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    context: Annotated[ClientContext, Depends(get_client_context)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityPostDetail:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.post.seo.update",
+        idempotency_key=idempotency_key,
+        request_payload={"post_id": post_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityPostDetail,
+        create=lambda: update_post_seo(
             db, post_id=post_id, payload=payload, principal=principal, context=context
         ),
         response_status=status.HTTP_200_OK,

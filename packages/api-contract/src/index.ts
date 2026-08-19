@@ -1719,6 +1719,15 @@ export interface CommunityGroupMemberDecisionRequest {
   role?: CommunityGroupRole;
 }
 
+export interface CommunityPostSeoUpdateRequest {
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string[] | null;
+  seo_canonical_path?: string | null;
+  og_image_url?: string | null;
+  expected_seo_version: number;
+}
+
 export interface CommunityPostCreateRequest {
   board_code: CommunityBoardCode;
   group_slug?: string | null;
@@ -1758,6 +1767,12 @@ export interface CommunityPostSummary {
   reply_count: number;
   like_count: number;
   version: number;
+  seo_version: number;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_keywords: string[] | null;
+  seo_canonical_path: string | null;
+  og_image_url: string | null;
   edited_at: string | null;
   last_activity_at: string;
   created_at: string;

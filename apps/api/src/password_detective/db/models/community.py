@@ -435,6 +435,12 @@ class CommunityPost(Base):
     reply_count: Mapped[int] = mapped_column(Integer, default=0)
     like_count: Mapped[int] = mapped_column(Integer, default=0)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    seo_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    seo_description: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    seo_keywords: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    seo_canonical_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    og_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    seo_version: Mapped[int] = mapped_column(Integer, default=1)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_by_author_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

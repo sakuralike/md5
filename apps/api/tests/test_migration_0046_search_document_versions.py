@@ -26,7 +26,7 @@ def test_release_migrations_converge_at_search_document_version_head() -> None:
     config = Config(str(api_directory / "alembic.ini"))
     config.set_main_option("script_location", str(api_directory / "alembic"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["20260817_0047"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["20260818_0048"]
 
 
 def test_search_document_versions_compile_to_mysql_bigint() -> None:
