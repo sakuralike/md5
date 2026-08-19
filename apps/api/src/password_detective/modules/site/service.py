@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import date, timedelta
+
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
@@ -8,6 +11,12 @@ from password_detective.core.time import utc_now
 from password_detective.db.models.archive_fingerprint import (
     ArchiveFingerprint,
     FingerprintAlgorithm,
+)
+from password_detective.db.models.community import (
+    CommunityBoard,
+    CommunityComment,
+    CommunityContentStatus,
+    CommunityPost,
 )
 from password_detective.db.models.hash_detail import (
     HashComment,
@@ -30,6 +39,9 @@ from password_detective.modules.registration.service import get_registration_pol
 from password_detective.modules.site.schemas import (
     AlgorithmDistributionItem,
     AlgorithmDistributionResponse,
+    CommunityActivityTrendBoard,
+    CommunityActivityTrendBucket,
+    CommunityActivityTrendResponse,
     HomeDiscoveryResponse,
     HotHashSummary,
     PublicLegalConfig,
@@ -244,5 +256,92 @@ def get_algorithm_distribution(db: Session) -> AlgorithmDistributionResponse:
             )
             for algorithm in algorithms
         ],
+        generated_at=utc_now(),
+    )
+
+
+def get_community_activity_trend(
+    db: Session,
+    *,
+    window_days: int = 30,
+) -> CommunityActivityTrendResponse:
+    end_day = utc_now().date()
+    start_day = end_day - timedelta(days=window_days - 1)
+    cutoff = start_day
+
+    post_rows = db.execute(
+        select(CommunityPost.created_at, CommunityPost.board_code)
+        .join(CommunityBoard, CommunityBoard.id == CommunityPost.board_id)
+        .where(
+            CommunityPost.status == CommunityContentStatus.PUBLISHED,
+            CommunityPost.deleted_by_author_at.is_(None),
+            CommunityBoard.status == "active",
+            CommunityPost.created_at >= cutoff,
+        )
+    ).all()
+    comment_rows = db.execute(
+        select(CommunityComment.created_at, CommunityPost.board_code)
+        .join(CommunityPost, CommunityPost.id == CommunityComment.post_id)
+        .join(CommunityBoard, CommunityBoard.id == CommunityPost.board_id)
+        .where(
+            CommunityComment.status == CommunityContentStatus.PUBLISHED,
+            CommunityComment.deleted_by_author_at.is_(None),
+            CommunityPost.status == CommunityContentStatus.PUBLISHED,
+            CommunityPost.deleted_by_author_at.is_(None),
+            CommunityBoard.status == "active",
+            CommunityComment.created_at >= cutoff,
+        )
+    ).all()
+
+    daily_posts: dict[date, int] = defaultdict(int)
+    daily_comments: dict[date, int] = defaultdict(int)
+    daily_boards: dict[date, set[str]] = defaultdict(set)
+    board_posts: dict[str, int] = defaultdict(int)
+    board_comments: dict[str, int] = defaultdict(int)
+    for created_at, board_code in post_rows:
+        day = created_at.date()
+        daily_posts[day] += 1
+        daily_boards[day].add(board_code)
+        board_posts[board_code] += 1
+    for created_at, board_code in comment_rows:
+        day = created_at.date()
+        daily_comments[day] += 1
+        daily_boards[day].add(board_code)
+        board_comments[board_code] += 1
+
+    board_rows = db.execute(
+        select(CommunityBoard.code, CommunityBoard.name)
+        .where(CommunityBoard.status == "active")
+        .order_by(CommunityBoard.sort_order, CommunityBoard.code)
+    ).all()
+    buckets = [
+        CommunityActivityTrendBucket(
+            day=start_day + timedelta(days=offset),
+            posts_count_band=_count_band(daily_posts[start_day + timedelta(days=offset)]),
+            comments_count_band=_count_band(daily_comments[start_day + timedelta(days=offset)]),
+            activity_count_band=_count_band(
+                daily_posts[start_day + timedelta(days=offset)]
+                + daily_comments[start_day + timedelta(days=offset)]
+            ),
+            active_boards_count_band=_count_band(
+                len(daily_boards[start_day + timedelta(days=offset)])
+            ),
+        )
+        for offset in range(window_days)
+    ]
+    boards = [
+        CommunityActivityTrendBoard(
+            board_code=code,
+            board_name=name,
+            posts_count_band=_count_band(board_posts[code]),
+            comments_count_band=_count_band(board_comments[code]),
+            activity_count_band=_count_band(board_posts[code] + board_comments[code]),
+        )
+        for code, name in board_rows
+    ]
+    return CommunityActivityTrendResponse(
+        window_days=window_days,
+        buckets=buckets,
+        boards=boards,
         generated_at=utc_now(),
     )

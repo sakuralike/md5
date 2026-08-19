@@ -254,3 +254,32 @@ def test_algorithm_distribution_only_aggregates_verified_archives(client):
     }
     assert "digest" not in response.text
     assert "ciphertext" not in response.text
+
+
+def test_community_activity_trend_returns_only_privacy_bounded_buckets(client):
+    response = client.get("/api/v1/site/community-activity-trend?days=7")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=300"
+    body = response.json()
+    assert body["window_days"] == 7
+    assert len(body["buckets"]) == 7
+    assert all(
+        set(bucket)
+        == {
+            "day",
+            "posts_count_band",
+            "comments_count_band",
+            "activity_count_band",
+            "active_boards_count_band",
+        }
+        for bucket in body["buckets"]
+    )
+    assert all("digest" not in str(item) for item in body["buckets"])
+    assert all("username" not in str(item) for item in body["boards"])
+
+
+def test_community_activity_trend_rejects_unbounded_window(client):
+    response = client.get("/api/v1/site/community-activity-trend?days=180")
+
+    assert response.status_code == 422

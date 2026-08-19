@@ -4,6 +4,8 @@ import type {
   AdminCommunityBoardResponse,
   AdminCommunityBoardUpdateRequest,
   CommunityBoardStatus,
+  AdminCommunityPostImageSummary,
+  CommunityImageStatus,
   UserRole,
   CommunityImageUploadConfig,
 } from "@password-detective/api-contract";
@@ -27,6 +29,8 @@ import {
   listCommunityBoards,
   updateCommunityBoard,
   getCommunityImageUploadConfig,
+  listCommunityImages,
+  removeCommunityImage,
   saveCommunityImageUploadConfig,
 } from "../services/communityConfiguration";
 import { useAdminAuthStore } from "../stores/auth";
@@ -52,6 +56,10 @@ const error = ref("");
 const success = ref("");
 const imageConfig = ref<CommunityImageUploadConfig>({ enabled: false, max_bytes: 5_242_880, max_pixels: 20_000_000, max_per_post: 4 });
 const imageConfigBusy = ref(false);
+const imageItems = ref<AdminCommunityPostImageSummary[]>([]);
+const imageStatus = ref<CommunityImageStatus | "">("");
+const imageListLoading = ref(false);
+const imageRemoveBusy = ref("");
 
 const selectedBoard = computed(() =>
   boards.value.find((board) => board.code === selectedCode.value) ?? null,
@@ -65,6 +73,7 @@ const canUpdate = computed(() => selectedBoard.value !== null && draft.value.nam
 onMounted(() => {
   void loadBoards();
   void loadImageConfig();
+  void loadImageList();
 });
 
 async function loadImageConfig(): Promise<void> {
@@ -73,6 +82,43 @@ async function loadImageConfig(): Promise<void> {
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "图片上传配置加载失败";
   }
+}
+
+async function loadImageList(): Promise<void> {
+  imageListLoading.value = true;
+  try {
+    imageItems.value = (await listCommunityImages(imageStatus.value, auth.accessToken)).items;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "图片附件列表加载失败";
+  } finally {
+    imageListLoading.value = false;
+  }
+}
+
+async function removeImage(image: AdminCommunityPostImageSummary): Promise<void> {
+  if (image.status === "removed" || !window.confirm("确认下架该论坛图片附件？")) return;
+  imageRemoveBusy.value = image.id;
+  error.value = "";
+  success.value = "";
+  try {
+    await removeCommunityImage(image.id, auth.accessToken);
+    success.value = "图片附件已下架并写入审计日志。";
+    await loadImageList();
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "图片附件下架失败";
+  } finally {
+    imageRemoveBusy.value = "";
+  }
+}
+
+function imageStatusLabel(status: CommunityImageStatus): string {
+  return { uploaded: "待绑定", attached: "已绑定", removed: "已下架" }[status];
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function saveImageConfig(): Promise<void> {
@@ -261,6 +307,46 @@ function roleLabel(role: UserRole): string {
         <div class="space-y-2"><Label for="image-max-count">每主题张数</Label><Input id="image-max-count" v-model.number="imageConfig.max_per_post" type="number" min="1" max="6" /></div>
       </div>
       <Button :disabled="imageConfigBusy" @click="saveImageConfig"><span>{{ imageConfigBusy ? "保存中…" : "保存图片配置" }}</span></Button>
+    </section>
+
+    <section class="space-y-5 rounded-2xl border bg-card p-5 shadow-sm sm:p-6" aria-labelledby="image-governance-heading">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 id="image-governance-heading" class="text-lg font-semibold">图片附件治理</h2>
+          <p class="mt-1 text-sm text-muted-foreground">仅显示附件元数据和绑定主题，不展示原始路径、文件名或二进制内容。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-muted-foreground">状态</span>
+          <Select v-model="imageStatus" @update:model-value="loadImageList">
+            <SelectTrigger aria-label="图片附件状态" class="w-28"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">全部</SelectItem>
+              <SelectItem value="uploaded">待绑定</SelectItem>
+              <SelectItem value="attached">已绑定</SelectItem>
+              <SelectItem value="removed">已下架</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button type="button" variant="outline" :disabled="imageListLoading" @click="loadImageList">刷新</Button>
+        </div>
+      </div>
+      <div v-if="imageListLoading" class="h-28 animate-pulse rounded-md bg-muted" />
+      <div v-else-if="imageItems.length === 0" class="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">暂无符合条件的图片附件。</div>
+      <div v-else class="divide-y rounded-md border">
+        <div v-for="image in imageItems" :key="image.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0 space-y-1 text-sm">
+            <div class="flex flex-wrap items-center gap-2">
+              <Badge :variant="image.status === 'removed' ? 'destructive' : 'outline'">{{ imageStatusLabel(image.status) }}</Badge>
+              <span class="font-medium">{{ image.content_type }}</span>
+              <span class="text-muted-foreground">{{ formatBytes(image.size_bytes) }} · {{ image.width }} × {{ image.height }}</span>
+            </div>
+            <p class="truncate text-muted-foreground">{{ image.post_title || "尚未绑定公开主题" }} · 上传者 {{ image.owner_username }}</p>
+            <p class="text-xs text-muted-foreground">附件 ID {{ image.id }} · {{ new Date(image.created_at).toLocaleString() }}</p>
+          </div>
+          <Button v-if="image.status !== 'removed'" type="button" variant="destructive" size="sm" :disabled="imageRemoveBusy === image.id" @click="removeImage(image)">
+            {{ imageRemoveBusy === image.id ? "下架中…" : "下架附件" }}
+          </Button>
+        </div>
+      </div>
     </section>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">

@@ -1805,6 +1805,29 @@ export interface AlgorithmDistributionResponse {
   generated_at: string;
 }
 
+export interface CommunityActivityTrendBucket {
+  day: string;
+  posts_count_band: string;
+  comments_count_band: string;
+  activity_count_band: string;
+  active_boards_count_band: string;
+}
+
+export interface CommunityActivityTrendBoard {
+  board_code: string;
+  board_name: string;
+  posts_count_band: string;
+  comments_count_band: string;
+  activity_count_band: string;
+}
+
+export interface CommunityActivityTrendResponse {
+  window_days: number;
+  buckets: CommunityActivityTrendBucket[];
+  boards: CommunityActivityTrendBoard[];
+  generated_at: string;
+}
+
 export interface CommunityGroupSeoUpdateRequest {
   seo_title?: string | null;
   seo_description?: string | null;
@@ -1849,6 +1872,8 @@ export interface CommunityImageUploadConfig {
   max_per_post: number;
 }
 
+export type CommunityImageStatus = "uploaded" | "attached" | "removed";
+
 export interface CommunityPostImage {
   id: string;
   url: string;
@@ -1862,6 +1887,28 @@ export interface AdminCommunityImageUploadConfigResponse {
   config: CommunityImageUploadConfig;
   audit_id: string | null;
   request_id: string | null;
+}
+
+export interface AdminCommunityPostImageSummary {
+  id: string;
+  owner_username: string;
+  post_id: string | null;
+  post_title: string | null;
+  status: CommunityImageStatus;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+  created_at: string;
+  attached_at: string | null;
+  removed_at: string | null;
+}
+
+export interface AdminCommunityPostImageListResponse {
+  items: AdminCommunityPostImageSummary[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface CommunityPostUpdateRequest {

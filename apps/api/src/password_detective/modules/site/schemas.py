@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -77,4 +77,27 @@ class AlgorithmDistributionItem(BaseModel):
 class AlgorithmDistributionResponse(BaseModel):
     total_count_band: str
     items: list[AlgorithmDistributionItem]
+    generated_at: datetime
+
+
+class CommunityActivityTrendBucket(BaseModel):
+    day: date
+    posts_count_band: str
+    comments_count_band: str
+    activity_count_band: str
+    active_boards_count_band: str
+
+
+class CommunityActivityTrendBoard(BaseModel):
+    board_code: str
+    board_name: str
+    posts_count_band: str
+    comments_count_band: str
+    activity_count_band: str
+
+
+class CommunityActivityTrendResponse(BaseModel):
+    window_days: int = Field(ge=7, le=90)
+    buckets: list[CommunityActivityTrendBucket]
+    boards: list[CommunityActivityTrendBoard]
     generated_at: datetime

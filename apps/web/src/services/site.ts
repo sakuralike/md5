@@ -1,5 +1,6 @@
 import type {
   AlgorithmDistributionResponse,
+  CommunityActivityTrendResponse,
   HomeDiscoveryResponse,
   PublicSiteConfig,
 } from "@password-detective/api-contract";
@@ -49,4 +50,12 @@ export function getHomeDiscovery(): Promise<HomeDiscoveryResponse> {
 
 export function getAlgorithmDistribution(): Promise<AlgorithmDistributionResponse> {
   return apiRequest<AlgorithmDistributionResponse>("/site/algorithm-distribution");
+}
+
+export function getCommunityActivityTrend(
+  days = 30,
+): Promise<CommunityActivityTrendResponse> {
+  return apiRequest<CommunityActivityTrendResponse>(
+    `/site/community-activity-trend?days=${days}`,
+  );
 }

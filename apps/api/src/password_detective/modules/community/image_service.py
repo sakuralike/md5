@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings
@@ -15,8 +15,13 @@ from password_detective.db.models.community_image import (
     CommunityPostImage,
 )
 from password_detective.db.models.system_setting import SystemSetting
+from password_detective.db.models.user import User
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
+from password_detective.modules.community.admin_schemas import (
+    AdminCommunityPostImageListResponse,
+    AdminCommunityPostImageSummary,
+)
 from password_detective.modules.community.group_service import require_post_visible
 from password_detective.modules.community.image_assets import (
     StoredCommunityPostImage,
@@ -234,6 +239,50 @@ def remove_community_post_image(
         db.commit()
         db.refresh(image)
     return _image_response(image)
+
+
+def list_admin_community_post_images(
+    db: Session,
+    *,
+    status: CommunityImageStatus | None,
+    page: int,
+    page_size: int,
+) -> AdminCommunityPostImageListResponse:
+    filters = []
+    if status is not None:
+        filters.append(CommunityPostImage.status == status)
+    total = db.scalar(select(func.count(CommunityPostImage.id)).where(*filters)) or 0
+    rows = db.execute(
+        select(CommunityPostImage, User.username, CommunityPost.title)
+        .join(User, User.id == CommunityPostImage.owner_id)
+        .outerjoin(CommunityPost, CommunityPost.id == CommunityPostImage.post_id)
+        .where(*filters)
+        .order_by(CommunityPostImage.created_at.desc(), CommunityPostImage.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return AdminCommunityPostImageListResponse(
+        items=[
+            AdminCommunityPostImageSummary(
+                id=image.id,
+                owner_username=username,
+                post_id=image.post_id,
+                post_title=post_title,
+                status=image.status,
+                content_type=image.content_type,
+                size_bytes=image.size_bytes,
+                width=image.width,
+                height=image.height,
+                created_at=image.created_at,
+                attached_at=image.attached_at,
+                removed_at=image.removed_at,
+            )
+            for image, username, post_title in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 def _image_response(image: CommunityPostImage) -> CommunityPostImageResponse:

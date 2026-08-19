@@ -21,6 +21,7 @@ from password_detective.db.models.community import (
     CommunityNotificationOutboxStatus,
     CommunityReportStatus,
 )
+from password_detective.db.models.community_image import CommunityImageStatus
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import (
     Principal,
@@ -37,6 +38,7 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityNotificationOutboxMetrics,
     AdminCommunityNotificationReplayRequest,
     AdminCommunityNotificationReplayResponse,
+    AdminCommunityPostImageListResponse,
     AdminCommunityPostModerateRequest,
     AdminCommunityPostMutationResponse,
     AdminCommunityReportListResponse,
@@ -58,6 +60,7 @@ from password_detective.modules.community.admin_service import (
 )
 from password_detective.modules.community.image_service import (
     get_community_image_upload_config,
+    list_admin_community_post_images,
     remove_community_post_image,
     save_community_image_upload_config,
 )
@@ -67,6 +70,26 @@ from password_detective.modules.community.schemas import (
 )
 
 admin_router = APIRouter(prefix="/admin/community", tags=["社区治理"])
+
+
+@admin_router.get(
+    "/images",
+    response_model=AdminCommunityPostImageListResponse,
+)
+def admin_community_images(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+    status: CommunityImageStatus | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminCommunityPostImageListResponse:
+    del principal
+    return list_admin_community_post_images(
+        db,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @admin_router.get(

@@ -16,6 +16,7 @@ from password_detective.db.models.community import (
     CommunityReportStatus,
     CommunitySearchRebuildStatus,
 )
+from password_detective.db.models.community_image import CommunityImageStatus
 from password_detective.db.models.user import UserRole
 from password_detective.modules.community.schemas import CommunityImageUploadConfig
 
@@ -24,6 +25,28 @@ class AdminCommunityImageUploadConfigResponse(BaseModel):
     config: CommunityImageUploadConfig
     audit_id: str | None = None
     request_id: str | None = None
+
+
+class AdminCommunityPostImageSummary(BaseModel):
+    id: str
+    owner_username: str
+    post_id: str | None
+    post_title: str | None
+    status: CommunityImageStatus
+    content_type: str
+    size_bytes: int
+    width: int
+    height: int
+    created_at: datetime
+    attached_at: datetime | None
+    removed_at: datetime | None
+
+
+class AdminCommunityPostImageListResponse(BaseModel):
+    items: list[AdminCommunityPostImageSummary]
+    page: int
+    page_size: int
+    total: int
 
 
 class AdminCommunityReportSummary(BaseModel):

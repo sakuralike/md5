@@ -117,8 +117,28 @@ def test_admin_can_enable_image_upload_and_bind_only_owned_clean_image(client):
         stored = db.get(CommunityPostImage, image["id"])
         assert stored is not None
         assert stored.status == CommunityImageStatus.ATTACHED
-        assert stored.post_id == post["id"]
-        assert db.scalar(select(CommunityPost).where(CommunityPost.id == post["id"])) is not None
+    assert stored.post_id == post["id"]
+    assert db.scalar(select(CommunityPost).where(CommunityPost.id == post["id"])) is not None
+
+    listed = client.get("/api/v1/admin/community/images", headers=owner_headers)
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["post_id"] == post["id"]
+    assert listed.json()["items"][0]["owner_username"] == "image_owner"
+    assert "asset_name" not in listed.text
+    assert "sha256" not in listed.text
+
+    removed = client.post(
+        f"/api/v1/admin/community/images/{image['id']}/remove",
+        headers=owner_headers,
+    )
+    assert removed.status_code == 200, removed.text
+    removed_list = client.get(
+        "/api/v1/admin/community/images?status=removed",
+        headers=owner_headers,
+    )
+    assert removed_list.status_code == 200
+    assert removed_list.json()["total"] == 1
 
 
 def test_image_metadata_is_rejected(client):

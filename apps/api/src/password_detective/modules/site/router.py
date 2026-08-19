@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from password_detective.db.dependencies import get_db
 from password_detective.modules.site.assets import resolve_community_avatar, resolve_site_logo
 from password_detective.modules.site.schemas import (
     AlgorithmDistributionResponse,
+    CommunityActivityTrendResponse,
     HomeDiscoveryResponse,
     PublicSiteConfigResponse,
 )
@@ -22,6 +23,7 @@ from password_detective.modules.site.seo import (
 )
 from password_detective.modules.site.service import (
     get_algorithm_distribution,
+    get_community_activity_trend,
     get_home_discovery,
     get_public_site_config,
 )
@@ -64,6 +66,22 @@ def algorithm_distribution(
 ) -> AlgorithmDistributionResponse:
     response.headers["Cache-Control"] = "public, max-age=300"
     return get_algorithm_distribution(db)
+
+
+@router.get(
+    "/community-activity-trend",
+    response_model=CommunityActivityTrendResponse,
+    dependencies=[
+        Depends(rate_limit("site.community_activity_trend", limit=120, window_seconds=60))
+    ],
+)
+def community_activity_trend(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    days: Annotated[int, Query(ge=7, le=90)] = 30,
+) -> CommunityActivityTrendResponse:
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return get_community_activity_trend(db, window_days=days)
 
 
 @router.get(
