@@ -56,6 +56,10 @@ from password_detective.modules.community.group_service import (
     require_post_visible,
     visible_group_model,
 )
+from password_detective.modules.community.image_service import (
+    attach_community_post_images,
+    list_post_images,
+)
 from password_detective.modules.community.notification_service import (
     create_notification,
     in_app_notification_visibility_condition,
@@ -297,6 +301,12 @@ def create_post(
     )
     db.add(post)
     db.flush()
+    attach_community_post_images(
+        db,
+        attachment_ids=payload.attachment_ids,
+        post=post,
+        principal=principal,
+    )
     increment_group_post_count(db, post.group_id, 1)
     record_post_published(db, post)
     _sync_mention_notifications(
@@ -2198,6 +2208,7 @@ def _post_detail(
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
         seo=post_seo_projection(db, post),
+        attachments=list_post_images(db, post),
         comments=[
             _comment_response(
                 comment,

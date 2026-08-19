@@ -39,6 +39,10 @@ from password_detective.modules.auth.schemas import (
     TokenResponse,
 )
 from password_detective.modules.auth.totp import verify_user_totp
+from password_detective.modules.registration.service import (
+    consume_registration_invite,
+    resolve_registration_invite,
+)
 from password_detective.modules.reputation.levels import (
     DAILY_ACTIVITY_GROWTH,
     record_growth_event,
@@ -179,6 +183,11 @@ def register_user(
 ) -> User:
     username = payload.username.strip().lower()
     email = str(payload.email).strip().lower()
+    invite = resolve_registration_invite(
+        db,
+        invite_code=payload.invite_code,
+        context=context,
+    )
     existing = db.scalar(select(User.id).where(or_(User.username == username, User.email == email)))
     if existing:
         raise AppError("auth.account_conflict", "用户名或邮箱已被使用", status_code=409)
@@ -194,6 +203,12 @@ def register_user(
     except IntegrityError as exc:
         db.rollback()
         raise AppError("auth.account_conflict", "用户名或邮箱已被使用", status_code=409) from exc
+    consume_registration_invite(
+        db,
+        invite=invite,
+        user_id=user.id,
+        context=context,
+    )
     write_audit_log(
         db,
         actor_id=user.id,
@@ -203,6 +218,7 @@ def register_user(
         result="success",
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,
+        details={"registration_invite_id": invite.id if invite is not None else None},
     )
     db.commit()
     db.refresh(user)

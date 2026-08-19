@@ -5,6 +5,8 @@ import {
   type AdminUserDetail,
   type AdminUserListItem,
   type AdminUserListResponse,
+  type AdminUserProfileReasonCode,
+  type AdminUserProfileUpdateResponse,
   type AdminUserSessionRevocationResponse,
   type AdminUserStatusChangeResponse,
   type AdminUserStatusReasonCode,
@@ -76,6 +78,37 @@ export interface AdminUserSessionRevocationInput {
   expectedActiveSessionCount: number;
   reasonCode: AdminSessionRevocationReasonCode;
   reauthToken: string;
+}
+
+export interface AdminUserProfileUpdateInput {
+  expectedUpdatedAt: string;
+  email?: string;
+  emailVerified?: boolean;
+  reasonCode: AdminUserProfileReasonCode;
+  reauthToken: string;
+}
+
+export function updateAdminUserProfile(
+  userId: string,
+  input: AdminUserProfileUpdateInput,
+  token: string,
+  idempotencyKey: string,
+): Promise<AdminUserProfileUpdateResponse> {
+  return apiRequest<AdminUserProfileUpdateResponse>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({
+        expected_updated_at: input.expectedUpdatedAt,
+        ...(input.email ? { email: input.email } : {}),
+        ...(input.emailVerified === undefined ? {} : { email_verified: input.emailVerified }),
+        reason_code: input.reasonCode,
+        reauth_token: input.reauthToken,
+      }),
+    },
+    token,
+  );
 }
 
 export function reauthenticateAdmin(

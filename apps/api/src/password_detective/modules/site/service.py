@@ -4,13 +4,18 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from password_detective.core.maintenance import load_maintenance_runtime_config
-from password_detective.db.models.archive_fingerprint import ArchiveFingerprint
+from password_detective.core.time import utc_now
+from password_detective.db.models.archive_fingerprint import (
+    ArchiveFingerprint,
+    FingerprintAlgorithm,
+)
 from password_detective.db.models.hash_detail import (
     HashComment,
     HashLike,
     HashVote,
     HashVoteOutcome,
 )
+from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.submission import Submission
 from password_detective.db.models.system_setting import SystemSetting
@@ -21,11 +26,15 @@ from password_detective.modules.admin.setting_schemas import (
     SiteNavigationItem,
     default_site_navigation,
 )
+from password_detective.modules.registration.service import get_registration_policy
 from password_detective.modules.site.schemas import (
+    AlgorithmDistributionItem,
+    AlgorithmDistributionResponse,
     HomeDiscoveryResponse,
     HotHashSummary,
     PublicLegalConfig,
     PublicMaintenanceConfig,
+    PublicRegistrationConfig,
     PublicSeoConfig,
     PublicSiteConfigResponse,
     UserRankingSummary,
@@ -107,6 +116,7 @@ def get_public_site_config(
             active=maintenance.enabled and not maintenance_force_disabled,
             message=maintenance.message,
         ),
+        registration=PublicRegistrationConfig(mode=get_registration_policy(db).mode),
     )
 
 
@@ -178,4 +188,61 @@ def get_home_discovery(db: Session, *, limit: int = 5) -> HomeDiscoveryResponse:
             UserRankingSummary(rank=index, uid=row.id, username=row.username, score=row.score)
             for index, row in enumerate(points_rows, start=1)
         ],
+    )
+
+
+def _count_band(count: int) -> str:
+    if count == 0:
+        return "0"
+    if count < 10:
+        return "少于 10"
+    if count < 50:
+        return "10-49"
+    if count < 100:
+        return "50-99"
+    if count < 500:
+        return "100-499"
+    if count < 1_000:
+        return "500-999"
+    return f"{count // 1_000}k+"
+
+
+def get_algorithm_distribution(db: Session) -> AlgorithmDistributionResponse:
+    rows = db.execute(
+        select(
+            ArchiveFingerprint.algorithm,
+            func.count(func.distinct(ArchiveFingerprint.id)).label("fingerprint_count"),
+        )
+        .join(
+            PasswordCandidate,
+            PasswordCandidate.archive_id == ArchiveFingerprint.archive_id,
+        )
+        .where(PasswordCandidate.status == CandidateStatus.VERIFIED)
+        .group_by(ArchiveFingerprint.algorithm)
+    ).all()
+    counts = {row.algorithm: int(row.fingerprint_count) for row in rows}
+    total = sum(counts.values())
+    algorithms = [
+        FingerprintAlgorithm.MD5,
+        FingerprintAlgorithm.SHA1,
+        FingerprintAlgorithm.SHA256,
+        FingerprintAlgorithm.SHA512,
+    ]
+
+    def privacy_percentage(count: int) -> float:
+        if total == 0 or count == 0:
+            return 0.0
+        return float(min(100, round((count * 100 / total) / 5) * 5))
+
+    return AlgorithmDistributionResponse(
+        total_count_band=_count_band(total),
+        items=[
+            AlgorithmDistributionItem(
+                algorithm=algorithm,
+                count_band=_count_band(counts.get(algorithm, 0)),
+                percentage=privacy_percentage(counts.get(algorithm, 0)),
+            )
+            for algorithm in algorithms
+        ],
+        generated_at=utc_now(),
     )

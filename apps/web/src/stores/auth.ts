@@ -116,13 +116,23 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  async function register(username: string, email: string, password: string): Promise<void> {
+  async function register(
+    username: string,
+    email: string,
+    password: string,
+    inviteCode?: string,
+  ): Promise<void> {
     busy.value = true;
     error.value = "";
     try {
       await apiRequest<User>("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}),
+        }),
       });
       await login(username, password);
     } catch (caught) {

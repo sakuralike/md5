@@ -66,6 +66,10 @@ from password_detective.db.models.community import (
     CommunityUserFollow,
     CommunityUserMute,
 )
+from password_detective.db.models.community_image import (
+    CommunityImageStatus,
+    CommunityPostImage,
+)
 from password_detective.db.models.desktop_announcement import (
     DesktopAnnouncement,
     DesktopAnnouncementContentType,
@@ -106,6 +110,10 @@ from password_detective.db.models.privacy_request import (
 from password_detective.db.models.reauthentication_grant import (
     ReauthenticationGrant,
     ReauthenticationPurpose,
+)
+from password_detective.db.models.registration_invite import (
+    RegistrationInvite,
+    RegistrationInviteUse,
 )
 from password_detective.db.models.reputation_event import ReputationEvent
 from password_detective.db.models.reward_adjustment_event import (
@@ -232,6 +240,8 @@ __all__ = [
     "CommunityNotificationOutboxStatus",
     "CommunityNotificationSource",
     "CommunityInteractionPolicy",
+    "CommunityImageStatus",
+    "CommunityPostImage",
     "CommunityPublicProfile",
     "CommunityRelationVisibility",
     "CommunityUserBlock",
@@ -293,6 +303,8 @@ __all__ = [
     "RiskAlertSeverity",
     "RiskAlertStatus",
     "ReputationEvent",
+    "RegistrationInvite",
+    "RegistrationInviteUse",
     "RoleChangeRequest",
     "RoleChangeRequestStatus",
     "RewardAdjustmentDirection",

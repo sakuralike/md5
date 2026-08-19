@@ -1,4 +1,8 @@
-import type { HomeDiscoveryResponse, PublicSiteConfig } from "@password-detective/api-contract";
+import type {
+  AlgorithmDistributionResponse,
+  HomeDiscoveryResponse,
+  PublicSiteConfig,
+} from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
 export function createDefaultPublicSiteConfig(): PublicSiteConfig {
@@ -29,6 +33,9 @@ export function createDefaultPublicSiteConfig(): PublicSiteConfig {
       active: false,
       message: "系统正在维护，请稍后再试。",
     },
+    registration: {
+      mode: "open",
+    },
   };
 }
 
@@ -38,4 +45,8 @@ export function getPublicSiteConfig(): Promise<PublicSiteConfig> {
 
 export function getHomeDiscovery(): Promise<HomeDiscoveryResponse> {
   return apiRequest<HomeDiscoveryResponse>("/site/home-discovery");
+}
+
+export function getAlgorithmDistribution(): Promise<AlgorithmDistributionResponse> {
+  return apiRequest<AlgorithmDistributionResponse>("/site/algorithm-distribution");
 }

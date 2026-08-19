@@ -7,13 +7,14 @@ from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings, get_settings
+from password_detective.core.errors import AppError
 from password_detective.core.idempotency import (
     abandon_idempotency,
     acquire_idempotency,
@@ -67,6 +68,12 @@ from password_detective.modules.community.group_service import (
     list_groups,
     update_group,
 )
+from password_detective.modules.community.image_assets import store_community_post_image
+from password_detective.modules.community.image_service import (
+    create_community_post_image,
+    get_community_image_upload_config,
+    resolve_authorized_post_image,
+)
 from password_detective.modules.community.notification_stream import (
     latest_delivered_event_id,
     list_delivered_events,
@@ -100,6 +107,7 @@ from password_detective.modules.community.schemas import (
     CommunityGroupSeoUpdateRequest,
     CommunityGroupUpdateRequest,
     CommunityHomeResponse,
+    CommunityImageUploadConfig,
     CommunityMuteRequest,
     CommunityNotificationListResponse,
     CommunityNotificationPreferencesResponse,
@@ -108,6 +116,7 @@ from password_detective.modules.community.schemas import (
     CommunityOwnProfileResponse,
     CommunityPostCreateRequest,
     CommunityPostDetail,
+    CommunityPostImageResponse,
     CommunityPostInteractionResponse,
     CommunityPostListResponse,
     CommunityPostSeoUpdateRequest,
@@ -416,6 +425,76 @@ def community_my_profile(
     principal: Annotated[Principal, Depends(get_current_principal)],
 ) -> CommunityOwnProfileResponse:
     return get_own_profile(db, principal=principal)
+
+
+@router.get("/image-upload-config", response_model=CommunityImageUploadConfig)
+def community_image_upload_config(
+    db: Annotated[Session, Depends(get_db)],
+) -> CommunityImageUploadConfig:
+    return get_community_image_upload_config(db)
+
+
+@router.post(
+    "/images",
+    response_model=CommunityPostImageResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("community.image.upload", limit=20, window_seconds=3600))],
+)
+async def community_image_upload(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> CommunityPostImageResponse:
+    config = get_community_image_upload_config(db)
+    if not config.enabled:
+        raise AppError(
+            "community.image_upload_disabled",
+            "社区主题图片上传当前未启用",
+            status_code=403,
+        )
+    if not principal.user.email_verified:
+        raise AppError(
+            "community.email_verification_required",
+            "完成邮箱验证后才能上传主题图片",
+            status_code=403,
+        )
+    stored = await store_community_post_image(
+        request,
+        settings,
+        max_bytes=config.max_bytes,
+        max_pixels=config.max_pixels,
+    )
+    return create_community_post_image(
+        db,
+        stored=stored,
+        principal=principal,
+        context=get_client_context(request),
+    )
+
+
+@router.get("/images/{image_id}/content", response_class=FileResponse)
+def community_image_content(
+    image_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+) -> FileResponse:
+    path, content_type = resolve_authorized_post_image(
+        db,
+        settings,
+        image_id=image_id,
+        principal=principal,
+    )
+    return FileResponse(
+        path,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post(

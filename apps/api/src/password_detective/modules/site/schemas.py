@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -31,6 +32,10 @@ class PublicMaintenanceConfig(BaseModel):
     message: str
 
 
+class PublicRegistrationConfig(BaseModel):
+    mode: Literal["open", "invite_only"]
+
+
 class PublicSiteConfigResponse(BaseModel):
     site_name: str
     site_logo_url: str
@@ -38,6 +43,7 @@ class PublicSiteConfigResponse(BaseModel):
     seo: PublicSeoConfig
     legal: PublicLegalConfig
     maintenance: PublicMaintenanceConfig
+    registration: PublicRegistrationConfig
 
 
 class HotHashSummary(BaseModel):
@@ -60,3 +66,15 @@ class HomeDiscoveryResponse(BaseModel):
     hot_hashes: list[HotHashSummary]
     contribution_leaders: list[UserRankingSummary]
     points_leaders: list[UserRankingSummary]
+
+
+class AlgorithmDistributionItem(BaseModel):
+    algorithm: FingerprintAlgorithm
+    count_band: str
+    percentage: float = Field(ge=0, le=100)
+
+
+class AlgorithmDistributionResponse(BaseModel):
+    total_count_band: str
+    items: list[AlgorithmDistributionItem]
+    generated_at: datetime

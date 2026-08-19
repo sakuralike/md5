@@ -130,6 +130,9 @@ describe("shared API contract", () => {
         active: false,
         message: "系统正在维护，请稍后再试。",
       },
+      registration: {
+        mode: "open",
+      },
     };
     const discovery: HomeDiscoveryResponse = {
       hot_hashes: [

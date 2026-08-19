@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.user import UserRole, UserStatus
@@ -25,6 +25,12 @@ class AdminSessionRevocationReasonCode(StrEnum):
     USER_REQUEST = "user_request"
     INCIDENT_RESPONSE = "incident_response"
     MANUAL_REVIEW = "manual_review"
+
+
+class AdminUserProfileReasonCode(StrEnum):
+    PROFILE_CORRECTION = "profile_correction"
+    USER_REQUEST = "user_request"
+    COMPLIANCE_REVIEW = "compliance_review"
 
 
 class AdminReauthenticationRequest(BaseModel):
@@ -68,6 +74,20 @@ class AdminUserSessionRevocationRequest(BaseModel):
     expected_active_session_count: int = Field(ge=0)
     reason_code: AdminSessionRevocationReasonCode
     reauth_token: str = Field(min_length=16, max_length=256)
+
+
+class AdminUserProfileUpdateRequest(BaseModel):
+    expected_updated_at: datetime
+    email: EmailStr | None = None
+    email_verified: bool | None = None
+    reason_code: AdminUserProfileReasonCode
+    reauth_token: str = Field(min_length=16, max_length=256)
+
+    @model_validator(mode="after")
+    def require_update(self) -> AdminUserProfileUpdateRequest:
+        if self.email is None and self.email_verified is None:
+            raise ValueError("至少提交一项资料变更")
+        return self
 
 
 class AdminUserListItem(BaseModel):
@@ -116,5 +136,14 @@ class AdminUserStatusChangeResponse(BaseModel):
 class AdminUserSessionRevocationResponse(BaseModel):
     user_id: str
     revoked_session_count: int
+    audit_id: str
+    request_id: str | None
+
+
+class AdminUserProfileUpdateResponse(BaseModel):
+    user_id: str
+    masked_email: str
+    email_verified: bool
+    updated_at: datetime
     audit_id: str
     request_id: str | None

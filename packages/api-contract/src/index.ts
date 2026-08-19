@@ -1489,6 +1489,56 @@ export interface PublicSeoConfig {
   open_graph_enabled: boolean;
 }
 
+export type AdminUserProfileReasonCode =
+  | "profile_correction"
+  | "user_request"
+  | "compliance_review";
+
+export interface AdminUserProfileUpdateRequest {
+  expected_updated_at: string;
+  email?: string;
+  email_verified?: boolean;
+  reason_code: AdminUserProfileReasonCode;
+  reauth_token: string;
+}
+
+export interface AdminUserProfileUpdateResponse {
+  user_id: string;
+  masked_email: string;
+  email_verified: boolean;
+  updated_at: string;
+  audit_id: string;
+  request_id: string | null;
+}
+
+export type RegistrationMode = "open" | "invite_only";
+export type RegistrationInviteStatus = "active" | "exhausted" | "expired" | "revoked";
+
+export interface RegistrationPolicy {
+  mode: RegistrationMode;
+}
+
+export interface RegistrationInvite {
+  id: string;
+  label: string;
+  max_uses: number;
+  use_count: number;
+  remaining_uses: number;
+  status: RegistrationInviteStatus;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface RegistrationInviteCreated extends RegistrationInvite {
+  code: string;
+}
+
+export interface RegistrationInviteListResponse {
+  items: RegistrationInvite[];
+  total: number;
+}
+
 export interface PublicLegalConfig {
   icp_record: string;
   public_security_record: string;
@@ -1501,6 +1551,10 @@ export interface PublicMaintenanceConfig {
   message: string;
 }
 
+export interface PublicRegistrationConfig {
+  mode: RegistrationMode;
+}
+
 export interface PublicSiteConfig {
   site_name: string;
   site_logo_url: string;
@@ -1508,6 +1562,7 @@ export interface PublicSiteConfig {
   seo: PublicSeoConfig;
   legal: PublicLegalConfig;
   maintenance: PublicMaintenanceConfig;
+  registration: PublicRegistrationConfig;
 }
 
 export interface HotHashSummary {
@@ -1738,6 +1793,18 @@ export interface CommunityGroupUpdateRequest {
   status: CommunityGroupStatus;
 }
 
+export interface AlgorithmDistributionItem {
+  algorithm: FingerprintAlgorithm;
+  count_band: string;
+  percentage: number;
+}
+
+export interface AlgorithmDistributionResponse {
+  total_count_band: string;
+  items: AlgorithmDistributionItem[];
+  generated_at: string;
+}
+
 export interface CommunityGroupSeoUpdateRequest {
   seo_title?: string | null;
   seo_description?: string | null;
@@ -1772,6 +1839,29 @@ export interface CommunityPostCreateRequest {
   title: string;
   content: string;
   rules_accepted: boolean;
+  attachment_ids?: string[];
+}
+
+export interface CommunityImageUploadConfig {
+  enabled: boolean;
+  max_bytes: number;
+  max_pixels: number;
+  max_per_post: number;
+}
+
+export interface CommunityPostImage {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+}
+
+export interface AdminCommunityImageUploadConfigResponse {
+  config: CommunityImageUploadConfig;
+  audit_id: string | null;
+  request_id: string | null;
 }
 
 export interface CommunityPostUpdateRequest {
@@ -1870,6 +1960,7 @@ export interface CommunityPostDetail {
   created_at: string;
   comments: CommunityCommentResponse[];
   seo: CommunitySeoProjection;
+  attachments: CommunityPostImage[];
 }
 
 export interface CommunityHomeResponse {

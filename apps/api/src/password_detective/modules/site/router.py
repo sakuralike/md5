@@ -10,13 +10,21 @@ from password_detective.core.config import Settings, get_settings
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.modules.site.assets import resolve_community_avatar, resolve_site_logo
-from password_detective.modules.site.schemas import HomeDiscoveryResponse, PublicSiteConfigResponse
+from password_detective.modules.site.schemas import (
+    AlgorithmDistributionResponse,
+    HomeDiscoveryResponse,
+    PublicSiteConfigResponse,
+)
 from password_detective.modules.site.seo import (
     build_robots_txt,
     build_sitemap_xml,
     seo_settings_for_files,
 )
-from password_detective.modules.site.service import get_home_discovery, get_public_site_config
+from password_detective.modules.site.service import (
+    get_algorithm_distribution,
+    get_home_discovery,
+    get_public_site_config,
+)
 
 router = APIRouter(prefix="/site", tags=["站点公开信息"])
 
@@ -43,6 +51,19 @@ def public_site_config(
 )
 def home_discovery(db: Annotated[Session, Depends(get_db)]) -> HomeDiscoveryResponse:
     return get_home_discovery(db, limit=5)
+
+
+@router.get(
+    "/algorithm-distribution",
+    response_model=AlgorithmDistributionResponse,
+    dependencies=[Depends(rate_limit("site.algorithm_distribution", limit=120, window_seconds=60))],
+)
+def algorithm_distribution(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+) -> AlgorithmDistributionResponse:
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return get_algorithm_distribution(db)
 
 
 @router.get(

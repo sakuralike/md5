@@ -81,6 +81,8 @@ from password_detective.modules.admin.user_schemas import (
     AdminUserDetail,
     AdminUserListItem,
     AdminUserListResponse,
+    AdminUserProfileUpdateRequest,
+    AdminUserProfileUpdateResponse,
     AdminUserSessionRevocationRequest,
     AdminUserSessionRevocationResponse,
     AdminUserStatusChangeRequest,
@@ -93,6 +95,7 @@ from password_detective.modules.admin.users import (
     get_admin_user,
     list_admin_users,
     revoke_admin_user_sessions,
+    update_admin_user_profile,
 )
 from password_detective.modules.auth.context import get_client_context, get_notification_gateway
 from password_detective.modules.auth.dependencies import (
@@ -115,6 +118,21 @@ from password_detective.modules.auth.service import (
     rotate_refresh_token,
 )
 from password_detective.modules.auth.totp import begin_totp_setup, confirm_totp_setup, disable_totp
+from password_detective.modules.registration.schemas import (
+    RegistrationInviteCreatedResponse,
+    RegistrationInviteCreateRequest,
+    RegistrationInviteListResponse,
+    RegistrationInviteResponse,
+    RegistrationPolicyResponse,
+    RegistrationPolicyUpdate,
+)
+from password_detective.modules.registration.service import (
+    create_registration_invite,
+    get_registration_policy,
+    list_registration_invites,
+    revoke_registration_invite,
+    save_registration_policy,
+)
 from password_detective.modules.site.assets import store_site_logo
 
 router = APIRouter(prefix="/admin", tags=["管理端"])
@@ -301,6 +319,137 @@ def admin_user_detail(
     _: Annotated[Principal, Depends(require_user_governance_admin)],
 ) -> AdminUserDetail:
     return get_admin_user(db, user_id)
+
+
+@router.get("/registration/policy", response_model=RegistrationPolicyResponse)
+def admin_registration_policy(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> RegistrationPolicyResponse:
+    return get_registration_policy(db)
+
+
+@router.put("/registration/policy", response_model=RegistrationPolicyResponse)
+def admin_registration_policy_save(
+    payload: RegistrationPolicyUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> RegistrationPolicyResponse:
+    return save_registration_policy(
+        db,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
+
+
+@router.get("/registration/invites", response_model=RegistrationInviteListResponse)
+def admin_registration_invite_list(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> RegistrationInviteListResponse:
+    return list_registration_invites(db)
+
+
+@router.post(
+    "/registration/invites",
+    response_model=RegistrationInviteCreatedResponse,
+    status_code=201,
+    dependencies=[
+        Depends(
+            rate_limit(
+                "admin.registration.invites.create",
+                limit=20,
+                window_seconds=60,
+            )
+        )
+    ],
+)
+def admin_registration_invite_create(
+    payload: RegistrationInviteCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> RegistrationInviteCreatedResponse:
+    return create_registration_invite(
+        db,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
+
+
+@router.post(
+    "/registration/invites/{invite_id}/revoke",
+    response_model=RegistrationInviteResponse,
+)
+def admin_registration_invite_revoke(
+    invite_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+) -> RegistrationInviteResponse:
+    return revoke_registration_invite(
+        db,
+        invite_id=invite_id,
+        principal=principal,
+        context=get_client_context(request),
+    )
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=AdminUserProfileUpdateResponse,
+    dependencies=[Depends(rate_limit("admin.users.profile", limit=30, window_seconds=60))],
+)
+def admin_user_profile_update(
+    user_id: str,
+    payload: AdminUserProfileUpdateRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_user_governance_admin)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> AdminUserProfileUpdateResponse:
+    request_hash = payload_digest(
+        {
+            "user_id": user_id,
+            "expected_updated_at": payload.expected_updated_at.isoformat(),
+            "email": str(payload.email).lower() if payload.email is not None else None,
+            "email_verified": payload.email_verified,
+            "reason_code": payload.reason_code.value,
+        }
+    )
+    lease = acquire_idempotency(
+        db,
+        scope="admin.users.profile",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    if lease.cached_response is not None:
+        response.status_code = lease.cached_status or status.HTTP_200_OK
+        return AdminUserProfileUpdateResponse.model_validate(lease.cached_response)
+    try:
+        result = update_admin_user_profile(
+            db,
+            user_id=user_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_200_OK,
+            response_body=result.model_dump(mode="json"),
+        )
+        return result
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise
 
 
 @router.patch(

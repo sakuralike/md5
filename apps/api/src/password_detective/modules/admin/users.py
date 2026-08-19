@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import ColumnElement, and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +29,8 @@ from password_detective.modules.admin.user_schemas import (
     AdminUserDetail,
     AdminUserListItem,
     AdminUserListResponse,
+    AdminUserProfileUpdateRequest,
+    AdminUserProfileUpdateResponse,
     AdminUserSessionRevocationRequest,
     AdminUserSessionRevocationResponse,
     AdminUserStatusChangeRequest,
@@ -46,6 +48,10 @@ class AdminUserFilters:
     status: UserStatus | None = None
     role: UserRole | None = None
     query: str | None = None
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def _escape_like(value: str) -> str:
@@ -345,6 +351,83 @@ def _validate_status_reason(payload: AdminUserStatusChangeRequest) -> None:
             "原因码与目标账号状态不匹配",
             status_code=400,
         )
+
+
+def update_admin_user_profile(
+    db: Session,
+    *,
+    user_id: str,
+    payload: AdminUserProfileUpdateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminUserProfileUpdateResponse:
+    user = _locked_governance_target(db, user_id=user_id, actor_id=principal.user.id)
+    if _aware(user.updated_at) != _aware(payload.expected_updated_at):
+        raise AppError(
+            "admin.user_profile_conflict",
+            "用户资料已发生变化，请刷新后重试",
+            status_code=409,
+            details={"current_updated_at": user.updated_at.isoformat()},
+        )
+
+    normalized_email = str(payload.email).strip().lower() if payload.email is not None else None
+    email_changed = normalized_email is not None and normalized_email != user.email
+    if email_changed:
+        existing = db.scalar(
+            select(User.id).where(User.email == normalized_email, User.id != user.id)
+        )
+        if existing:
+            raise AppError("admin.user_conflict", "邮箱已被其他账号使用", status_code=409)
+
+    next_verified = payload.email_verified
+    if email_changed and next_verified is None:
+        next_verified = False
+    verification_changed = (
+        next_verified is not None and next_verified != user.email_verified
+    )
+    if not email_changed and not verification_changed:
+        raise AppError(
+            "admin.user_profile_unchanged",
+            "提交的用户资料没有变化",
+            status_code=409,
+        )
+
+    _consume_admin_governance_grant(
+        db,
+        payload_token=payload.reauth_token,
+        principal=principal,
+    )
+    changed_fields: list[str] = []
+    if email_changed and normalized_email is not None:
+        user.email = normalized_email
+        changed_fields.append("email")
+    if next_verified is not None:
+        user.email_verified_at = utc_now() if next_verified else None
+        changed_fields.append("email_verified")
+    db.flush()
+    audit = write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="admin.user.profile_updated",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "changed_fields": changed_fields,
+            "reason_code": payload.reason_code.value,
+        },
+    )
+    db.flush()
+    return AdminUserProfileUpdateResponse(
+        user_id=user.id,
+        masked_email=_mask_email(user.email),
+        email_verified=user.email_verified,
+        updated_at=user.updated_at,
+        audit_id=audit.id,
+        request_id=context.request_id,
+    )
 
 
 def change_admin_user_status(

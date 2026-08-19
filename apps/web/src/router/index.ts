@@ -26,6 +26,7 @@ import ResetPasswordPage from "../pages/ResetPasswordPage.vue";
 import ReputationPage from "../pages/ReputationPage.vue";
 import SecurityPage from "../pages/SecurityPage.vue";
 import SecurityToolsPage from "../pages/SecurityToolsPage.vue";
+import StatisticsPage from "../pages/StatisticsPage.vue";
 import SubmissionsPage from "../pages/SubmissionsPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
 import ThirdPartyAuthorizePage from "../pages/ThirdPartyAuthorizePage.vue";
@@ -58,6 +59,7 @@ const router = createRouter({
     { path: "/verify-email", component: VerifyEmailPage, meta: guestSeo },
     { path: "/security", component: SecurityPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/tools", component: SecurityToolsPage, meta: { ...publicSeo, seoTitle: "本地安全工具" } },
+    { path: "/statistics", component: StatisticsPage, meta: { ...publicSeo, seoTitle: "算法分布" } },
     { path: "/user-center", component: UserCenterPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/developer", redirect: "/developer/applications", meta: privateSeo },
     { path: "/developer/apply", component: DeveloperApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },

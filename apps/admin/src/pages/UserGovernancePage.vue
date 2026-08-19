@@ -6,6 +6,7 @@ import {
   type AdminUserCreateRequest,
   type AdminUserDetail,
   type AdminUserListItem,
+  type AdminUserProfileReasonCode,
   type AdminUserStatusReasonCode,
   type UserRole,
   type UserStatus,
@@ -20,10 +21,12 @@ import {
   ShieldCheck,
   ShieldOff,
   UserPlus,
+  UserRoundPen,
   Users,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import UserLevelsManagement from "@/components/UserLevelsManagement.vue";
+import RegistrationManagement from "@/components/RegistrationManagement.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +61,7 @@ import {
   listAdminUsers,
   reauthenticateAdmin,
   revokeAdminUserSessions,
+  updateAdminUserProfile,
   type AdminUserFilters,
 } from "../services/users";
 import { useAdminAuthStore } from "../stores/auth";
@@ -98,6 +102,14 @@ const createEmailVerified = ref("true");
 const createBusy = ref(false);
 const createError = ref("");
 const createSuccess = ref("");
+const profileEditing = ref(false);
+const profileEmail = ref("");
+const profileEmailVerified = ref("keep");
+const profileReason = ref<AdminUserProfileReasonCode>("profile_correction");
+const profilePassword = ref("");
+const profileTotp = ref("");
+const profileBusy = ref(false);
+const profileError = ref("");
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const rangeLabel = computed(() => {
@@ -215,12 +227,23 @@ function resetActionForm(): void {
   actionError.value = "";
 }
 
+function resetProfileForm(): void {
+  profileEditing.value = false;
+  profileEmail.value = "";
+  profileEmailVerified.value = "keep";
+  profileReason.value = "profile_correction";
+  profilePassword.value = "";
+  profileTotp.value = "";
+  profileError.value = "";
+}
+
 async function openDetail(item: AdminUserListItem): Promise<void> {
   detailOpen.value = true;
   selected.value = null;
   detailLoading.value = true;
   actionSuccess.value = "";
   resetActionForm();
+  resetProfileForm();
   error.value = "";
   try {
     selected.value = await getAdminUser(item.id, auth.accessToken);
@@ -228,6 +251,46 @@ async function openDetail(item: AdminUserListItem): Promise<void> {
     error.value = describeError(value);
   } finally {
     detailLoading.value = false;
+  }
+}
+
+async function submitProfileUpdate(): Promise<void> {
+  if (!selected.value || !auth.accessToken) return;
+  profileBusy.value = true;
+  profileError.value = "";
+  actionSuccess.value = "";
+  const userId = selected.value.id;
+  try {
+    const grant = await reauthenticateAdmin(
+      {
+        currentPassword: profilePassword.value,
+        ...(profileTotp.value ? { totpCode: profileTotp.value } : {}),
+      },
+      auth.accessToken,
+    );
+    await updateAdminUserProfile(
+      userId,
+      {
+        expectedUpdatedAt: selected.value.updated_at,
+        ...(profileEmail.value.trim() ? { email: profileEmail.value.trim() } : {}),
+        ...(profileEmailVerified.value === "keep"
+          ? {}
+          : { emailVerified: profileEmailVerified.value === "true" }),
+        reasonCode: profileReason.value,
+        reauthToken: grant.reauth_token,
+      },
+      auth.accessToken,
+      `admin-profile-${createClientId()}`,
+    );
+    actionSuccess.value = "用户非权限资料已更新，审计事件已记录。";
+    resetProfileForm();
+    await refreshSelectedUser(userId);
+  } catch (value) {
+    profileError.value = describeError(value);
+    profilePassword.value = "";
+    profileTotp.value = "";
+  } finally {
+    profileBusy.value = false;
   }
 }
 
@@ -443,6 +506,8 @@ onMounted(() => void loadUsers());
       </form>
     </section>
 
+    <RegistrationManagement />
+
     <div v-if="error" class="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
       {{ error }}
     </div>
@@ -580,6 +645,62 @@ onMounted(() => void loadUsers());
           <div v-if="actionSuccess" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status" aria-live="polite">
             {{ actionSuccess }}
           </div>
+
+          <section v-if="!selectedIsProtected" class="space-y-4 rounded-lg border p-4">
+            <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div class="flex items-start gap-3">
+                <UserRoundPen class="mt-0.5 h-5 w-5 text-primary" />
+                <div>
+                  <h3 class="font-semibold">编辑非权限资料</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">仅可修改邮箱及其验证状态，不包含角色、密码、积分或安全凭据。</p>
+                </div>
+              </div>
+              <Button v-if="!profileEditing" size="sm" variant="outline" @click="profileEditing = true">编辑资料</Button>
+            </div>
+            <form v-if="profileEditing" class="space-y-4 border-t pt-4" @submit.prevent="submitProfileUpdate">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="space-y-2">
+                  <Label for="profile-email">新邮箱（可选）</Label>
+                  <Input id="profile-email" v-model="profileEmail" type="email" autocomplete="off" :placeholder="selected.masked_email" />
+                </div>
+                <div class="space-y-2">
+                  <Label>邮箱验证状态</Label>
+                  <Select v-model="profileEmailVerified">
+                    <SelectTrigger aria-label="资料编辑邮箱验证状态"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keep">保持当前状态</SelectItem>
+                      <SelectItem value="true">标记为已验证</SelectItem>
+                      <SelectItem value="false">标记为待验证</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div class="space-y-2">
+                  <Label>修改原因</Label>
+                  <Select v-model="profileReason">
+                    <SelectTrigger aria-label="资料修改原因"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="profile_correction">资料纠正</SelectItem>
+                      <SelectItem value="user_request">用户请求</SelectItem>
+                      <SelectItem value="compliance_review">合规复核</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div class="space-y-2">
+                  <Label for="profile-admin-password">管理员当前密码</Label>
+                  <Input id="profile-admin-password" v-model="profilePassword" type="password" autocomplete="current-password" required />
+                </div>
+                <div class="space-y-2 sm:col-span-2">
+                  <Label for="profile-admin-totp">TOTP 验证码（已启用时填写）</Label>
+                  <Input id="profile-admin-totp" v-model="profileTotp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" />
+                </div>
+              </div>
+              <p v-if="profileError" class="text-sm text-destructive" role="alert">{{ profileError }}</p>
+              <div class="flex justify-end gap-2">
+                <Button type="button" variant="ghost" :disabled="profileBusy" @click="resetProfileForm">取消</Button>
+                <Button type="submit" :disabled="profileBusy">{{ profileBusy ? "保存中" : "保存资料" }}</Button>
+              </div>
+            </form>
+          </section>
 
           <section class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
             <div class="flex items-start gap-3">

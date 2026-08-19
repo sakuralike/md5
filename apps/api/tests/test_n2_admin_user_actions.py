@@ -119,6 +119,75 @@ def test_admin_user_governance_reauthentication_is_admin_only(client):
     assert token.startswith("reauth_")
 
 
+def test_admin_can_edit_non_privileged_user_profile_with_idempotent_audit(client):
+    _, _, target_id = _register_and_login(client, "profile_target")
+    admin_headers, admin_id, admin_secret = _privileged_session(
+        client,
+        suffix="profile_admin",
+        role=UserRole.ADMIN,
+    )
+    detail = client.get(f"/api/v1/admin/users/{target_id}", headers=admin_headers)
+    assert detail.status_code == 200
+    reauth_token = _reauthenticate(client, admin_headers, admin_secret)
+    payload = {
+        "expected_updated_at": detail.json()["updated_at"],
+        "email": "profile-corrected@synthetic.example.com",
+        "email_verified": True,
+        "reason_code": "profile_correction",
+        "reauth_token": reauth_token,
+    }
+    headers = {**admin_headers, "Idempotency-Key": "n2-profile-update-0001"}
+    updated = client.patch(
+        f"/api/v1/admin/users/{target_id}",
+        headers=headers,
+        json=payload,
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["user_id"] == target_id
+    assert body["email_verified"] is True
+    assert "profile-corrected@" not in updated.text
+
+    replay = client.patch(
+        f"/api/v1/admin/users/{target_id}",
+        headers=headers,
+        json=payload,
+    )
+    assert replay.status_code == 200
+    assert replay.json() == body
+
+    self_detail = client.get(f"/api/v1/admin/users/{admin_id}", headers=admin_headers)
+    assert self_detail.status_code == 200
+    self_reauth = _reauthenticate(client, admin_headers, admin_secret)
+    forbidden = client.patch(
+        f"/api/v1/admin/users/{admin_id}",
+        headers={**admin_headers, "Idempotency-Key": "n2-profile-self-0001"},
+        json={
+            "expected_updated_at": self_detail.json()["updated_at"],
+            "email_verified": True,
+            "reason_code": "compliance_review",
+            "reauth_token": self_reauth,
+        },
+    )
+    assert forbidden.status_code == 403
+    assert forbidden.json()["code"] == "admin.user_self_governance_forbidden"
+
+    with client.app.state.database.session_factory() as db:
+        target = db.get(User, target_id)
+        assert target is not None
+        assert target.email == "profile-corrected@synthetic.example.com"
+        assert target.email_verified
+        audits = db.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "admin.user.profile_updated",
+                AuditLog.target_id == target_id,
+            )
+        ).all()
+        assert len(audits) == 1
+        assert audits[0].details["changed_fields"] == ["email", "email_verified"]
+        assert "profile-corrected" not in str(audits[0].details)
+
+
 def test_admin_can_disable_and_restore_user_with_idempotent_audit(client):
     _, target_headers, target_id = _register_and_login(client, "status_target")
     _, _, replay_target_id = _register_and_login(client, "status_replay_target")

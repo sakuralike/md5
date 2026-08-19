@@ -5,6 +5,7 @@ import type {
   AdminCommunityBoardUpdateRequest,
   CommunityBoardStatus,
   UserRole,
+  CommunityImageUploadConfig,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,8 @@ import {
   createCommunityConfigurationKey,
   listCommunityBoards,
   updateCommunityBoard,
+  getCommunityImageUploadConfig,
+  saveCommunityImageUploadConfig,
 } from "../services/communityConfiguration";
 import { useAdminAuthStore } from "../stores/auth";
 
@@ -47,6 +50,8 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref("");
 const success = ref("");
+const imageConfig = ref<CommunityImageUploadConfig>({ enabled: false, max_bytes: 5_242_880, max_pixels: 20_000_000, max_per_post: 4 });
+const imageConfigBusy = ref(false);
 
 const selectedBoard = computed(() =>
   boards.value.find((board) => board.code === selectedCode.value) ?? null,
@@ -59,7 +64,30 @@ const canUpdate = computed(() => selectedBoard.value !== null && draft.value.nam
 
 onMounted(() => {
   void loadBoards();
+  void loadImageConfig();
 });
+
+async function loadImageConfig(): Promise<void> {
+  try {
+    imageConfig.value = (await getCommunityImageUploadConfig(auth.accessToken)).config;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "图片上传配置加载失败";
+  }
+}
+
+async function saveImageConfig(): Promise<void> {
+  imageConfigBusy.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    imageConfig.value = (await saveCommunityImageUploadConfig(imageConfig.value, auth.accessToken)).config;
+    success.value = imageConfig.value.enabled ? "论坛图片上传已启用并写入审计日志。" : "论坛图片上传已关闭并写入审计日志。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "图片上传配置保存失败";
+  } finally {
+    imageConfigBusy.value = false;
+  }
+}
 
 function emptyDraft(): BoardDraft {
   return {
@@ -213,6 +241,26 @@ function roleLabel(role: UserRole): string {
         <h2 class="font-semibold">排序规则</h2>
         <p class="mt-2 text-sm text-muted-foreground">数字越小越靠前；代码创建后保持稳定，保证历史链接与数据兼容。</p>
       </article>
+    </section>
+
+    <section class="space-y-5 rounded-2xl border bg-card p-5 shadow-sm sm:p-6" aria-labelledby="image-upload-heading">
+      <div>
+        <h2 id="image-upload-heading" class="text-lg font-semibold">论坛图片上传</h2>
+        <p class="mt-1 text-sm text-muted-foreground">默认关闭。仅允许 PNG、JPEG、WebP；服务端校验文件签名、元数据、尺寸和像素总量，图片只能作为主题附件引用。</p>
+      </div>
+      <div class="grid gap-4 md:grid-cols-4 md:items-end">
+        <div class="space-y-2">
+          <Label>上传状态</Label>
+          <Select :model-value="imageConfig.enabled ? 'enabled' : 'disabled'" @update:model-value="imageConfig.enabled = $event === 'enabled'">
+            <SelectTrigger aria-label="论坛图片上传状态"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="disabled">关闭</SelectItem><SelectItem value="enabled">开启</SelectItem></SelectContent>
+          </Select>
+        </div>
+        <div class="space-y-2"><Label for="image-max-bytes">单张大小（字节）</Label><Input id="image-max-bytes" v-model.number="imageConfig.max_bytes" type="number" min="1024" max="20971520" /></div>
+        <div class="space-y-2"><Label for="image-max-pixels">像素上限</Label><Input id="image-max-pixels" v-model.number="imageConfig.max_pixels" type="number" min="65536" max="100000000" /></div>
+        <div class="space-y-2"><Label for="image-max-count">每主题张数</Label><Input id="image-max-count" v-model.number="imageConfig.max_per_post" type="number" min="1" max="6" /></div>
+      </div>
+      <Button :disabled="imageConfigBusy" @click="saveImageConfig"><span>{{ imageConfigBusy ? "保存中…" : "保存图片配置" }}</span></Button>
     </section>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">

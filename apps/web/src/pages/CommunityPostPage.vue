@@ -573,6 +573,16 @@ function reportReasonLabel(reason: CommunityReportReason): string {
         </CardHeader>
         <CardContent>
           <p v-if="!editingPost" class="whitespace-pre-wrap break-words text-sm leading-7">{{ post.content }}</p>
+          <div v-if="post.attachments?.length" class="mt-5 grid gap-3 sm:grid-cols-2">
+            <img
+              v-for="image in post.attachments ?? []"
+              :key="image.id"
+              :src="image.url"
+              :alt="`主题附件 ${image.width}x${image.height}`"
+              class="max-h-96 w-full rounded-md border object-contain"
+              loading="lazy"
+            />
+          </div>
         </CardContent>
       </Card>
       <Card v-if="canEditPostSeo">

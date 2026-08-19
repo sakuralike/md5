@@ -138,11 +138,22 @@ class CommunityPostCreateRequest(BaseModel):
     title: str = Field(min_length=4, max_length=120)
     content: str = Field(min_length=20, max_length=10000)
     rules_accepted: bool
+    attachment_ids: list[str] = Field(default_factory=list, max_length=6)
 
     @field_validator("title", "content")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return _normalize(value, "内容不能为空")
+
+    @field_validator("attachment_ids")
+    @classmethod
+    def validate_attachment_ids(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 36 for item in normalized):
+            raise ValueError("附件标识无效")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("不能重复引用同一附件")
+        return normalized
 
 
 class CommunityPostUpdateRequest(BaseModel):
@@ -347,6 +358,23 @@ class CommunityPostDetail(BaseModel):
     created_at: datetime
     comments: list[CommunityCommentResponse]
     seo: CommunitySeoProjection
+    attachments: list[CommunityPostImageResponse]
+
+
+class CommunityImageUploadConfig(BaseModel):
+    enabled: bool = False
+    max_bytes: int = Field(default=5_242_880, ge=1024, le=20_971_520)
+    max_pixels: int = Field(default=20_000_000, ge=65_536, le=100_000_000)
+    max_per_post: int = Field(default=4, ge=1, le=6)
+
+
+class CommunityPostImageResponse(BaseModel):
+    id: str
+    url: str
+    content_type: str
+    size_bytes: int
+    width: int
+    height: int
 
 
 class CommunityHomeResponse(BaseModel):

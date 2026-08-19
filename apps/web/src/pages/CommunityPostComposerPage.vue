@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { CommunityBoard, CommunityBoardCode, CommunityGroupSummary } from "@password-detective/api-contract";
+import type {
+  CommunityBoard,
+  CommunityBoardCode,
+  CommunityGroupSummary,
+  CommunityImageUploadConfig,
+  CommunityPostImage,
+} from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,7 +17,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createCommunityIdempotencyKey, createCommunityPost, listCommunityBoards, listCommunityGroups } from "../services/community";
+import {
+  createCommunityIdempotencyKey,
+  createCommunityPost,
+  getCommunityImageUploadConfig,
+  listCommunityBoards,
+  listCommunityGroups,
+  uploadCommunityPostImage,
+} from "../services/community";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
@@ -28,6 +41,14 @@ const rulesAccepted = ref(false);
 const loading = ref(true);
 const submitting = ref(false);
 const error = ref("");
+const imageConfig = ref<CommunityImageUploadConfig>({
+  enabled: false,
+  max_bytes: 5_242_880,
+  max_pixels: 20_000_000,
+  max_per_post: 4,
+});
+const attachments = ref<CommunityPostImage[]>([]);
+const uploadingImage = ref(false);
 
 const canSubmit = computed(
   () => auth.isAuthenticated && auth.user?.email_verified && rulesAccepted.value && title.value.trim().length >= 4 && content.value.trim().length >= 20,
@@ -37,6 +58,7 @@ onMounted(async () => {
   try {
     boards.value = (await listCommunityBoards()).items;
     groups.value = (await listCommunityGroups(auth.accessToken)).items;
+    imageConfig.value = await getCommunityImageUploadConfig();
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "社区板块加载失败";
   } finally {
@@ -56,6 +78,7 @@ async function submit(): Promise<void> {
         title: title.value.trim(),
         content: content.value.trim(),
         rules_accepted: true,
+        attachment_ids: attachments.value.map((item) => item.id),
       },
       auth.accessToken,
       createCommunityIdempotencyKey("post"),
@@ -66,6 +89,41 @@ async function submit(): Promise<void> {
   } finally {
     submitting.value = false;
   }
+}
+
+async function uploadImage(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file || !imageConfig.value.enabled) return;
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    error.value = "主题图片仅支持 PNG、JPEG 或 WebP。";
+    return;
+  }
+  if (file.size > imageConfig.value.max_bytes) {
+    error.value = `图片不能超过 ${Math.floor(imageConfig.value.max_bytes / 1024 / 1024)} MiB。`;
+    return;
+  }
+  if (attachments.value.length >= imageConfig.value.max_per_post) {
+    error.value = `每个主题最多上传 ${imageConfig.value.max_per_post} 张图片。`;
+    return;
+  }
+  uploadingImage.value = true;
+  error.value = "";
+  try {
+    attachments.value = [
+      ...attachments.value,
+      await uploadCommunityPostImage(file, auth.accessToken),
+    ];
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "主题图片上传失败";
+  } finally {
+    uploadingImage.value = false;
+  }
+}
+
+function removeImage(imageId: string): void {
+  attachments.value = attachments.value.filter((item) => item.id !== imageId);
 }
 </script>
 
@@ -121,6 +179,26 @@ async function submit(): Promise<void> {
           <Label for="community-composer-content">主题内容</Label>
           <Textarea id="community-composer-content" v-model="content" :maxlength="10000" class="min-h-56" placeholder="请描述背景、授权范围、复现步骤和结果…" />
           <p class="text-xs text-muted-foreground">{{ content.length }}/10000，至少 20 个字符。</p>
+        </div>
+        <div v-if="imageConfig.enabled" class="space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <Label for="community-composer-image">主题图片（可选）</Label>
+            <span class="text-xs text-muted-foreground">{{ attachments.length }}/{{ imageConfig.max_per_post }}</span>
+          </div>
+          <Input
+            id="community-composer-image"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            :disabled="uploadingImage || attachments.length >= imageConfig.max_per_post"
+            @change="uploadImage"
+          />
+          <div v-if="attachments.length" class="grid gap-2 sm:grid-cols-2">
+            <div v-for="image in attachments" :key="image.id" class="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <span class="truncate">{{ image.content_type }} · {{ Math.ceil(image.size_bytes / 1024) }} KiB</span>
+              <Button type="button" size="sm" variant="ghost" @click="removeImage(image.id)">移除</Button>
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">上传后先进入当前账号的待发布附件区，只能绑定到本人新建的公开主题。</p>
         </div>
         <div class="flex items-start gap-3">
           <Checkbox id="community-composer-rules" v-model="rulesAccepted" />

@@ -4,6 +4,8 @@ import type {
   AdminCommunityBoardListResponse,
   AdminCommunityBoardMutationResponse,
   AdminCommunityBoardUpdateRequest,
+  AdminCommunityImageUploadConfigResponse,
+  CommunityImageUploadConfig,
 } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
@@ -44,6 +46,27 @@ export function updateCommunityBoard(
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+export function getCommunityImageUploadConfig(
+  token: string,
+): Promise<AdminCommunityImageUploadConfigResponse> {
+  return apiRequest<AdminCommunityImageUploadConfigResponse>(
+    "/admin/community/image-upload-config",
+    {},
+    token,
+  );
+}
+
+export function saveCommunityImageUploadConfig(
+  config: CommunityImageUploadConfig,
+  token: string,
+): Promise<AdminCommunityImageUploadConfigResponse> {
+  return apiRequest<AdminCommunityImageUploadConfigResponse>(
+    "/admin/community/image-upload-config",
+    { method: "PUT", body: JSON.stringify(config) },
     token,
   );
 }

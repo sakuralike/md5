@@ -40,6 +40,7 @@ const visibleNavigation = computed(() =>
   siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
 );
 const hasToolsNavigation = computed(() => visibleNavigation.value.some((item) => item.path === "/tools"));
+const hasStatisticsNavigation = computed(() => visibleNavigation.value.some((item) => item.path === "/statistics"));
 
 function applyCurrentSeo(): void {
   if (typeof document === "undefined" || typeof window === "undefined") return;
@@ -208,6 +209,7 @@ onBeforeUnmount(releaseCustomBackground);
       <nav class="nav" aria-label="主导航">
         <RouterLink v-for="item in visibleNavigation" :key="item.path" :to="item.path">{{ item.label }}</RouterLink>
         <RouterLink v-if="!hasToolsNavigation" to="/tools">安全工具</RouterLink>
+        <RouterLink v-if="!hasStatisticsNavigation" to="/statistics">数据统计</RouterLink>
       </nav>
 
       <div class="topbar-actions">

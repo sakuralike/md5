@@ -29,6 +29,7 @@ import type {
   CommunityGroupSeoUpdateRequest,
   CommunityGroupUpdateRequest,
   CommunityHomeResponse,
+  CommunityImageUploadConfig,
   CommunityNotificationKind,
   CommunityNotificationListResponse,
   CommunityNotificationPreferencesResponse,
@@ -43,6 +44,7 @@ import type {
   CommunityRelationshipMutationResponse,
   CommunityPostCreateRequest,
   CommunityPostInteractionResponse,
+  CommunityPostImage,
   CommunityPostSeoUpdateRequest,
   CommunityPostUpdateRequest,
   CommunityPostDetail,
@@ -340,6 +342,21 @@ export function createCommunityPost(
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+export function getCommunityImageUploadConfig(): Promise<CommunityImageUploadConfig> {
+  return apiRequest<CommunityImageUploadConfig>("/community/image-upload-config");
+}
+
+export function uploadCommunityPostImage(
+  file: File,
+  token: string,
+): Promise<CommunityPostImage> {
+  return apiRequest<CommunityPostImage>(
+    "/community/images",
+    { method: "POST", headers: { "Content-Type": file.type }, body: file },
     token,
   );
 }

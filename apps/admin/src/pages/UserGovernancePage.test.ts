@@ -14,6 +14,7 @@ vi.mock("../services/users", () => ({
   reauthenticateAdmin: vi.fn(),
   changeAdminUserStatus: vi.fn(),
   revokeAdminUserSessions: vi.fn(),
+  updateAdminUserProfile: vi.fn(),
 }));
 
 describe("UserGovernancePage", () => {
@@ -22,6 +23,7 @@ describe("UserGovernancePage", () => {
 
     expect(html).toContain("用户审批工作台");
     expect(html).toContain("手动创建用户");
+    expect(html).toContain("注册策略与邀请码");
     expect(html).toContain("用户名、邮箱或 UID");
     expect(html).toContain("用户等级与权益");
     expect(html).toContain('id="user-levels"');

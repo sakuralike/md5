@@ -32,6 +32,7 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityBoardListResponse,
     AdminCommunityBoardMutationResponse,
     AdminCommunityBoardUpdateRequest,
+    AdminCommunityImageUploadConfigResponse,
     AdminCommunityNotificationOutboxListResponse,
     AdminCommunityNotificationOutboxMetrics,
     AdminCommunityNotificationReplayRequest,
@@ -55,8 +56,71 @@ from password_detective.modules.community.admin_service import (
     resolve_admin_report,
     update_admin_board,
 )
+from password_detective.modules.community.image_service import (
+    get_community_image_upload_config,
+    remove_community_post_image,
+    save_community_image_upload_config,
+)
+from password_detective.modules.community.schemas import (
+    CommunityImageUploadConfig,
+    CommunityPostImageResponse,
+)
 
 admin_router = APIRouter(prefix="/admin/community", tags=["社区治理"])
+
+
+@admin_router.get(
+    "/image-upload-config",
+    response_model=AdminCommunityImageUploadConfigResponse,
+)
+def admin_community_image_upload_config(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> AdminCommunityImageUploadConfigResponse:
+    del principal
+    return AdminCommunityImageUploadConfigResponse(
+        config=get_community_image_upload_config(db)
+    )
+
+
+@admin_router.put(
+    "/image-upload-config",
+    response_model=AdminCommunityImageUploadConfigResponse,
+)
+def admin_community_image_upload_config_save(
+    payload: CommunityImageUploadConfig,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> AdminCommunityImageUploadConfigResponse:
+    saved = save_community_image_upload_config(
+        db,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
+    return AdminCommunityImageUploadConfigResponse(
+        config=saved,
+        request_id=get_client_context(request).request_id,
+    )
+
+
+@admin_router.post(
+    "/images/{image_id}/remove",
+    response_model=CommunityPostImageResponse,
+)
+def admin_community_image_remove(
+    image_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> CommunityPostImageResponse:
+    return remove_community_post_image(
+        db,
+        image_id=image_id,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @admin_router.get("/boards", response_model=AdminCommunityBoardListResponse)

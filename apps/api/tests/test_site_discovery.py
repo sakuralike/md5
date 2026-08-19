@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
+from password_detective.db.models.archive import Archive
+from password_detective.db.models.archive_fingerprint import (
+    ArchiveFingerprint,
+    FingerprintAlgorithm,
+)
+from password_detective.db.models.password_candidate import CandidateStatus, PasswordCandidate
 from password_detective.db.models.points_ledger import PointsLedger, PointsLedgerStatus
 from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User
@@ -70,6 +76,7 @@ def test_public_site_config_uses_safe_defaults_and_published_projection(client):
             "active": False,
             "message": "系统正在维护，请稍后再试。",
         },
+        "registration": {"mode": "open"},
     }
 
     with client.app.state.database.session_factory() as db:
@@ -183,3 +190,67 @@ def test_home_discovery_returns_hot_hashes_and_top_five_rankings(client):
     assert body["points_leaders"][0]["uid"] == alpha_id
     assert body["points_leaders"][0]["score"] == 20
     assert all(len(body[key]) <= 5 for key in ("contribution_leaders", "points_leaders"))
+
+
+def test_algorithm_distribution_only_aggregates_verified_archives(client):
+    with client.app.state.database.session_factory() as db:
+        for index in range(12):
+            archive = Archive(optional_format="zip")
+            db.add(archive)
+            db.flush()
+            algorithm = FingerprintAlgorithm.MD5 if index < 8 else FingerprintAlgorithm.SHA256
+            digest_length = 32 if algorithm == FingerprintAlgorithm.MD5 else 64
+            db.add(
+                ArchiveFingerprint(
+                    archive_id=archive.id,
+                    algorithm=algorithm,
+                    digest=f"{index + 1:0{digest_length}x}",
+                )
+            )
+            db.add(
+                PasswordCandidate(
+                    archive_id=archive.id,
+                    secret_ciphertext=f"synthetic-ciphertext-{index}",
+                    secret_nonce=f"synthetic-nonce-{index}",
+                    secret_key_version="synthetic-v1",
+                    secret_dedup_tag=f"{index + 1:064x}",
+                    status=CandidateStatus.VERIFIED,
+                )
+            )
+        pending_archive = Archive(optional_format="7z")
+        db.add(pending_archive)
+        db.flush()
+        db.add(
+            ArchiveFingerprint(
+                archive_id=pending_archive.id,
+                algorithm=FingerprintAlgorithm.SHA512,
+                digest="f" * 128,
+            )
+        )
+        db.add(
+            PasswordCandidate(
+                archive_id=pending_archive.id,
+                secret_ciphertext="pending-synthetic-ciphertext",
+                secret_nonce="pending-synthetic-nonce",
+                secret_key_version="synthetic-v1",
+                secret_dedup_tag="f" * 64,
+                status=CandidateStatus.PENDING,
+            )
+        )
+        db.commit()
+
+    response = client.get("/api/v1/site/algorithm-distribution")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=300"
+    body = response.json()
+    assert body["total_count_band"] == "10-49"
+    by_algorithm = {item["algorithm"]: item for item in body["items"]}
+    assert by_algorithm["md5"]["count_band"] == "少于 10"
+    assert by_algorithm["sha256"]["count_band"] == "少于 10"
+    assert by_algorithm["sha512"] == {
+        "algorithm": "sha512",
+        "count_band": "0",
+        "percentage": 0.0,
+    }
+    assert "digest" not in response.text
+    assert "ciphertext" not in response.text
