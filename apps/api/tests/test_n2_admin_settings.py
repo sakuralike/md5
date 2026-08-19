@@ -57,6 +57,15 @@ def _snapshot(quota: int) -> dict[str, object]:
             {"label": "首页", "path": "/", "enabled": True, "requires_auth": False},
             {"label": "社区", "path": "/community", "enabled": True, "requires_auth": False},
         ],
+        "icp_record": "合成 ICP 备 00000000 号",
+        "public_security_record": "合成公网安备 00000000000000 号",
+        "copyright_text": "2026 合成侦探站",
+        "public_contact_email": "contact@synthetic.example.com",
+        "maintenance_enabled": False,
+        "maintenance_message": "系统正在维护，请稍后再试。",
+        "maintenance_allowed_ip_cidrs": ["192.0.2.0/24", "2001:db8::/48"],
+        "max_active_sessions": 2,
+        "session_overflow_policy": "deny_new",
         "daily_reveal_quota": quota,
         "reauthentication_ttl_minutes": 5,
         "privacy_deletion_grace_hours": 168,
@@ -113,6 +122,13 @@ def test_current_settings_require_admin_and_save_directly(client) -> None:
     assert site_config.status_code == 200
     assert site_config.json()["site_name"] == "合成侦探站"
     assert [item["path"] for item in site_config.json()["navigation"]] == ["/", "/community"]
+    assert site_config.json()["legal"] == {
+        "icp_record": "合成 ICP 备 00000000 号",
+        "public_security_record": "合成公网安备 00000000000000 号",
+        "copyright_text": "2026 合成侦探站",
+        "public_contact_email": "contact@synthetic.example.com",
+    }
+    assert site_config.json()["maintenance"]["active"] is False
 
     with client.app.state.database.session_factory() as db:
         persisted = db.get(SystemSetting, "daily_reveal_quota")

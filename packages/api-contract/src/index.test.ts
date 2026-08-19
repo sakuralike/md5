@@ -120,6 +120,16 @@ describe("shared API contract", () => {
         default_image_url: "",
         open_graph_enabled: true,
       },
+      legal: {
+        icp_record: "合成 ICP 备 00000000 号",
+        public_security_record: "",
+        copyright_text: "2026 合成侦探站",
+        public_contact_email: "contact@synthetic.example.com",
+      },
+      maintenance: {
+        active: false,
+        message: "系统正在维护，请稍后再试。",
+      },
     };
     const discovery: HomeDiscoveryResponse = {
       hot_hashes: [
@@ -137,6 +147,7 @@ describe("shared API contract", () => {
     };
 
     expect(config.navigation[0]?.path).toBe("/");
+    expect(config.maintenance.active).toBe(false);
     expect(discovery.hot_hashes[0]?.algorithm).toBe("sha256");
     expect(discovery.points_leaders[0]?.score).toBe(10);
   });

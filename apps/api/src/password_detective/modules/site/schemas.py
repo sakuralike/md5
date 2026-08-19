@@ -19,11 +19,25 @@ class PublicSeoConfig(BaseModel):
     open_graph_enabled: bool
 
 
+class PublicLegalConfig(BaseModel):
+    icp_record: str
+    public_security_record: str
+    copyright_text: str
+    public_contact_email: str
+
+
+class PublicMaintenanceConfig(BaseModel):
+    active: bool
+    message: str
+
+
 class PublicSiteConfigResponse(BaseModel):
     site_name: str
     site_logo_url: str
     navigation: list[SiteNavigationItem]
     seo: PublicSeoConfig
+    legal: PublicLegalConfig
+    maintenance: PublicMaintenanceConfig
 
 
 class HotHashSummary(BaseModel):

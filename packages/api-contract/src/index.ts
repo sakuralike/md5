@@ -1489,11 +1489,25 @@ export interface PublicSeoConfig {
   open_graph_enabled: boolean;
 }
 
+export interface PublicLegalConfig {
+  icp_record: string;
+  public_security_record: string;
+  copyright_text: string;
+  public_contact_email: string;
+}
+
+export interface PublicMaintenanceConfig {
+  active: boolean;
+  message: string;
+}
+
 export interface PublicSiteConfig {
   site_name: string;
   site_logo_url: string;
   navigation: SiteNavigationItem[];
   seo: PublicSeoConfig;
+  legal: PublicLegalConfig;
+  maintenance: PublicMaintenanceConfig;
 }
 
 export interface HotHashSummary {
@@ -1530,6 +1544,15 @@ export interface OperationalSettingsSnapshot {
   site_name: string;
   site_logo_url: string;
   site_navigation: SiteNavigationItem[];
+  icp_record: string;
+  public_security_record: string;
+  copyright_text: string;
+  public_contact_email: string;
+  maintenance_enabled: boolean;
+  maintenance_message: string;
+  maintenance_allowed_ip_cidrs: string[];
+  max_active_sessions: number;
+  session_overflow_policy: "deny_new" | "revoke_oldest";
   daily_reveal_quota: number;
   reauthentication_ttl_minutes: number;
   privacy_deletion_grace_hours: number;

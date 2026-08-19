@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from password_detective.core.maintenance import load_maintenance_runtime_config
 from password_detective.db.models.archive_fingerprint import ArchiveFingerprint
 from password_detective.db.models.hash_detail import (
     HashComment,
@@ -23,6 +24,8 @@ from password_detective.modules.admin.setting_schemas import (
 from password_detective.modules.site.schemas import (
     HomeDiscoveryResponse,
     HotHashSummary,
+    PublicLegalConfig,
+    PublicMaintenanceConfig,
     PublicSeoConfig,
     PublicSiteConfigResponse,
     UserRankingSummary,
@@ -34,6 +37,18 @@ def _setting_value(db: Session, key: str, default: object) -> object:
     if record is None:
         return default
     return record.value_json.get("value", default)
+
+
+def _public_plain_text(db: Session, key: str) -> str:
+    raw_value = _setting_value(db, key, "")
+    if not isinstance(raw_value, str):
+        return ""
+    normalized = raw_value.strip()
+    if "<" in normalized or ">" in normalized:
+        return ""
+    if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+        return ""
+    return normalized
 
 
 def _public_seo_config(db: Session) -> PublicSeoConfig:
@@ -62,7 +77,11 @@ def _public_seo_config(db: Session) -> PublicSeoConfig:
     )
 
 
-def get_public_site_config(db: Session) -> PublicSiteConfigResponse:
+def get_public_site_config(
+    db: Session,
+    *,
+    maintenance_force_disabled: bool = False,
+) -> PublicSiteConfigResponse:
     raw_name = _setting_value(db, "site_name", "密码侦探社")
     raw_logo = _setting_value(db, "site_logo_url", "")
     raw_navigation = _setting_value(
@@ -72,11 +91,22 @@ def get_public_site_config(db: Session) -> PublicSiteConfigResponse:
         navigation = [SiteNavigationItem.model_validate(item) for item in raw_navigation]
     except (TypeError, ValueError):
         navigation = default_site_navigation()
+    maintenance = load_maintenance_runtime_config(db)
     return PublicSiteConfigResponse(
         site_name=raw_name if isinstance(raw_name, str) and raw_name.strip() else "密码侦探社",
         site_logo_url=raw_logo if isinstance(raw_logo, str) else "",
         navigation=[item for item in navigation if item.enabled],
         seo=_public_seo_config(db),
+        legal=PublicLegalConfig(
+            icp_record=_public_plain_text(db, "icp_record"),
+            public_security_record=_public_plain_text(db, "public_security_record"),
+            copyright_text=_public_plain_text(db, "copyright_text"),
+            public_contact_email=_public_plain_text(db, "public_contact_email"),
+        ),
+        maintenance=PublicMaintenanceConfig(
+            active=maintenance.enabled and not maintenance_force_disabled,
+            message=maintenance.message,
+        ),
     )
 
 

@@ -3,6 +3,7 @@ import type { PublicSiteConfig } from "@password-detective/api-contract";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
+import MaintenancePage from "./components/MaintenancePage.vue";
 import UserAccountMenu from "./components/UserAccountMenu.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +155,14 @@ onBeforeUnmount(releaseCustomBackground);
 
 <template>
   <div class="shell" :data-background="activeBackground">
+    <MaintenancePage
+      v-if="siteConfig.maintenance.active"
+      :site-name="siteConfig.site_name"
+      :site-logo-url="siteConfig.site_logo_url"
+      :contact-email="siteConfig.legal.public_contact_email"
+      :maintenance="siteConfig.maintenance"
+    />
+    <template v-else>
     <a
       href="#main-content"
       class="sr-only z-50 rounded-md bg-background px-4 py-2 text-foreground shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -282,8 +291,14 @@ onBeforeUnmount(releaseCustomBackground);
     <AnnouncementPopup />
 
     <footer class="site-footer">
-      <span>{{ siteConfig.site_name }} · 隐私优先的压缩包指纹协作平台</span>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span>{{ siteConfig.legal.copyright_text || `${siteConfig.site_name} · 隐私优先的压缩包指纹协作平台` }}</span>
+        <a v-if="siteConfig.legal.icp_record" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-foreground hover:underline">{{ siteConfig.legal.icp_record }}</a>
+        <a v-if="siteConfig.legal.public_security_record" href="https://beian.mps.gov.cn/#/query/webSearch" target="_blank" rel="noopener noreferrer" class="hover:text-foreground hover:underline">{{ siteConfig.legal.public_security_record }}</a>
+        <a v-if="siteConfig.legal.public_contact_email" :href="`mailto:${siteConfig.legal.public_contact_email}`" class="hover:text-foreground hover:underline">{{ siteConfig.legal.public_contact_email }}</a>
+      </div>
       <span class="system-status"><i aria-hidden="true"></i> 本地计算模式</span>
     </footer>
+    </template>
   </div>
 </template>

@@ -26,8 +26,14 @@ router = APIRouter(prefix="/site", tags=["站点公开信息"])
     response_model=PublicSiteConfigResponse,
     dependencies=[Depends(rate_limit("site.config", limit=240, window_seconds=60))],
 )
-def public_site_config(db: Annotated[Session, Depends(get_db)]) -> PublicSiteConfigResponse:
-    return get_public_site_config(db)
+def public_site_config(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PublicSiteConfigResponse:
+    return get_public_site_config(
+        db,
+        maintenance_force_disabled=settings.maintenance_force_disabled,
+    )
 
 
 @router.get(

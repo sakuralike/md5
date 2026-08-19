@@ -13,6 +13,15 @@ vi.mock("../services/settings", () => ({
       site_name: "密码侦探社",
       site_logo_url: "",
       site_navigation: [],
+      icp_record: "",
+      public_security_record: "",
+      copyright_text: "",
+      public_contact_email: "",
+      maintenance_enabled: false,
+      maintenance_message: "系统正在维护，请稍后再试。",
+      maintenance_allowed_ip_cidrs: [],
+      max_active_sessions: 0,
+      session_overflow_policy: "deny_new",
       daily_reveal_quota: 20,
       reauthentication_ttl_minutes: 5,
       privacy_deletion_grace_hours: 72,
@@ -70,6 +79,11 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("系统配置工作台");
     expect(html).toContain("站点品牌");
     expect(html).toContain("站点导航");
+    expect(html).toContain("备案与联系信息");
+    expect(html).toContain('id="maintenance-governance"');
+    expect(html).toContain("维护 IP 白名单");
+    expect(html).toContain('id="session-governance"');
+    expect(html).toContain("同时登录设备数");
     expect(html).not.toContain("用户等级规则");
     expect(html).not.toContain("用户等级与权益");
     expect(html).not.toContain('id="user-levels"');

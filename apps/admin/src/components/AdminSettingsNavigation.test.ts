@@ -19,6 +19,9 @@ describe("AdminSettingsNavigation", () => {
 
     expect(html).toContain("SEO 设置");
     expect(html).toContain("/settings#seo-settings");
+    expect(html).toContain("/settings#site-legal");
+    expect(html).toContain("/settings#maintenance-governance");
+    expect(html).toContain("/settings#session-governance");
     expect(html).not.toContain("版本历史");
     expect(html).not.toContain("/settings#version-history");
   });

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import {
   BadgeCheck,
+  FileText,
   Globe2,
   MailCheck,
   Menu,
+  MonitorSmartphone,
   Settings2,
+  Wrench,
   type LucideIcon,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -34,7 +37,10 @@ const props = withDefaults(defineProps<{ mode?: "desktop" | "mobile" }>(), {
 });
 
 const systemSettingsSections: readonly SystemSettingsSectionItem[] = [
-  { label: "站点外观", to: "/settings#site-appearance", icon: Globe2 },
+  { label: "站点外观", to: "/settings#site-brand", icon: Globe2 },
+  { label: "备案与联系", to: "/settings#site-legal", icon: FileText },
+  { label: "维护治理", to: "/settings#maintenance-governance", icon: Wrench },
+  { label: "登录设备", to: "/settings#session-governance", icon: MonitorSmartphone },
   { label: "邮件投递", to: "/settings#email-delivery", icon: MailCheck },
   { label: "SEO 设置", to: "/settings#seo-settings", icon: Globe2 },
   { label: "运行策略", to: "/settings#operational-policy", icon: Settings2 },

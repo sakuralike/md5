@@ -5,6 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from password_detective.core.client_ip import normalize_network_cidrs
+from password_detective.core.maintenance import DEFAULT_MAINTENANCE_MESSAGE
+
 
 class SiteNavigationItem(BaseModel):
     label: str = Field(min_length=1, max_length=20)
@@ -89,6 +92,17 @@ class OperationalSettingsSnapshot(BaseModel):
     site_navigation: list[SiteNavigationItem] = Field(
         default_factory=default_site_navigation, min_length=1, max_length=8
     )
+    icp_record: str = Field(default="", max_length=120)
+    public_security_record: str = Field(default="", max_length=120)
+    copyright_text: str = Field(default="", max_length=200)
+    public_contact_email: EmailStr | Literal[""] = ""
+    maintenance_enabled: bool = False
+    maintenance_message: str = Field(
+        default=DEFAULT_MAINTENANCE_MESSAGE, min_length=1, max_length=500
+    )
+    maintenance_allowed_ip_cidrs: list[str] = Field(default_factory=list, max_length=100)
+    max_active_sessions: int = Field(default=0, ge=0, le=100)
+    session_overflow_policy: Literal["deny_new", "revoke_oldest"] = "deny_new"
     daily_reveal_quota: int = Field(ge=1, le=1000)
     reauthentication_ttl_minutes: int = Field(ge=1, le=15)
     privacy_deletion_grace_hours: int = Field(ge=1, le=720)
@@ -102,6 +116,38 @@ class OperationalSettingsSnapshot(BaseModel):
     @classmethod
     def normalize_site_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("icp_record", "public_security_record", "copyright_text")
+    @classmethod
+    def normalize_public_legal_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("公开站点信息不能包含换行符或控制字符")
+        if "<" in normalized or ">" in normalized:
+            raise ValueError("公开站点信息不能包含 HTML 标签")
+        return normalized
+
+    @field_validator("maintenance_message")
+    @classmethod
+    def normalize_maintenance_message(cls, value: str) -> str:
+        normalized = value.strip()
+        if any(
+            (ord(character) < 32 and character not in {"\r", "\n", "\t"})
+            or ord(character) == 127
+            for character in normalized
+        ):
+            raise ValueError("维护提示不能包含控制字符")
+        if "<" in normalized or ">" in normalized:
+            raise ValueError("维护提示不能包含 HTML 标签")
+        return normalized
+
+    @field_validator("maintenance_allowed_ip_cidrs")
+    @classmethod
+    def normalize_maintenance_cidrs(cls, values: list[str]) -> list[str]:
+        try:
+            return normalize_network_cidrs(values)
+        except ValueError as exc:
+            raise ValueError("维护白名单必须使用有效的 IPv4/IPv6 CIDR") from exc
 
     @field_validator("site_logo_url")
     @classmethod

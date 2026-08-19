@@ -9,6 +9,7 @@ from password_detective.core.security import hash_opaque_token
 from password_detective.core.time import utc_now
 from password_detective.db.models.audit_log import AuditLog
 from password_detective.db.models.reauthentication_grant import ReauthenticationGrant
+from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User
 from password_detective.db.models.user_session import UserSession
 
@@ -128,6 +129,102 @@ def test_login_refresh_rotation_and_reuse_detection(client):
             )
         ).all()
         assert active == []
+
+
+def test_session_limit_counts_rotated_family_once_and_denies_new_login(client):
+    assert register(client).status_code == 201
+    first = login(client)
+    assert first.status_code == 200
+    rotated = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": first.json()["refresh_token"]},
+    )
+    assert rotated.status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        db.add_all(
+            [
+                SystemSetting(key="max_active_sessions", value_json={"value": 1}),
+                SystemSetting(key="session_overflow_policy", value_json={"value": "deny_new"}),
+            ]
+        )
+        db.commit()
+
+    denied = login(client)
+    assert denied.status_code == 409
+    assert denied.json()["code"] == "auth.session_limit_reached"
+    assert denied.json()["details"] == {"limit": 1}
+
+    with client.app.state.database.session_factory() as db:
+        active_family_count = len(
+            set(
+                db.scalars(
+                    select(UserSession.family_id).where(UserSession.revoked_at.is_(None))
+                ).all()
+            )
+        )
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "auth.session_limit",
+                AuditLog.result == "blocked",
+            )
+        )
+        assert active_family_count == 1
+        assert audit is not None
+        assert audit.details["active_session_count"] == 1
+
+
+def test_session_limit_can_revoke_oldest_family(client):
+    assert register(client).status_code == 201
+    oldest = login(client)
+    assert oldest.status_code == 200
+    second = login(client)
+    assert second.status_code == 200
+    refreshed_oldest = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": oldest.json()["refresh_token"]},
+    )
+    assert refreshed_oldest.status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        db.add_all(
+            [
+                SystemSetting(key="max_active_sessions", value_json={"value": 2}),
+                SystemSetting(
+                    key="session_overflow_policy",
+                    value_json={"value": "revoke_oldest"},
+                ),
+            ]
+        )
+        db.commit()
+
+    newest = login(client)
+    assert newest.status_code == 200
+    assert (
+        client.get(
+            "/api/v1/me/profile",
+            headers=auth_headers(refreshed_oldest.json()),
+        ).status_code
+        == 401
+    )
+    assert client.get("/api/v1/me/profile", headers=auth_headers(second.json())).status_code == 200
+    assert client.get("/api/v1/me/profile", headers=auth_headers(newest.json())).status_code == 200
+
+    with client.app.state.database.session_factory() as db:
+        active_family_count = len(
+            set(
+                db.scalars(
+                    select(UserSession.family_id).where(UserSession.revoked_at.is_(None))
+                ).all()
+            )
+        )
+        revoked = db.scalar(
+            select(UserSession).where(
+                UserSession.revoked_reason == "session_limit_revoke_oldest"
+            )
+        )
+        assert active_family_count == 2
+        assert revoked is not None
 
 
 def test_username_is_immutable_after_registration(client):

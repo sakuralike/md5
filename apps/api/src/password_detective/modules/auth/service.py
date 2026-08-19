@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
 from password_detective.db.models.account_action_token import AccountTokenKind
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
+from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.user import User, UserStatus
 from password_detective.db.models.user_session import UserSession
 from password_detective.modules.auth.account_tokens import issue_account_token
@@ -49,6 +50,103 @@ LOCK_MINUTES = 15
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _session_limit_settings(db: Session) -> tuple[int, str]:
+    limit_record = db.get(SystemSetting, "max_active_sessions")
+    policy_record = db.get(SystemSetting, "session_overflow_policy")
+    raw_limit = limit_record.value_json.get("value") if limit_record else 0
+    raw_policy = policy_record.value_json.get("value") if policy_record else "deny_new"
+    limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) else 0
+    if not 0 <= limit <= 100:
+        limit = 0
+    policy = raw_policy if raw_policy in {"deny_new", "revoke_oldest"} else "deny_new"
+    return limit, policy
+
+
+def _enforce_session_limit(
+    db: Session,
+    *,
+    user: User,
+    now: datetime,
+    context: ClientContext,
+) -> None:
+    limit, policy = _session_limit_settings(db)
+    if limit == 0:
+        return
+
+    active_family_ids = (
+        select(UserSession.family_id)
+        .where(
+            UserSession.user_id == user.id,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+        )
+        .distinct()
+        .subquery()
+    )
+    first_created_at = func.min(UserSession.created_at)
+    active_families = db.execute(
+        select(UserSession.family_id, first_created_at.label("first_created_at"))
+        .join(active_family_ids, active_family_ids.c.family_id == UserSession.family_id)
+        .where(UserSession.user_id == user.id)
+        .group_by(UserSession.family_id)
+        .order_by(first_created_at.asc(), UserSession.family_id.asc())
+    ).all()
+    if len(active_families) < limit:
+        return
+
+    if policy == "deny_new":
+        write_audit_log(
+            db,
+            actor_id=user.id,
+            action="auth.session_limit",
+            target_type="user",
+            target_id=user.id,
+            result="blocked",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={
+                "policy": policy,
+                "limit": limit,
+                "active_session_count": len(active_families),
+            },
+        )
+        db.commit()
+        raise AppError(
+            "auth.session_limit_reached",
+            "当前账号已达到同时登录设备数上限",
+            status_code=409,
+            details={"limit": limit},
+        )
+
+    revoke_count = len(active_families) - limit + 1
+    oldest_family_ids = [row.family_id for row in active_families[:revoke_count]]
+    db.execute(
+        update(UserSession)
+        .where(
+            UserSession.user_id == user.id,
+            UserSession.family_id.in_(oldest_family_ids),
+            UserSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now, revoked_reason="session_limit_revoke_oldest")
+    )
+    write_audit_log(
+        db,
+        actor_id=user.id,
+        action="auth.session_limit",
+        target_type="user",
+        target_id=user.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "policy": policy,
+            "limit": limit,
+            "active_session_count": len(active_families),
+            "revoked_session_count": revoke_count,
+        },
+    )
 
 
 def _issue_token_response(
@@ -127,7 +225,9 @@ def login_user(
     context: ClientContext,
 ) -> TokenResponse:
     login = payload.login.strip().lower()
-    user = db.scalar(select(User).where(or_(User.username == login, User.email == login)))
+    user = db.scalar(
+        select(User).where(or_(User.username == login, User.email == login)).with_for_update()
+    )
     now = utc_now()
 
     if user is None:
@@ -167,6 +267,7 @@ def login_user(
     if needs_password_rehash(user.account_password_hash):
         user.account_password_hash = hash_account_password(payload.password)
 
+    _enforce_session_limit(db, user=user, now=now, context=context)
     refresh_token = create_refresh_token()
     session = UserSession(
         user_id=user.id,

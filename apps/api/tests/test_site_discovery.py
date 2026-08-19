@@ -60,6 +60,16 @@ def test_public_site_config_uses_safe_defaults_and_published_projection(client):
             "default_image_url": "",
             "open_graph_enabled": True,
         },
+        "legal": {
+            "icp_record": "",
+            "public_security_record": "",
+            "copyright_text": "",
+            "public_contact_email": "",
+        },
+        "maintenance": {
+            "active": False,
+            "message": "系统正在维护，请稍后再试。",
+        },
     }
 
     with client.app.state.database.session_factory() as db:

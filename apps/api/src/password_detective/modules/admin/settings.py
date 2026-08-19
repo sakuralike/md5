@@ -85,6 +85,7 @@ def save_current_settings(
     principal: Principal,
     context: ClientContext,
 ) -> OperationalSettingsResponse:
+    previous, _, _ = _current_settings(db)
     _apply_snapshot(db, snapshot=snapshot, actor_id=principal.user.id)
     db.flush()
     rebuilt_level_profiles = rebuild_all_level_profiles(db)
@@ -102,5 +103,33 @@ def save_current_settings(
             "rebuilt_level_profiles": rebuilt_level_profiles,
         },
     )
+    if previous.maintenance_enabled != snapshot.maintenance_enabled:
+        write_audit_log(
+            db,
+            actor_id=principal.user.id,
+            action=(
+                "admin.maintenance.enabled"
+                if snapshot.maintenance_enabled
+                else "admin.maintenance.disabled"
+            ),
+            target_type="system_settings",
+            target_id="maintenance",
+            result="success",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={"allowed_network_count": len(snapshot.maintenance_allowed_ip_cidrs)},
+        )
+    if previous.maintenance_allowed_ip_cidrs != snapshot.maintenance_allowed_ip_cidrs:
+        write_audit_log(
+            db,
+            actor_id=principal.user.id,
+            action="admin.maintenance.allowlist_updated",
+            target_type="system_settings",
+            target_id="maintenance_allowed_ip_cidrs",
+            result="success",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={"allowed_network_count": len(snapshot.maintenance_allowed_ip_cidrs)},
+        )
     db.commit()
     return get_current_settings(db)

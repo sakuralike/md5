@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from password_detective.core.client_ip import normalize_network_cidrs
+
 FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "app_secret_key": "APP_SECRET_KEY",
     "database_url": "DATABASE_URL",
@@ -119,6 +121,8 @@ class Settings(BaseSettings):
     max_json_body_bytes: int = Field(default=1_048_576, ge=1_024, le=16_777_216)
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     public_origin: str = "http://localhost:5173"
+    trusted_proxy_cidrs: str = "127.0.0.1/32,::1/128"
+    maintenance_force_disabled: bool = False
     auto_create_tables: bool = True
     log_level: str = "INFO"
 
@@ -156,6 +160,15 @@ class Settings(BaseSettings):
         if parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
             raise ValueError("PUBLIC_ORIGIN 不得包含路径、查询参数、片段或用户凭据")
         return origin
+
+    @field_validator("trusted_proxy_cidrs")
+    @classmethod
+    def validate_trusted_proxy_cidrs(cls, value: str) -> str:
+        try:
+            networks = normalize_network_cidrs(value.split(","))
+        except ValueError as exc:
+            raise ValueError("TRUSTED_PROXY_CIDRS 必须是逗号分隔的 IPv4/IPv6 CIDR") from exc
+        return ",".join(networks)
 
     @field_validator("browser_cookie_secure")
     @classmethod

@@ -22,9 +22,11 @@ import {
 } from "@password-detective/api-contract";
 import {
   CheckCircle2,
+  FileText,
   Globe2,
   ImageUp,
   MailCheck,
+  MonitorSmartphone,
   Navigation,
   Plus,
   RefreshCw,
@@ -35,6 +37,7 @@ import {
   Server,
   Settings2,
   Trash2,
+  Wrench,
 } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
@@ -76,6 +79,15 @@ const defaultSnapshot: OperationalSettingsSnapshot = {
     { label: "首页", path: "/", enabled: true, requires_auth: false },
     { label: "社区", path: "/community", enabled: true, requires_auth: false },
   ],
+  icp_record: "",
+  public_security_record: "",
+  copyright_text: "",
+  public_contact_email: "",
+  maintenance_enabled: false,
+  maintenance_message: "系统正在维护，请稍后再试。",
+  maintenance_allowed_ip_cidrs: [],
+  max_active_sessions: 0,
+  session_overflow_policy: "deny_new",
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,
@@ -122,6 +134,7 @@ const seoLoading = ref(false);
 const seoSaveBusy = ref(false);
 const seoError = ref("");
 const seoMessage = ref("");
+const maintenanceAllowedIpText = ref("");
 const seoPreviewTitle = computed(() => {
   const siteName = form.value.site_name.trim() || "密码侦探社";
   const homeTitle = seoForm.value.home_title.trim() || siteName;
@@ -158,6 +171,7 @@ function useSnapshot(snapshot: OperationalSettingsSnapshot): void {
   const persisted = cloneOperationalSettingsSnapshot(snapshot);
   baselineSnapshot.value = persisted;
   form.value = cloneOperationalSettingsSnapshot(persisted);
+  maintenanceAllowedIpText.value = persisted.maintenance_allowed_ip_cidrs.join("\n");
 }
 
 function resetCurrentEdits(): void {
@@ -173,6 +187,22 @@ function normalizedSnapshot(): OperationalSettingsSnapshot {
     site_name: form.value.site_name.trim(),
     site_logo_url: form.value.site_logo_url.trim(),
     site_navigation: form.value.site_navigation.map((item) => ({ ...item })),
+    icp_record: form.value.icp_record.trim(),
+    public_security_record: form.value.public_security_record.trim(),
+    copyright_text: form.value.copyright_text.trim(),
+    public_contact_email: form.value.public_contact_email.trim(),
+    maintenance_enabled: form.value.maintenance_enabled,
+    maintenance_message: form.value.maintenance_message.trim(),
+    maintenance_allowed_ip_cidrs: Array.from(
+      new Set(
+        maintenanceAllowedIpText.value
+          .split(/[\r\n,]+/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ),
+    max_active_sessions: Number(form.value.max_active_sessions),
+    session_overflow_policy: form.value.session_overflow_policy,
     daily_reveal_quota: Number(form.value.daily_reveal_quota),
     reauthentication_ttl_minutes: Number(form.value.reauthentication_ttl_minutes),
     privacy_deletion_grace_hours: Number(form.value.privacy_deletion_grace_hours),
@@ -386,6 +416,53 @@ onMounted(refreshPage);
       <section id="site-navigation" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Navigation class="size-5 text-primary" />站点导航</h2><p class="mt-1 text-sm text-muted-foreground">至少保留一个已启用的站内导航项。</p></div><Button type="button" variant="outline" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button></div>
         <div class="space-y-3"><div v-for="(item, index) in form.site_navigation" :key="`${item.path}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div class="space-y-2"><Label :for="`navigation-label-${index}`">名称</Label><Input :id="`navigation-label-${index}`" v-model="item.label" /></div><div class="space-y-2"><Label :for="`navigation-path-${index}`">路径</Label><Input :id="`navigation-path-${index}`" v-model="item.path" /></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="item.enabled" @update:model-value="item.enabled = $event === true" />启用</Label><Label class="flex items-center gap-2"><Checkbox :model-value="item.requires_auth" @update:model-value="item.requires_auth = $event === true" />登录后可见</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.site_navigation.length <= 1" @click="removeNavigationItem(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div></div></div>
+      </section>
+
+      <section id="site-legal" class="glass-panel scroll-mt-28 p-6">
+        <div class="mb-5">
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><FileText class="size-5 text-primary" />备案与联系信息</h2>
+          <p class="mt-1 text-sm text-muted-foreground">已填写的信息会展示在公开站点页脚，留空字段不会展示。</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2"><Label for="icp-record">ICP 备案号</Label><Input id="icp-record" v-model="form.icp_record" maxlength="120" placeholder="示例 ICP 备 00000000 号" /></div>
+          <div class="space-y-2"><Label for="public-security-record">公安备案号</Label><Input id="public-security-record" v-model="form.public_security_record" maxlength="120" placeholder="示例公网安备 00000000000000 号" /></div>
+          <div class="space-y-2"><Label for="copyright-text">版权信息</Label><Input id="copyright-text" v-model="form.copyright_text" maxlength="200" placeholder="版权所有者与年份" /></div>
+          <div class="space-y-2"><Label for="public-contact-email">公开联系邮箱</Label><Input id="public-contact-email" v-model="form.public_contact_email" type="email" maxlength="254" placeholder="contact@synthetic.example.com" /></div>
+        </div>
+      </section>
+
+      <section id="maintenance-governance" class="glass-panel scroll-mt-28 p-6">
+        <div class="mb-5">
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Wrench class="size-5 text-primary" />维护治理</h2>
+          <p class="mt-1 text-sm text-muted-foreground">维护开启后阻断业务请求，仅健康检查、指标、公开配置、站点 Logo 和白名单来源保持可访问。</p>
+        </div>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <Label class="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm">
+            <Checkbox id="maintenance-enabled" :model-value="form.maintenance_enabled" @update:model-value="form.maintenance_enabled = $event === true" />
+            <span><span class="block font-medium text-foreground">启用维护模式</span><span class="block text-xs text-muted-foreground">保存后立即应用 HTTP 503 维护响应。</span></span>
+          </Label>
+          <div class="space-y-2"><Label for="maintenance-message">维护提示</Label><Textarea id="maintenance-message" v-model="form.maintenance_message" rows="3" maxlength="500" /></div>
+          <div class="space-y-2 lg:col-span-2">
+            <Label for="maintenance-allowed-cidrs">维护 IP 白名单</Label>
+            <Textarea id="maintenance-allowed-cidrs" v-model="maintenanceAllowedIpText" rows="4" placeholder="192.0.2.0/24&#10;2001:db8::/48" />
+            <p class="text-xs text-muted-foreground">每行一个 IPv4 或 IPv6 CIDR。请求来源仅在可信代理链解析后参与匹配，空白名单不会放行。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="session-governance" class="glass-panel scroll-mt-28 p-6">
+        <div class="mb-5">
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><MonitorSmartphone class="size-5 text-primary" />登录设备治理</h2>
+          <p class="mt-1 text-sm text-muted-foreground">按活跃会话族统计浏览器和 API 登录，不记录硬件标识或原始令牌。</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2"><Label for="max-active-sessions">同时登录设备数</Label><Input id="max-active-sessions" v-model.number="form.max_active_sessions" type="number" min="0" max="100" /><p class="text-xs text-muted-foreground">设置为 0 表示不限制。</p></div>
+          <div class="space-y-2">
+            <Label for="session-overflow-policy">超限策略</Label>
+            <Select v-model="form.session_overflow_policy"><SelectTrigger id="session-overflow-policy"><SelectValue placeholder="选择超限策略" /></SelectTrigger><SelectContent><SelectItem value="deny_new">拒绝新登录</SelectItem><SelectItem value="revoke_oldest">撤销最旧会话</SelectItem></SelectContent></Select>
+            <p class="text-xs text-muted-foreground">拒绝策略不会静默退出已有设备；撤销策略会为新登录腾出一个会话名额。</p>
+          </div>
+        </div>
       </section>
 
       <section id="seo-settings" class="glass-panel scroll-mt-28 p-6" data-section="seo-settings">

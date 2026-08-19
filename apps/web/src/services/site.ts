@@ -19,6 +19,16 @@ export function createDefaultPublicSiteConfig(): PublicSiteConfig {
       default_image_url: "",
       open_graph_enabled: false,
     },
+    legal: {
+      icp_record: "",
+      public_security_record: "",
+      copyright_text: "",
+      public_contact_email: "",
+    },
+    maintenance: {
+      active: false,
+      message: "系统正在维护，请稍后再试。",
+    },
   };
 }
 

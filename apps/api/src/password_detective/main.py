@@ -13,6 +13,7 @@ from password_detective.core.config import Settings, get_settings
 from password_detective.core.errors import AppError, app_error_handler, validation_error_handler
 from password_detective.core.http_security import HttpSecurityMiddleware
 from password_detective.core.logging import configure_logging
+from password_detective.core.maintenance import MaintenanceModeMiddleware
 from password_detective.core.notifications import (
     NotificationGateway,
     build_notification_gateway,
@@ -135,6 +136,7 @@ def create_app(
         HttpSecurityMiddleware,
         max_json_body_bytes=resolved_settings.max_json_body_bytes,
     )
+    app.add_middleware(MaintenanceModeMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origin_list,
