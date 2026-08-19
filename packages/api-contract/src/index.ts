@@ -1297,6 +1297,26 @@ export interface AdminDashboardSummary {
   queue_backlog: AdminQueueBacklog;
 }
 
+export interface AdminHeatmapDay {
+  day: string;
+  weekday: number;
+  activity_count_band: string;
+  active_boards_count_band: string;
+}
+
+export interface AdminHeatmapBoard {
+  board_code: string;
+  board_name: string;
+  activity_count_band: string;
+}
+
+export interface AdminCommunityHeatmapResponse {
+  window_days: number;
+  days: AdminHeatmapDay[];
+  boards: AdminHeatmapBoard[];
+  generated_at: string;
+}
+
 export type AuditDetailValue =
   | string
   | number

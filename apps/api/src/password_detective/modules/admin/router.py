@@ -33,6 +33,8 @@ from password_detective.db.models.role_change_request import (
 )
 from password_detective.db.models.user import UserRole, UserStatus
 from password_detective.db.models.user_session import UserSession
+from password_detective.modules.admin.analytics import get_community_heatmap
+from password_detective.modules.admin.analytics_schemas import AdminCommunityHeatmapResponse
 from password_detective.modules.admin.audit_logs import (
     AdminAuditLogFilters,
     export_admin_audit_logs,
@@ -271,6 +273,15 @@ def dashboard_summary(
     window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
 ) -> AdminDashboardSummary:
     return get_dashboard_summary(db, window_hours=window_hours)
+
+
+@router.get("/analytics/community-heatmap", response_model=AdminCommunityHeatmapResponse)
+def community_heatmap(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+    days: Annotated[int, Query(ge=7, le=90)] = 30,
+) -> AdminCommunityHeatmapResponse:
+    return get_community_heatmap(db, window_days=days)
 
 
 def admin_user_filters(

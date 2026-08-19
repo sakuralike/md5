@@ -4,6 +4,12 @@ import pyotp
 from sqlalchemy import select
 
 from password_detective.db.models.audit_log import AuditLog
+from password_detective.db.models.community import (
+    CommunityBoard,
+    CommunityComment,
+    CommunityContentStatus,
+    CommunityPost,
+)
 from password_detective.db.models.password_candidate import (
     CandidateStatus,
     PasswordCandidate,
@@ -148,5 +154,63 @@ def test_dashboard_summary_validates_window(client):
         "/api/v1/admin/dashboard/summary",
         headers=_admin_headers(client),
         params={"window_hours": 0},
+    )
+    assert response.status_code == 422
+
+
+def test_admin_community_heatmap_is_privacy_bounded_and_mfa_protected(client):
+    registration, contributor_headers = _register_and_login(client, "heatmap")
+    client.get("/api/v1/community/boards")
+    with client.app.state.database.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == registration["username"]))
+        board = db.scalar(select(CommunityBoard).where(CommunityBoard.code == "general"))
+        assert user is not None and board is not None
+        post = CommunityPost(
+            board_id=board.id,
+            board_code=board.code,
+            author_id=user.id,
+            title="合成热度主题",
+            content="这是用于验证管理端聚合热度矩阵的合成社区主题内容。",
+            status=CommunityContentStatus.PUBLISHED,
+        )
+        db.add(post)
+        db.flush()
+        db.add(
+            CommunityComment(
+                post_id=post.id,
+                author_id=user.id,
+                content="这是用于验证日期活动桶的合成回复。",
+                status=CommunityContentStatus.PUBLISHED,
+            )
+        )
+        db.commit()
+
+    forbidden = client.get(
+        "/api/v1/admin/analytics/community-heatmap",
+        headers=contributor_headers,
+    )
+    assert forbidden.status_code == 403
+
+    response = client.get(
+        "/api/v1/admin/analytics/community-heatmap",
+        headers=_admin_headers(client),
+        params={"days": 7},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["window_days"] == 7
+    assert len(body["days"]) == 7
+    assert any(item["activity_count_band"] == "少于 10" for item in body["days"])
+    assert any(item["board_code"] == "general" for item in body["boards"])
+    assert "合成热度主题" not in response.text
+    assert "合成热度主题" not in str(body)
+    assert "username" not in response.text
+
+
+def test_admin_community_heatmap_validates_window(client):
+    response = client.get(
+        "/api/v1/admin/analytics/community-heatmap",
+        headers=_admin_headers(client),
+        params={"days": 180},
     )
     assert response.status_code == 422

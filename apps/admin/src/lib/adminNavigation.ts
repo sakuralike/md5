@@ -83,6 +83,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: Database,
   },
   {
+    label: "数据热度",
+    path: "/analytics/heatmap",
+    description: "查看按日期、星期和社区板块聚合的隐私热度区间。",
+    group: "安全运营",
+    icon: Database,
+  },
+  {
     label: "风险告警",
     path: "/risk-alerts",
     description: "处置风险告警、分派与通知回放。",
