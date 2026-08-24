@@ -29,6 +29,7 @@ const snapshot = {
   maintenance_allowed_ip_cidrs: [],
   max_active_sessions: 0,
   session_overflow_policy: "deny_new" as const,
+  referral_reward_points: 10,
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,

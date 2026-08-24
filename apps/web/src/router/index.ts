@@ -24,6 +24,7 @@ import LoginPage from "../pages/LoginPage.vue";
 import RegisterPage from "../pages/RegisterPage.vue";
 import ResetPasswordPage from "../pages/ResetPasswordPage.vue";
 import ReputationPage from "../pages/ReputationPage.vue";
+import ReferralPage from "../pages/ReferralPage.vue";
 import RewardsPage from "../pages/RewardsPage.vue";
 import SecurityPage from "../pages/SecurityPage.vue";
 import SecurityToolsPage from "../pages/SecurityToolsPage.vue";
@@ -114,6 +115,7 @@ const router = createRouter({
     { path: "/account/privacy", component: AccountPrivacyPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/submissions", component: SubmissionsPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/reputation", component: ReputationPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/referrals", component: ReferralPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/rewards", component: RewardsPage, meta: { ...publicSeo, seoTitle: "积分商城" } },
     { path: "/trust-cases", component: TrustCasesPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/oauth/authorize", component: ThirdPartyAuthorizePage, meta: { ...privateSeo, requiresAuth: true } },

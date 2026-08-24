@@ -103,6 +103,7 @@ class OperationalSettingsSnapshot(BaseModel):
     maintenance_allowed_ip_cidrs: list[str] = Field(default_factory=list, max_length=100)
     max_active_sessions: int = Field(default=0, ge=0, le=100)
     session_overflow_policy: Literal["deny_new", "revoke_oldest"] = "deny_new"
+    referral_reward_points: int = Field(default=10, ge=0, le=10_000)
     daily_reveal_quota: int = Field(ge=1, le=1000)
     reauthentication_ttl_minutes: int = Field(ge=1, le=15)
     privacy_deletion_grace_hours: int = Field(ge=1, le=720)

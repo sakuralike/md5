@@ -24,6 +24,7 @@ def default_operational_settings() -> OperationalSettingsSnapshot:
         privacy_deletion_grace_hours=72,
         desktop_min_client_version="1.0.0",
         desktop_update_download_cache_seconds=3600,
+        referral_reward_points=10,
     )
 
 

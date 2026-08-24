@@ -29,6 +29,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
     invite_code: str | None = Field(default=None, max_length=128)
+    referral_code: str | None = Field(default=None, max_length=32)
 
     @field_validator("username")
     @classmethod
@@ -39,6 +40,18 @@ class RegisterRequest(BaseModel):
     @classmethod
     def validate_password(cls, value: str) -> str:
         return _validate_password(value)
+
+    @field_validator("referral_code")
+    @classmethod
+    def normalize_referral_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if not re.fullmatch(r"pd-[a-f0-9]{20}", normalized):
+            raise ValueError("邀请链接代码格式无效")
+        return normalized
 
 
 class ProfileUpdateRequest(BaseModel):

@@ -22,6 +22,7 @@ vi.mock("../services/settings", () => ({
       maintenance_allowed_ip_cidrs: [],
       max_active_sessions: 0,
       session_overflow_policy: "deny_new",
+      referral_reward_points: 10,
       daily_reveal_quota: 20,
       reauthentication_ttl_minutes: 5,
       privacy_deletion_grace_hours: 72,
@@ -84,6 +85,8 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("维护 IP 白名单");
     expect(html).toContain('id="session-governance"');
     expect(html).toContain("同时登录设备数");
+    expect(html).toContain('id="referral-reward-points"');
+    expect(html).toContain("邀请注册奖励积分");
     expect(html).not.toContain("用户等级规则");
     expect(html).not.toContain("用户等级与权益");
     expect(html).not.toContain('id="user-levels"');

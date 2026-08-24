@@ -1630,6 +1630,7 @@ export interface OperationalSettingsSnapshot {
   maintenance_allowed_ip_cidrs: string[];
   max_active_sessions: number;
   session_overflow_policy: "deny_new" | "revoke_oldest";
+  referral_reward_points: number;
   daily_reveal_quota: number;
   reauthentication_ttl_minutes: number;
   privacy_deletion_grace_hours: number;
@@ -1813,6 +1814,15 @@ export interface CommunityGroupUpdateRequest {
   description: string;
   visibility: CommunityGroupVisibility;
   status: CommunityGroupStatus;
+}
+
+export interface ReferralProfileResponse {
+  code: string;
+  referral_url: string;
+  reward_points: number;
+  referral_count: number;
+  total_points_earned: number;
+  created_at: string;
 }
 
 export type RewardCatalogKind = "virtual";

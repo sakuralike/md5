@@ -3,6 +3,10 @@ import { createSSRApp } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import RegisterPage from "./RegisterPage.vue";
 
+vi.mock("vue-router", () => ({
+  useRoute: () => ({ query: { ref: "pd-aaaaaaaaaaaaaaaaaaaa" } }),
+}));
+
 vi.mock("../stores/auth", () => ({
   useAuthStore: () => ({ busy: false, error: "", register: vi.fn() }),
 }));
@@ -18,5 +22,6 @@ describe("RegisterPage", () => {
     expect(html).toContain("创建账号");
     expect(html).toContain('autocomplete="new-password"');
     expect(html).toContain("读取注册策略");
+    expect(html).toContain("已识别邀请链接");
   });
 });

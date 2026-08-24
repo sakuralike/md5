@@ -23,6 +23,7 @@ import {
 import {
   CheckCircle2,
   FileText,
+  Gift,
   Globe2,
   ImageUp,
   MailCheck,
@@ -88,6 +89,7 @@ const defaultSnapshot: OperationalSettingsSnapshot = {
   maintenance_allowed_ip_cidrs: [],
   max_active_sessions: 0,
   session_overflow_policy: "deny_new",
+  referral_reward_points: 10,
   daily_reveal_quota: 20,
   reauthentication_ttl_minutes: 5,
   privacy_deletion_grace_hours: 72,
@@ -203,6 +205,7 @@ function normalizedSnapshot(): OperationalSettingsSnapshot {
     ),
     max_active_sessions: Number(form.value.max_active_sessions),
     session_overflow_policy: form.value.session_overflow_policy,
+    referral_reward_points: Number(form.value.referral_reward_points),
     daily_reveal_quota: Number(form.value.daily_reveal_quota),
     reauthentication_ttl_minutes: Number(form.value.reauthentication_ttl_minutes),
     privacy_deletion_grace_hours: Number(form.value.privacy_deletion_grace_hours),
@@ -509,7 +512,7 @@ onMounted(refreshPage);
 
       <section id="operational-policy" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5"><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Server class="size-5 text-primary" />运行参数</h2><p class="mt-1 text-sm text-muted-foreground">这些设置会在保存后直接更新运行时配置。</p></div>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div class="space-y-2"><Label for="daily-quota">每日明文查看配额</Label><Input id="daily-quota" v-model.number="form.daily_reveal_quota" type="number" min="1" max="1000" /></div><div class="space-y-2"><Label for="reauth-ttl">再认证有效期（分钟）</Label><Input id="reauth-ttl" v-model.number="form.reauthentication_ttl_minutes" type="number" min="1" max="15" /></div><div class="space-y-2"><Label for="deletion-grace">账号删除宽限期（小时）</Label><Input id="deletion-grace" v-model.number="form.privacy_deletion_grace_hours" type="number" min="1" max="720" /></div><div class="space-y-2"><Label for="min-client">桌面端最低版本</Label><Input id="min-client" v-model="form.desktop_min_client_version" placeholder="1.0.0" /></div><div class="space-y-2"><Label for="download-cache">升级下载缓存（秒）</Label><Input id="download-cache" v-model.number="form.desktop_update_download_cache_seconds" type="number" min="60" max="31536000" /></div></div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div class="space-y-2"><Label for="daily-quota">每日明文查看配额</Label><Input id="daily-quota" v-model.number="form.daily_reveal_quota" type="number" min="1" max="1000" /></div><div class="space-y-2"><Label for="referral-reward-points" class="flex items-center gap-2"><Gift class="size-4 text-primary" />邀请注册奖励积分</Label><Input id="referral-reward-points" v-model.number="form.referral_reward_points" type="number" min="0" max="10000" /><p class="text-xs text-muted-foreground">每次邀请链接注册成功后，邀请人和新用户各获得相同积分。</p></div><div class="space-y-2"><Label for="reauth-ttl">再认证有效期（分钟）</Label><Input id="reauth-ttl" v-model.number="form.reauthentication_ttl_minutes" type="number" min="1" max="15" /></div><div class="space-y-2"><Label for="deletion-grace">账号删除宽限期（小时）</Label><Input id="deletion-grace" v-model.number="form.privacy_deletion_grace_hours" type="number" min="1" max="720" /></div><div class="space-y-2"><Label for="min-client">桌面端最低版本</Label><Input id="min-client" v-model="form.desktop_min_client_version" placeholder="1.0.0" /></div><div class="space-y-2"><Label for="download-cache">升级下载缓存（秒）</Label><Input id="download-cache" v-model.number="form.desktop_update_download_cache_seconds" type="number" min="60" max="31536000" /></div></div>
       </section>
 
       <section id="email-delivery" class="glass-panel scroll-mt-28 p-6">

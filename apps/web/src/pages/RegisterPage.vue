@@ -2,6 +2,7 @@
 import type { RegistrationMode } from "@password-detective/api-contract";
 import { KeyRound, LoaderCircle, UserPlus } from "lucide-vue-next";
 import { onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +10,14 @@ import { getPublicSiteConfig } from "../services/site";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
+const route = useRoute();
 const username = ref("");
 const email = ref("");
 const password = ref("");
 const inviteCode = ref("");
+const referralCode = ref(
+  typeof route.query.ref === "string" ? route.query.ref.trim().toLowerCase() : "",
+);
 const registrationMode = ref<RegistrationMode>("open");
 const policyLoading = ref(true);
 
@@ -31,6 +36,7 @@ async function submit(): Promise<void> {
       email.value,
       password.value,
       registrationMode.value === "invite_only" ? inviteCode.value : undefined,
+      referralCode.value || undefined,
     );
   } catch {
     // Store 统一展示服务端返回的注册错误。
@@ -66,6 +72,11 @@ async function submit(): Promise<void> {
         <KeyRound class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input id="invite-code" v-model="inviteCode" class="pl-9" maxlength="128" autocomplete="off" required />
       </div>
+    </div>
+    <div v-if="referralCode" class="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+      <Label for="referral-code">邀请链接</Label>
+      <Input id="referral-code" :model-value="referralCode" readonly />
+      <p class="text-xs text-muted-foreground">已识别邀请链接，注册成功后你和邀请人各获得积分奖励。</p>
     </div>
     <Button class="w-full" :disabled="auth.busy || policyLoading">
       <LoaderCircle v-if="auth.busy || policyLoading" class="mr-2 h-4 w-4 animate-spin" />

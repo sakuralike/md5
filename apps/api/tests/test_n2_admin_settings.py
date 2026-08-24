@@ -66,6 +66,7 @@ def _snapshot(quota: int) -> dict[str, object]:
         "maintenance_allowed_ip_cidrs": ["192.0.2.0/24", "2001:db8::/48"],
         "max_active_sessions": 2,
         "session_overflow_policy": "deny_new",
+        "referral_reward_points": 10,
         "daily_reveal_quota": quota,
         "reauthentication_ttl_minutes": 5,
         "privacy_deletion_grace_hours": 168,

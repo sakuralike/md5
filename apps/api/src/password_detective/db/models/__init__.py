@@ -189,6 +189,7 @@ from password_detective.db.models.trust_case import (
 from password_detective.db.models.user import User, UserRole, UserStatus
 from password_detective.db.models.user_growth_event import UserGrowthEvent
 from password_detective.db.models.user_level_profile import UserLevelProfile
+from password_detective.db.models.user_referral import UserReferralProfile, UserReferralUse
 from password_detective.db.models.user_session import UserSession
 from password_detective.db.models.verification import (
     CandidateFeedback,
@@ -365,6 +366,8 @@ __all__ = [
     "UserRole",
     "UserSession",
     "UserStatus",
+    "UserReferralProfile",
+    "UserReferralUse",
     "VerificationChallenge",
     "VerificationEvidenceEvent",
     "VerificationReceipt",

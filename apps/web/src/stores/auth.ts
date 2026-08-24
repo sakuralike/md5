@@ -121,6 +121,7 @@ export const useAuthStore = defineStore("auth", () => {
     email: string,
     password: string,
     inviteCode?: string,
+    referralCode?: string,
   ): Promise<void> {
     busy.value = true;
     error.value = "";
@@ -132,6 +133,7 @@ export const useAuthStore = defineStore("auth", () => {
           email,
           password,
           ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}),
+          ...(referralCode?.trim() ? { referral_code: referralCode.trim() } : {}),
         }),
       });
       await login(username, password);
