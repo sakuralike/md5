@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://password-detective.example/schemas/pdpp/v1/message.json",
+  "title": "Password Detective Plugin Protocol v1 message",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "method": {
+          "enum": ["initialize", "health/check", "command/execute", "shutdown"]
+        },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "initialize" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/initializeParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "health/check" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "command/execute" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/commandParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "shutdown" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        }
+      ]
+    },
+    "initializeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "host_version", "plugin_id", "granted_capabilities"],
+      "properties": {
+        "protocol_version": { "const": "1.0" },
+        "host_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "plugin_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$",
+          "maxLength": 255
+        },
+        "granted_capabilities": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
+    },
+    "commandParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "input"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "input": {}
+      }
+    },
+    "emptyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "successResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "result": {}
+      }
+    },
+    "errorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "error"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "integer" },
+            "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "data": {}
+          }
+        }
+      }
+    }
+  }
+}

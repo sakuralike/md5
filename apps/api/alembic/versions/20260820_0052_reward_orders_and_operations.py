@@ -43,17 +43,37 @@ def upgrade() -> None:
             "sort_weight = 0, entitlement_key = 'community_supporter'"
         )
     )
-    op.alter_column("reward_catalog_items", "category", existing_type=sa.String(64), nullable=False)
-    op.alter_column("reward_catalog_items", "tags", existing_type=sa.JSON(), nullable=False)
-    op.alter_column(
-        "reward_catalog_items", "sort_weight", existing_type=sa.Integer(), nullable=False
-    )
-    op.alter_column(
-        "reward_catalog_items",
-        "entitlement_key",
-        existing_type=sa.String(64),
-        nullable=False,
-    )
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("reward_catalog_items") as batch_op:
+            batch_op.alter_column(
+                "category", existing_type=sa.String(64), existing_nullable=True, nullable=False
+            )
+            batch_op.alter_column(
+                "tags", existing_type=sa.JSON(), existing_nullable=True, nullable=False
+            )
+            batch_op.alter_column(
+                "sort_weight", existing_type=sa.Integer(), existing_nullable=True, nullable=False
+            )
+            batch_op.alter_column(
+                "entitlement_key",
+                existing_type=sa.String(64),
+                existing_nullable=True,
+                nullable=False,
+            )
+    else:
+        op.alter_column(
+            "reward_catalog_items", "category", existing_type=sa.String(64), nullable=False
+        )
+        op.alter_column("reward_catalog_items", "tags", existing_type=sa.JSON(), nullable=False)
+        op.alter_column(
+            "reward_catalog_items", "sort_weight", existing_type=sa.Integer(), nullable=False
+        )
+        op.alter_column(
+            "reward_catalog_items",
+            "entitlement_key",
+            existing_type=sa.String(64),
+            nullable=False,
+        )
     op.create_index("ix_reward_catalog_items_category", "reward_catalog_items", ["category"])
     op.create_index("ix_reward_catalog_items_sort_weight", "reward_catalog_items", ["sort_weight"])
     op.create_index(

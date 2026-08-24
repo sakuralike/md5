@@ -8,6 +8,7 @@ param(
     [switch]$IncludeMonitoring,
     [switch]$IncludeKeyRotation,
     [switch]$IncludeStability,
+    [switch]$IncludePluginConformance,
     [switch]$IncludeStagingReadiness,
     [switch]$IncludeStagingEvidence,
     [switch]$IncludeStagingAdapters,
@@ -163,6 +164,9 @@ try {
     }
     Invoke-Checked dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
     Invoke-Checked dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
+    if ($IncludePluginConformance) {
+        Invoke-Checked pwsh ./scripts/test-pdpp-conformance.ps1
+    }
 } finally {
     Pop-Location
 }

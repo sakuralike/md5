@@ -35,7 +35,16 @@ def upgrade() -> None:
         "community_groups",
         sa.Column("seo_version", sa.Integer(), nullable=False, server_default="1"),
     )
-    op.alter_column("community_groups", "seo_version", server_default=None)
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("community_groups") as batch_op:
+            batch_op.alter_column(
+                "seo_version",
+                existing_type=sa.Integer(),
+                existing_nullable=False,
+                server_default=None,
+            )
+    else:
+        op.alter_column("community_groups", "seo_version", server_default=None)
 
 
 def downgrade() -> None:

@@ -28,9 +28,7 @@ def upgrade() -> None:
         "reward_fulfillments",
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_reward_fulfillments_lease_owner", "reward_fulfillments", ["lease_owner"]
-    )
+    op.create_index("ix_reward_fulfillments_lease_owner", "reward_fulfillments", ["lease_owner"])
     op.create_index(
         "ix_reward_fulfillments_lease_expires_at",
         "reward_fulfillments",
@@ -45,7 +43,16 @@ def upgrade() -> None:
         sa.Column("priority_reason", sa.String(64), nullable=True),
     )
     op.execute(sa.text("UPDATE trust_cases SET priority_score = 0 WHERE priority_score IS NULL"))
-    op.alter_column("trust_cases", "priority_score", existing_type=sa.Integer(), nullable=False)
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("trust_cases") as batch_op:
+            batch_op.alter_column(
+                "priority_score",
+                existing_type=sa.Integer(),
+                existing_nullable=True,
+                nullable=False,
+            )
+    else:
+        op.alter_column("trust_cases", "priority_score", existing_type=sa.Integer(), nullable=False)
     op.create_index("ix_trust_cases_priority_score", "trust_cases", ["priority_score"])
 
 

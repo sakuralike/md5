@@ -42,3 +42,4 @@ Thumbs.db
 *.sqlite*
 logs/
 artifacts/
+tests/fixtures/pdpp/rust/target/
