@@ -11,6 +11,10 @@ vi.mock("../services/referrals", () => ({
   getMyReferralProfile: vi.fn(),
 }));
 
+vi.mock("../services/site", () => ({
+  getPublicSiteConfig: vi.fn(),
+}));
+
 describe("ReferralPage", () => {
   it("renders the referral reward workspace", async () => {
     const html = await renderToString(createSSRApp(ReferralPage));

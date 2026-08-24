@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getMyReferralProfile } from "../services/referrals";
+import { getPublicSiteConfig } from "../services/site";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
@@ -14,6 +15,7 @@ const data = ref<Awaited<ReturnType<typeof getMyReferralProfile>> | null>(null);
 const loading = ref(true);
 const error = ref("");
 const message = ref("");
+const referralEnabled = ref(false);
 const referralUrl = computed(() => {
   if (!data.value || typeof window === "undefined") return data.value?.referral_url ?? "";
   return new URL(data.value.referral_url, window.location.origin).toString();
@@ -24,6 +26,9 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
+    const siteConfig = await getPublicSiteConfig();
+    referralEnabled.value = siteConfig.registration.mode === "open";
+    if (!referralEnabled.value) return;
     data.value = await getMyReferralProfile(auth.accessToken);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "邀请链接暂时无法加载";
@@ -58,8 +63,9 @@ onMounted(() => void load());
 
     <p v-if="error" class="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{{ error }}</p>
     <p v-if="message" class="rounded-md bg-primary/10 px-4 py-3 text-sm text-primary" role="status">{{ message }}</p>
+    <Card v-if="!loading && !referralEnabled" class="border-primary/30 bg-primary/5"><CardContent class="p-6 text-sm text-muted-foreground">当前已启用邀请码注册，邀请链接暂不可用；邀请码优先。</CardContent></Card>
 
-    <Card v-if="data" class="border-border/70">
+    <Card v-if="data && referralEnabled" class="border-border/70">
       <CardHeader><CardTitle>我的专属邀请链接</CardTitle><CardDescription>链接长期有效；每位新用户只能绑定一次邀请关系。</CardDescription></CardHeader>
       <CardContent class="space-y-5">
         <div class="space-y-2"><Label for="referral-link">邀请链接</Label><div class="flex gap-2"><Input id="referral-link" :model-value="referralUrl" readonly /><Button size="icon" type="button" title="复制邀请链接" aria-label="复制邀请链接" @click="copyReferralLink"><Copy class="size-4" /></Button></div></div>

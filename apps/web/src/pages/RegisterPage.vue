@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RegistrationMode } from "@password-detective/api-contract";
 import { KeyRound, LoaderCircle, UserPlus } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +20,12 @@ const referralCode = ref(
 );
 const registrationMode = ref<RegistrationMode>("open");
 const policyLoading = ref(true);
+const referralEnabled = computed(() => registrationMode.value === "open");
 
 onMounted(async () => {
   try {
     registrationMode.value = (await getPublicSiteConfig()).registration.mode;
+    if (!referralEnabled.value) referralCode.value = "";
   } finally {
     policyLoading.value = false;
   }
@@ -36,7 +38,7 @@ async function submit(): Promise<void> {
       email.value,
       password.value,
       registrationMode.value === "invite_only" ? inviteCode.value : undefined,
-      referralCode.value || undefined,
+      referralEnabled.value ? referralCode.value || undefined : undefined,
     );
   } catch {
     // Store 统一展示服务端返回的注册错误。
@@ -73,7 +75,7 @@ async function submit(): Promise<void> {
         <Input id="invite-code" v-model="inviteCode" class="pl-9" maxlength="128" autocomplete="off" required />
       </div>
     </div>
-    <div v-if="referralCode" class="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+    <div v-if="referralCode && referralEnabled" class="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
       <Label for="referral-code">邀请链接</Label>
       <Input id="referral-code" :model-value="referralCode" readonly />
       <p class="text-xs text-muted-foreground">已识别邀请链接，注册成功后你和邀请人各获得积分奖励。</p>

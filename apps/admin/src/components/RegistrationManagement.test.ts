@@ -17,6 +17,7 @@ describe("RegistrationManagement", () => {
     const html = await renderToString(createSSRApp(RegistrationManagement));
 
     expect(html).toContain("注册策略与邀请码");
+    expect(html).toContain("邀请码注册为第一优先级");
     expect(html).toContain("保存注册策略");
     expect(html).toContain("生成邀请码");
     expect(html).toContain("明文仅在创建成功后显示一次");

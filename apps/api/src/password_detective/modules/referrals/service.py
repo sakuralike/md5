@@ -14,6 +14,7 @@ from password_detective.db.models.user import User, UserStatus
 from password_detective.db.models.user_referral import UserReferralProfile, UserReferralUse
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.referrals.schemas import ReferralProfileResponse
+from password_detective.modules.registration.service import get_registration_policy
 
 REFERRAL_REWARD_SETTING_KEY = "referral_reward_points"
 DEFAULT_REFERRAL_REWARD_POINTS = 10
@@ -147,6 +148,12 @@ def award_referral_rewards(
 
 
 def get_referral_profile(db: Session, *, user_id: str) -> ReferralProfileResponse:
+    if get_registration_policy(db).mode == "invite_only":
+        raise AppError(
+            "auth.referral_disabled",
+            "当前已启用邀请码注册，邀请链接暂不可用",
+            status_code=409,
+        )
     profile = ensure_referral_profile(db, user_id=user_id)
     referral_count = int(
         db.scalar(

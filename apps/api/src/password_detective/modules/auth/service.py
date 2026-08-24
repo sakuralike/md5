@@ -46,6 +46,7 @@ from password_detective.modules.referrals.service import (
 )
 from password_detective.modules.registration.service import (
     consume_registration_invite,
+    get_registration_policy,
     resolve_registration_invite,
 )
 from password_detective.modules.reputation.levels import (
@@ -193,11 +194,13 @@ def register_user(
         invite_code=payload.invite_code,
         context=context,
     )
-    referral = resolve_referral_code(
-        db,
-        referral_code=payload.referral_code,
-        context=context,
-    )
+    referral = None
+    if get_registration_policy(db).mode == "open":
+        referral = resolve_referral_code(
+            db,
+            referral_code=payload.referral_code,
+            context=context,
+        )
     existing = db.scalar(select(User.id).where(or_(User.username == username, User.email == email)))
     if existing:
         raise AppError("auth.account_conflict", "用户名或邮箱已被使用", status_code=409)

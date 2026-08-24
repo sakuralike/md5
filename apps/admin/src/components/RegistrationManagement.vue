@@ -124,7 +124,7 @@ onMounted(() => void load());
         <span class="rounded-md bg-primary/10 p-2 text-primary"><KeyRound class="h-5 w-5" /></span>
         <div>
           <h2 class="font-semibold">注册策略与邀请码</h2>
-          <p class="mt-1 text-sm leading-6 text-muted-foreground">开放注册与邀请码注册互斥；邀请码明文仅在创建成功后显示一次。</p>
+          <p class="mt-1 text-sm leading-6 text-muted-foreground">邀请码注册与用户邀请链接不能同时启用：邀请码注册为第一优先级，选择开放注册后才启用邀请链接。邀请码明文仅在创建成功后显示一次。</p>
         </div>
       </div>
       <Button variant="outline" size="sm" :disabled="loading" @click="load">
@@ -138,8 +138,8 @@ onMounted(() => void load());
         <Select v-model="mode">
           <SelectTrigger aria-label="注册模式"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="open">开放注册</SelectItem>
-            <SelectItem value="invite_only">仅邀请码注册</SelectItem>
+            <SelectItem value="open">开放注册（邀请链接可用）</SelectItem>
+            <SelectItem value="invite_only">仅邀请码注册（第一优先级）</SelectItem>
           </SelectContent>
         </Select>
       </div>
