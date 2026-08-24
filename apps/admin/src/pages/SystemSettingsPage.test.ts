@@ -80,6 +80,9 @@ describe("SystemSettingsPage", () => {
     expect(html).toContain("系统配置工作台");
     expect(html).toContain("站点品牌");
     expect(html).toContain("站点导航");
+    expect(html).toContain("手动输入路径");
+    expect(html).toContain("选择现有页面");
+    expect(html).toContain("顶部导航仅显示这里保存并启用的菜单项");
     expect(html).toContain("备案与联系信息");
     expect(html).toContain('id="maintenance-governance"');
     expect(html).toContain("维护 IP 白名单");

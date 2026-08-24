@@ -110,6 +110,25 @@ const defaultSeoSettings: SeoSettings = {
   sitemap_enabled: false,
 };
 
+interface NavigationPathOption {
+  label: string;
+  path: string;
+  requiresAuth: boolean;
+}
+
+const navigationPathOptions: NavigationPathOption[] = [
+  { label: "首页", path: "/", requiresAuth: false },
+  { label: "社区", path: "/community", requiresAuth: false },
+  { label: "积分商城", path: "/rewards", requiresAuth: false },
+  { label: "安全工具", path: "/tools", requiresAuth: false },
+  { label: "数据统计", path: "/statistics", requiresAuth: false },
+  { label: "用户中心", path: "/user-center", requiresAuth: true },
+  { label: "邀请奖励", path: "/referrals", requiresAuth: true },
+  { label: "等级积分信誉", path: "/reputation", requiresAuth: true },
+  { label: "我的贡献", path: "/submissions", requiresAuth: true },
+  { label: "信任案件", path: "/trust-cases", requiresAuth: true },
+];
+
 const auth = useAdminAuthStore();
 const form = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
 const baselineSnapshot = ref<OperationalSettingsSnapshot>(cloneOperationalSettingsSnapshot(defaultSnapshot));
@@ -221,11 +240,33 @@ function normalizedSnapshot(): OperationalSettingsSnapshot {
 function addNavigationItem(): void {
   if (form.value.site_navigation.length >= 8) return;
   const sequence = form.value.site_navigation.length + 1;
-  form.value.site_navigation.push({ label: `导航 ${sequence}`, path: `/page-${sequence}`, enabled: true, requires_auth: false });
+  const available = navigationPathOptions.find(
+    (option) => !form.value.site_navigation.some((item) => item.path === option.path),
+  );
+  form.value.site_navigation.push({
+    label: available?.label ?? `导航 ${sequence}`,
+    path: available?.path ?? `/custom-${sequence}`,
+    enabled: true,
+    requires_auth: available?.requiresAuth ?? false,
+  });
 }
 
 function removeNavigationItem(index: number): void {
   if (form.value.site_navigation.length > 1) form.value.site_navigation.splice(index, 1);
+}
+
+function selectedNavigationPreset(path: string): string | undefined {
+  return navigationPathOptions.some((option) => option.path === path) ? path : undefined;
+}
+
+function applyNavigationPath(index: number, value: unknown): void {
+  if (typeof value !== "string") return;
+  const option = navigationPathOptions.find((item) => item.path === value);
+  const navigation = form.value.site_navigation[index];
+  if (!option || !navigation) return;
+  navigation.label = option.label;
+  navigation.path = option.path;
+  navigation.requires_auth = option.requiresAuth;
 }
 
 
@@ -417,8 +458,8 @@ onMounted(refreshPage);
       </section>
 
       <section id="site-navigation" class="glass-panel scroll-mt-28 p-6">
-        <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Navigation class="size-5 text-primary" />站点导航</h2><p class="mt-1 text-sm text-muted-foreground">至少保留一个已启用的站内导航项。</p></div><Button type="button" variant="outline" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button></div>
-        <div class="space-y-3"><div v-for="(item, index) in form.site_navigation" :key="`${item.path}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div class="space-y-2"><Label :for="`navigation-label-${index}`">名称</Label><Input :id="`navigation-label-${index}`" v-model="item.label" /></div><div class="space-y-2"><Label :for="`navigation-path-${index}`">路径</Label><Input :id="`navigation-path-${index}`" v-model="item.path" /></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="item.enabled" @update:model-value="item.enabled = $event === true" />启用</Label><Label class="flex items-center gap-2"><Checkbox :model-value="item.requires_auth" @update:model-value="item.requires_auth = $event === true" />登录后可见</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.site_navigation.length <= 1" @click="removeNavigationItem(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div></div></div>
+        <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Navigation class="size-5 text-primary" />站点导航</h2><p class="mt-1 text-sm text-muted-foreground">顶部导航仅显示这里保存并启用的菜单项；路径可以手动输入，也可以选择现有页面。</p></div><Button type="button" variant="outline" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button></div>
+        <div class="space-y-3"><div v-for="(item, index) in form.site_navigation" :key="`${item.path}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto_auto]"><div class="space-y-2"><Label :for="`navigation-label-${index}`">名称</Label><Input :id="`navigation-label-${index}`" v-model="item.label" /></div><div class="grid gap-3 sm:grid-cols-2"><div class="space-y-2"><Label :for="`navigation-path-${index}`">手动输入路径</Label><Input :id="`navigation-path-${index}`" v-model="item.path" placeholder="/custom-page" /></div><div class="space-y-2"><Label :for="`navigation-preset-${index}`">选择现有页面</Label><Select :model-value="selectedNavigationPreset(item.path)" @update:model-value="applyNavigationPath(index, $event)"><SelectTrigger :id="`navigation-preset-${index}`"><SelectValue placeholder="选择页面" /></SelectTrigger><SelectContent><SelectItem v-for="option in navigationPathOptions" :key="option.path" :value="option.path">{{ option.label }}（{{ option.path }}）</SelectItem></SelectContent></Select></div></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="item.enabled" @update:model-value="item.enabled = $event === true" />启用</Label><Label class="flex items-center gap-2"><Checkbox :model-value="item.requires_auth" @update:model-value="item.requires_auth = $event === true" />登录后可见</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.site_navigation.length <= 1" @click="removeNavigationItem(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div></div></div>
       </section>
 
       <section id="site-legal" class="glass-panel scroll-mt-28 p-6">
