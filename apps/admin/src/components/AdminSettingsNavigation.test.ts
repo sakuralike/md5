@@ -18,7 +18,7 @@ describe("AdminSettingsNavigation", () => {
     const html = await renderToString(app);
 
     expect(html).toContain("SEO 设置");
-    expect(html).toContain("注册与邀请");
+    expect(html).toContain("邀请码与邀请链接");
     expect(html).toContain("/registration");
     expect(html).toContain("/settings#seo-settings");
     expect(html).toContain("/settings#site-legal");

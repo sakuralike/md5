@@ -19,7 +19,7 @@ describe("RegistrationSettingsPage", () => {
     );
     const html = await renderToString(app);
 
-    expect(html).toContain("注册与邀请");
+    expect(html).toContain("邀请码与邀请链接");
     expect(html).toContain("邀请码注册为第一优先级");
     expect(html).toContain("设置邀请奖励积分");
     expect(html).toContain("注册策略组件");

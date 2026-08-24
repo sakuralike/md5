@@ -141,7 +141,7 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: UserRoundCog,
   },
   {
-    label: "注册与邀请",
+    label: "邀请码与邀请链接",
     path: "/registration",
     description: "管理邀请码注册策略与用户邀请链接开关。",
     group: "系统管理",
