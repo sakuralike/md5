@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -23,7 +33,13 @@ class RewardCatalogStatus(StrEnum):
 
 class RewardCatalogItem(Base):
     __tablename__ = "reward_catalog_items"
-    __table_args__ = (UniqueConstraint("slug", name="uq_reward_catalog_items_slug"),)
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_reward_catalog_items_slug"),
+        CheckConstraint(
+            "kind = 'VIRTUAL'",
+            name="ck_reward_catalog_items_virtual_kind",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     slug: Mapped[str] = mapped_column(String(64), index=True)

@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from password_detective.core.ids import new_id
@@ -96,6 +104,12 @@ class RewardOrder(Base):
 
 class RewardOrderItem(Base):
     __tablename__ = "reward_order_items"
+    __table_args__ = (
+        CheckConstraint(
+            "kind_snapshot = 'VIRTUAL'",
+            name="ck_reward_order_items_virtual_kind",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     order_id: Mapped[str] = mapped_column(
@@ -174,6 +188,10 @@ class RewardFulfillment(Base):
     __tablename__ = "reward_fulfillments"
     __table_args__ = (
         UniqueConstraint("order_id", "attempt_no", name="uq_reward_fulfillment_attempt"),
+        CheckConstraint(
+            "delivery_kind = 'INTERNAL_ENTITLEMENT'",
+            name="ck_reward_fulfillments_internal_entitlement",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
