@@ -15,6 +15,7 @@ import LoginPage from "../pages/LoginPage.vue";
 import RiskAlertsPage from "../pages/RiskAlertsPage.vue";
 import RewardCatalogPage from "../pages/RewardCatalogPage.vue";
 import RewardOrdersPage from "../pages/RewardOrdersPage.vue";
+import RegistrationSettingsPage from "../pages/RegistrationSettingsPage.vue";
 import RoleChangesPage from "../pages/RoleChangesPage.vue";
 import SystemSettingsPage from "../pages/SystemSettingsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
@@ -37,6 +38,7 @@ const router = createRouter({
     { path: "/", component: DashboardPage, meta: { requiresAdmin: true } },
     { path: "/audit", component: AuditPage, meta: { requiresAdmin: true } },
     { path: "/users", component: UserGovernancePage, meta: { requiresAdmin: true } },
+    { path: "/registration", component: RegistrationSettingsPage, meta: { requiresAdmin: true } },
     { path: "/role-changes", component: RoleChangesPage, meta: { requiresAdmin: true } },
     { path: "/settings", component: SystemSettingsPage, meta: { requiresAdmin: true } },
     { path: "/candidates", component: CandidateModerationPage, meta: { requiresAdmin: true } },
