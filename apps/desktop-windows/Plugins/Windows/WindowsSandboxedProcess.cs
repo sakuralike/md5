@@ -83,7 +83,10 @@ internal sealed class WindowsSandboxedProcess : IAsyncDisposable
             CreatePipePair(out parentStandardOutput, out childStandardOutput, childReads: false);
             CreatePipePair(out parentStandardError, out childStandardError, childReads: false);
 
-            job = PluginJobObject.Create(options.MemoryLimitBytes, options.ActiveProcessLimit);
+            job = PluginJobObject.Create(
+                options.MemoryLimitBytes,
+                options.ActiveProcessLimit,
+                options.CpuRatePercent);
             if (options.UseAppContainer)
             {
                 profile = AppContainerProfile.Acquire(
@@ -95,6 +98,19 @@ internal sealed class WindowsSandboxedProcess : IAsyncDisposable
                 profile.GrantDirectory(
                     options.WorkingDirectory,
                     FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
+                foreach (var directory in options.ReadOnlyDirectories)
+                {
+                    profile.GrantDirectory(
+                        directory,
+                        FileSystemRights.ReadAndExecute | FileSystemRights.Read | FileSystemRights.Synchronize);
+                }
+
+                foreach (var directory in options.WritableDirectories)
+                {
+                    profile.GrantDirectory(
+                        directory,
+                        FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
+                }
             }
 
             using var attributes = new ProcessAttributeList(
@@ -319,7 +335,10 @@ internal sealed class PluginJobObject : IDisposable
 
     private PluginJobObject(SafeKernelObjectHandle handle) => _handle = handle;
 
-    public static PluginJobObject Create(long memoryLimitBytes, int activeProcessLimit)
+    public static PluginJobObject Create(
+        long memoryLimitBytes,
+        int activeProcessLimit,
+        int cpuRatePercent)
     {
         var handle = NativeMethods.CreateJobObject(IntPtr.Zero, null);
         if (handle.IsInvalid)
@@ -353,6 +372,22 @@ internal sealed class PluginJobObject : IDisposable
                     checked((uint)size)))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to apply plugin Job Object limits.");
+            }
+
+            var cpuLimit = new NativeMethods.JobObjectCpuRateControlInformation
+            {
+                ControlFlags = NativeMethods.JobObjectCpuRateControlEnable
+                    | NativeMethods.JobObjectCpuRateControlHardCap,
+                CpuRate = checked((uint)(cpuRatePercent * 100)),
+            };
+            Marshal.StructureToPtr(cpuLimit, pointer, fDeleteOld: false);
+            if (!NativeMethods.SetInformationJobObject(
+                    handle,
+                    NativeMethods.JobObjectInfoType.CpuRateControlInformation,
+                    pointer,
+                    checked((uint)Marshal.SizeOf<NativeMethods.JobObjectCpuRateControlInformation>())))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to apply plugin CPU hard cap.");
             }
         }
         catch
@@ -732,6 +767,8 @@ internal static class NativeMethods
     internal const uint JobObjectLimitProcessMemory = 0x00000100;
     internal const uint JobObjectLimitJobMemory = 0x00000200;
     internal const uint JobObjectLimitKillOnJobClose = 0x00002000;
+    internal const uint JobObjectCpuRateControlEnable = 0x00000001;
+    internal const uint JobObjectCpuRateControlHardCap = 0x00000004;
     internal const uint StillActive = 259;
     internal const uint WaitTimeout = 258;
     internal const uint WaitFailed = uint.MaxValue;
@@ -831,9 +868,17 @@ internal static class NativeMethods
         internal UIntPtr PeakJobMemoryUsed;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct JobObjectCpuRateControlInformation
+    {
+        internal uint ControlFlags;
+        internal uint CpuRate;
+    }
+
     internal enum JobObjectInfoType
     {
         ExtendedLimitInformation = 9,
+        CpuRateControlInformation = 15,
     }
 
     internal enum TokenInformationClass

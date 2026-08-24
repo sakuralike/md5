@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 
 if (args is ["--child"])
@@ -51,7 +52,7 @@ static async Task ExecuteCommandAsync(string id, JsonElement parameters)
         case "echo":
             await WriteResultAsync(id, new
             {
-                output = input.GetString(),
+                output = input,
                 language = "csharp",
             });
             return;
@@ -136,6 +137,34 @@ static async Task ExecuteCommandAsync(string id, JsonElement parameters)
         case "malformed-envelope":
             await Console.Out.WriteLineAsync($"{{\"jsonrpc\":2,\"id\":\"{id}\",\"result\":{{}}}}");
             await Console.Out.FlushAsync();
+            return;
+        case "host-file-read":
+            var descriptor = input.GetProperty("file");
+            await WriteAsync(new
+            {
+                jsonrpc = "2.0",
+                id = "plugin-file-read-1",
+                method = "host/file/read",
+                @params = new
+                {
+                    file_ref = descriptor.GetProperty("file_ref").GetString(),
+                    offset = 0,
+                    count = Math.Min(descriptor.GetProperty("length").GetInt32(), 4096),
+                },
+            });
+            var hostResponseLine = await Console.In.ReadLineAsync()
+                ?? throw new InvalidOperationException("Host callback response is missing.");
+            using (var hostResponse = JsonDocument.Parse(hostResponseLine))
+            {
+                var result = hostResponse.RootElement.GetProperty("result");
+                var content = Encoding.UTF8.GetString(
+                    Convert.FromBase64String(result.GetProperty("data_base64").GetString()!));
+                await WriteResultAsync(id, new
+                {
+                    content,
+                    language = "csharp",
+                });
+            }
             return;
         default:
             await WriteErrorAsync(id, -32602, "Unknown synthetic command");

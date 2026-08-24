@@ -6,7 +6,10 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using PasswordDetective.Desktop.Plugins;
+using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
+using PasswordDetective.Desktop.Plugins.Runtime;
+using PasswordDetective.Desktop.Plugins.Storage;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -221,6 +224,85 @@ public sealed class PluginProcessHostTests : IDisposable
         Assert.True(host.HasExited);
     }
 
+    [Fact]
+    public async Task PluginReadsOnlyOpaqueGrantedFileThroughHostCallback()
+    {
+        var privateFile = Path.Combine(_workingDirectory, "selected.txt");
+        await File.WriteAllTextAsync(privateFile, "synthetic broker content");
+        var installedDirectory = Path.Combine(_workingDirectory, "installed");
+        var schemaDirectory = Path.Combine(installedDirectory, "schemas");
+        Directory.CreateDirectory(schemaDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(schemaDirectory, "read.schema.json"),
+            """{"type":"object","properties":{"file":{"type":"string","format":"file"}}}""");
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "broker-storage"));
+        using var broker = new PluginHostBroker(
+            "synthetic.csharp",
+            ["file:read:selected", "storage:private"],
+            new PluginPrivateStorage(paths));
+        var input = broker.PrepareCommandInput(
+            new PluginCommandManifest("host-file-read", "读取文件", "schemas/read.schema.json"),
+            installedDirectory,
+            JsonSerializer.SerializeToElement(new { file = privateFile }));
+        var fileDescriptor = input.GetProperty("file");
+        Assert.False(fileDescriptor.TryGetProperty("path", out _));
+        Assert.False(input.GetRawText().Contains(privateFile, StringComparison.OrdinalIgnoreCase));
+
+        var options = new PluginProcessStartOptions
+        {
+            PluginId = "synthetic.csharp",
+            ExecutablePath = FindSyntheticPlugin(),
+            WorkingDirectory = _workingDirectory,
+            MemoryLimitBytes = 256L * 1024 * 1024,
+            ActiveProcessLimit = 1,
+        }.WithoutAppContainerForTests();
+        await using var host = await PluginProcessHost.StartAsync(options, default, broker);
+        await host.InitializeAsync("0.1.0", ["file:read:selected"], TimeSpan.FromSeconds(5));
+
+        var result = await ExecuteAsync<SyntheticFileReadResult>(
+            host,
+            "host-file-read",
+            input);
+
+        Assert.Equal("synthetic broker content", result.Content);
+        Assert.Equal("csharp", result.Language);
+    }
+
+    [Fact]
+    public async Task HostBrokerEnforcesPrivateStorageCapability()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "private-storage-broker"));
+        var storage = new PluginPrivateStorage(paths);
+        using var allowed = new PluginHostBroker(
+            "synthetic.csharp",
+            ["storage:private"],
+            storage);
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            [],
+            storage);
+
+        var stored = await allowed.HandleAsync(
+            "host/storage/set",
+            JsonSerializer.SerializeToElement(new
+            {
+                key = "settings.current",
+                value = new { enabled = true },
+            }));
+        var loaded = await allowed.HandleAsync(
+            "host/storage/get",
+            JsonSerializer.SerializeToElement(new { key = "settings.current" }));
+
+        Assert.True(stored.GetProperty("stored").GetBoolean());
+        Assert.True(loaded.GetProperty("found").GetBoolean());
+        Assert.True(loaded.GetProperty("value").GetProperty("enabled").GetBoolean());
+        var exception = await Assert.ThrowsAsync<PdppHostRequestException>(
+            () => denied.HandleAsync(
+                "host/storage/get",
+                JsonSerializer.SerializeToElement(new { key = "settings.current" })));
+        Assert.Equal(-32001, exception.Code);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))
@@ -342,4 +424,5 @@ public sealed class PluginProcessHostTests : IDisposable
     private sealed record SyntheticChildResult(int ChildPid, string Language);
     private sealed record SyntheticProbeResult(bool FileRead, bool NetworkConnected, string Language);
     private sealed record SyntheticEnvironmentResult(bool Present, string Language);
+    private sealed record SyntheticFileReadResult(string Content, string Language);
 }

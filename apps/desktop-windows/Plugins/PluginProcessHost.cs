@@ -10,6 +10,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
 {
     private readonly WindowsSandboxedProcess _sandboxedProcess;
     private readonly PluginProcessStartOptions _options;
+    private readonly IPdppHostRequestHandler? _hostRequestHandler;
     private readonly Stream _output;
     private readonly StreamWriter _input;
     private readonly CancellationTokenSource _lifetime = new();
@@ -21,10 +22,12 @@ public sealed class PluginProcessHost : IAsyncDisposable
 
     private PluginProcessHost(
         WindowsSandboxedProcess sandboxedProcess,
-        PluginProcessStartOptions options)
+        PluginProcessStartOptions options,
+        IPdppHostRequestHandler? hostRequestHandler)
     {
         _sandboxedProcess = sandboxedProcess;
         _options = options;
+        _hostRequestHandler = hostRequestHandler;
         _input = new StreamWriter(
             sandboxedProcess.StandardInput,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
@@ -54,11 +57,12 @@ public sealed class PluginProcessHost : IAsyncDisposable
 
     public static Task<PluginProcessHost> StartAsync(
         PluginProcessStartOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IPdppHostRequestHandler? hostRequestHandler = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var process = WindowsSandboxedProcess.Start(options);
-        return Task.FromResult(new PluginProcessHost(process, options));
+        return Task.FromResult(new PluginProcessHost(process, options, hostRequestHandler));
     }
 
     public async Task<PdppInitializeResult> InitializeAsync(
@@ -148,25 +152,34 @@ public sealed class PluginProcessHost : IAsyncDisposable
                 }
 
                 await write;
-                var read = ReadBoundedLineAsync();
-                if (await Task.WhenAny(read, cancellationSignal) != read)
+                while (true)
                 {
-                    ObserveFault(read);
-                    await ThrowAfterCancellationAsync(method, timeout, timeoutCancellation, cancellationToken);
-                }
+                    var read = ReadBoundedLineAsync();
+                    if (await Task.WhenAny(read, cancellationSignal) != read)
+                    {
+                        ObserveFault(read);
+                        await ThrowAfterCancellationAsync(method, timeout, timeoutCancellation, cancellationToken);
+                    }
 
-                var responseLine = await read;
-                if (responseLine is null)
-                {
-                    throw CreateExitedException();
-                }
+                    var responseLine = await read;
+                    if (responseLine is null)
+                    {
+                        throw CreateExitedException();
+                    }
 
-                if (Encoding.UTF8.GetByteCount(responseLine) > _options.MaximumMessageBytes)
-                {
-                    throw new PdppProtocolException("The PDPP response exceeds the configured message limit.");
-                }
+                    if (Encoding.UTF8.GetByteCount(responseLine) > _options.MaximumMessageBytes)
+                    {
+                        throw new PdppProtocolException("The PDPP response exceeds the configured message limit.");
+                    }
 
-                return ParseResponse<TResult>(responseLine, requestId);
+                    var hostRequest = ParseHostRequest(responseLine);
+                    if (hostRequest is null)
+                    {
+                        return ParseResponse<TResult>(responseLine, requestId);
+                    }
+
+                    await RespondToHostRequestAsync(hostRequest, linked.Token);
+                }
             }
             catch (OperationCanceledException) when (timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
@@ -319,6 +332,95 @@ public sealed class PluginProcessHost : IAsyncDisposable
         }
     }
 
+    private static PdppHostRequest? ParseHostRequest(string line)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(line, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = 32,
+            });
+        }
+        catch (JsonException exception)
+        {
+            throw new PdppProtocolException("The plugin returned invalid JSON.", exception);
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("method", out var method))
+            {
+                return null;
+            }
+
+            if (root.EnumerateObject().Count() != 4
+                || !root.TryGetProperty("jsonrpc", out var jsonRpc)
+                || jsonRpc.ValueKind != JsonValueKind.String
+                || jsonRpc.GetString() != PdppProtocol.JsonRpcVersion
+                || !root.TryGetProperty("id", out var id)
+                || id.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(id.GetString())
+                || id.GetString()!.Length > 64
+                || method.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(method.GetString())
+                || method.GetString()!.Length > 128
+                || !root.TryGetProperty("params", out var parameters)
+                || parameters.ValueKind != JsonValueKind.Object)
+            {
+                throw new PdppProtocolException("The plugin returned an invalid host request envelope.");
+            }
+
+            return new PdppHostRequest(id.GetString()!, method.GetString()!, parameters.Clone());
+        }
+    }
+
+    private async Task RespondToHostRequestAsync(
+        PdppHostRequest request,
+        CancellationToken cancellationToken)
+    {
+        object response;
+        try
+        {
+            if (_hostRequestHandler is null)
+            {
+                throw new PdppHostRequestException(-32601, "Host method is unavailable.");
+            }
+
+            var result = await _hostRequestHandler.HandleAsync(
+                request.Method,
+                request.Params,
+                cancellationToken);
+            response = new
+            {
+                jsonrpc = PdppProtocol.JsonRpcVersion,
+                id = request.Id,
+                result,
+            };
+        }
+        catch (PdppHostRequestException exception)
+        {
+            response = new
+            {
+                jsonrpc = PdppProtocol.JsonRpcVersion,
+                id = request.Id,
+                error = new { code = exception.Code, message = exception.Message },
+            };
+        }
+
+        var line = JsonSerializer.Serialize(response, PdppProtocol.SerializerOptions);
+        if (Encoding.UTF8.GetByteCount(line) > _options.MaximumMessageBytes)
+        {
+            throw new PdppProtocolException("The host response exceeds the configured message limit.");
+        }
+
+        await _input.WriteLineAsync(line.AsMemory(), cancellationToken);
+    }
+
     private async Task CaptureStandardErrorAsync()
     {
         var buffer = new byte[1024];
@@ -461,4 +563,10 @@ public sealed class PdppProcessExitedException : PdppProtocolException
 
     public int? ExitCode { get; }
     public string StandardError { get; }
+}
+
+public sealed class PdppHostRequestException : Exception
+{
+    public PdppHostRequestException(int code, string message) : base(message) => Code = code;
+    public int Code { get; }
 }

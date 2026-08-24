@@ -1,0 +1,79 @@
+using PasswordDetective.Desktop.Plugins.Packages;
+
+namespace PasswordDetective.Desktop.Plugins.Permissions;
+
+public sealed record PluginPermissionDecision(
+    IReadOnlyList<string> Granted,
+    IReadOnlyList<string> DeniedRequired,
+    IReadOnlyList<string> DeniedOptional);
+
+public sealed class PluginPermissionPolicy
+{
+    public static readonly IReadOnlySet<string> LocallySupportedCapabilities = new HashSet<string>(
+        [
+            "ui:command",
+            "storage:private",
+            "file:read:selected",
+        ],
+        StringComparer.Ordinal);
+
+    public static readonly IReadOnlySet<string> KnownCapabilities = new HashSet<string>(
+        LocallySupportedCapabilities.Concat(
+        [
+            "api:profile:read",
+            "api:hash:read",
+            "api:verification:submit",
+            "network:internet",
+            "secret:candidate:ephemeral",
+            "process:spawn",
+            "system:persistence",
+            "credential:read",
+        ]),
+        StringComparer.Ordinal);
+
+    public PluginPermissionDecision Evaluate(
+        PluginManifest manifest,
+        IEnumerable<string> userGrantedCapabilities)
+    {
+        var required = ValidateRequested(manifest.Capabilities.Required, "必需权限");
+        var optional = ValidateRequested(manifest.Capabilities.Optional, "可选权限");
+        if (required.Intersect(optional, StringComparer.Ordinal).Any())
+        {
+            throw new PluginPackageException("同一插件权限不能同时声明为必需和可选。");
+        }
+
+        var userGranted = userGrantedCapabilities.ToHashSet(StringComparer.Ordinal);
+        var deniedRequired = required
+            .Where(capability => !LocallySupportedCapabilities.Contains(capability)
+                                 || !userGranted.Contains(capability))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var deniedOptional = optional
+            .Where(capability => !LocallySupportedCapabilities.Contains(capability)
+                                 || !userGranted.Contains(capability))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var granted = required.Concat(optional)
+            .Where(capability => LocallySupportedCapabilities.Contains(capability)
+                                 && userGranted.Contains(capability))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        return new PluginPermissionDecision(granted, deniedRequired, deniedOptional);
+    }
+
+    private static string[] ValidateRequested(IEnumerable<string> capabilities, string fieldName)
+    {
+        var values = capabilities.ToArray();
+        if (values.Length > 64
+            || values.Any(value => string.IsNullOrWhiteSpace(value)
+                                   || value.Length > 128
+                                   || !KnownCapabilities.Contains(value))
+            || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+        {
+            throw new PluginPackageException($"插件{fieldName}包含未知、重复或无效项。");
+        }
+
+        return values;
+    }
+}

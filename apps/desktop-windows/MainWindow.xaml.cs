@@ -1,5 +1,14 @@
 using System.Windows;
 using System.Windows.Input;
+using PasswordDetective.Desktop.Plugins.Installation;
+using PasswordDetective.Desktop.Plugins.Packages;
+using PasswordDetective.Desktop.Plugins.Permissions;
+using PasswordDetective.Desktop.Plugins.Registry;
+using PasswordDetective.Desktop.Plugins.Runtime;
+using PasswordDetective.Desktop.Plugins.Safety;
+using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.UI;
+using PasswordDetective.Desktop.Plugins.ViewModels;
 using PasswordDetective.Desktop.Services;
 using PasswordDetective.Desktop.ViewModels;
 
@@ -8,10 +17,15 @@ namespace PasswordDetective.Desktop;
 public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
+    private readonly PluginStoragePaths _pluginPaths;
+    private readonly PluginSafeMode _pluginSafeMode;
+    private PluginMarketplaceWindow? _pluginMarketplaceWindow;
 
-    public MainWindow()
+    public MainWindow(PluginStoragePaths pluginPaths, PluginSafeMode pluginSafeMode)
     {
         InitializeComponent();
+        _pluginPaths = pluginPaths;
+        _pluginSafeMode = pluginSafeMode;
         _viewModel = new MainWindowViewModel(
             new FileFingerprintService(),
             new ArchiveVerificationService(),
@@ -20,6 +34,50 @@ public partial class MainWindow : Window
             new ProtectedSessionStore(),
             new ExternalUriLauncher());
         DataContext = _viewModel;
+    }
+
+    private void OpenPluginMarketplace_OnClick(object sender, RoutedEventArgs eventArgs)
+    {
+        if (_pluginMarketplaceWindow is { IsLoaded: true })
+        {
+            if (_pluginMarketplaceWindow.WindowState == WindowState.Minimized)
+            {
+                _pluginMarketplaceWindow.WindowState = WindowState.Normal;
+            }
+
+            _pluginMarketplaceWindow.Activate();
+            return;
+        }
+
+        var registry = new PluginRegistry(_pluginPaths);
+        var permissionPolicy = new PluginPermissionPolicy();
+        var logs = new PluginLogStore(_pluginPaths);
+        var execution = new PluginExecutionService(_pluginPaths, logs);
+        var installer = new PluginInstaller(
+            _pluginPaths,
+            new PluginPackageVerifier(),
+            permissionPolicy,
+            registry,
+            execution);
+        var runtime = new PluginRuntimeService(
+            registry,
+            execution,
+            _pluginSafeMode,
+            logs);
+        var viewModel = new PluginMarketplaceViewModel(
+            _pluginPaths,
+            installer,
+            permissionPolicy,
+            registry,
+            runtime,
+            _pluginSafeMode,
+            new PluginDialogService());
+        _pluginMarketplaceWindow = new PluginMarketplaceWindow(viewModel)
+        {
+            Owner = this,
+        };
+        _pluginMarketplaceWindow.Closed += (_, _) => _pluginMarketplaceWindow = null;
+        _pluginMarketplaceWindow.Show();
     }
 
     private void CandidatePasswordBox_OnPasswordChanged(object sender, RoutedEventArgs eventArgs) =>

@@ -60,3 +60,16 @@ public sealed record PdppHealthResult(
 public sealed record PdppCommandParams(
     [property: JsonPropertyName("command")] string Command,
     [property: JsonPropertyName("input")] JsonElement Input);
+
+public sealed record PdppHostRequest(
+    string Id,
+    string Method,
+    JsonElement Params);
+
+public interface IPdppHostRequestHandler
+{
+    Task<JsonElement> HandleAsync(
+        string method,
+        JsonElement parameters,
+        CancellationToken cancellationToken = default);
+}

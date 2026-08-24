@@ -338,6 +338,7 @@
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Text="{Binding ApiConnectionStatus}" Foreground="#00C000" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Button Content="插件市场" Click="OpenPluginMarketplace_OnClick" />
                             <Button Content="检查更新" Command="{Binding CheckForUpdatesCommand}" />
                             <Button Content="下载升级包" Command="{Binding OpenUpdateDownloadCommand}" />
                         </StackPanel>

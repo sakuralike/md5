@@ -16,7 +16,15 @@
         "jsonrpc": { "const": "2.0" },
         "id": { "type": "string", "minLength": 1, "maxLength": 64 },
         "method": {
-          "enum": ["initialize", "health/check", "command/execute", "shutdown"]
+          "enum": [
+            "initialize",
+            "health/check",
+            "command/execute",
+            "shutdown",
+            "host/file/read",
+            "host/storage/get",
+            "host/storage/set"
+          ]
         },
         "params": { "type": "object" }
       },
@@ -36,6 +44,18 @@
         {
           "if": { "properties": { "method": { "const": "shutdown" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/file/read" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/fileReadParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/storage/get" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/storageGetParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/storage/set" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/storageSetParams" } } }
         }
       ]
     },
@@ -72,6 +92,33 @@
       "type": "object",
       "additionalProperties": false,
       "maxProperties": 0
+    },
+    "fileReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_ref", "offset", "count"],
+      "properties": {
+        "file_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "offset": { "type": "integer", "minimum": 0 },
+        "count": { "type": "integer", "minimum": 1, "maximum": 524288 }
+      }
+    },
+    "storageGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$" }
+      }
+    },
+    "storageSetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$" },
+        "value": {}
+      }
     },
     "successResponse": {
       "type": "object",

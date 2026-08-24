@@ -17,8 +17,11 @@ public sealed class PluginProcessStartOptions
     public IReadOnlyList<string> Arguments { get; init; } = [];
     public IReadOnlyDictionary<string, string> Environment { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyList<string> ReadOnlyDirectories { get; init; } = [];
+    public IReadOnlyList<string> WritableDirectories { get; init; } = [];
     public long MemoryLimitBytes { get; init; } = 256L * 1024 * 1024;
     public int ActiveProcessLimit { get; init; } = 4;
+    public int CpuRatePercent { get; init; } = 25;
     public int MaximumMessageBytes { get; init; } = Protocol.PdppProtocol.DefaultMaximumMessageBytes;
     public int MaximumStandardErrorBytes { get; init; } = 16 * 1024;
     internal bool UseAppContainer { get; init; } = true;
@@ -60,6 +63,11 @@ public sealed class PluginProcessStartOptions
             throw new ArgumentOutOfRangeException(nameof(ActiveProcessLimit));
         }
 
+        if (CpuRatePercent is < 5 or > 50)
+        {
+            throw new ArgumentOutOfRangeException(nameof(CpuRatePercent));
+        }
+
         if (MaximumMessageBytes is < 1024 or > 8 * 1024 * 1024)
         {
             throw new ArgumentOutOfRangeException(nameof(MaximumMessageBytes));
@@ -82,6 +90,14 @@ public sealed class PluginProcessStartOptions
         {
             throw new ArgumentException("Plugin arguments contain invalid characters.", nameof(Arguments));
         }
+
+        foreach (var directory in ReadOnlyDirectories.Concat(WritableDirectories))
+        {
+            if (!Path.IsPathFullyQualified(directory) || !Directory.Exists(directory))
+            {
+                throw new DirectoryNotFoundException("Plugin ACL directory must be an existing absolute path.");
+            }
+        }
     }
 
     internal PluginProcessStartOptions WithoutAppContainerForTests() => new()
@@ -91,8 +107,11 @@ public sealed class PluginProcessStartOptions
         WorkingDirectory = WorkingDirectory,
         Arguments = Arguments,
         Environment = Environment,
+        ReadOnlyDirectories = ReadOnlyDirectories,
+        WritableDirectories = WritableDirectories,
         MemoryLimitBytes = MemoryLimitBytes,
         ActiveProcessLimit = ActiveProcessLimit,
+        CpuRatePercent = CpuRatePercent,
         MaximumMessageBytes = MaximumMessageBytes,
         MaximumStandardErrorBytes = MaximumStandardErrorBytes,
         UseAppContainer = false,

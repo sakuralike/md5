@@ -166,6 +166,7 @@ try {
     Invoke-Checked dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
     if ($IncludePluginConformance) {
         Invoke-Checked pwsh ./scripts/test-pdpp-conformance.ps1
+        Invoke-Checked pwsh ./scripts/build-synthetic-pdpkg.ps1
     }
 } finally {
     Pop-Location

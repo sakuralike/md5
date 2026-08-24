@@ -2,6 +2,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
+using PasswordDetective.Desktop.Plugins.Safety;
+using PasswordDetective.Desktop.Plugins.Storage;
 
 namespace PasswordDetective.Desktop;
 
@@ -9,6 +11,8 @@ public partial class App : Application
 {
     private const uint NativeMessageBoxError = 0x00000010;
     private static int _failureReported;
+    private PluginSafeMode? _pluginSafeMode;
+    private bool _pluginSessionFaulted;
 
     public App()
     {
@@ -21,15 +25,28 @@ public partial class App : Application
         try
         {
             EnsureWindowsDirectoryEnvironment();
-            var window = new MainWindow();
+            var pluginPaths = PluginStoragePaths.CreateDefault();
+            _pluginSafeMode = new PluginSafeMode(pluginPaths);
+            _pluginSafeMode.BeginSession();
+            var window = new MainWindow(pluginPaths, _pluginSafeMode);
             MainWindow = window;
             window.Show();
         }
         catch (Exception exception)
         {
+            _pluginSessionFaulted = true;
             ReportStartupFailure(exception);
             Shutdown(1);
         }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (!_pluginSessionFaulted)
+        {
+            _pluginSafeMode?.MarkCleanExit();
+        }
+        base.OnExit(e);
     }
 
     private static void EnsureWindowsDirectoryEnvironment()
@@ -58,13 +75,15 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        _pluginSessionFaulted = true;
         e.Handled = true;
         ReportStartupFailure(e.Exception);
         Shutdown(1);
     }
 
-    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
+        _pluginSessionFaulted = true;
         if (e.ExceptionObject is Exception exception)
         {
             ReportStartupFailure(exception);

@@ -1,0 +1,342 @@
+<Window x:Class="PasswordDetective.Desktop.PluginMarketplaceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="密码侦探社 - 插件市场"
+        Width="980"
+        Height="680"
+        MinWidth="860"
+        MinHeight="600"
+        WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Background="#F2F2F2"
+        FontFamily="Microsoft YaHei UI"
+        FontSize="12"
+        Closing="Window_OnClosing">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style TargetType="Button">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinWidth" Value="76" />
+            <Setter Property="Padding" Value="10,2" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="4,1" />
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border x:Name="UnreviewedBanner"
+                Grid.Row="0"
+                Padding="10,8"
+                Background="#FFF4E5"
+                BorderBrush="#C46A00"
+                BorderThickness="1">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right"
+                           Margin="12,0,0,0"
+                           FontWeight="Bold"
+                           Foreground="#A13F00"
+                           Text="未审核" />
+                <TextBlock Text="本地加载的插件没有平台审核签章，将始终以未审核状态运行。"
+                           Foreground="#6B3500" />
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1"
+                Margin="0,8,0,8"
+                Padding="8,6"
+                Background="White"
+                BorderBrush="#C8C8C8"
+                BorderThickness="1">
+            <DockPanel>
+                <Button DockPanel.Dock="Right"
+                        Content="退出安全模式"
+                        Command="{Binding LeaveSafeModeCommand}"
+                        Visibility="{Binding IsSafeMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding SafeModeStatus}" />
+            </DockPanel>
+        </Border>
+
+        <TabControl Grid.Row="2">
+            <TabItem x:Name="OnlineMarketTab" Header="在线市场">
+                <Grid Background="White">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="在线插件市场尚未开放" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="#666666"
+                                   Text="当前轮次仅支持加载并隔离运行本地未审核插件。" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem x:Name="InstalledPluginsTab" Header="已安装">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="280" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right"
+                                    Content="刷新"
+                                    Command="{Binding RefreshCommand}" />
+                            <TextBlock VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="本地插件" />
+                        </DockPanel>
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding InstalledPlugins}"
+                                 SelectedItem="{Binding SelectedInstalledPlugin}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="250"
+                                            Margin="2"
+                                            Padding="8"
+                                            BorderBrush="#D0D0D0"
+                                            BorderThickness="0,0,0,1">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Row="1"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="#555555"
+                                                       Text="{Binding CurrentVersion, StringFormat=版本 {0}}" />
+                                            <StackPanel Grid.Row="2" Margin="0,5,0,0" Orientation="Horizontal">
+                                                <Border Padding="5,1"
+                                                        Background="#FFF0F0"
+                                                        BorderBrush="#B00020"
+                                                        BorderThickness="1">
+                                                    <TextBlock Foreground="#B00020"
+                                                               FontWeight="Bold"
+                                                               Text="未审核" />
+                                                </Border>
+                                                <TextBlock Margin="8,2,0,0"
+                                                           Foreground="#666666"
+                                                           Text="{Binding RuntimeStatus}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <GroupBox Header="插件详情">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="名称" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="{Binding SelectedInstalledPlugin.DisplayName}" />
+                                    <TextBlock Grid.Row="1" Margin="0,6,0,0" Text="插件 ID" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedInstalledPlugin.PluginId}" />
+                                    <TextBlock Grid.Row="2" Margin="0,6,0,0" Text="版本" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedInstalledPlugin.CurrentVersion}" />
+                                    <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="运行状态" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedPluginState}" />
+                                    <TextBlock Grid.Row="4" Margin="0,6,0,0" Text="审核状态" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" FontWeight="Bold" Foreground="#B00020" Text="未审核" />
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="运行管理">
+                                <WrapPanel>
+                                    <Button Content="启用 / 停用" Command="{Binding ToggleEnabledCommand}" />
+                                    <Button Content="健康检查" Command="{Binding HealthCheckCommand}" />
+                                    <Button Content="回退版本" Command="{Binding RollbackCommand}" />
+                                    <Button Content="卸载" Command="{Binding UninstallCommand}" />
+                                </WrapPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="命令与权限确认">
+                                <StackPanel>
+                                    <TextBlock Margin="0,0,0,7"
+                                               Foreground="#B00020"
+                                               FontWeight="Bold"
+                                               Text="正在操作未审核插件；命令将在 AppContainer 中运行。" />
+                                    <ComboBox ItemsSource="{Binding AvailableCommands}"
+                                              SelectedItem="{Binding SelectedCommand}"
+                                              DisplayMemberPath="Title" />
+                                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding CommandForm.Fields}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,7">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="130" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Margin="0,5,8,0" Text="{Binding Label}" />
+                                                    <TextBox Grid.Column="1"
+                                                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                             Visibility="{Binding IsText, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    <CheckBox Grid.Column="1"
+                                                              VerticalAlignment="Center"
+                                                              IsChecked="{Binding BooleanValue}"
+                                                              Visibility="{Binding IsBoolean, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    <ComboBox Grid.Column="1"
+                                                              ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding Value}"
+                                                              Visibility="{Binding IsEnum, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    <Grid Grid.Column="1"
+                                                          Visibility="{Binding IsPath, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Text="{Binding Value}" />
+                                                        <Button Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                Content="浏览…"
+                                                                Command="{Binding BrowseCommand}" />
+                                                    </Grid>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ProgressBar Height="5"
+                                                 Margin="0,2,0,7"
+                                                 IsIndeterminate="True"
+                                                 Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button HorizontalAlignment="Left"
+                                            Content="执行命令"
+                                            Command="{Binding ExecuteCommand}" />
+                                    <TextBlock Margin="0,10,0,4" FontWeight="SemiBold" Text="结构化结果" />
+                                    <TextBox Height="120"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Text="{Binding CommandResult, Mode=OneWay}" />
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem x:Name="LocalPluginsTab" Header="本地插件">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <GroupBox Header="浏览本地插件包">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox IsReadOnly="True"
+                                         Text="{Binding SelectedPackagePath, Mode=OneWay}"
+                                         ToolTip="{Binding SelectedPackagePath}" />
+                                <Button Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        Content="浏览 .pdpkg"
+                                        Command="{Binding BrowsePackageCommand}" />
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="包详情">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="插件名称" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="{Binding SelectedPackage.Manifest.DisplayName}" />
+                                <TextBlock Grid.Row="1" Margin="0,6,0,0" Text="插件 ID / 版本" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,6,0,0">
+                                    <Run Text="{Binding SelectedPackage.Manifest.PluginId}" />
+                                    <Run Text=" / " />
+                                    <Run Text="{Binding SelectedPackage.Manifest.Version}" />
+                                </TextBlock>
+                                <TextBlock Grid.Row="2" Margin="0,6,0,0" Text="开发者密钥" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedPackage.Manifest.PublisherKeyId}" />
+                                <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="签名指纹" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedPackage.PublisherKeyFingerprint}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Row="4" Margin="0,6,0,0" Text="文件" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" Text="{Binding PackageFileSummary}" />
+                                <TextBlock Grid.Row="5" Margin="0,6,0,0" Text="必需权限" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding PackageRequiredCapabilities}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="6" Margin="0,6,0,0" Text="可选权限" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding PackageOptionalCapabilities}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="7" Margin="0,6,0,0" Text="审核状态" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,6,0,0" FontWeight="Bold" Foreground="#B00020" Text="未审核" />
+                            </Grid>
+                        </GroupBox>
+
+                        <Border Padding="9"
+                                Background="#FFF0F0"
+                                BorderBrush="#B00020"
+                                BorderThickness="1">
+                            <TextBlock Foreground="#8B0018"
+                                       TextWrapping="Wrap"
+                                       Text="安装只代表包结构、文件摘要和开发者签名通过检查，不代表平台已经审核代码。安装和运行期间将持续标记为“未审核”。" />
+                        </Border>
+                        <Button Margin="0,10,0,0"
+                                HorizontalAlignment="Left"
+                                Content="安装未审核插件"
+                                Command="{Binding InstallPackageCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="3"
+                Margin="0,8,0,0"
+                Padding="8,6"
+                Background="White"
+                BorderBrush="#C8C8C8"
+                BorderThickness="1">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</Window>
