@@ -343,6 +343,7 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
         version.approved_capabilities = list(version.requested_capabilities)
         version.review_policy_version = "synthetic-review-policy-v1"
         version.platform_key_id = "synthetic-platform-ed25519-v1"
+        version.platform_public_key_base64 = base64.b64encode(b"\x01" * 32).decode()
         version.platform_signature_base64 = base64.b64encode(
             b"synthetic-platform-signature"
         ).decode()
@@ -401,6 +402,7 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
                 effective_at=utc_now() - timedelta(seconds=1),
                 batch_id="synthetic-batch-001",
                 platform_key_id="synthetic-platform-ed25519-v1",
+                platform_public_key_base64=base64.b64encode(b"\x01" * 32).decode(),
                 platform_signature_base64=base64.b64encode(
                     b"synthetic-revocation-signature"
                 ).decode(),

@@ -28,6 +28,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionCreateRequest,
     PluginVersionFinalizeRequest,
     PluginVersionResponse,
+    PluginVersionSubmitRequest,
     SigningKeyCreateRequest,
     SigningKeyListResponse,
     SigningKeyResponse,
@@ -45,6 +46,7 @@ from password_detective.modules.desktop_plugins.service import (
     list_signing_keys,
     register_signing_key,
     revoke_signing_key,
+    submit_version_for_review,
     update_project,
     upload_artifact,
 )
@@ -391,6 +393,45 @@ def finalize_plugin_version(
         response = finalize_version(
             db,
             settings,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _complete(db, lease, response, status.HTTP_200_OK)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post(
+    "/plugin-versions/{version_id}/submit",
+    response_model=PluginVersionResponse,
+    dependencies=[
+        Depends(rate_limit("developer.plugin.version.submit", limit=30, window_seconds=3600))
+    ],
+)
+def submit_plugin_version(
+    version_id: str,
+    payload: PluginVersionSubmitRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginVersionResponse:
+    lease = _acquire(
+        db,
+        principal=principal,
+        scope="developer.plugin.version.submit",
+        key=idempotency_key,
+        payload={"version_id": version_id, **payload.model_dump()},
+    )
+    if cached := _cached(lease, PluginVersionResponse):
+        return cached
+    try:
+        response = submit_version_for_review(
+            db,
             version_id=version_id,
             payload=payload,
             principal=principal,

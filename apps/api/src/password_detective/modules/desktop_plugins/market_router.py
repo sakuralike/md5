@@ -5,18 +5,29 @@ import hashlib
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings, get_settings
+from password_detective.core.idempotency import (
+    abandon_idempotency,
+    acquire_idempotency,
+    complete_idempotency,
+    payload_digest,
+    require_idempotency_key,
+)
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
+from password_detective.modules.auth.context import get_client_context
+from password_detective.modules.auth.dependencies import Principal, get_current_principal
 from password_detective.modules.desktop_plugins.schemas import (
     DownloadTicketRequest,
     DownloadTicketResponse,
     PluginArchitecture,
     PluginCategory,
+    PluginReportCreateRequest,
+    PluginReportResponse,
     PluginRevocationListResponse,
     PublicPluginCatalogResponse,
     PublicPluginDetailResponse,
@@ -24,6 +35,7 @@ from password_detective.modules.desktop_plugins.schemas import (
 )
 from password_detective.modules.desktop_plugins.service import (
     create_download_ticket,
+    create_report,
     get_public_plugin,
     get_public_version,
     list_public_catalog,
@@ -150,3 +162,42 @@ def issue_plugin_download_ticket(
             request.url_for("download_desktop_plugin_artifact", token=token)
         ),
     )
+
+
+@router.post("/{plugin_slug}/reports", response_model=PluginReportResponse, status_code=201)
+def report_plugin(
+    plugin_slug: str,
+    payload: PluginReportCreateRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReportResponse:
+    lease = acquire_idempotency(
+        db,
+        scope="desktop.plugin.report.create",
+        owner_key=principal.user.id,
+        idempotency_key=idempotency_key,
+        request_hash=payload_digest({"plugin_slug": plugin_slug, **payload.model_dump()}),
+    )
+    if lease.cached_response is not None:
+        return PluginReportResponse.model_validate(lease.cached_response)
+    try:
+        response = create_report(
+            db,
+            plugin_slug=plugin_slug,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        complete_idempotency(
+            db,
+            lease,
+            response_status=status.HTTP_201_CREATED,
+            response_body=response.model_dump(mode="json"),
+        )
+        return response
+    except Exception:
+        db.rollback()
+        abandon_idempotency(db, lease)
+        raise

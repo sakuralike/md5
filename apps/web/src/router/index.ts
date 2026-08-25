@@ -35,6 +35,7 @@ import ThirdPartyAuthorizePage from "../pages/ThirdPartyAuthorizePage.vue";
 import AuthorizedApplicationsPage from "../pages/AuthorizedApplicationsPage.vue";
 import UserCenterPage from "../pages/UserCenterPage.vue";
 import DeveloperApplicationsPage from "../pages/DeveloperApplicationsPage.vue";
+import DeveloperPluginsPage from "../pages/DeveloperPluginsPage.vue";
 import VerifyEmailPage from "../pages/VerifyEmailPage.vue";
 
 declare module "vue-router" {
@@ -66,6 +67,7 @@ const router = createRouter({
     { path: "/developer", redirect: "/developer/applications", meta: privateSeo },
     { path: "/developer/apply", component: DeveloperApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/developer/applications", component: DeveloperApplicationsPage, meta: { ...privateSeo, requiresAuth: true } },
+    { path: "/developer/plugins", component: DeveloperPluginsPage, meta: { ...privateSeo, requiresAuth: true } },
     { path: "/community", component: CommunityHomePage, meta: { ...publicSeo, seoTitle: "社区" } },
     { path: "/community/search", component: CommunitySearchPage, meta: privateSeo },
     { path: "/community/activity", component: CommunityActivityPage, meta: privateSeo },

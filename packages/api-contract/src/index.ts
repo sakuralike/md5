@@ -3235,6 +3235,7 @@ export interface DesktopPluginVersion {
   source_review_mode: "source" | "reproducible" | "binary_only";
   review_policy_version: string | null;
   platform_key_id: string | null;
+  platform_public_key_base64: string | null;
   platform_signature_base64: string | null;
   version: number;
   created_at: string;
@@ -3305,6 +3306,7 @@ export interface DesktopPluginRevocation {
   effective_at: string;
   batch_id: string;
   platform_key_id: string;
+  platform_public_key_base64: string;
   platform_signature_base64: string;
 }
 
@@ -3312,4 +3314,73 @@ export interface DesktopPluginRevocationListResponse {
   generated_at: string;
   policy_version: string;
   items: DesktopPluginRevocation[];
+}
+
+export interface DesktopPluginReviewEvent {
+  id: string;
+  kind: "submitted" | "approved" | "rejected" | "published" | "yanked" | "revoked";
+  actor_user_id: string | null;
+  note: string | null;
+  requested_capabilities: DesktopPluginCapability[];
+  approved_capabilities: DesktopPluginCapability[];
+  version_number: number;
+  created_at: string;
+}
+
+export interface DesktopPluginReviewQueueItem {
+  version_id: string;
+  plugin_id: string;
+  plugin_slug: string;
+  plugin_name: string;
+  owner_user_id: string;
+  semver: string;
+  status: DesktopPluginVersionStatus;
+  requested_capabilities: DesktopPluginCapability[];
+  approved_capabilities: DesktopPluginCapability[];
+  signing_key_fingerprint: string;
+  manifest_sha256: string | null;
+  risk_tier: string;
+  submitted_at: string | null;
+  updated_at: string;
+  version: number;
+}
+
+export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem {
+  manifest_json: Record<string, unknown> | null;
+  release_notes: string;
+  source_review_mode: string;
+  review_policy_version: string | null;
+  platform_key_id: string | null;
+  platform_public_key_base64: string | null;
+  platform_signature_base64: string | null;
+  artifacts: DesktopPluginArtifact[];
+  events: DesktopPluginReviewEvent[];
+}
+
+export interface DesktopPluginReviewQueueResponse {
+  items: DesktopPluginReviewQueueItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface DesktopPluginReport {
+  id: string;
+  plugin_id: string;
+  version_id: string | null;
+  reporter_user_id: string;
+  category: string;
+  description: string;
+  status: "open" | "acknowledged" | "resolved" | "dismissed";
+  reviewer_user_id: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesktopPluginReportListResponse {
+  items: DesktopPluginReport[];
+  page: number;
+  page_size: number;
+  total: number;
 }

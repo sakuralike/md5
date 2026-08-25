@@ -192,7 +192,7 @@ onServerPrefetch(load);
         <h1 class="text-3xl font-semibold tracking-tight">{{ isApplyPage ? "开发者应用申请" : "我的开发者应用" }}</h1>
         <p class="max-w-3xl text-sm leading-6 text-muted-foreground">{{ isApplyPage ? "创建草稿、提交审核；被驳回后可在原申请中修改并重新提交。只有管理员审核通过，系统才会创建可用的第三方桌面应用。" : "查看申请进度、审核反馈和已创建的 Client ID；需要新建或修改申请时进入申请页面。" }}</p>
       </div>
-      <div class="flex flex-wrap gap-2"><Button v-if="!isApplyPage" as-child><RouterLink to="/developer/apply">新建申请</RouterLink></Button><Button variant="outline" :disabled="loading" @click="load">{{ loading ? "刷新中…" : "刷新记录" }}</Button></div>
+      <div class="flex flex-wrap gap-2"><Button as-child variant="outline"><RouterLink to="/developer/plugins">插件开发者中心</RouterLink></Button><Button v-if="!isApplyPage" as-child><RouterLink to="/developer/apply">新建申请</RouterLink></Button><Button variant="outline" :disabled="loading" @click="load">{{ loading ? "刷新中…" : "刷新记录" }}</Button></div>
     </header>
 
     <Alert v-if="error" variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>

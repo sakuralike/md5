@@ -80,6 +80,27 @@ class DesktopPluginRevocationScope(StrEnum):
     SIGNING_KEY = "signing_key"
 
 
+class DesktopPluginReviewEventKind(StrEnum):
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    PUBLISHED = "published"
+    YANKED = "yanked"
+    REVOKED = "revoked"
+
+
+class DesktopPluginPublicationStatus(StrEnum):
+    PUBLISHED = "published"
+    YANKED = "yanked"
+
+
+class DesktopPluginReportStatus(StrEnum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
 class DesktopPlugin(Base):
     __tablename__ = "desktop_plugins"
     __table_args__ = (
@@ -187,6 +208,7 @@ class DesktopPluginVersion(Base):
     )
     review_policy_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     platform_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    platform_public_key_base64: Mapped[str | None] = mapped_column(String(128), nullable=True)
     platform_signature_base64: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -320,5 +342,93 @@ class DesktopPluginRevocation(Base):
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     batch_id: Mapped[str] = mapped_column(String(64), index=True)
     platform_key_id: Mapped[str] = mapped_column(String(128))
+    platform_public_key_base64: Mapped[str] = mapped_column(String(128))
     platform_signature_base64: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class DesktopPluginReviewEvent(Base):
+    __tablename__ = "desktop_plugin_review_events"
+    __table_args__ = (
+        Index("ix_desktop_plugin_review_events_version_created", "version_id", "created_at"),
+        Index("ix_desktop_plugin_review_events_kind_created", "kind", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_versions.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[DesktopPluginReviewEventKind] = mapped_column(
+        Enum(DesktopPluginReviewEventKind, native_enum=False, length=16), index=True
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+    approved_capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+    version_number: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class DesktopPluginPublication(Base):
+    __tablename__ = "desktop_plugin_publications"
+    __table_args__ = (
+        UniqueConstraint(
+            "version_id", "channel", name="uq_desktop_plugin_publications_version_channel"
+        ),
+        Index("ix_desktop_plugin_publications_channel_status", "channel", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_versions.id", ondelete="CASCADE"), index=True
+    )
+    channel: Mapped[str] = mapped_column(String(32), default="stable")
+    status: Mapped[DesktopPluginPublicationStatus] = mapped_column(
+        Enum(DesktopPluginPublicationStatus, native_enum=False, length=16),
+        default=DesktopPluginPublicationStatus.PUBLISHED,
+        index=True,
+    )
+    published_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    yanked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    yanked_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class DesktopPluginReport(Base):
+    __tablename__ = "desktop_plugin_reports"
+    __table_args__ = (
+        Index("ix_desktop_plugin_reports_status_created", "status", "created_at"),
+        Index("ix_desktop_plugin_reports_plugin_status", "plugin_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    plugin_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugins.id", ondelete="CASCADE"), index=True
+    )
+    version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    reporter_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(Text)
+    status: Mapped[DesktopPluginReportStatus] = mapped_column(
+        Enum(DesktopPluginReportStatus, native_enum=False, length=16),
+        default=DesktopPluginReportStatus.OPEN,
+        index=True,
+    )
+    reviewer_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )

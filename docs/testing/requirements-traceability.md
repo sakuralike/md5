@@ -577,6 +577,17 @@
 | 下载票据与撤销 | 哈希存储的短期单次下载票据、公开分区校验、版本/项目/密钥撤销读取侧阻断、ETag | 首次下载 200、重放 410、撤销后目录隐藏/票据 404、条件请求 304 | 本地已验证；管理员发布与撤销写入由第 3 轮实现 |
 | 共享 API 合同 | `packages/api-contract/src/index.ts` 的路径、架构、状态、能力与响应类型 | API Contract typecheck；Vitest 8 项；Staging OpenAPI 包含开发者与市场路径 | 已实现并部署 |
 
+## 2026-08-25 桌面插件市场第 3 轮追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Web 插件提交 | `DeveloperPluginsPage.vue`、`developerPlugins.ts`、`/developer/plugins` | Web lint/typecheck；58 文件 103 项测试，含页面渲染测试 | 已实现项目、密钥、版本、上传、已批准第三方应用关联和提交入口 |
+| Admin 人工审核闭环 | `PluginReviewsPage.vue`、`pluginReviews.ts`、`admin_router.py`、迁移 `20260825_0057` | Admin lint/typecheck；52 文件 99 项测试；API 人工审核工作流测试 | 已实现队列、详情、权限差异、不可变事件、批准、驳回、发布、下架和紧急撤销 |
+| 权限与第三方 Scope | `api:*` 能力到 `profile:read/hash:read/desktop:verification` Scope 映射；批准权限子集校验 | 无关联应用、缺少 Scope、批准未申请权限均返回 422；合法 Scope 可提交 | 已实现；提交和管理员批准时均重新校验应用归属、批准状态和 Scope |
+| 平台签章与紧急撤销 | 公开 Ed25519 公钥、规范化签名载荷、发布/撤销签名、公开到撤销分区移动 | 独立公钥验签；撤销后目录隐藏、公开文件不存在、撤销文件存在、撤销列表 200 | 已实现人工发布与紧急撤销写入；自动恶意代码判定未实现 |
+| 用户举报与处置 | 认证举报接口、`desktop_plugin_reports`、Admin 举报列表和处置 | 创建幂等重放返回同一举报；处置幂等；工作流专项测试通过 | 已实现 API 入口和 Admin 处置；桌面在线市场用户界面仍属于后续轮次 |
+| 验收边界 | 本地专项、统一门禁、远端、Staging、UAT/Production 分层 | 插件 API 专项 10 项、API Contract 8 项通过；统一门禁及发布证据待本轮结束补齐 | 自动静态/供应链审核与 Windows 动态审核属于第 4、5 轮；UAT/Production 未批准 |
+
 ### Staging 发布复验（2026-08-25）
 
 - 部署修订：`dd50edce1bce`，Git tree `b9e2ee20cb76c1c6088cb22b2e0161edf3e113a1`，源码归档 SHA-256 `a5d7122a03e2fcb5cbf9d8b0542f6c070614b07140b5f681deaf7651dcc1d0d7`。

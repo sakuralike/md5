@@ -251,6 +251,163 @@ class PluginVersionFinalizeRequest(BaseModel):
     version: int = Field(ge=1)
 
 
+class PluginVersionSubmitRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class PluginVersionApproveRequest(BaseModel):
+    version: int = Field(ge=1)
+    approved_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    review_note: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("approved_capabilities")
+    @classmethod
+    def normalize_capabilities(cls, values: list[str]) -> list[str]:
+        return _normalize_capabilities(values)
+
+    @field_validator("review_note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginVersionRejectRequest(BaseModel):
+    version: int = Field(ge=1)
+    review_note: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("review_note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginVersionPublishRequest(BaseModel):
+    version: int = Field(ge=1)
+    channel: str = Field(default="stable", min_length=1, max_length=32)
+
+    @field_validator("channel")
+    @classmethod
+    def normalize_channel(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if normalized != "stable":
+            raise ValueError("当前仅支持 stable 发布通道")
+        return normalized
+
+
+class PluginVersionYankRequest(BaseModel):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginVersionRevokeRequest(BaseModel):
+    version: int = Field(ge=1)
+    reason_code: str = Field(min_length=3, max_length=64)
+    reason: str = Field(min_length=1, max_length=2_000)
+    affects_historical_versions: bool = False
+
+    @field_validator("reason_code", "reason")
+    @classmethod
+    def normalize_values(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginReviewEventResponse(BaseModel):
+    id: str
+    kind: str
+    actor_user_id: str | None
+    note: str | None
+    requested_capabilities: list[str]
+    approved_capabilities: list[str]
+    version_number: int
+    created_at: datetime
+
+
+class PluginReviewQueueItem(BaseModel):
+    version_id: str
+    plugin_id: str
+    plugin_slug: str
+    plugin_name: str
+    owner_user_id: str
+    semver: str
+    status: PluginVersionStatus
+    requested_capabilities: list[str]
+    approved_capabilities: list[str]
+    signing_key_fingerprint: str
+    manifest_sha256: str | None
+    risk_tier: str
+    submitted_at: datetime | None
+    updated_at: datetime
+    version: int
+
+
+class PluginReviewQueueResponse(BaseModel):
+    items: list[PluginReviewQueueItem]
+    page: int
+    page_size: int
+    total: int
+
+
+class PluginReviewDetailResponse(PluginReviewQueueItem):
+    manifest_json: dict | None
+    release_notes: str
+    source_review_mode: str
+    review_policy_version: str | None
+    platform_key_id: str | None
+    platform_public_key_base64: str | None
+    platform_signature_base64: str | None
+    artifacts: list[PluginArtifactResponse]
+    events: list[PluginReviewEventResponse]
+
+
+class PluginReportCreateRequest(BaseModel):
+    version_id: str | None = Field(default=None, min_length=36, max_length=36)
+    category: Literal["malware", "privacy", "copyright", "misleading", "other"]
+    description: str = Field(min_length=10, max_length=4_000)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginReportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    plugin_id: str
+    version_id: str | None
+    reporter_user_id: str
+    category: str
+    description: str
+    status: str
+    reviewer_user_id: str | None
+    resolution_note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PluginReportListResponse(BaseModel):
+    items: list[PluginReportResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class PluginReportReviewRequest(BaseModel):
+    status: Literal["acknowledged", "resolved", "dismissed"]
+    resolution_note: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("resolution_note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return _strip(value)
+
+
 class PluginVersionResponse(BaseModel):
     id: str
     plugin_id: str
@@ -271,6 +428,7 @@ class PluginVersionResponse(BaseModel):
     source_review_mode: str
     review_policy_version: str | None
     platform_key_id: str | None
+    platform_public_key_base64: str | None
     platform_signature_base64: str | None
     version: int
     created_at: datetime
@@ -377,6 +535,7 @@ class PublicPluginVersionResponse(BaseModel):
     risk_tier: str
     review_policy_version: str
     platform_key_id: str
+    platform_public_key_base64: str
     platform_signature_base64: str
     published_at: datetime
     artifacts: list[PublicPluginArtifactResponse]
@@ -446,6 +605,7 @@ class PluginRevocationResponse(BaseModel):
     effective_at: datetime
     batch_id: str
     platform_key_id: str
+    platform_public_key_base64: str
     platform_signature_base64: str
 
 

@@ -8,6 +8,7 @@ import {
   KeyRound,
   LayoutDashboard,
   MonitorUp,
+  Puzzle,
   Megaphone,
   ShoppingBag,
   Settings2,
@@ -139,6 +140,13 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     description: "按用户名、邮箱或 UID 查找并治理账号。",
     group: "系统管理",
     icon: UserRoundCog,
+  },
+  {
+    label: "插件审核",
+    path: "/plugin-reviews",
+    description: "审核插件版本权限、发布、下架、撤销与用户举报。",
+    group: "安全运营",
+    icon: Puzzle,
   },
   {
     label: "邀请码与邀请链接",

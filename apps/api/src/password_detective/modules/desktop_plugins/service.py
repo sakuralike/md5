@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,7 +25,14 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginArtifactStatus,
     DesktopPluginArtifactZone,
     DesktopPluginDownloadTicket,
+    DesktopPluginPublication,
+    DesktopPluginPublicationStatus,
+    DesktopPluginReport,
+    DesktopPluginReportStatus,
+    DesktopPluginReviewEvent,
+    DesktopPluginReviewEventKind,
     DesktopPluginRevocation,
+    DesktopPluginRevocationScope,
     DesktopPluginSigningKey,
     DesktopPluginSigningKeyStatus,
     DesktopPluginStatus,
@@ -47,11 +57,25 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginProjectListResponse,
     PluginProjectResponse,
     PluginProjectUpdateRequest,
+    PluginReportCreateRequest,
+    PluginReportListResponse,
+    PluginReportResponse,
+    PluginReportReviewRequest,
+    PluginReviewDetailResponse,
+    PluginReviewEventResponse,
+    PluginReviewQueueItem,
+    PluginReviewQueueResponse,
     PluginRevocationListResponse,
     PluginRevocationResponse,
+    PluginVersionApproveRequest,
     PluginVersionCreateRequest,
     PluginVersionFinalizeRequest,
+    PluginVersionPublishRequest,
+    PluginVersionRejectRequest,
     PluginVersionResponse,
+    PluginVersionRevokeRequest,
+    PluginVersionSubmitRequest,
+    PluginVersionYankRequest,
     PublicPluginArtifactResponse,
     PublicPluginCatalogItem,
     PublicPluginCatalogResponse,
@@ -66,10 +90,19 @@ from password_detective.modules.desktop_plugins.schemas import (
 from password_detective.modules.desktop_plugins.storage import DesktopPluginStorage
 
 _REVOCATION_POLICY_VERSION = "desktop-plugin-control-plane-v1"
+_API_CAPABILITY_SCOPES = {
+    "api:profile:read": "profile:read",
+    "api:hash:read": "hash:read",
+    "api:verification:submit": "desktop:verification",
+}
 
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _signature_timestamp(value: datetime) -> str:
+    return _aware(value).astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _require_verified(principal: Principal) -> None:
@@ -102,6 +135,49 @@ def _write_audit(
         request_id=context.request_id if context else None,
         details=details or {},
     )
+
+
+def _platform_signature(
+    settings: Settings, payload: dict[str, object]
+) -> tuple[str, str, str]:
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    seed = hashlib.sha256(
+        b"password-detective-plugin-platform-signing-v1\0"
+        + settings.app_secret_key.encode("utf-8")
+    ).digest()
+    private_key = Ed25519PrivateKey.from_private_bytes(seed)
+    public_key = private_key.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    key_id = f"platform-ed25519-{hashlib.sha256(public_key).hexdigest()[:16]}"
+    signature = private_key.sign(canonical.encode("utf-8"))
+    return (
+        key_id,
+        base64.b64encode(public_key).decode("ascii"),
+        base64.b64encode(signature).decode("ascii"),
+    )
+
+
+def _review_event(
+    db: Session,
+    *,
+    version: DesktopPluginVersion,
+    kind: DesktopPluginReviewEventKind,
+    actor_id: str | None,
+    note: str | None = None,
+) -> DesktopPluginReviewEvent:
+    event = DesktopPluginReviewEvent(
+        version_id=version.id,
+        kind=kind,
+        actor_user_id=actor_id,
+        note=note,
+        requested_capabilities=list(version.requested_capabilities),
+        approved_capabilities=list(version.approved_capabilities),
+        version_number=version.version,
+    )
+    db.add(event)
+    return event
 
 
 def _owned_project(
@@ -138,9 +214,11 @@ def _owned_version(
     return row[0], row[1]
 
 
-def _validate_linked_app(db: Session, *, app_id: str | None, owner_id: str) -> None:
+def _validate_linked_app(
+    db: Session, *, app_id: str | None, owner_id: str
+) -> ThirdPartyApp | None:
     if app_id is None:
-        return
+        return None
     app = db.scalar(
         select(ThirdPartyApp).where(
             ThirdPartyApp.id == app_id,
@@ -153,6 +231,39 @@ def _validate_linked_app(db: Session, *, app_id: str | None, owner_id: str) -> N
             "desktop_plugin.invalid_linked_application",
             "关联的第三方应用不存在、未批准或不属于当前开发者",
             status_code=422,
+        )
+    return app
+
+
+def _validate_api_capabilities(
+    db: Session, *, plugin: DesktopPlugin, requested_capabilities: list[str]
+) -> None:
+    required_scopes = {
+        _API_CAPABILITY_SCOPES[capability]
+        for capability in requested_capabilities
+        if capability in _API_CAPABILITY_SCOPES
+    }
+    if not required_scopes:
+        return
+    app = _validate_linked_app(
+        db,
+        app_id=plugin.linked_third_party_app_id,
+        owner_id=plugin.owner_user_id,
+    )
+    if app is None:
+        raise AppError(
+            "desktop_plugin.linked_application_required",
+            "申请平台 API 权限的插件必须关联已批准的第三方应用",
+            status_code=422,
+        )
+    approved_scopes = {str(scope) for scope in json.loads(app.approved_scopes_json)}
+    missing_scopes = sorted(required_scopes - approved_scopes)
+    if missing_scopes:
+        raise AppError(
+            "desktop_plugin.linked_application_scope_missing",
+            "关联第三方应用未获批插件申请的平台 API Scope",
+            status_code=422,
+            details={"missing_scopes": missing_scopes},
         )
 
 
@@ -188,6 +299,7 @@ def _version_response(db: Session, version: DesktopPluginVersion) -> PluginVersi
         source_review_mode=version.source_review_mode,
         review_policy_version=version.review_policy_version,
         platform_key_id=version.platform_key_id,
+        platform_public_key_base64=version.platform_public_key_base64,
         platform_signature_base64=version.platform_signature_base64,
         version=version.version,
         created_at=version.created_at,
@@ -848,6 +960,7 @@ def _public_version_response(
         or version.published_at is None
         or version.review_policy_version is None
         or version.platform_key_id is None
+        or version.platform_public_key_base64 is None
         or version.platform_signature_base64 is None
         or not artifacts
         or _is_revoked(
@@ -872,6 +985,7 @@ def _public_version_response(
         risk_tier=version.risk_tier,
         review_policy_version=version.review_policy_version,
         platform_key_id=version.platform_key_id,
+        platform_public_key_base64=version.platform_public_key_base64,
         platform_signature_base64=version.platform_signature_base64,
         published_at=version.published_at,
         artifacts=[
@@ -1163,6 +1277,7 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
                 effective_at=record.effective_at,
                 batch_id=record.batch_id,
                 platform_key_id=record.platform_key_id,
+                platform_public_key_base64=record.platform_public_key_base64,
                 platform_signature_base64=record.platform_signature_base64,
             )
         )
@@ -1173,3 +1288,626 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
         policy_version=_REVOCATION_POLICY_VERSION,
         items=items,
     )
+
+
+def submit_version_for_review(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionSubmitRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginVersionResponse:
+    _require_verified(principal)
+    plugin, version = _owned_version(
+        db, version_id=version_id, owner_id=principal.user.id, lock=True
+    )
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status != DesktopPluginVersionStatus.QUARANTINED:
+        raise AppError(
+            "desktop_plugin.version_not_submittable", "插件版本不处于待审核状态", status_code=409
+        )
+    _validate_api_capabilities(
+        db,
+        plugin=plugin,
+        requested_capabilities=list(version.requested_capabilities),
+    )
+    version.status = DesktopPluginVersionStatus.REVIEW_QUEUED
+    version.submitted_at = utc_now()
+    version.version += 1
+    _review_event(
+        db, version=version, kind=DesktopPluginReviewEventKind.SUBMITTED, actor_id=principal.user.id
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.submitted",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+    )
+    db.commit()
+    db.refresh(version)
+    return _version_response(db, version)
+
+
+def _queue_item(plugin: DesktopPlugin, version: DesktopPluginVersion) -> PluginReviewQueueItem:
+    return PluginReviewQueueItem(
+        version_id=version.id,
+        plugin_id=plugin.id,
+        plugin_slug=plugin.slug,
+        plugin_name=plugin.name,
+        owner_user_id=plugin.owner_user_id,
+        semver=version.semver,
+        status=version.status.value,
+        requested_capabilities=list(version.requested_capabilities),
+        approved_capabilities=list(version.approved_capabilities),
+        signing_key_fingerprint=version.signing_key_fingerprint,
+        manifest_sha256=version.manifest_sha256,
+        risk_tier=version.risk_tier,
+        submitted_at=version.submitted_at,
+        updated_at=version.updated_at,
+        version=version.version,
+    )
+
+
+def list_review_queue(
+    db: Session, *, page: int, page_size: int, status_filter: str | None
+) -> PluginReviewQueueResponse:
+    statuses = {
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
+        DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
+        DesktopPluginVersionStatus.APPROVED,
+        DesktopPluginVersionStatus.REJECTED,
+        DesktopPluginVersionStatus.PUBLISHED,
+        DesktopPluginVersionStatus.YANKED,
+        DesktopPluginVersionStatus.REVOKED,
+    }
+    statement = (
+        select(DesktopPlugin, DesktopPluginVersion)
+        .join(DesktopPluginVersion, DesktopPluginVersion.plugin_id == DesktopPlugin.id)
+        .where(DesktopPluginVersion.status.in_(statuses))
+    )
+    if status_filter:
+        try:
+            status = DesktopPluginVersionStatus(status_filter)
+        except ValueError as exc:
+            raise AppError(
+                "desktop_plugin.invalid_review_status", "审核状态无效", status_code=422
+            ) from exc
+        statement = statement.where(DesktopPluginVersion.status == status)
+    rows = list(
+        db.execute(
+            statement.order_by(DesktopPluginVersion.updated_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    total_statement = select(func.count()).select_from(
+        statement.order_by(None).limit(None).offset(None).subquery()
+    )
+    total = db.scalar(total_statement) or 0
+    return PluginReviewQueueResponse(
+        items=[_queue_item(plugin, version) for plugin, version in rows],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResponse:
+    row = db.execute(
+        select(DesktopPlugin, DesktopPluginVersion)
+        .join(DesktopPluginVersion, DesktopPluginVersion.plugin_id == DesktopPlugin.id)
+        .where(DesktopPluginVersion.id == version_id)
+    ).one_or_none()
+    if row is None:
+        raise AppError("desktop_plugin.version_not_found", "插件版本不存在", status_code=404)
+    plugin, version = row
+    artifacts = list(
+        db.scalars(
+            select(DesktopPluginArtifact).where(
+                DesktopPluginArtifact.plugin_version_id == version.id
+            )
+        ).all()
+    )
+    events = list(
+        db.scalars(
+            select(DesktopPluginReviewEvent)
+            .where(DesktopPluginReviewEvent.version_id == version.id)
+            .order_by(DesktopPluginReviewEvent.created_at)
+        ).all()
+    )
+    return PluginReviewDetailResponse(
+        **_queue_item(plugin, version).model_dump(),
+        manifest_json=version.manifest_json,
+        release_notes=version.release_notes,
+        source_review_mode=version.source_review_mode,
+        review_policy_version=version.review_policy_version,
+        platform_key_id=version.platform_key_id,
+        platform_public_key_base64=version.platform_public_key_base64,
+        platform_signature_base64=version.platform_signature_base64,
+        artifacts=[_artifact_response(artifact) for artifact in artifacts],
+        events=[
+            PluginReviewEventResponse(
+                id=event.id,
+                kind=event.kind.value,
+                actor_user_id=event.actor_user_id,
+                note=event.note,
+                requested_capabilities=list(event.requested_capabilities),
+                approved_capabilities=list(event.approved_capabilities),
+                version_number=event.version_number,
+                created_at=event.created_at,
+            )
+            for event in events
+        ],
+    )
+
+
+def _admin_version(
+    db: Session, *, version_id: str, lock: bool = False
+) -> tuple[DesktopPlugin, DesktopPluginVersion]:
+    statement = (
+        select(DesktopPlugin, DesktopPluginVersion)
+        .join(DesktopPluginVersion, DesktopPluginVersion.plugin_id == DesktopPlugin.id)
+        .where(DesktopPluginVersion.id == version_id)
+    )
+    if lock:
+        statement = statement.with_for_update()
+    row = db.execute(statement).one_or_none()
+    if row is None:
+        raise AppError("desktop_plugin.version_not_found", "插件版本不存在", status_code=404)
+    return row[0], row[1]
+
+
+def approve_version(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionApproveRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status not in {
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
+    }:
+        raise AppError(
+            "desktop_plugin.version_not_approvable", "插件版本不处于人工审核状态", status_code=409
+        )
+    _validate_api_capabilities(
+        db,
+        plugin=plugin,
+        requested_capabilities=list(version.requested_capabilities),
+    )
+    requested = set(version.requested_capabilities)
+    approved = set(payload.approved_capabilities)
+    if not approved.issubset(requested):
+        raise AppError(
+            "desktop_plugin.capability_not_requested", "管理员不能批准未申请的权限", status_code=422
+        )
+    version.status = DesktopPluginVersionStatus.APPROVED
+    version.approved_capabilities = sorted(approved)
+    version.reviewer_user_id = principal.user.id
+    version.review_policy_version = "manual-review-v1"
+    version.approved_at = utc_now()
+    version.version += 1
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.APPROVED,
+        actor_id=principal.user.id,
+        note=payload.review_note,
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.approved",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"approved_capabilities": sorted(approved)},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def reject_version(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionRejectRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    del plugin
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status not in {
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
+    }:
+        raise AppError(
+            "desktop_plugin.version_not_rejectable", "插件版本不处于人工审核状态", status_code=409
+        )
+    version.status = DesktopPluginVersionStatus.REJECTED
+    version.reviewer_user_id = principal.user.id
+    version.review_policy_version = "manual-review-v1"
+    version.version += 1
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.REJECTED,
+        actor_id=principal.user.id,
+        note=payload.review_note,
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.rejected",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"reason": payload.review_note},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def publish_version(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+    payload: PluginVersionPublishRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status != DesktopPluginVersionStatus.APPROVED:
+        raise AppError(
+            "desktop_plugin.version_not_publishable", "只有批准版本才能发布", status_code=409
+        )
+    artifacts = list(
+        db.scalars(
+            select(DesktopPluginArtifact)
+            .where(DesktopPluginArtifact.plugin_version_id == version.id)
+            .with_for_update()
+        ).all()
+    )
+    storage = DesktopPluginStorage(settings)
+    for artifact in artifacts:
+        if artifact.status != DesktopPluginArtifactStatus.QUARANTINED or not artifact.storage_key:
+            raise AppError(
+                "desktop_plugin.artifact_not_ready", "制品未处于隔离待发布状态", status_code=409
+            )
+        source = storage.quarantine_path(artifact.storage_key)
+        public_key = storage.public_key(version.id, artifact.architecture, artifact.id)
+        destination = storage.public_path(public_key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(destination.suffix + ".publish")
+        shutil.copyfile(source, temporary)
+        temporary.replace(destination)
+        artifact.public_storage_key = public_key
+        artifact.status = DesktopPluginArtifactStatus.PUBLIC
+        artifact.zone = DesktopPluginArtifactZone.PUBLIC
+    now = utc_now()
+    key_id, public_key, signature = _platform_signature(
+        settings,
+        {
+            "plugin_id": plugin.id,
+            "version_id": version.id,
+            "semver": version.semver,
+            "manifest_sha256": version.manifest_sha256,
+            "approved_capabilities": version.approved_capabilities,
+            "policy": version.review_policy_version,
+            "published_at": _signature_timestamp(now),
+        },
+    )
+    version.platform_key_id = key_id
+    version.platform_public_key_base64 = public_key
+    version.platform_signature_base64 = signature
+    version.status = DesktopPluginVersionStatus.PUBLISHED
+    version.published_at = now
+    version.version += 1
+    plugin.status = DesktopPluginStatus.ACTIVE
+    publication = DesktopPluginPublication(
+        version_id=version.id,
+        channel=payload.channel,
+        published_by_user_id=principal.user.id,
+        published_at=now,
+    )
+    db.add(publication)
+    _review_event(
+        db, version=version, kind=DesktopPluginReviewEventKind.PUBLISHED, actor_id=principal.user.id
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.published",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"channel": payload.channel, "platform_key_id": key_id},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def yank_version(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionYankRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status != DesktopPluginVersionStatus.PUBLISHED:
+        raise AppError(
+            "desktop_plugin.version_not_yankable", "只有已发布版本才能下架", status_code=409
+        )
+    publication = db.scalar(
+        select(DesktopPluginPublication)
+        .where(
+            DesktopPluginPublication.version_id == version.id,
+            DesktopPluginPublication.channel == "stable",
+        )
+        .with_for_update()
+    )
+    if publication:
+        publication.status = DesktopPluginPublicationStatus.YANKED
+        publication.yanked_at = utc_now()
+        publication.yanked_by_user_id = principal.user.id
+    version.status = DesktopPluginVersionStatus.YANKED
+    version.yanked_at = utc_now()
+    version.version += 1
+    for artifact in db.scalars(
+        select(DesktopPluginArtifact)
+        .where(DesktopPluginArtifact.plugin_version_id == version.id)
+        .with_for_update()
+    ).all():
+        artifact.status = DesktopPluginArtifactStatus.YANKED
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.YANKED,
+        actor_id=principal.user.id,
+        note=payload.reason,
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.yanked",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"reason": payload.reason},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def revoke_version(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+    payload: PluginVersionRevokeRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status not in {
+        DesktopPluginVersionStatus.PUBLISHED,
+        DesktopPluginVersionStatus.YANKED,
+        DesktopPluginVersionStatus.APPROVED,
+    }:
+        raise AppError(
+            "desktop_plugin.version_not_revokeable", "插件版本当前不能撤销", status_code=409
+        )
+    now = utc_now()
+    key_id, public_key, signature = _platform_signature(
+        settings,
+        {
+            "scope": "version",
+            "plugin_id": plugin.id,
+            "version_id": version.id,
+            "reason_code": payload.reason_code,
+            "effective_at": _signature_timestamp(now),
+        },
+    )
+    db.add(
+        DesktopPluginRevocation(
+            scope=DesktopPluginRevocationScope.VERSION,
+            plugin_version_id=version.id,
+            reason_code=payload.reason_code,
+            affects_historical_versions=payload.affects_historical_versions,
+            effective_at=now,
+            batch_id=secrets.token_hex(16),
+            platform_key_id=key_id,
+            platform_public_key_base64=public_key,
+            platform_signature_base64=signature,
+        )
+    )
+    version.status = DesktopPluginVersionStatus.REVOKED
+    version.version += 1
+    storage = DesktopPluginStorage(settings)
+    for artifact in db.scalars(
+        select(DesktopPluginArtifact)
+        .where(DesktopPluginArtifact.plugin_version_id == version.id)
+        .with_for_update()
+    ).all():
+        revoked_key = storage.revoked_key(version.id, artifact.architecture, artifact.id)
+        destination = storage.revoked_path(revoked_key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source: Path | None = None
+        if artifact.public_storage_key:
+            public_source = storage.public_path(artifact.public_storage_key)
+            if public_source.is_file():
+                source = public_source
+        if source is None and artifact.storage_key:
+            quarantine_source = storage.quarantine_path(artifact.storage_key)
+            if quarantine_source.is_file():
+                source = quarantine_source
+        if source is not None:
+            source.replace(destination)
+        artifact.storage_key = revoked_key
+        artifact.public_storage_key = None
+        artifact.status = DesktopPluginArtifactStatus.REVOKED
+        artifact.zone = DesktopPluginArtifactZone.REVOKED
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.REVOKED,
+        actor_id=principal.user.id,
+        note=payload.reason,
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.revoked",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"reason_code": payload.reason_code},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def create_report(
+    db: Session,
+    *,
+    plugin_slug: str,
+    payload: PluginReportCreateRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReportResponse:
+    plugin = db.scalar(
+        select(DesktopPlugin).where(
+            DesktopPlugin.slug == plugin_slug, DesktopPlugin.status == DesktopPluginStatus.ACTIVE
+        )
+    )
+    if plugin is None:
+        raise AppError("desktop_plugin.not_found", "插件不存在", status_code=404)
+    if payload.version_id:
+        version = db.scalar(
+            select(DesktopPluginVersion).where(
+                DesktopPluginVersion.id == payload.version_id,
+                DesktopPluginVersion.plugin_id == plugin.id,
+            )
+        )
+        if version is None:
+            raise AppError("desktop_plugin.version_not_found", "插件版本不存在", status_code=404)
+    report = DesktopPluginReport(
+        plugin_id=plugin.id,
+        version_id=payload.version_id,
+        reporter_user_id=principal.user.id,
+        category=payload.category,
+        description=payload.description,
+    )
+    db.add(report)
+    db.flush()
+    _write_audit(
+        db,
+        action="desktop_plugin.report.created",
+        target_type="desktop_plugin_report",
+        target_id=report.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"category": report.category},
+    )
+    db.commit()
+    db.refresh(report)
+    return PluginReportResponse.model_validate(report)
+
+
+def list_reports(
+    db: Session, *, page: int, page_size: int, status_filter: str | None
+) -> PluginReportListResponse:
+    statement = select(DesktopPluginReport)
+    if status_filter:
+        try:
+            statement = statement.where(
+                DesktopPluginReport.status == DesktopPluginReportStatus(status_filter)
+            )
+        except ValueError as exc:
+            raise AppError(
+                "desktop_plugin.invalid_report_status", "举报状态无效", status_code=422
+            ) from exc
+    rows = list(
+        db.scalars(
+            statement.order_by(DesktopPluginReport.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    total = (
+        db.scalar(
+            select(func.count()).select_from(
+                statement.order_by(None).limit(None).offset(None).subquery()
+            )
+        )
+        or 0
+    )
+    return PluginReportListResponse(
+        items=[PluginReportResponse.model_validate(report) for report in rows],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def review_report(
+    db: Session,
+    *,
+    report_id: str,
+    payload: PluginReportReviewRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReportResponse:
+    report = db.scalar(
+        select(DesktopPluginReport).where(DesktopPluginReport.id == report_id).with_for_update()
+    )
+    if report is None:
+        raise AppError("desktop_plugin.report_not_found", "举报不存在", status_code=404)
+    report.status = DesktopPluginReportStatus(payload.status)
+    report.reviewer_user_id = principal.user.id
+    report.resolution_note = payload.resolution_note
+    _write_audit(
+        db,
+        action="desktop_plugin.report.reviewed",
+        target_type="desktop_plugin_report",
+        target_id=report.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"status": payload.status},
+    )
+    db.commit()
+    db.refresh(report)
+    return PluginReportResponse.model_validate(report)
