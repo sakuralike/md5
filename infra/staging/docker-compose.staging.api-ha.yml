@@ -5,12 +5,24 @@ services:
     ports: !reset []
     expose:
       - "8000"
+    environment:
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+    volumes:
+      - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
 
   worker:
     image: ${STAGING_API_IMAGE:-password-detective-api:staging}
+    environment:
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+    volumes:
+      - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
 
   scheduler:
     image: ${STAGING_API_IMAGE:-password-detective-api:staging}
+    environment:
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+    volumes:
+      - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
 
   api-proxy:
     image: nginx:1.30.4-alpine3.24
@@ -26,3 +38,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+volumes:
+  desktop-plugin-data:

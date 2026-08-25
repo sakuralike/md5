@@ -89,8 +89,10 @@ services:
       SITE_LOGO_MAX_BYTES: ${SITE_LOGO_MAX_BYTES:-2097152}
       DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES: ${DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES:-5242880}
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
     volumes:
       - desktop-update-data:/var/lib/password-detective/desktop-updates
+      - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
       - site-asset-data:/var/lib/password-detective/site-assets
     command: ["sh", "-c", "for attempt in 1 2 3 4 5; do if alembic upgrade head; then exec uvicorn password_detective.main:app --host 0.0.0.0 --port 8000; fi; echo alembic-upgrade-failed attempt=$$attempt retrying >&2; sleep 5; done; exit 1"]
     ports: ["${API_PORT:-8000}:8000"]
@@ -156,7 +158,10 @@ services:
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
-    volumes: ["desktop-update-data:/var/lib/password-detective/desktop-updates"]
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+    volumes:
+      - desktop-update-data:/var/lib/password-detective/desktop-updates
+      - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
     command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}"]
     depends_on:
       api: { condition: service_healthy }
@@ -214,6 +219,7 @@ services:
       SUBMISSION_PENDING_POINTS: ${SUBMISSION_PENDING_POINTS:-1}
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
+      DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
     command: ["celery", "-A", "password_detective.worker.celery_app", "beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
@@ -245,4 +251,5 @@ volumes:
   mysql-data:
   redis-data:
   desktop-update-data:
+  desktop-plugin-data:
   site-asset-data:
