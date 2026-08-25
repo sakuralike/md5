@@ -19,6 +19,8 @@ describe("DeveloperPluginsPage", () => {
     expect(html).toContain("桌面插件开发者中心");
     expect(html).toContain("Ed25519 公钥 Base64");
     expect(html).toContain("申请权限");
+    expect(html).toContain("用户界面命令");
+    expect(html).toContain("读取用户选择的文件");
     expect(html).toContain("关联第三方应用");
     expect(html).toContain("自动审核报告");
     expect(html).toContain("创建、上传并提交审核");
