@@ -17,6 +17,15 @@ public sealed class PluginPermissionPolicy
         ],
         StringComparer.Ordinal);
 
+    public static readonly IReadOnlySet<string> MarketSupportedCapabilities = new HashSet<string>(
+        LocallySupportedCapabilities.Concat(
+        [
+            "api:profile:read",
+            "api:hash:read",
+            "api:verification:submit",
+        ]),
+        StringComparer.Ordinal);
+
     public static readonly IReadOnlySet<string> KnownCapabilities = new HashSet<string>(
         LocallySupportedCapabilities.Concat(
         [
@@ -34,6 +43,17 @@ public sealed class PluginPermissionPolicy
     public PluginPermissionDecision Evaluate(
         PluginManifest manifest,
         IEnumerable<string> userGrantedCapabilities)
+        => EvaluateCore(manifest, userGrantedCapabilities, LocallySupportedCapabilities);
+
+    public PluginPermissionDecision EvaluateMarket(
+        PluginManifest manifest,
+        IEnumerable<string> userGrantedCapabilities)
+        => EvaluateCore(manifest, userGrantedCapabilities, MarketSupportedCapabilities);
+
+    private static PluginPermissionDecision EvaluateCore(
+        PluginManifest manifest,
+        IEnumerable<string> userGrantedCapabilities,
+        IReadOnlySet<string> supportedCapabilities)
     {
         var required = ValidateRequested(manifest.Capabilities.Required, "必需权限");
         var optional = ValidateRequested(manifest.Capabilities.Optional, "可选权限");
@@ -44,17 +64,17 @@ public sealed class PluginPermissionPolicy
 
         var userGranted = userGrantedCapabilities.ToHashSet(StringComparer.Ordinal);
         var deniedRequired = required
-            .Where(capability => !LocallySupportedCapabilities.Contains(capability)
+            .Where(capability => !supportedCapabilities.Contains(capability)
                                  || !userGranted.Contains(capability))
             .Order(StringComparer.Ordinal)
             .ToArray();
         var deniedOptional = optional
-            .Where(capability => !LocallySupportedCapabilities.Contains(capability)
+            .Where(capability => !supportedCapabilities.Contains(capability)
                                  || !userGranted.Contains(capability))
             .Order(StringComparer.Ordinal)
             .ToArray();
         var granted = required.Concat(optional)
-            .Where(capability => LocallySupportedCapabilities.Contains(capability)
+            .Where(capability => supportedCapabilities.Contains(capability)
                                  && userGranted.Contains(capability))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PluginArchitecture = Literal["windows-x64", "windows-arm64"]
 PluginStatus = Literal["draft", "active", "suspended", "revoked"]
@@ -21,6 +21,7 @@ PluginVersionStatus = Literal[
     "published",
     "yanked",
     "rejected",
+    "withdrawn",
     "revoked",
 ]
 PluginCategory = Literal[
@@ -327,6 +328,250 @@ class PluginReviewEventResponse(BaseModel):
     created_at: datetime
 
 
+class PluginStaticFindingResponse(BaseModel):
+    id: str
+    stage: str
+    rule_id: str
+    severity: str
+    title: str
+    detail: str
+    file_path: str | None
+    evidence: dict
+    blocked: bool
+    created_at: datetime
+
+
+class PluginDynamicTaskResponse(BaseModel):
+    id: str
+    artifact_id: str
+    architecture: str
+    status: str
+    runner_id: str | None
+    attempt: int
+    lease_expires_at: datetime | None
+    evidence_complete: bool
+    fresh_environment: bool
+    destruction_proof_sha256: str | None
+    error_code: str | None
+    error_message: str | None
+    result_summary: dict
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class PluginStaticReviewRunResponse(BaseModel):
+    id: str
+    policy_version: str
+    status: str
+    attempt: int
+    summary: dict
+    error_code: str | None
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    findings: list[PluginStaticFindingResponse]
+    dynamic_tasks: list[PluginDynamicTaskResponse]
+
+
+class PluginStaticReviewReportResponse(BaseModel):
+    version_id: str
+    version_status: PluginVersionStatus
+    runs: list[PluginStaticReviewRunResponse]
+
+
+class PluginRunnerCreateRequest(BaseModel):
+    name: str = Field(min_length=3, max_length=128)
+    architecture: PluginArchitecture
+    certificate_fingerprint: str = Field(min_length=64, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return _strip(value)
+
+    @field_validator("certificate_fingerprint")
+    @classmethod
+    def normalize_fingerprint(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if any(character not in "0123456789abcdef" for character in normalized):
+            raise ValueError("证书指纹必须是 SHA-256 十六进制摘要")
+        return normalized
+
+
+class PluginRunnerResponse(BaseModel):
+    id: str
+    name: str
+    architecture: PluginArchitecture
+    certificate_fingerprint: str
+    status: str
+    policy_version: str | None
+    image_digest: str | None
+    probe_version: str | None
+    last_heartbeat_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+
+class PluginRunnerRegistrationResponse(PluginRunnerResponse):
+    runner_secret: str | None
+
+
+class PluginRunnerListResponse(BaseModel):
+    items: list[PluginRunnerResponse]
+
+
+class PluginReviewMetricsResponse(BaseModel):
+    generated_at: datetime
+    review_run_counts: dict[str, int]
+    version_status_counts: dict[str, int]
+    dynamic_task_counts: dict[str, int]
+    runner_status_counts: dict[str, int]
+    runner_capacity_by_architecture: dict[str, int]
+    runner_active_by_architecture: dict[str, int]
+    queue_depth_by_architecture: dict[str, int]
+    oldest_queued_seconds: float | None
+    average_review_seconds: float | None
+    p95_review_seconds: float | None
+    completed_last_24_hours: int
+    install_events_last_24_hours: int
+
+
+class PluginReviewPolicyUpdate(BaseModel):
+    version: int = Field(ge=0)
+    static_lease_seconds: int = Field(default=300, ge=60, le=1_800)
+    dynamic_lease_seconds: int = Field(default=300, ge=60, le=1_800)
+    task_token_seconds: int = Field(default=900, ge=60, le=3_600)
+    maximum_static_attempts: int = Field(default=3, ge=1, le=5)
+    maximum_dynamic_attempts: int = Field(default=3, ge=1, le=5)
+    runner_offline_seconds: int = Field(default=90, ge=30, le=600)
+    revocation_refresh_hours: int = Field(default=6, ge=1, le=24)
+    revocation_max_stale_hours: int = Field(default=168, ge=24, le=720)
+
+    @model_validator(mode="after")
+    def validate_revocation_window(self) -> PluginReviewPolicyUpdate:
+        if self.revocation_max_stale_hours <= self.revocation_refresh_hours:
+            raise ValueError("撤销缓存最大离线时长必须大于刷新间隔")
+        return self
+
+
+class PluginReviewPolicyResponse(PluginReviewPolicyUpdate):
+    policy_version: str
+    static_engine_version: str
+    dynamic_engine_version: str
+    updated_at: datetime | None
+    updated_by: str | None
+
+
+class PluginRunnerHeartbeatRequest(BaseModel):
+    policy_version: str = Field(min_length=3, max_length=64)
+    image_digest: str = Field(min_length=64, max_length=64)
+    probe_version: str = Field(min_length=1, max_length=64)
+    fresh_environment_ready: bool
+
+    @field_validator("policy_version", "probe_version")
+    @classmethod
+    def normalize_values(cls, value: str) -> str:
+        return _strip(value)
+
+    @field_validator("image_digest")
+    @classmethod
+    def normalize_image_digest(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if any(character not in "0123456789abcdef" for character in normalized):
+            raise ValueError("镜像摘要必须是 SHA-256 十六进制摘要")
+        return normalized
+
+
+class PluginRunnerTaskLeaseResponse(BaseModel):
+    task_id: str
+    review_run_id: str
+    plugin_id: str
+    plugin_slug: str
+    version_id: str
+    semver: str
+    artifact_id: str
+    architecture: PluginArchitecture
+    artifact_sha256: str
+    artifact_size_bytes: int
+    requested_capabilities: list[str]
+    policy_version: str
+    artifact_url: str
+    task_token: str
+    expires_at: datetime
+
+
+class PluginRunnerTaskHeartbeatResponse(BaseModel):
+    task_id: str
+    lease_expires_at: datetime
+
+
+EvidenceValue = bool | int | float | None
+
+
+class PluginDynamicFindingRequest(BaseModel):
+    stage: Literal[
+        "dynamic_protocol",
+        "dynamic_resource",
+        "dynamic_file",
+        "dynamic_process",
+        "dynamic_network",
+        "dynamic_cleanup",
+    ]
+    rule_id: str = Field(min_length=3, max_length=64)
+    severity: Literal["info", "low", "medium", "high", "critical"]
+    title: str = Field(min_length=1, max_length=255)
+    detail: str = Field(min_length=1, max_length=2_000)
+    file_path: str | None = Field(default=None, max_length=512)
+    evidence: dict[str, EvidenceValue] = Field(default_factory=dict, max_length=16)
+    blocked: bool = False
+
+    @field_validator("rule_id", "title", "detail")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        return _strip(value)
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_relative_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = _strip(value)
+        if (
+            not normalized
+            or "\\" in normalized
+            or ":" in normalized
+            or normalized.startswith("/")
+            or ".." in normalized.split("/")
+        ):
+            raise ValueError("动态证据文件路径必须是安全相对路径")
+        return normalized
+
+
+class PluginRunnerTaskCompleteRequest(BaseModel):
+    outcome: Literal["passed", "blocked", "infrastructure_failed"]
+    evidence_complete: bool
+    fresh_environment: bool
+    destruction_proof_sha256: str = Field(min_length=64, max_length=64)
+    summary: dict[str, EvidenceValue] = Field(default_factory=dict, max_length=32)
+    findings: list[PluginDynamicFindingRequest] = Field(default_factory=list, max_length=128)
+    error_code: str | None = Field(default=None, max_length=128)
+    error_message: str | None = Field(default=None, max_length=2_000)
+
+    @field_validator("destruction_proof_sha256")
+    @classmethod
+    def normalize_destruction_proof(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if any(character not in "0123456789abcdef" for character in normalized):
+            raise ValueError("销毁证明必须是 SHA-256 十六进制摘要")
+        return normalized
+
+    @field_validator("error_code", "error_message")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        return _strip(value) if value is not None else None
+
+
 class PluginReviewQueueItem(BaseModel):
     version_id: str
     plugin_id: str
@@ -360,8 +605,10 @@ class PluginReviewDetailResponse(PluginReviewQueueItem):
     platform_key_id: str | None
     platform_public_key_base64: str | None
     platform_signature_base64: str | None
+    platform_signature_payload: dict | None
     artifacts: list[PluginArtifactResponse]
     events: list[PluginReviewEventResponse]
+    review_runs: list[PluginStaticReviewRunResponse]
 
 
 class PluginReportCreateRequest(BaseModel):
@@ -522,6 +769,8 @@ class PublicPluginArtifactResponse(BaseModel):
 
 
 class PublicPluginVersionResponse(BaseModel):
+    version_id: str
+    plugin_slug: str
     semver: str
     status: Literal["published"]
     manifest_json: dict
@@ -537,6 +786,7 @@ class PublicPluginVersionResponse(BaseModel):
     platform_key_id: str
     platform_public_key_base64: str
     platform_signature_base64: str
+    platform_signature_payload: dict
     published_at: datetime
     artifacts: list[PublicPluginArtifactResponse]
 
@@ -544,6 +794,7 @@ class PublicPluginVersionResponse(BaseModel):
 class PublicPluginDetailResponse(BaseModel):
     slug: str
     name: str
+    developer_name: str
     summary: str
     description: str
     category: str
@@ -557,6 +808,7 @@ class PublicPluginDetailResponse(BaseModel):
 class PublicPluginCatalogItem(BaseModel):
     slug: str
     name: str
+    developer_name: str
     summary: str
     category: str
     tags: list[str]
@@ -594,6 +846,61 @@ class DownloadTicketResponse(BaseModel):
     artifact_size_bytes: int
 
 
+class PluginInstallEventRequest(BaseModel):
+    event_id: str = Field(min_length=16, max_length=64)
+    plugin_slug: str = Field(min_length=3, max_length=128)
+    semver: str = Field(min_length=5, max_length=32)
+    architecture: PluginArchitecture
+    source: Literal["market_reviewed", "local_unreviewed"]
+    kind: Literal[
+        "installed",
+        "upgraded",
+        "rolled_back",
+        "enabled",
+        "disabled",
+        "uninstalled",
+        "download_failed",
+    ]
+    result: Literal["success", "failure"] = "success"
+    client_version: str | None = Field(default=None, max_length=32)
+
+    @field_validator("event_id", "plugin_slug", "semver")
+    @classmethod
+    def normalize_event_values(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginInstallEventResponse(BaseModel):
+    accepted: bool
+    event_id: str
+
+
+class PluginBrokerAuthorizationRequest(BaseModel):
+    semver: str = Field(min_length=5, max_length=32)
+    capability: Literal[
+        "api:profile:read",
+        "api:hash:read",
+        "api:verification:submit",
+    ]
+
+    @field_validator("semver")
+    @classmethod
+    def validate_semver(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _SEMVER_PATTERN.fullmatch(normalized):
+            raise ValueError("插件版本必须是严格 SemVer x.y.z")
+        return normalized
+
+
+class PluginBrokerAuthorizationResponse(BaseModel):
+    allowed: Literal[True]
+    plugin_slug: str
+    semver: str
+    capability: str
+    scope: str
+    linked_application_id: str
+
+
 class PluginRevocationResponse(BaseModel):
     id: str
     scope: Literal["plugin", "version", "signing_key"]
@@ -607,6 +914,7 @@ class PluginRevocationResponse(BaseModel):
     platform_key_id: str
     platform_public_key_base64: str
     platform_signature_base64: str
+    platform_signature_payload: dict
 
 
 class PluginRevocationListResponse(BaseModel):

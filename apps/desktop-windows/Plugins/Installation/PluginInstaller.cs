@@ -2,6 +2,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using PasswordDetective.Desktop.Plugins.Packages;
+using PasswordDetective.Desktop.Plugins.Market;
 using PasswordDetective.Desktop.Plugins.Permissions;
 using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Runtime;
@@ -53,19 +54,81 @@ public sealed class PluginInstaller
         CancellationToken cancellationToken = default) =>
         _verifier.VerifyAsync(packagePath, cancellationToken);
 
-    public async Task<PluginInstallResult> InstallLocalAsync(
+    public async Task<PluginInstallResult> InstallMarketAsync(
         string packagePath,
+        MarketPluginVersion marketVersion,
         IEnumerable<string> userGrantedCapabilities,
         CancellationToken cancellationToken = default)
+    {
+        PlatformSignatureVerifier.Verify(marketVersion);
+        var inspection = await _verifier.VerifyAsync(packagePath, cancellationToken);
+        if (!string.Equals(inspection.Manifest.PluginId, marketVersion.PluginSlug, StringComparison.Ordinal)
+            || !string.Equals(inspection.Manifest.Version, marketVersion.Semver, StringComparison.Ordinal)
+            || !string.Equals(
+                inspection.Files.Single(item => item.Path == PluginPackageVerifier.ManifestPath).Sha256,
+                marketVersion.ManifestSha256,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PluginInstallException("在线插件清单或摘要与平台发布版本不一致。");
+        }
+
+        var requestedCapabilities = inspection.Manifest.Capabilities.Required
+            .Concat(inspection.Manifest.Capabilities.Optional)
+            .ToHashSet(StringComparer.Ordinal);
+        var approvedCapabilities = marketVersion.ApprovedCapabilities.ToHashSet(StringComparer.Ordinal);
+        if (!approvedCapabilities.IsSubsetOf(requestedCapabilities)
+            || inspection.Manifest.Capabilities.Required.Any(
+                capability => !approvedCapabilities.Contains(capability)))
+        {
+            throw new PluginInstallException("平台批准权限不是插件清单申请权限的完整子集。");
+        }
+
+        var artifact = marketVersion.Artifacts.SingleOrDefault(
+            item => string.Equals(item.Architecture, inspection.Architecture, StringComparison.Ordinal));
+        if (artifact is null
+            || !string.Equals(artifact.Sha256, inspection.PackageSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PluginInstallException("在线插件制品摘要与平台发布版本不一致。");
+        }
+
+        var local = await InstallAsync(
+            packagePath,
+            userGrantedCapabilities.Intersect(approvedCapabilities, StringComparer.Ordinal),
+            marketReviewed: true,
+            cancellationToken);
+        var market = local.Plugin with
+        {
+            Source = PluginSource.MarketReviewed,
+            PlatformKeyId = marketVersion.PlatformKeyId,
+            PlatformPublicKeyBase64 = marketVersion.PlatformPublicKeyBase64,
+            PlatformSignatureBase64 = marketVersion.PlatformSignatureBase64,
+            ReviewPolicyVersion = marketVersion.ReviewPolicyVersion,
+            RiskTier = marketVersion.RiskTier,
+        };
+        await _registry.UpsertAsync(market, cancellationToken);
+        return local with { Plugin = market };
+    }
+
+    public Task<PluginInstallResult> InstallLocalAsync(
+        string packagePath,
+        IEnumerable<string> userGrantedCapabilities,
+        CancellationToken cancellationToken = default) =>
+        InstallAsync(packagePath, userGrantedCapabilities, marketReviewed: false, cancellationToken);
+
+    private async Task<PluginInstallResult> InstallAsync(
+        string packagePath,
+        IEnumerable<string> userGrantedCapabilities,
+        bool marketReviewed,
+        CancellationToken cancellationToken)
     {
         await _lock.WaitAsync(cancellationToken);
         try
         {
             _paths.EnsureDirectories();
             var inspection = await _verifier.VerifyAsync(packagePath, cancellationToken);
-            var permission = _permissions.Evaluate(
-                inspection.Manifest,
-                userGrantedCapabilities);
+            var permission = marketReviewed
+                ? _permissions.EvaluateMarket(inspection.Manifest, userGrantedCapabilities)
+                : _permissions.Evaluate(inspection.Manifest, userGrantedCapabilities);
             if (permission.DeniedRequired.Count > 0)
             {
                 throw new PluginInstallException(

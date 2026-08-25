@@ -23,6 +23,7 @@ from password_detective.modules.community.notification_service import (
     dispatch_pending_notification_events,
 )
 from password_detective.modules.community.search_index import dispatch_pending_search_events
+from password_detective.modules.desktop_plugins.review_service import process_pending_static_reviews
 from password_detective.modules.rewards.service import process_pending_fulfillments
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
@@ -83,6 +84,10 @@ celery_app.conf.update(
         },
         "process-reward-fulfillments": {
             "task": "rewards.process_fulfillments",
+            "schedule": 5.0,
+        },
+        "process-desktop-plugin-static-reviews": {
+            "task": "desktop_plugins.process_static_reviews",
             "schedule": 5.0,
         },
     },
@@ -238,5 +243,19 @@ def process_reward_fulfillments() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return process_pending_fulfillments(db, worker_id=worker_instance_id)
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="desktop_plugins.process_static_reviews")
+def process_desktop_plugin_static_reviews() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return process_pending_static_reviews(
+                db,
+                settings,
+                worker_id=worker_instance_id,
+            )
     finally:
         database.dispose()

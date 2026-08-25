@@ -12,6 +12,9 @@ public static class PdppProtocol
     public const string HealthCheckMethod = "health/check";
     public const string ExecuteCommandMethod = "command/execute";
     public const string ShutdownMethod = "shutdown";
+    public const string HostApiProfileReadMethod = "host/api/profile/read";
+    public const string HostApiHashReadMethod = "host/api/hash/read";
+    public const string HostApiVerificationSubmitMethod = "host/api/verification/submit";
     public const int DefaultMaximumMessageBytes = 1024 * 1024;
 
     internal const string SchemaResourceName =

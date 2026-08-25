@@ -34,12 +34,17 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly PluginStoragePaths _paths;
     private readonly PluginLogStore _logs;
     private readonly PluginPrivateStorage _privateStorage;
+    private readonly IPluginApiBroker? _apiBroker;
 
-    public PluginExecutionService(PluginStoragePaths paths, PluginLogStore logs)
+    public PluginExecutionService(
+        PluginStoragePaths paths,
+        PluginLogStore logs,
+        IPluginApiBroker? apiBroker = null)
     {
         _paths = paths;
         _logs = logs;
         _privateStorage = new PluginPrivateStorage(paths);
+        _apiBroker = apiBroker;
     }
 
     public async Task ValidateAsync(
@@ -91,8 +96,10 @@ public sealed class PluginExecutionService : IPluginExecutionService
         var installedDirectory = _paths.InstalledVersionDirectory(plugin.PluginId, version.Version);
         using var broker = new PluginHostBroker(
             plugin.PluginId,
+            plugin.CurrentVersion,
             plugin.GrantedCapabilities,
-            _privateStorage);
+            _privateStorage,
+            _apiBroker);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

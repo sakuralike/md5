@@ -1,4 +1,4 @@
-import type { DesktopPluginCapability, DesktopPluginProjectDetail, DesktopPluginVersion } from "@password-detective/api-contract";
+import type { DesktopPluginCapability, DesktopPluginProject, DesktopPluginProjectDetail, DesktopPluginStaticReviewReport, DesktopPluginVersion } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
 function key(prefix: string): string {
@@ -13,8 +13,18 @@ export interface SigningKeyRecord {
 }
 
 export async function listDeveloperPlugins(token: string): Promise<DesktopPluginProjectDetail[]> {
-  const response = await apiRequest<{ items: DesktopPluginProjectDetail[] }>("/developer/plugins?page=1&page_size=100", {}, token);
-  return response.items;
+  const response = await apiRequest<{ items: DesktopPluginProject[] }>("/developer/plugins?page=1&page_size=100", {}, token);
+  return Promise.all(response.items.map((item) => apiRequest<DesktopPluginProjectDetail>(
+    `/developer/plugins/${encodeURIComponent(item.id)}`, {}, token,
+  )));
+}
+
+export function getPluginReviewReport(token: string, versionId: string): Promise<DesktopPluginStaticReviewReport> {
+  return apiRequest(
+    `/developer/plugin-versions/${encodeURIComponent(versionId)}/review-report`,
+    {},
+    token,
+  );
 }
 
 export function createDeveloperPlugin(token: string, payload: Record<string, unknown>) {
@@ -76,6 +86,18 @@ export function submitPluginVersion(token: string, version: DesktopPluginVersion
   return apiRequest<DesktopPluginVersion>(
     `/developer/plugin-versions/${encodeURIComponent(version.id)}/submit`,
     { method: "POST", headers: { "Idempotency-Key": key("plugin-submit") }, body: JSON.stringify({ version: version.version }) },
+    token,
+  );
+}
+
+export function withdrawPluginVersion(token: string, version: DesktopPluginVersion) {
+  return apiRequest<DesktopPluginVersion>(
+    `/developer/plugin-versions/${encodeURIComponent(version.id)}/withdraw`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": key("plugin-withdraw") },
+      body: JSON.stringify({ version: version.version }),
+    },
     token,
   );
 }

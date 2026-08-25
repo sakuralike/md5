@@ -41,6 +41,9 @@ from password_detective.modules.desktop_announcements.router import (
     public_router as desktop_announcements_router,
 )
 from password_detective.modules.desktop_plugins.admin_router import (
+    policy_router as desktop_plugins_policy_router,
+)
+from password_detective.modules.desktop_plugins.admin_router import (
     router as desktop_plugins_admin_router,
 )
 from password_detective.modules.desktop_plugins.developer_router import (
@@ -48,6 +51,12 @@ from password_detective.modules.desktop_plugins.developer_router import (
 )
 from password_detective.modules.desktop_plugins.market_router import (
     router as desktop_plugins_market_router,
+)
+from password_detective.modules.desktop_plugins.runner_router import (
+    admin_router as desktop_plugin_runners_admin_router,
+)
+from password_detective.modules.desktop_plugins.runner_router import (
+    runner_router as desktop_plugin_runners_router,
 )
 from password_detective.modules.desktop_updates.router import (
     admin_router as desktop_updates_admin_router,
@@ -218,7 +227,10 @@ def create_app(
     app.include_router(desktop_updates_admin_router, prefix="/api/v1")
     app.include_router(desktop_plugins_developer_router, prefix="/api/v1")
     app.include_router(desktop_plugins_admin_router, prefix="/api/v1")
+    app.include_router(desktop_plugins_policy_router, prefix="/api/v1")
     app.include_router(desktop_plugins_market_router, prefix="/api/v1")
+    app.include_router(desktop_plugin_runners_admin_router, prefix="/api/v1")
+    app.include_router(desktop_plugin_runners_router, prefix="/api/v1")
     return app
 
 

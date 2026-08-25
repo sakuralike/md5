@@ -124,6 +124,23 @@ public sealed class PluginPackageVerifierTests : IDisposable
     }
 
     [Fact]
+    public async Task MarketPermissionPolicyAllowsOnlyTheThreeBrokerCapabilities()
+    {
+        var path = _factory.Create(
+            _directory,
+            pluginId: "com.synthetic.market-api",
+            requiredCapabilities: ["ui:command", "api:profile:read"]);
+        var inspection = await new PluginPackageVerifier().VerifyAsync(path);
+
+        var decision = new PluginPermissionPolicy().EvaluateMarket(
+            inspection.Manifest,
+            ["ui:command", "api:profile:read"]);
+
+        Assert.Empty(decision.DeniedRequired);
+        Assert.Contains("api:profile:read", decision.Granted);
+    }
+
+    [Fact]
     public async Task FileSchemaRequiresCapabilityAndDirectorySchemaIsRejected()
     {
         var fileWithoutCapability = _factory.Create(

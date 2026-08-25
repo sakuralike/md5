@@ -52,7 +52,19 @@ public partial class MainWindow : Window
         var registry = new PluginRegistry(_pluginPaths);
         var permissionPolicy = new PluginPermissionPolicy();
         var logs = new PluginLogStore(_pluginPaths);
-        var execution = new PluginExecutionService(_pluginPaths, logs);
+        var brokerApiClient = new DesktopApiClient();
+        var pluginApiBroker = new PluginApiBroker(
+            brokerApiClient,
+            new InstallationIdentityService(),
+            async cancellationToken =>
+            {
+                var session = await _viewModel.GetSessionForPluginBrokerAsync(cancellationToken);
+                return new PluginBrokerSession(
+                    session.ServerBaseUrl,
+                    session.AccessToken,
+                    session.AccountId);
+            });
+        var execution = new PluginExecutionService(_pluginPaths, logs, pluginApiBroker);
         var installer = new PluginInstaller(
             _pluginPaths,
             new PluginPackageVerifier(),
@@ -71,7 +83,8 @@ public partial class MainWindow : Window
             registry,
             runtime,
             _pluginSafeMode,
-            new PluginDialogService());
+            new PluginDialogService(),
+            _viewModel.ServerBaseUrl);
         _pluginMarketplaceWindow = new PluginMarketplaceWindow(viewModel)
         {
             Owner = this,

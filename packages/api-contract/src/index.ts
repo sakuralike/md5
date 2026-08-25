@@ -3166,6 +3166,7 @@ export const DESKTOP_PLUGIN_VERSION_STATUSES = [
   "published",
   "yanked",
   "rejected",
+  "withdrawn",
   "revoked",
 ] as const;
 
@@ -3195,11 +3196,19 @@ export const DESKTOP_PLUGIN_PATHS = {
   version: "/desktop/plugins/{plugin_slug}/versions/{semver}",
   downloadTicket: "/desktop/plugins/{plugin_slug}/download-ticket",
   revocations: "/desktop/plugins/revocations",
+  brokerAuthorize: "/desktop/plugins/{plugin_slug}/broker/authorize",
   developerProjects: "/developer/plugins",
   developerSigningKeys: "/developer/plugins/signing-keys",
   developerVersions: "/developer/plugins/{plugin_id}/versions",
   uploadSession: "/developer/plugin-versions/{version_id}/upload-session",
   finalize: "/developer/plugin-versions/{version_id}/finalize",
+  submit: "/developer/plugin-versions/{version_id}/submit",
+  reviewReport: "/developer/plugin-versions/{version_id}/review-report",
+  adminRunners: "/admin/plugin-review-runners",
+  adminPluginReviewMetrics: "/admin/plugin-reviews/metrics",
+  adminPluginReviewPolicy: "/admin/plugin-review-policy",
+  runnerHeartbeat: "/plugin-runner/heartbeat",
+  runnerLease: "/plugin-runner/tasks/lease",
 } as const;
 
 export interface DesktopPluginArtifact {
@@ -3271,6 +3280,7 @@ export interface DesktopPluginProjectDetail extends DesktopPluginProject {
 export interface DesktopPluginCatalogItem {
   slug: string;
   name: string;
+  developer_name: string;
   summary: string;
   category: string;
   tags: string[];
@@ -3288,11 +3298,90 @@ export interface DesktopPluginCatalogResponse {
   total: number;
 }
 
+export interface DesktopPluginPublicArtifact {
+  architecture: DesktopPluginArchitecture;
+  size_bytes: number;
+  sha256: string;
+  artifact_filename: string;
+}
+
+export interface DesktopPluginPublicVersion {
+  version_id: string;
+  plugin_slug: string;
+  semver: string;
+  status: "published";
+  manifest_json: Record<string, unknown>;
+  manifest_sha256: string;
+  signing_key_fingerprint: string;
+  protocol_min: number;
+  protocol_max: number;
+  host_min: string;
+  host_max: string;
+  approved_capabilities: DesktopPluginCapability[];
+  risk_tier: string;
+  review_policy_version: string;
+  platform_key_id: string;
+  platform_public_key_base64: string;
+  platform_signature_base64: string;
+  platform_signature_payload: Record<string, unknown>;
+  published_at: string;
+  artifacts: DesktopPluginPublicArtifact[];
+}
+
+export interface DesktopPluginPublicDetail {
+  slug: string;
+  name: string;
+  developer_name: string;
+  summary: string;
+  description: string;
+  category: string;
+  tags: string[];
+  website_url: string | null;
+  privacy_policy_url: string | null;
+  source_url: string | null;
+  versions: DesktopPluginPublicVersion[];
+}
+
 export interface DesktopPluginDownloadTicketResponse {
   download_url: string;
   expires_at: string;
   artifact_sha256: string;
   artifact_size_bytes: number;
+}
+
+export interface DesktopPluginInstallEventRequest {
+  event_id: string;
+  plugin_slug: string;
+  semver: string;
+  architecture: DesktopPluginArchitecture;
+  source: "market_reviewed" | "local_unreviewed";
+  kind: "installed" | "upgraded" | "rolled_back" | "enabled" | "disabled" | "uninstalled" | "download_failed";
+  result: "success" | "failure";
+  client_version: string | null;
+}
+
+export interface DesktopPluginInstallEventResponse {
+  accepted: boolean;
+  event_id: string;
+}
+
+export type DesktopPluginBrokerCapability =
+  | "api:profile:read"
+  | "api:hash:read"
+  | "api:verification:submit";
+
+export interface DesktopPluginBrokerAuthorizationRequest {
+  semver: string;
+  capability: DesktopPluginBrokerCapability;
+}
+
+export interface DesktopPluginBrokerAuthorizationResponse {
+  allowed: true;
+  plugin_slug: string;
+  semver: string;
+  capability: DesktopPluginBrokerCapability;
+  scope: string;
+  linked_application_id: string;
 }
 
 export interface DesktopPluginRevocation {
@@ -3308,6 +3397,7 @@ export interface DesktopPluginRevocation {
   platform_key_id: string;
   platform_public_key_base64: string;
   platform_signature_base64: string;
+  platform_signature_payload: Record<string, unknown>;
 }
 
 export interface DesktopPluginRevocationListResponse {
@@ -3318,7 +3408,7 @@ export interface DesktopPluginRevocationListResponse {
 
 export interface DesktopPluginReviewEvent {
   id: string;
-  kind: "submitted" | "approved" | "rejected" | "published" | "yanked" | "revoked";
+  kind: "submitted" | "withdrawn" | "approved" | "rejected" | "published" | "yanked" | "revoked";
   actor_user_id: string | null;
   note: string | null;
   requested_capabilities: DesktopPluginCapability[];
@@ -3345,6 +3435,113 @@ export interface DesktopPluginReviewQueueItem {
   version: number;
 }
 
+export interface DesktopPluginStaticFinding {
+  id: string;
+  stage: "structure" | "signature" | "sbom" | "vulnerability" | "license" | "secret" | "static_behavior" | "pe_analysis";
+  rule_id: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  title: string;
+  detail: string;
+  file_path: string | null;
+  evidence: Record<string, unknown>;
+  blocked: boolean;
+  created_at: string;
+}
+
+export interface DesktopPluginStaticReviewRun {
+  id: string;
+  policy_version: string;
+  status: "queued" | "running" | "passed" | "failed" | "infrastructure_failed" | "cancelled";
+  attempt: number;
+  summary: Record<string, unknown>;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  findings: DesktopPluginStaticFinding[];
+  dynamic_tasks: DesktopPluginDynamicTask[];
+}
+
+export interface DesktopPluginDynamicTask {
+  id: string;
+  artifact_id: string;
+  architecture: DesktopPluginArchitecture;
+  status: "queued" | "leased" | "passed" | "blocked" | "infrastructure_failed" | "cancelled";
+  runner_id: string | null;
+  attempt: number;
+  lease_expires_at: string | null;
+  evidence_complete: boolean;
+  fresh_environment: boolean;
+  destruction_proof_sha256: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  result_summary: Record<string, unknown>;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface DesktopPluginStaticReviewReport {
+  version_id: string;
+  version_status: DesktopPluginVersionStatus;
+  runs: DesktopPluginStaticReviewRun[];
+}
+
+export interface DesktopPluginRunner {
+  id: string;
+  name: string;
+  architecture: DesktopPluginArchitecture;
+  certificate_fingerprint: string;
+  status: "ready" | "busy" | "offline" | "revoked";
+  policy_version: string | null;
+  image_digest: string | null;
+  probe_version: string | null;
+  last_heartbeat_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface DesktopPluginRunnerRegistration extends DesktopPluginRunner {
+  runner_secret: string | null;
+}
+
+export interface DesktopPluginRunnerListResponse {
+  items: DesktopPluginRunner[];
+}
+
+export interface DesktopPluginReviewMetrics {
+  generated_at: string;
+  review_run_counts: Record<string, number>;
+  version_status_counts: Record<string, number>;
+  dynamic_task_counts: Record<string, number>;
+  runner_status_counts: Record<string, number>;
+  runner_capacity_by_architecture: Record<string, number>;
+  runner_active_by_architecture: Record<string, number>;
+  queue_depth_by_architecture: Record<string, number>;
+  oldest_queued_seconds: number | null;
+  average_review_seconds: number | null;
+  p95_review_seconds: number | null;
+  completed_last_24_hours: number;
+  install_events_last_24_hours: number;
+}
+
+export interface DesktopPluginReviewPolicy {
+  version: number;
+  policy_version: string;
+  static_engine_version: string;
+  dynamic_engine_version: string;
+  static_lease_seconds: number;
+  dynamic_lease_seconds: number;
+  task_token_seconds: number;
+  maximum_static_attempts: number;
+  maximum_dynamic_attempts: number;
+  runner_offline_seconds: number;
+  revocation_refresh_hours: number;
+  revocation_max_stale_hours: number;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
 export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem {
   manifest_json: Record<string, unknown> | null;
   release_notes: string;
@@ -3353,8 +3550,10 @@ export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem 
   platform_key_id: string | null;
   platform_public_key_base64: string | null;
   platform_signature_base64: string | null;
+  platform_signature_payload: Record<string, unknown> | null;
   artifacts: DesktopPluginArtifact[];
   events: DesktopPluginReviewEvent[];
+  review_runs: DesktopPluginStaticReviewRun[];
 }
 
 export interface DesktopPluginReviewQueueResponse {

@@ -197,7 +197,7 @@ public sealed class PluginRegistry
 
     private static InstalledPlugin Validate(InstalledPlugin plugin)
     {
-        if (plugin.Source != PluginSource.LocalUnreviewed
+        if (plugin.Source is not (PluginSource.LocalUnreviewed or PluginSource.MarketReviewed)
             || plugin.Versions is null
             || !plugin.Versions.TryGetValue(plugin.CurrentVersion, out var currentVersion)
             || currentVersion?.Manifest is null
@@ -208,14 +208,23 @@ public sealed class PluginRegistry
             || plugin.RollbackVersion is not null && !plugin.Versions.ContainsKey(plugin.RollbackVersion)
             || plugin.ConsecutiveFailures is < 0 or > 3
             || plugin.GrantedCapabilities is null
+            || plugin.RiskTier is not ("low" or "standard" or "medium" or "high" or "critical")
             || plugin.RuntimeStatus is not ("ready" or "running" or "failed" or "disabled"))
         {
-            throw new PluginRegistryException("插件注册表条目无效或来源不是本地未审核。");
+            throw new PluginRegistryException("插件注册表条目无效或来源不受信任。");
+        }
+
+        if (plugin.Source == PluginSource.MarketReviewed
+            && (string.IsNullOrWhiteSpace(plugin.PlatformKeyId)
+                || string.IsNullOrWhiteSpace(plugin.PlatformPublicKeyBase64)
+                || string.IsNullOrWhiteSpace(plugin.PlatformSignatureBase64)
+                || string.IsNullOrWhiteSpace(plugin.ReviewPolicyVersion)))
+        {
+            throw new PluginRegistryException("平台审核插件缺少平台签章元数据。");
         }
 
         return plugin with
         {
-            Source = PluginSource.LocalUnreviewed,
             GrantedCapabilities = plugin.GrantedCapabilities
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)

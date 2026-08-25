@@ -891,6 +891,26 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 - HTTP：本机 API ready/catalog/revocations 为 200，未认证开发者/Admin/举报写入为 401；公网 Web `/developer/plugins` 与 Admin `/plugin-reviews` 为 200，API 代理为 200。
 - 浏览器：Chromium 桌面/移动共 4 个页面旅程通过；页面无横向溢出、非预期请求错误或页面异常，Admin 移动端固定顶栏遮挡已修复。
 
+## 2026-08-25 桌面插件市场第 4 轮：自动静态与供应链审核
+
+| 层级 | 当前证据 | 状态 |
+|---|---|---|
+| 数据与编排 | Alembic `20260826_0058`；`desktop_plugin_review_runs`、`desktop_plugin_review_findings`；策略版本、Worker 租约、三次重试和 evidence JSON | 本地已实现；迁移 `0058 -> 0057 -> 0058` 与 Worker 任务注册通过 |
+| 自动审核 | 隔离摘要、开发者签名、CycloneDX SBOM、高危漏洞快照、许可证、秘密特征、源码/二进制静态行为、未声明网络和 PE 入口 | 正常包进入 `manual_review_ready`；六类恶意语料、缺失 SBOM 和工具异常均失败关闭 |
+| 报告边界 | 开发者本人 `review-report` 只返回可见发现；Admin 版本详情返回完整运行、阶段、规则和证据摘要 | 跨开发者读取返回 404；响应和 evidence 文件均不含命中的合成秘密值 |
+| 审核门禁 | Admin 仅可批准 `manual_review_ready`，不能批准 `review_queued/auto_review_running/auto_review_failed` | API 负向测试通过，Admin 按钮条件同步收紧 |
+| 验收边界 | 本轮只实现 Linux Worker 静态与供应链审核 | 统一门禁 API `368 passed, 1 skipped`、覆盖率 `86.23%`、Web 103、Admin 99、Contract 8、Windows 65/65 和生产构建通过；Windows 动态 Runner 属于第 5 轮；未推送、未部署，UAT/Production 未批准 |
+
+## 2026-08-25 桌面插件市场第 5～6 轮：动态 Runner 与在线安装
+
+| 层级 | 当前证据 | 状态 |
+|---|---|---|
+| Windows Runner 控制面 | 迁移 `20260826_0059`；Runner 登记/撤销、证书指纹、一次性 Secret、心跳、架构任务、短期 Token、租约和结果接口 | 本地已实现；Secret 仅首次返回，重放为 null；mTLS 缺失、错误指纹和过期 Token 拒绝 |
+| 动态执行器 | `apps/plugin-review-runner-windows`、`DynamicReviewExecutor`；AppContainer、Job Object、PDPP 健康检查、资源/网络/文件/进程探针、任务目录清理 | Runner/桌面构建通过；桌面 67/67；动态证据不完整、租约耗尽失败关闭 |
+| 在线桌面市场 | WPF 在线市场目录、搜索、详情、撤销签章、平台签章、票据下载、摘要校验、权限交集和 `market_reviewed` 安装 | 本地编译和市场签章专项通过；真实公网 Windows 旅程尚未执行 |
+| 安装事件 | 迁移 `20260826_0060`；安装/升级/回退/启停/卸载事件、事件 ID 幂等和隐私最小化字段 | API 专项通过；不保存原始 IP、设备硬件或插件输出 |
+| 剩余边界 | VM 快照、真实 mTLS 证书链、隔离网络、长时多 Runner、在线更新离线缓存和 UAT | 未验证；第 7 轮生产化收口仍未完成 |
+
 ## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
 
 - 本地通过：私信隐私导出与账户删除专项测试通过；导出只包含请求人参与会话的解密正文投影，不暴露加密存储字段；删除按 Outbox、通知、消息、成员、会话顺序清理，并验证无残留私信行。
@@ -932,3 +952,15 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | SMTP 设置可见性 | 浏览器断言服务器地址、端口、授权码密码框、保存与重置控件可见，且页面不出现版本历史、差异预览、发布或回滚控件 | Chromium、Firefox、WebKit 本地真实 API 旅程通过；Staging Chromium 可见性与重置验证通过 |
 | 可访问性契约 | 管理端设置页移动端基线更新为“系统配置工作台”“运行参数”“SMTP 邮件投递”和每日配额控件 | 定向 Chromium 可访问性与视觉基线旅程通过；统一门禁通过 |
 | Staging 发布 | 代码提交 `d3f13a2ef3b96904e18506b7d678056e33e16026` 经 SSH 推送并构建 Admin 镜像；API 双实例与 Worker 三实例保持运行 | Admin `/settings` HTTP 200；ready 返回数据库和限流后端正常；诊断管理员验证后已删除 |
+
+## 2026-08-26 桌面插件市场第 7 轮本地生产化切片
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 审核积压与 Runner 容量 | `GET /api/v1/admin/plugin-reviews/metrics`、阶段耗时/队列/架构容量统计、Admin 指标区块 | 双 Runner 独立领取任务；积压、ready/busy 容量和 P95/平均耗时测试通过 | 本地已实现，未部署 |
+| 审核策略管理 | `review_policy.py`、`GET/PUT /api/v1/admin/plugin-review-policy`、`system_settings` 乐观版本和审计 | 策略版本冲突、租约/Token 实际生效、Admin 控件渲染通过 | 本地已实现，未部署 |
+| 动态证据完整性 | `workspace_deleted`、任务绑定销毁证明 SHA-256、AppContainer/断网/子进程摘要强校验 | 错误销毁证明和不完整摘要失败关闭；正常动态任务通过 | 本地已实现；真实 VM 快照与隔离网络未验证 |
+| 密钥轮换与撤销 | 轮换来源状态、签名密钥撤销公开签章、撤销缓存逐条验签 | 轮换、撤销列表签章、缓存篡改失败关闭通过 | 本地已实现，未部署 |
+| 桌面在线生命周期 | 市场安装确认、风险/审核时间/权限差异、6 小时刷新、7 天缓存、高风险离线停用、生命周期事件 | Windows 68 项；事件成功/失败路径和缓存合同覆盖 | 本地已实现；真实公网 Windows 旅程未验证 |
+| 平台 API Broker | `host/api/profile/read`、`host/api/hash/read`、`host/api/verification/submit`；服务端实时复核发布、能力、应用 Scope 和用户授权 | Broker 授权撤销立即拒绝；桌面宿主能力委派测试；Token/私钥不进入插件响应 | 本地已实现；真实用户 UAT 未验证 |
+| 生产化边界 | VM、mTLS 证书链、对象存储/CDN、长时容量、开发者/Admin/桌面 UAT | 尚无目标环境证据 | 未完成，不宣称公开市场生产批准 |

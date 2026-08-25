@@ -12,19 +12,25 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
     public const int MaximumFileChunkBytes = 512 * 1024;
 
     private readonly string _pluginId;
+    private readonly string _pluginVersion;
     private readonly IReadOnlySet<string> _capabilities;
     private readonly PluginFileBroker _files = new(maximumChunkBytes: MaximumFileChunkBytes);
     private readonly PluginPrivateStorage _storage;
+    private readonly IPluginApiBroker? _apiBroker;
     private bool _disposed;
 
     public PluginHostBroker(
         string pluginId,
+        string pluginVersion,
         IEnumerable<string> capabilities,
-        PluginPrivateStorage storage)
+        PluginPrivateStorage storage,
+        IPluginApiBroker? apiBroker = null)
     {
         _pluginId = pluginId;
+        _pluginVersion = pluginVersion;
         _capabilities = capabilities.ToHashSet(StringComparer.Ordinal);
         _storage = storage;
+        _apiBroker = apiBroker;
     }
 
     public JsonElement PrepareCommandInput(
@@ -107,6 +113,9 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             "host/file/read" => ReadFileAsync(parameters, cancellationToken),
             "host/storage/get" => GetStorageAsync(parameters, cancellationToken),
             "host/storage/set" => SetStorageAsync(parameters, cancellationToken),
+            PdppProtocol.HostApiProfileReadMethod => CallApiAsync("api:profile:read", parameters, cancellationToken),
+            PdppProtocol.HostApiHashReadMethod => CallApiAsync("api:hash:read", parameters, cancellationToken),
+            PdppProtocol.HostApiVerificationSubmitMethod => CallApiAsync("api:verification:submit", parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -206,6 +215,26 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         {
             throw new PdppHostRequestException(-32001, $"Capability {capability} is not granted.");
         }
+    }
+
+    private Task<JsonElement> CallApiAsync(
+        string capability,
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability(capability);
+        if (_apiBroker is null)
+        {
+            return Task.FromException<JsonElement>(
+                new PdppHostRequestException(-32003, "插件平台 API Broker 当前不可用。"));
+        }
+
+        return _apiBroker.CallAsync(
+            _pluginId,
+            _pluginVersion,
+            capability,
+            parameters,
+            cancellationToken);
     }
 
     private static string ReadStorageKey(JsonElement parameters)

@@ -129,6 +129,18 @@ public sealed record ReceiptResponse(
     string CandidateStatus,
     DateTimeOffset AcceptedAt);
 
+public sealed record PluginBrokerAuthorizationRequest(
+    string Semver,
+    string Capability);
+
+public sealed record PluginBrokerAuthorizationResponse(
+    bool Allowed,
+    string PluginSlug,
+    string Semver,
+    string Capability,
+    string Scope,
+    string LinkedApplicationId);
+
 public sealed record ApiErrorBody(
     string Code,
     string Message,

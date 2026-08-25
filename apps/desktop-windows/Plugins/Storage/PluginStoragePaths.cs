@@ -22,6 +22,7 @@ public sealed class PluginStoragePaths
             Directory.GetParent(RootDirectory)?.FullName ?? RootDirectory,
             "plugin-logs");
         SafeModeMarkerPath = Path.Combine(RootDirectory, "session.marker.json");
+        RevocationCachePath = Path.Combine(RootDirectory, "market-revocations.json");
     }
 
     public string RootDirectory { get; }
@@ -33,6 +34,7 @@ public sealed class PluginStoragePaths
     public string StagingDirectory { get; }
     public string LogsDirectory { get; }
     public string SafeModeMarkerPath { get; }
+    public string RevocationCachePath { get; }
 
     public static PluginStoragePaths CreateDefault() => new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

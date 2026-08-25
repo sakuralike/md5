@@ -1,8 +1,12 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PasswordDetective.Desktop.Protocol;
+using PasswordDetective.Desktop.Plugins.Market;
 
 namespace PasswordDetective.Desktop.Services;
 
@@ -72,6 +76,124 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             serverBaseUrl,
             $"desktop/updates/check?{query}",
             cancellationToken);
+    }
+
+    public Task<MarketPluginCatalogResponse> GetPluginCatalogAsync(
+        string serverBaseUrl,
+        string? query = null,
+        CancellationToken cancellationToken = default)
+    {
+        var suffix = string.IsNullOrWhiteSpace(query)
+            ? "desktop/plugins/catalog?architecture=windows-x64&host_version=0.1.0&protocol_version=1"
+            : $"desktop/plugins/catalog?architecture=windows-x64&host_version=0.1.0&protocol_version=1&q={Uri.EscapeDataString(query)}";
+        return GetAsync<MarketPluginCatalogResponse>(serverBaseUrl, suffix, cancellationToken);
+    }
+
+    public Task<MarketPluginDetail> GetPluginDetailAsync(
+        string serverBaseUrl,
+        string slug,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<MarketPluginDetail>(
+            serverBaseUrl,
+            $"desktop/plugins/{Uri.EscapeDataString(slug)}",
+            cancellationToken);
+
+    public Task<MarketPluginRevocationList> GetPluginRevocationsAsync(
+        string serverBaseUrl,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<MarketPluginRevocationList>(
+            serverBaseUrl,
+            "desktop/plugins/revocations",
+            cancellationToken);
+
+    public Task<PluginBrokerAuthorizationResponse> AuthorizePluginBrokerAsync(
+        string serverBaseUrl,
+        string accessToken,
+        string pluginSlug,
+        PluginBrokerAuthorizationRequest request,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<PluginBrokerAuthorizationRequest, PluginBrokerAuthorizationResponse>(
+            serverBaseUrl,
+            $"desktop/plugins/{Uri.EscapeDataString(pluginSlug)}/broker/authorize",
+            request,
+            accessToken,
+            cancellationToken);
+
+    public Task<JsonElement> GetPluginHashAsync(
+        string serverBaseUrl,
+        string accessToken,
+        string algorithm,
+        string digest,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<JsonElement>(
+            serverBaseUrl,
+            $"archives/search?fingerprint={Uri.EscapeDataString(digest)}&algorithm={Uri.EscapeDataString(algorithm)}",
+            accessToken,
+            cancellationToken);
+
+    public Task<MarketPluginDownloadTicket> IssuePluginDownloadTicketAsync(
+        string serverBaseUrl,
+        string slug,
+        string semver,
+        string architecture,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<DownloadTicketRequest, MarketPluginDownloadTicket>(
+            serverBaseUrl,
+            $"desktop/plugins/{Uri.EscapeDataString(slug)}/download-ticket",
+            new DownloadTicketRequest(architecture, semver),
+            null,
+            cancellationToken);
+
+    public async Task DownloadPluginArtifactAsync(
+        string downloadUrl,
+        string destinationPath,
+        string expectedSha256,
+        long expectedSizeBytes,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync(
+            downloadUrl,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var destination = new FileStream(
+            destinationPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await source.CopyToAsync(destination, cancellationToken);
+        await destination.FlushAsync(cancellationToken);
+        var info = new FileInfo(destinationPath);
+        if (info.Length != expectedSizeBytes)
+        {
+            throw new DesktopApiException(422, "desktop.artifact_size_mismatch", "在线制品大小不一致。");
+        }
+        await using var verify = new FileStream(destinationPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(verify, cancellationToken));
+        if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DesktopApiException(422, "desktop.artifact_hash_mismatch", "在线制品摘要不一致。");
+        }
+    }
+
+    public async Task RecordPluginInstallEventAsync(
+        string serverBaseUrl,
+        PluginInstallEventRequest payload,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildUri(serverBaseUrl, "desktop/plugins/install-events"))
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions),
+        };
+        request.Headers.Add("Idempotency-Key", payload.EventId);
+        request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
 
     public Task<TokenResponse> LoginAsync(
@@ -238,6 +360,20 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         }
     }
 }
+
+public sealed record DownloadTicketRequest(
+    [property: JsonPropertyName("architecture")] string Architecture,
+    [property: JsonPropertyName("semver")] string Semver);
+
+public sealed record PluginInstallEventRequest(
+    [property: JsonPropertyName("event_id")] string EventId,
+    [property: JsonPropertyName("plugin_slug")] string PluginSlug,
+    [property: JsonPropertyName("semver")] string Semver,
+    [property: JsonPropertyName("architecture")] string Architecture,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("client_version")] string ClientVersion);
 
 public sealed class DesktopApiException(
     int statusCode,

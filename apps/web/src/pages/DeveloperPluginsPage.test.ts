@@ -7,7 +7,7 @@ vi.mock("../stores/auth", () => ({ useAuthStore: () => ({ accessToken: "syntheti
 vi.mock("../services/developerPlugins", () => ({
   listDeveloperPlugins: vi.fn().mockResolvedValue([]), createDeveloperPlugin: vi.fn(),
   registerPluginSigningKey: vi.fn(), createPluginVersion: vi.fn(), uploadPluginPackage: vi.fn(),
-  finalizePluginVersion: vi.fn(), submitPluginVersion: vi.fn(),
+  finalizePluginVersion: vi.fn(), submitPluginVersion: vi.fn(), getPluginReviewReport: vi.fn(), withdrawPluginVersion: vi.fn(),
 }));
 vi.mock("../services/developerApplications", () => ({
   listDeveloperApplications: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 100, total: 0 }),
@@ -20,6 +20,7 @@ describe("DeveloperPluginsPage", () => {
     expect(html).toContain("Ed25519 公钥 Base64");
     expect(html).toContain("申请权限");
     expect(html).toContain("关联第三方应用");
+    expect(html).toContain("自动审核报告");
     expect(html).toContain("创建、上传并提交审核");
     expect(html).not.toContain("synthetic-token");
   });

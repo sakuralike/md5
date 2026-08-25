@@ -25,6 +25,8 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginArtifactStatus,
     DesktopPluginArtifactZone,
     DesktopPluginDownloadTicket,
+    DesktopPluginInstallEvent,
+    DesktopPluginInstallEventKind,
     DesktopPluginPublication,
     DesktopPluginPublicationStatus,
     DesktopPluginReport,
@@ -43,15 +45,24 @@ from password_detective.db.models.desktop_plugin import (
 )
 from password_detective.db.models.reauthentication_grant import ReauthenticationPurpose
 from password_detective.db.models.third_party_app import ThirdPartyApp, ThirdPartyAppStatus
+from password_detective.db.models.third_party_oauth import ThirdPartyAuthorization
 from password_detective.db.models.user import User
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.auth.reauthentication import consume_reauthentication_grant
 from password_detective.modules.desktop_plugins.package_verifier import verify_plugin_package
+from password_detective.modules.desktop_plugins.review_service import (
+    enqueue_static_review,
+    list_review_runs,
+)
 from password_detective.modules.desktop_plugins.schemas import (
     ArtifactUploadResponse,
     DownloadTicketResponse,
     PluginArtifactResponse,
+    PluginBrokerAuthorizationRequest,
+    PluginBrokerAuthorizationResponse,
+    PluginInstallEventRequest,
+    PluginInstallEventResponse,
     PluginProjectCreateRequest,
     PluginProjectDetailResponse,
     PluginProjectListResponse,
@@ -95,6 +106,102 @@ _API_CAPABILITY_SCOPES = {
     "api:hash:read": "hash:read",
     "api:verification:submit": "desktop:verification",
 }
+
+
+def authorize_broker_capability(
+    db: Session,
+    *,
+    plugin_slug: str,
+    payload: PluginBrokerAuthorizationRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginBrokerAuthorizationResponse:
+    row = db.execute(
+        select(DesktopPlugin, DesktopPluginVersion)
+        .join(DesktopPluginVersion, DesktopPluginVersion.plugin_id == DesktopPlugin.id)
+        .where(
+            DesktopPlugin.slug == plugin_slug,
+            DesktopPluginVersion.semver == payload.semver,
+        )
+    ).one_or_none()
+    if row is None:
+        raise AppError("desktop_plugin.broker_version_not_found", "插件版本不存在", status_code=404)
+    plugin, version = row
+    if (
+        plugin.status != DesktopPluginStatus.ACTIVE
+        or version.status != DesktopPluginVersionStatus.PUBLISHED
+        or _is_revoked(
+            db,
+            plugin_id=plugin.id,
+            version_id=version.id,
+            signing_key_id=version.signing_key_id,
+        )
+        or payload.capability not in version.approved_capabilities
+    ):
+        raise AppError(
+            "desktop_plugin.broker_capability_denied",
+            "插件当前版本未获准使用该平台能力",
+            status_code=403,
+        )
+    scope = _API_CAPABILITY_SCOPES[payload.capability]
+    if plugin.linked_third_party_app_id is None:
+        raise AppError(
+            "desktop_plugin.broker_application_missing",
+            "插件未关联已批准的第三方应用",
+            status_code=403,
+        )
+    app = db.scalar(
+        select(ThirdPartyApp).where(
+            ThirdPartyApp.id == plugin.linked_third_party_app_id,
+            ThirdPartyApp.status == ThirdPartyAppStatus.APPROVED,
+        )
+    )
+    if app is None or scope not in {str(item) for item in json.loads(app.approved_scopes_json)}:
+        raise AppError(
+            "desktop_plugin.broker_application_scope_denied",
+            "关联应用的 Scope 已撤销或未批准",
+            status_code=403,
+        )
+    authorization = db.scalar(
+        select(ThirdPartyAuthorization).where(
+            ThirdPartyAuthorization.app_id == app.id,
+            ThirdPartyAuthorization.user_id == principal.user.id,
+            ThirdPartyAuthorization.revoked_at.is_(None),
+        )
+    )
+    authorized_scopes = (
+        {str(item) for item in json.loads(authorization.scope_json)}
+        if authorization is not None
+        else set()
+    )
+    if authorization is None or scope not in authorized_scopes:
+        raise AppError(
+            "desktop_plugin.broker_user_authorization_required",
+            "用户尚未授权该插件所关联的应用 Scope",
+            status_code=403,
+        )
+    now = utc_now()
+    authorization.last_used_at = now
+    app.last_used_at = now
+    app.request_count += 1
+    _write_audit(
+        db,
+        action="desktop_plugin.broker.authorized",
+        target_type="desktop_plugin",
+        target_id=plugin.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"capability": payload.capability, "scope": scope},
+    )
+    db.commit()
+    return PluginBrokerAuthorizationResponse(
+        allowed=True,
+        plugin_slug=plugin.slug,
+        semver=version.semver,
+        capability=payload.capability,
+        scope=scope,
+        linked_application_id=app.id,
+    )
 
 
 def _aware(value: datetime) -> datetime:
@@ -159,6 +266,54 @@ def _platform_signature(
     )
 
 
+def _publication_signature_payload(
+    plugin: DesktopPlugin,
+    version: DesktopPluginVersion,
+    artifacts: list[DesktopPluginArtifact],
+    *,
+    published_at: datetime,
+) -> dict[str, object]:
+    return {
+        "plugin_slug": plugin.slug,
+        "semver": version.semver,
+        "manifest_sha256": version.manifest_sha256,
+        "approved_capabilities": sorted(version.approved_capabilities),
+        "policy": version.review_policy_version,
+        "published_at": _signature_timestamp(published_at),
+        "artifacts": [
+            {
+                "architecture": artifact.architecture,
+                "sha256": artifact.sha256,
+                "size_bytes": artifact.size_bytes,
+            }
+            for artifact in sorted(artifacts, key=lambda item: item.architecture)
+        ],
+    }
+
+
+def _revocation_signature_payload(
+    *,
+    scope: DesktopPluginRevocationScope,
+    plugin: DesktopPlugin | None = None,
+    version: DesktopPluginVersion | None = None,
+    signing_key_fingerprint: str | None = None,
+    reason_code: str,
+    affects_historical_versions: bool,
+    effective_at: datetime,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "scope": scope.value,
+        "reason_code": reason_code,
+        "affects_historical_versions": affects_historical_versions,
+        "effective_at": _signature_timestamp(effective_at),
+    }
+    if plugin is not None:
+        payload["plugin_slug"] = plugin.slug
+    if version is not None:
+        payload["semver"] = version.semver
+    if signing_key_fingerprint is not None:
+        payload["signing_key_fingerprint"] = signing_key_fingerprint
+    return payload
 def _review_event(
     db: Session,
     *,
@@ -458,6 +613,28 @@ def register_signing_key(
 ) -> SigningKeyResponse:
     _require_verified(principal)
     _, fingerprint = _decode_public_key(payload.public_key_base64)
+    rotated_from: DesktopPluginSigningKey | None = None
+    if payload.rotated_from_id is not None:
+        rotated_from = db.scalar(
+            select(DesktopPluginSigningKey)
+            .where(
+                DesktopPluginSigningKey.id == payload.rotated_from_id,
+                DesktopPluginSigningKey.owner_user_id == principal.user.id,
+            )
+            .with_for_update()
+        )
+        if rotated_from is None:
+            raise AppError(
+                "desktop_plugin.signing_key_rotation_source_not_found",
+                "轮换来源密钥不存在或不属于当前开发者",
+                status_code=422,
+            )
+        if rotated_from.status == DesktopPluginSigningKeyStatus.REVOKED:
+            raise AppError(
+                "desktop_plugin.signing_key_rotation_source_revoked",
+                "已撤销的签名密钥不能作为轮换来源",
+                status_code=409,
+            )
     if db.scalar(
         select(DesktopPluginSigningKey.id).where(
             or_(
@@ -480,6 +657,8 @@ def register_signing_key(
         public_key_base64=payload.public_key_base64,
         fingerprint=fingerprint,
     )
+    if rotated_from is not None:
+        rotated_from.status = DesktopPluginSigningKeyStatus.ROTATING
     db.add(key)
     db.flush()
     _write_audit(
@@ -510,6 +689,7 @@ def list_signing_keys(db: Session, *, principal: Principal) -> SigningKeyListRes
 
 def revoke_signing_key(
     db: Session,
+    settings: Settings,
     *,
     key_id: str,
     reauth_token: str,
@@ -538,8 +718,32 @@ def revoke_signing_key(
         session_family_id=principal.session_family_id,
         expected_purpose=ReauthenticationPurpose.DESKTOP_PLUGIN_SIGNING_KEY,
     )
+    effective_at = utc_now()
     key.status = DesktopPluginSigningKeyStatus.REVOKED
-    key.revoked_at = utc_now()
+    key.revoked_at = effective_at
+    signature_payload = _revocation_signature_payload(
+        scope=DesktopPluginRevocationScope.SIGNING_KEY,
+        signing_key_fingerprint=key.fingerprint,
+        reason_code="developer_signing_key_revoked",
+        affects_historical_versions=True,
+        effective_at=effective_at,
+    )
+    platform_key_id, platform_public_key, platform_signature = _platform_signature(
+        settings, signature_payload
+    )
+    db.add(
+        DesktopPluginRevocation(
+            scope=DesktopPluginRevocationScope.SIGNING_KEY,
+            signing_key_id=key.id,
+            reason_code="developer_signing_key_revoked",
+            affects_historical_versions=True,
+            effective_at=effective_at,
+            batch_id=secrets.token_hex(16),
+            platform_key_id=platform_key_id,
+            platform_public_key_base64=platform_public_key,
+            platform_signature_base64=platform_signature,
+        )
+    )
     _write_audit(
         db,
         action="desktop_plugin.signing_key.revoked",
@@ -940,7 +1144,13 @@ def _is_revoked(db: Session, *, plugin_id: str, version_id: str, signing_key_id:
                     DesktopPluginRevocation.plugin_version_id == version_id,
                     (
                         (DesktopPluginRevocation.signing_key_id == signing_key_id)
-                        & DesktopPluginRevocation.affects_historical_versions.is_(True)
+                        & (
+                            (
+                                DesktopPluginRevocation.scope
+                                == DesktopPluginRevocationScope.SIGNING_KEY
+                            )
+                            | DesktopPluginRevocation.affects_historical_versions.is_(True)
+                        )
                     ),
                 ),
             )
@@ -952,6 +1162,7 @@ def _is_revoked(db: Session, *, plugin_id: str, version_id: str, signing_key_id:
 def _public_version_response(
     db: Session, version: DesktopPluginVersion
 ) -> PublicPluginVersionResponse | None:
+    plugin = db.get(DesktopPlugin, version.plugin_id)
     artifacts = _public_artifacts(db, version.id)
     if (
         version.status != DesktopPluginVersionStatus.PUBLISHED
@@ -962,6 +1173,7 @@ def _public_version_response(
         or version.platform_key_id is None
         or version.platform_public_key_base64 is None
         or version.platform_signature_base64 is None
+        or plugin is None
         or not artifacts
         or _is_revoked(
             db,
@@ -972,6 +1184,8 @@ def _public_version_response(
     ):
         return None
     return PublicPluginVersionResponse(
+        version_id=version.id,
+        plugin_slug=plugin.slug,
         semver=version.semver,
         status="published",
         manifest_json=version.manifest_json,
@@ -987,6 +1201,17 @@ def _public_version_response(
         platform_key_id=version.platform_key_id,
         platform_public_key_base64=version.platform_public_key_base64,
         platform_signature_base64=version.platform_signature_base64,
+        platform_signature_payload=(
+            _publication_signature_payload(
+                plugin,
+                version,
+                artifacts,
+                published_at=version.published_at,
+            )
+            if version.published_at is not None
+            and version.platform_signature_base64 is not None
+            else None
+        ),
         published_at=version.published_at,
         artifacts=[
             PublicPluginArtifactResponse(
@@ -1053,6 +1278,7 @@ def list_public_catalog(
             PublicPluginCatalogItem(
                 slug=plugin.slug,
                 name=plugin.name,
+                developer_name=owner.username,
                 summary=plugin.summary,
                 category=plugin.category,
                 tags=list(plugin.tags),
@@ -1075,14 +1301,17 @@ def list_public_catalog(
 
 
 def get_public_plugin(db: Session, *, slug: str) -> PublicPluginDetailResponse:
-    plugin = db.scalar(
-        select(DesktopPlugin).where(
+    row = db.execute(
+        select(DesktopPlugin, User)
+        .join(User, User.id == DesktopPlugin.owner_user_id)
+        .where(
             DesktopPlugin.slug == slug,
             DesktopPlugin.status == DesktopPluginStatus.ACTIVE,
         )
-    )
-    if plugin is None:
+    ).one_or_none()
+    if row is None:
         raise AppError("desktop_plugin.not_found", "插件不存在", status_code=404)
+    plugin, owner = row
     versions = list(
         db.scalars(
             select(DesktopPluginVersion)
@@ -1103,6 +1332,7 @@ def get_public_plugin(db: Session, *, slug: str) -> PublicPluginDetailResponse:
     return PublicPluginDetailResponse(
         slug=plugin.slug,
         name=plugin.name,
+        developer_name=owner.username,
         summary=plugin.summary,
         description=plugin.description,
         category=plugin.category,
@@ -1279,6 +1509,15 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
                 platform_key_id=record.platform_key_id,
                 platform_public_key_base64=record.platform_public_key_base64,
                 platform_signature_base64=record.platform_signature_base64,
+                platform_signature_payload=_revocation_signature_payload(
+                    scope=record.scope,
+                    plugin=plugin,
+                    version=version,
+                    signing_key_fingerprint=key.fingerprint if key else None,
+                    reason_code=record.reason_code,
+                    affects_historical_versions=record.affects_historical_versions,
+                    effective_at=record.effective_at,
+                ),
             )
         )
     return PluginRevocationListResponse(
@@ -1288,6 +1527,75 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
         policy_version=_REVOCATION_POLICY_VERSION,
         items=items,
     )
+
+
+def record_install_event(
+    db: Session,
+    *,
+    payload: PluginInstallEventRequest,
+    user_id: str | None,
+    idempotency_key: str,
+) -> PluginInstallEventResponse:
+    if idempotency_key != payload.event_id:
+        raise AppError(
+            "desktop_plugin.install_event_idempotency_mismatch",
+            "安装事件 ID 必须与 Idempotency-Key 一致",
+            status_code=422,
+        )
+    if db.scalar(
+        select(DesktopPluginInstallEvent.id).where(
+            DesktopPluginInstallEvent.event_id == payload.event_id
+        )
+    ):
+        return PluginInstallEventResponse(accepted=True, event_id=payload.event_id)
+    if payload.source == "market_reviewed":
+        row = db.execute(
+            select(DesktopPluginVersion, DesktopPlugin)
+            .join(DesktopPlugin, DesktopPlugin.id == DesktopPluginVersion.plugin_id)
+            .where(
+                DesktopPlugin.slug == payload.plugin_slug,
+                DesktopPluginVersion.semver == payload.semver,
+            )
+        ).one_or_none()
+        if row is None and payload.result == "success":
+            raise AppError(
+                "desktop_plugin.version_not_found", "插件版本不存在", status_code=404
+            )
+        if row is not None:
+            version, plugin = row
+        else:
+            version = plugin = None
+        if row is not None and payload.result == "success" and (
+            plugin.status != DesktopPluginStatus.ACTIVE
+            or version.status != DesktopPluginVersionStatus.PUBLISHED
+            or _is_revoked(
+                db,
+                plugin_id=plugin.id,
+                version_id=version.id,
+                signing_key_id=version.signing_key_id,
+            )
+            or not _public_artifacts(db, version.id, payload.architecture)
+        ):
+            raise AppError(
+                "desktop_plugin.version_not_available",
+                "平台插件版本当前不可用",
+                status_code=409,
+            )
+    db.add(
+        DesktopPluginInstallEvent(
+            event_id=payload.event_id,
+            plugin_slug=payload.plugin_slug,
+            semver=payload.semver,
+            architecture=payload.architecture,
+            source=payload.source,
+            kind=DesktopPluginInstallEventKind(payload.kind),
+            result=payload.result,
+            client_version=payload.client_version,
+            user_id=user_id,
+        )
+    )
+    db.commit()
+    return PluginInstallEventResponse(accepted=True, event_id=payload.event_id)
 
 
 def submit_version_for_review(
@@ -1318,6 +1626,7 @@ def submit_version_for_review(
     version.status = DesktopPluginVersionStatus.REVIEW_QUEUED
     version.submitted_at = utc_now()
     version.version += 1
+    review_run = enqueue_static_review(db, version=version)
     _review_event(
         db, version=version, kind=DesktopPluginReviewEventKind.SUBMITTED, actor_id=principal.user.id
     )
@@ -1328,6 +1637,56 @@ def submit_version_for_review(
         target_id=version.id,
         actor_id=principal.user.id,
         context=context,
+        details={"review_run_id": review_run.id},
+    )
+    db.commit()
+    db.refresh(version)
+    return _version_response(db, version)
+
+
+def withdraw_version(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionSubmitRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginVersionResponse:
+    _require_verified(principal)
+    _, version = _owned_version(
+        db, version_id=version_id, owner_id=principal.user.id, lock=True
+    )
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status not in {
+        DesktopPluginVersionStatus.QUARANTINED,
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.AUTO_REVIEW_RUNNING,
+        DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
+        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
+        DesktopPluginVersionStatus.REJECTED,
+    }:
+        raise AppError(
+            "desktop_plugin.version_not_withdrawable", "当前版本不能撤回", status_code=409
+        )
+    version.status = DesktopPluginVersionStatus.WITHDRAWN
+    version.version += 1
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.WITHDRAWN,
+        actor_id=principal.user.id,
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.withdrawn",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={},
     )
     db.commit()
     db.refresh(version)
@@ -1359,6 +1718,7 @@ def list_review_queue(
 ) -> PluginReviewQueueResponse:
     statuses = {
         DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.AUTO_REVIEW_RUNNING,
         DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
         DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
         DesktopPluginVersionStatus.APPROVED,
@@ -1431,6 +1791,17 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
         platform_key_id=version.platform_key_id,
         platform_public_key_base64=version.platform_public_key_base64,
         platform_signature_base64=version.platform_signature_base64,
+        platform_signature_payload=(
+            _publication_signature_payload(
+                plugin,
+                version,
+                artifacts,
+                published_at=version.published_at,
+            )
+            if version.published_at is not None
+            and version.platform_signature_base64 is not None
+            else None
+        ),
         artifacts=[_artifact_response(artifact) for artifact in artifacts],
         events=[
             PluginReviewEventResponse(
@@ -1445,6 +1816,9 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
             )
             for event in events
         ],
+        review_runs=list_review_runs(
+            db, version_id=version.id, developer_visible_only=False
+        ),
     )
 
 
@@ -1464,6 +1838,44 @@ def _admin_version(
     return row[0], row[1]
 
 
+def rerun_static_review(
+    db: Session,
+    *,
+    version_id: str,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.status not in {
+        DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+    }:
+        raise AppError(
+            "desktop_plugin.version_not_rerunnable", "当前版本不能重新执行自动审核", status_code=409
+        )
+    version.status = DesktopPluginVersionStatus.REVIEW_QUEUED
+    version.version += 1
+    run = enqueue_static_review(db, version=version)
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.SUBMITTED,
+        actor_id=principal.user.id,
+        note="管理员要求重新执行自动审核。",
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.static_review_rerun",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"review_run_id": run.id},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
 def approve_version(
     db: Session,
     *,
@@ -1477,10 +1889,7 @@ def approve_version(
         raise AppError(
             "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
         )
-    if version.status not in {
-        DesktopPluginVersionStatus.REVIEW_QUEUED,
-        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
-    }:
+    if version.status != DesktopPluginVersionStatus.MANUAL_REVIEW_READY:
         raise AppError(
             "desktop_plugin.version_not_approvable", "插件版本不处于人工审核状态", status_code=409
         )
@@ -1537,6 +1946,7 @@ def reject_version(
         )
     if version.status not in {
         DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
         DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
     }:
         raise AppError(
@@ -1608,17 +2018,15 @@ def publish_version(
         artifact.status = DesktopPluginArtifactStatus.PUBLIC
         artifact.zone = DesktopPluginArtifactZone.PUBLIC
     now = utc_now()
+    signature_payload = _publication_signature_payload(
+        plugin,
+        version,
+        artifacts,
+        published_at=now,
+    )
     key_id, public_key, signature = _platform_signature(
         settings,
-        {
-            "plugin_id": plugin.id,
-            "version_id": version.id,
-            "semver": version.semver,
-            "manifest_sha256": version.manifest_sha256,
-            "approved_capabilities": version.approved_capabilities,
-            "policy": version.review_policy_version,
-            "published_at": _signature_timestamp(now),
-        },
+        signature_payload,
     )
     version.platform_key_id = key_id
     version.platform_public_key_base64 = public_key
@@ -1733,13 +2141,14 @@ def revoke_version(
     now = utc_now()
     key_id, public_key, signature = _platform_signature(
         settings,
-        {
-            "scope": "version",
-            "plugin_id": plugin.id,
-            "version_id": version.id,
-            "reason_code": payload.reason_code,
-            "effective_at": _signature_timestamp(now),
-        },
+        _revocation_signature_payload(
+            scope=DesktopPluginRevocationScope.VERSION,
+            plugin=plugin,
+            version=version,
+            reason_code=payload.reason_code,
+            affects_historical_versions=payload.affects_historical_versions,
+            effective_at=now,
+        ),
     )
     db.add(
         DesktopPluginRevocation(

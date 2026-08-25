@@ -51,6 +51,10 @@ var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
         """
         {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
         """),
+    ["sbom.cdx.json"] = Encoding.UTF8.GetBytes(
+        """
+        {"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}
+        """),
 };
 var packageFiles = files.Select(pair => new PluginPackageFile(
         pair.Key,

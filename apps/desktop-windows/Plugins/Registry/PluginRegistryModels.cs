@@ -7,6 +7,8 @@ public static class PluginSource
 {
     public const string LocalUnreviewed = "local_unreviewed";
     public const string LocalUnreviewedLabel = "未审核";
+    public const string MarketReviewed = "market_reviewed";
+    public const string MarketReviewedLabel = "平台已审核";
 }
 
 public sealed record InstalledPluginVersion(
@@ -33,10 +35,17 @@ public sealed record InstalledPlugin(
     string? LastError,
     DateTimeOffset InstalledAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? LastStartedAt)
+    DateTimeOffset? LastStartedAt,
+    string? PlatformKeyId = null,
+    string? PlatformPublicKeyBase64 = null,
+    string? PlatformSignatureBase64 = null,
+    string? ReviewPolicyVersion = null,
+    string RiskTier = "standard")
 {
     [JsonIgnore]
-    public string ReviewLabel => PluginSource.LocalUnreviewedLabel;
+    public string ReviewLabel => Source == PluginSource.MarketReviewed
+        ? PluginSource.MarketReviewedLabel
+        : PluginSource.LocalUnreviewedLabel;
 
     [JsonIgnore]
     public bool CanRollback => RollbackVersion is not null && Versions.ContainsKey(RollbackVersion);

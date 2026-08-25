@@ -20,12 +20,20 @@ from password_detective.core.idempotency import (
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
-from password_detective.modules.auth.dependencies import Principal, get_current_principal
+from password_detective.modules.auth.dependencies import (
+    Principal,
+    get_current_principal,
+    get_optional_principal,
+)
 from password_detective.modules.desktop_plugins.schemas import (
     DownloadTicketRequest,
     DownloadTicketResponse,
     PluginArchitecture,
+    PluginBrokerAuthorizationRequest,
+    PluginBrokerAuthorizationResponse,
     PluginCategory,
+    PluginInstallEventRequest,
+    PluginInstallEventResponse,
     PluginReportCreateRequest,
     PluginReportResponse,
     PluginRevocationListResponse,
@@ -34,6 +42,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PublicPluginVersionResponse,
 )
 from password_detective.modules.desktop_plugins.service import (
+    authorize_broker_capability,
     create_download_ticket,
     create_report,
     get_public_plugin,
@@ -41,6 +50,7 @@ from password_detective.modules.desktop_plugins.service import (
     list_public_catalog,
     list_revocations,
     prepare_download,
+    record_install_event,
 )
 
 router = APIRouter(prefix="/desktop/plugins", tags=["桌面插件市场"])
@@ -125,6 +135,29 @@ def plugin_detail(
     return get_public_plugin(db, slug=plugin_slug)
 
 
+@router.post(
+    "/{plugin_slug}/broker/authorize",
+    response_model=PluginBrokerAuthorizationResponse,
+    dependencies=[
+        Depends(rate_limit("desktop.plugin.broker.authorize", limit=120, window_seconds=60))
+    ],
+)
+def authorize_plugin_broker(
+    plugin_slug: str,
+    payload: PluginBrokerAuthorizationRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> PluginBrokerAuthorizationResponse:
+    return authorize_broker_capability(
+        db,
+        plugin_slug=plugin_slug,
+        payload=payload,
+        principal=principal,
+        context=get_client_context(request),
+    )
+
+
 @router.get("/{plugin_slug}/versions/{semver}", response_model=PublicPluginVersionResponse)
 def plugin_version(
     plugin_slug: str,
@@ -201,3 +234,18 @@ def report_plugin(
         db.rollback()
         abandon_idempotency(db, lease)
         raise
+
+
+@router.post("/install-events", response_model=PluginInstallEventResponse, status_code=202)
+def record_plugin_install_event(
+    payload: PluginInstallEventRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginInstallEventResponse:
+    return record_install_event(
+        db,
+        payload=payload,
+        user_id=principal.user.id if principal else None,
+        idempotency_key=idempotency_key,
+    )

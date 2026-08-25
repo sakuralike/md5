@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -106,6 +107,19 @@ class DesktopPluginStorage:
         if not path.is_file():
             raise AppError("desktop_plugin.artifact_missing", "公开插件制品不存在", status_code=404)
         return path
+
+    def write_evidence_json(self, key: str, payload: dict) -> None:
+        destination = self.evidence_path(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.parent / f".{destination.name}.{uuid4().hex}.write"
+        try:
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def quarantine_path(self, key: str) -> Path:
         return self._partition_path(key, self.quarantine_root, "隔离")

@@ -20,7 +20,11 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginVersion,
 )
 from password_detective.db.models.third_party_app import ThirdPartyApp, ThirdPartyAppStatus
+from password_detective.db.models.third_party_oauth import ThirdPartyAuthorization
 from password_detective.db.models.user import User, UserRole
+from password_detective.modules.desktop_plugins.review_service import (
+    process_pending_static_reviews,
+)
 from password_detective.modules.desktop_plugins.storage import DesktopPluginStorage
 
 
@@ -44,7 +48,7 @@ def _verify_platform_signature(body: dict, payload: dict[str, object]) -> None:
     )
     Ed25519PublicKey.from_public_bytes(public_key).verify(
         base64.b64decode(body["platform_signature_base64"], validate=True),
-        _canonical_json(payload),
+        _canonical_json(body["platform_signature_payload"]),
     )
 
 
@@ -56,6 +60,72 @@ def _admin_headers(client) -> dict[str, str]:
         user.role = UserRole.ADMIN
         db.commit()
     return headers
+
+
+def _run_static_review(client) -> dict[str, int]:
+    with client.app.state.database.session_factory() as db:
+        return process_pending_static_reviews(
+            db,
+            client.app.state.settings,
+            worker_id="synthetic-static-review-worker",
+        )
+
+
+def _complete_dynamic_review(client, admin_headers: dict[str, str]) -> None:
+    certificate_fingerprint = uuid4().hex + uuid4().hex
+    registered = client.post(
+        "/api/v1/admin/plugin-review-runners",
+        headers={**admin_headers, "Idempotency-Key": f"runner-create-{uuid4().hex}"},
+        json={
+            "name": "Synthetic Windows Runner",
+            "architecture": "windows-x64",
+            "certificate_fingerprint": certificate_fingerprint,
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    runner = registered.json()
+    runner_headers = {
+        "Authorization": f"Bearer {runner['runner_secret']}",
+        "X-Plugin-Runner-Id": runner["id"],
+        "X-Plugin-Runner-Certificate-SHA256": certificate_fingerprint,
+        "X-Client-Certificate-Verified": "SUCCESS",
+    }
+    heartbeat = client.post(
+        "/api/v1/plugin-runner/heartbeat",
+        headers=runner_headers,
+        json={
+            "policy_version": "desktop-plugin-dynamic-review-v1",
+            "image_digest": "a" * 64,
+            "probe_version": "synthetic-probe-v1",
+            "fresh_environment_ready": True,
+        },
+    )
+    assert heartbeat.status_code == 200, heartbeat.text
+    leased = client.post("/api/v1/plugin-runner/tasks/lease", headers=runner_headers)
+    assert leased.status_code == 200, leased.text
+    task = leased.json()
+    task_headers = {**runner_headers, "X-Plugin-Task-Token": task["task_token"]}
+    completed = client.post(
+        f"/api/v1/plugin-runner/tasks/{task['task_id']}/complete",
+        headers=task_headers,
+        json={
+            "outcome": "passed",
+            "evidence_complete": True,
+            "fresh_environment": True,
+            "destruction_proof_sha256": hashlib.sha256(
+                f"pdpp-dynamic-destroyed-v1\n{task['task_id']}\n".encode()
+            ).hexdigest(),
+            "summary": {
+                "appcontainer": True,
+                "network_connected": False,
+                "child_process_count": 0,
+                "duration_ms": 25,
+                "workspace_deleted": True,
+            },
+            "findings": [],
+        },
+    )
+    assert completed.status_code == 200, completed.text
 
 
 def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
@@ -74,8 +144,10 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
     )
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["status"] == "review_queued"
+    assert _run_static_review(client)["passed"] == 1
 
     admin_headers = _admin_headers(client)
+    _complete_dynamic_review(client, admin_headers)
     queue = client.get("/api/v1/admin/plugin-reviews/queue", headers=admin_headers)
     assert queue.status_code == 200, queue.text
     assert queue.json()["items"][0]["version_id"] == version_id
@@ -240,12 +312,17 @@ def test_manual_review_rejects_unrequested_capability_and_records_rejection(clie
         json={"version": current["version"]},
     )
     assert submitted.status_code == 200, submitted.text
+    assert _run_static_review(client)["passed"] == 1
     admin_headers = _admin_headers(client)
+    _complete_dynamic_review(client, admin_headers)
+    current_detail = client.get(
+        f"/api/v1/admin/plugin-reviews/versions/{version_id}", headers=admin_headers
+    ).json()
     invalid_approval = client.post(
         f"/api/v1/admin/plugin-reviews/versions/{version_id}/approve",
         headers={**admin_headers, "Idempotency-Key": "review-approve-negative-001"},
         json={
-            "version": submitted.json()["version"],
+            "version": current_detail["version"],
             "approved_capabilities": ["network:internet"],
             "review_note": "Synthetic invalid capability approval.",
         },
@@ -254,7 +331,7 @@ def test_manual_review_rejects_unrequested_capability_and_records_rejection(clie
     detail = client.get(
         f"/api/v1/admin/plugin-reviews/versions/{version_id}", headers=admin_headers
     ).json()
-    assert detail["status"] == "review_queued"
+    assert detail["status"] == "manual_review_ready"
     assert [event["kind"] for event in detail["events"]] == ["submitted"]
     rejected = client.post(
         f"/api/v1/admin/plugin-reviews/versions/{version_id}/reject",
@@ -332,3 +409,69 @@ def test_api_capability_requires_owner_approved_linked_application_scope(client)
     )
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["status"] == "review_queued"
+
+
+def test_plugin_broker_authorization_rechecks_publication_scope_and_user_consent(client) -> None:
+    user_headers, user_id = _register_verified(client, "plugin_broker_user")
+    developer_headers, owner_id, project_id, finalized, _, _, _ = _finalized_fixture(
+        client, "com.synthetic.plugin-broker"
+    )
+    version_id = finalized["id"]
+    with client.app.state.database.session_factory() as db:
+        app = ThirdPartyApp(
+            client_id=f"pdc_{uuid4().hex}",
+            management_secret_hash="0" * 64,
+            name="Synthetic plugin broker app",
+            developer_name="Synthetic developer",
+            description="Synthetic broker authorization app.",
+            status=ThirdPartyAppStatus.APPROVED,
+            requested_scopes_json=json.dumps(["profile:read"]),
+            approved_scopes_json=json.dumps(["profile:read"]),
+            submitted_by_user_id=owner_id,
+        )
+        db.add(app)
+        db.flush()
+        plugin = db.get(DesktopPlugin, project_id)
+        version = db.get(DesktopPluginVersion, version_id)
+        assert plugin is not None and version is not None
+        plugin.linked_third_party_app_id = app.id
+        plugin.status = "active"
+        version.status = "published"
+        version.approved_capabilities = ["api:profile:read"]
+        version.published_at = datetime.now().astimezone()
+        db.add(
+            ThirdPartyAuthorization(
+                app_id=app.id,
+                user_id=user_id,
+                scope_json=json.dumps(["profile:read"]),
+            )
+        )
+        authorization_id = app.id
+        db.commit()
+
+    allowed = client.post(
+        "/api/v1/desktop/plugins/com.synthetic.plugin-broker/broker/authorize",
+        headers=user_headers,
+        json={"semver": "1.0.0", "capability": "api:profile:read"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["scope"] == "profile:read"
+    assert "access_token" not in allowed.text
+
+    with client.app.state.database.session_factory() as db:
+        authorization = db.scalar(
+            select(ThirdPartyAuthorization).where(
+                ThirdPartyAuthorization.app_id == authorization_id,
+                ThirdPartyAuthorization.user_id == user_id,
+            )
+        )
+        assert authorization is not None
+        authorization.revoked_at = datetime.now().astimezone()
+        db.commit()
+    denied = client.post(
+        "/api/v1/desktop/plugins/com.synthetic.plugin-broker/broker/authorize",
+        headers=user_headers,
+        json={"semver": "1.0.0", "capability": "api:profile:read"},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "desktop_plugin.broker_user_authorization_required"

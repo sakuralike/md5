@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using PasswordDetective.Desktop.Plugins.Market;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Permissions;
 using PasswordDetective.Desktop.Plugins.Registry;
@@ -11,6 +12,13 @@ public interface IPluginDialogService
     string? SelectPackage();
     string? SelectPath(PluginCommandFieldKind kind);
     bool ConfirmInstall(PluginPackageInspection inspection, PluginPermissionDecision permission);
+    bool ConfirmMarketInstall(
+        MarketPluginDetail detail,
+        MarketPluginVersion version,
+        PluginPermissionDecision permission,
+        IReadOnlyList<string> addedCapabilities,
+        bool signingKeyChanged,
+        bool majorVersionChanged);
     bool ConfirmUninstall(InstalledPlugin plugin);
 }
 
@@ -70,6 +78,38 @@ public sealed class PluginDialogService : IPluginDialogService
                    "安装未审核本地插件",
                    System.Windows.MessageBoxButton.YesNo,
                    System.Windows.MessageBoxImage.Warning,
+                   System.Windows.MessageBoxResult.No)
+               == System.Windows.MessageBoxResult.Yes;
+    }
+
+    public bool ConfirmMarketInstall(
+        MarketPluginDetail detail,
+        MarketPluginVersion version,
+        PluginPermissionDecision permission,
+        IReadOnlyList<string> addedCapabilities,
+        bool signingKeyChanged,
+        bool majorVersionChanged)
+    {
+        var granted = permission.Granted.Count == 0 ? "无" : string.Join("、", permission.Granted);
+        var added = addedCapabilities.Count == 0 ? "无" : string.Join("、", addedCapabilities);
+        var flags = new List<string>();
+        if (signingKeyChanged) flags.Add("开发者签名密钥已变化");
+        if (majorVersionChanged) flags.Add("主版本已升级");
+        var changeText = flags.Count == 0 ? "无" : string.Join("；", flags);
+        var message = $"此插件来自官方在线市场，平台审核策略：{version.ReviewPolicyVersion}。\n\n"
+                      + $"插件：{detail.Name} {version.Semver}\n"
+                      + $"开发者：{detail.DeveloperName}\n"
+                      + $"风险级别：{version.RiskTier}\n"
+                      + $"最近审核：{version.PublishedAt:yyyy-MM-dd HH:mm:ss} UTC\n"
+                      + $"将授予权限：{granted}\n"
+                      + $"新增权限：{added}\n"
+                      + $"需要重新确认的更新变化：{changeText}\n\n"
+                      + "是否继续安装或升级？";
+        return System.Windows.MessageBox.Show(
+                   message,
+                   "确认平台审核插件安装",
+                   System.Windows.MessageBoxButton.YesNo,
+                   System.Windows.MessageBoxImage.Information,
                    System.Windows.MessageBoxResult.No)
                == System.Windows.MessageBoxResult.Yes;
     }

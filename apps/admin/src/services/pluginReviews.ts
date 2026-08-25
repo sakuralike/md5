@@ -4,6 +4,11 @@ import type {
   DesktopPluginReportListResponse,
   DesktopPluginReviewDetail,
   DesktopPluginReviewQueueResponse,
+  DesktopPluginRunner,
+  DesktopPluginRunnerListResponse,
+  DesktopPluginRunnerRegistration,
+  DesktopPluginReviewMetrics,
+  DesktopPluginReviewPolicy,
 } from "@password-detective/api-contract";
 import { createClientId } from "@/lib/clientId";
 import { apiRequest } from "./api";
@@ -67,6 +72,13 @@ export function revokePluginVersion(token: string, detail: DesktopPluginReviewDe
   });
 }
 
+export function rerunPluginStaticReview(
+  token: string,
+  detail: DesktopPluginReviewDetail,
+): Promise<DesktopPluginReviewDetail> {
+  return mutateVersion(token, detail.version_id, "rerun", {});
+}
+
 export function listPluginReports(token: string): Promise<DesktopPluginReportListResponse> {
   return apiRequest("/admin/plugin-reviews/reports?page=1&page_size=100", {}, token);
 }
@@ -79,6 +91,69 @@ export function resolvePluginReport(token: string, report: DesktopPluginReport, 
       headers: mutationHeaders(),
       body: JSON.stringify({ status: "resolved", resolution_note: note }),
     },
+    token,
+  );
+}
+
+export function listPluginRunners(token: string): Promise<DesktopPluginRunnerListResponse> {
+  return apiRequest("/admin/plugin-review-runners", {}, token);
+}
+
+export function getPluginReviewMetrics(token: string): Promise<DesktopPluginReviewMetrics> {
+  return apiRequest("/admin/plugin-reviews/metrics", {}, token);
+}
+
+export function getPluginReviewPolicy(token: string): Promise<DesktopPluginReviewPolicy> {
+  return apiRequest("/admin/plugin-review-policy", {}, token);
+}
+
+export function savePluginReviewPolicy(
+  token: string,
+  policy: DesktopPluginReviewPolicy,
+): Promise<DesktopPluginReviewPolicy> {
+  return apiRequest(
+    "/admin/plugin-review-policy",
+    {
+      method: "PUT",
+      headers: mutationHeaders(),
+      body: JSON.stringify({
+        version: policy.version,
+        static_lease_seconds: policy.static_lease_seconds,
+        dynamic_lease_seconds: policy.dynamic_lease_seconds,
+        task_token_seconds: policy.task_token_seconds,
+        maximum_static_attempts: policy.maximum_static_attempts,
+        maximum_dynamic_attempts: policy.maximum_dynamic_attempts,
+        runner_offline_seconds: policy.runner_offline_seconds,
+        revocation_refresh_hours: policy.revocation_refresh_hours,
+        revocation_max_stale_hours: policy.revocation_max_stale_hours,
+      }),
+    },
+    token,
+  );
+}
+
+export function createPluginRunner(
+  token: string,
+  payload: {
+    name: string;
+    architecture: "windows-x64" | "windows-arm64";
+    certificate_fingerprint: string;
+  },
+): Promise<DesktopPluginRunnerRegistration> {
+  return apiRequest(
+    "/admin/plugin-review-runners",
+    { method: "POST", headers: mutationHeaders(), body: JSON.stringify(payload) },
+    token,
+  );
+}
+
+export function revokePluginRunner(
+  token: string,
+  runner: DesktopPluginRunner,
+): Promise<DesktopPluginRunner> {
+  return apiRequest(
+    `/admin/plugin-review-runners/${encodeURIComponent(runner.id)}/revoke`,
+    { method: "POST", headers: mutationHeaders() },
     token,
   );
 }

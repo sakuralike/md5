@@ -17,11 +17,20 @@ from password_detective.core.idempotency import (
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
+from password_detective.modules.desktop_plugins.review_policy import (
+    get_current_review_policy,
+    review_policy_response,
+    save_review_policy,
+)
+from password_detective.modules.desktop_plugins.runner_service import get_review_metrics
 from password_detective.modules.desktop_plugins.schemas import (
     PluginReportListResponse,
     PluginReportResponse,
     PluginReportReviewRequest,
     PluginReviewDetailResponse,
+    PluginReviewMetricsResponse,
+    PluginReviewPolicyResponse,
+    PluginReviewPolicyUpdate,
     PluginReviewQueueResponse,
     PluginVersionApproveRequest,
     PluginVersionPublishRequest,
@@ -36,12 +45,14 @@ from password_detective.modules.desktop_plugins.service import (
     list_review_queue,
     publish_version,
     reject_version,
+    rerun_static_review,
     review_report,
     revoke_version,
     yank_version,
 )
 
 router = APIRouter(prefix="/admin/plugin-reviews", tags=["管理端·插件审核"])
+policy_router = APIRouter(prefix="/admin/plugin-review-policy", tags=["管理端·插件审核策略"])
 
 
 def _lease(
@@ -113,6 +124,37 @@ def approve_plugin_version(
             db,
             version_id=version_id,
             payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post("/versions/{version_id}/rerun", response_model=PluginReviewDetailResponse)
+def rerun_plugin_static_review(
+    version_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewDetailResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin.version.static_review_rerun",
+        idempotency_key,
+        {"version_id": version_id},
+    )
+    if lease.cached_response is not None:
+        return PluginReviewDetailResponse.model_validate(lease.cached_response)
+    try:
+        response = rerun_static_review(
+            db,
+            version_id=version_id,
             principal=principal,
             context=get_client_context(request),
         )
@@ -292,6 +334,51 @@ def review_plugin_report(
         response = review_report(
             db,
             report_id=report_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+@router.get("/metrics", response_model=PluginReviewMetricsResponse)
+def review_metrics(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+) -> PluginReviewMetricsResponse:
+    return get_review_metrics(db)
+
+
+@policy_router.get("", response_model=PluginReviewPolicyResponse)
+def plugin_review_policy(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+) -> PluginReviewPolicyResponse:
+    return review_policy_response(get_current_review_policy(db))
+
+
+@policy_router.put("", response_model=PluginReviewPolicyResponse)
+def update_plugin_review_policy(
+    payload: PluginReviewPolicyUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewPolicyResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin_review_policy.save",
+        idempotency_key,
+        payload.model_dump(mode="json"),
+    )
+    if lease.cached_response is not None:
+        return PluginReviewPolicyResponse.model_validate(lease.cached_response)
+    try:
+        response = save_review_policy(
+            db,
             payload=payload,
             principal=principal,
             context=get_client_context(request),

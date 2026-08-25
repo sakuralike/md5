@@ -588,12 +588,33 @@
 | 用户举报与处置 | 认证举报接口、`desktop_plugin_reports`、Admin 举报列表和处置 | 创建幂等重放返回同一举报；处置幂等；工作流专项测试通过 | 已实现 API 入口和 Admin 处置；桌面在线市场用户界面仍属于后续轮次 |
 | 验收边界 | 本地专项、统一门禁、远端、Staging、UAT/Production 分层 | 插件 API 专项 10 项、API Contract 8 项、统一门禁、远端同树、Staging 和 Chromium 四视口通过 | 自动静态/供应链审核与 Windows 动态审核属于第 4、5 轮；UAT/Production 未批准 |
 
+## 2026-08-25 桌面插件市场第 5～6 轮追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| Runner 身份与租约 | `runner_router.py`、`runner_service.py`、迁移 `20260826_0059`、短期 task token | mTLS 标记/错误指纹/过期 Token 401；租约过期三次后 `infrastructure_failed`；Secret 幂等重放不返回 | 本地已实现；真实证书链和隔离网络未验证 |
+| Windows 动态审核 | `DynamicReviewExecutor.cs`、`PluginReviewRunner.Windows`、现有 AppContainer/Job Object | 桌面 67/67；Runner 和桌面 Release 构建；动态任务健康/证据/销毁合同通过 | 本地执行器完成；VM 快照、真实恶意行为 canary 和多 Runner 压测未验证 |
+| 在线市场发现与安装 | `PluginMarketplaceViewModel`、`DesktopApiClient`、平台签章/撤销验证、`InstallMarketAsync` | 平台签章篡改测试；市场/摘要/票据 API 专项；桌面编译通过 | 本地在线主旅程已实现；真实公网 Windows 旅程待执行 |
+| 市场身份与事件 | `market_reviewed` 注册表来源、迁移 `20260826_0060`、安装事件接口 | 安装事件 202/幂等重放/Idempotency-Key 不一致 422；权限扩大和撤销版本安装被阻断 | 本地已实现；事件不含原始 IP/设备硬件/插件输出 |
+| 全部市场边界 | 第 7 轮性能、恢复、密钥轮换、灰度、开发者/Admin/桌面 UAT | 当前未执行生产化和 UAT 门禁 | 未完成，不宣称公开市场生产批准 |
+
 ### 第 3 轮最终发布证据（2026-08-25）
 
 - 最终提交 `26e64c7a67fb52a0040e1f812a188235af68ee26` 与远端分支同 commit/tree；归档 SHA-256 `24796a737867c970fe847e7fc819cf38a258cf8eadada37dd2aec200676b8ed6`。
 - Staging 备份 `/opt/password-detective-backups/20260825T104207Z-26e64c7`，迁移 `20260825_0057 (head)`；API 2、Worker 3、Scheduler、Web、Admin 使用最终修订，共享插件卷跨 API/Worker 读写通过。
 - API OpenAPI 包含提交、Admin 队列和用户举报路径；未认证开发者/Admin/举报写入为 401，目录/撤销为 200；公网开发者中心和审核工作台为 200。
 - Chromium 桌面/移动四视口页面均通过，无页面异常、非预期 4xx/5xx 或横向溢出；UAT/Production 未批准。
+
+## 2026-08-25 桌面插件市场第 4 轮追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 审核运行与发现 | 迁移 `20260826_0058`、`DesktopPluginReviewRun/Finding`、策略版本、阶段、严重级别、阻断标记 | SQLite 前滚/回滚/再前滚；迁移 head 测试 | 本地已实现，未部署 |
+| 结构与签名复核 | `static_review.py` 重新计算隔离对象 SHA-256，并复用受限 ZIP 与 Ed25519 校验 | 正常包通过；摘要/签名异常形成阻断发现 | 已实现，工具异常不形成通过结论 |
+| SBOM/漏洞/许可证 | CycloneDX JSON 合同、组件名称/版本、内置高危漏洞策略快照、许可证缺失/禁止清单 | `PD-VULN-001`、`PD-LICENSE-002`、缺失 SBOM 阻断语料 | 已实现基础策略；真实外部漏洞源和更新演练仍属生产化收口 |
+| 秘密与静态行为 | 私钥/云密钥/令牌特征、进程派生、持久化、凭据、未声明网络、源码语义和 PE 入口规则 | 六类恶意语料 100% 命中；响应与 evidence 不含秘密正文 | 已实现；不替代第 5 轮真实 Windows 动态行为 |
+| Worker 失败关闭 | Celery Beat 任务、逐条领取、`skip_locked`、租约、最多三次重试、`infrastructure_failed` | Worker 任务注册；连续三次工具异常后版本为 `auto_review_failed` | 已实现，不重复形成通过决策 |
+| 开发者/Admin 报告 | 本人 `review-report`、Web 自动报告、Admin 完整阶段与发现视图 | 跨开发者 404；Web 103、Admin 99、Contract 8 项测试通过 | 本地已实现；未推送、未部署 |
 
 ### Staging 发布复验（2026-08-25）
 
@@ -658,3 +679,14 @@
 | SEO-06 robots 与 sitemap | `apps/api/src/password_detective/modules/site/` 路由/服务及 `infra/nginx/spa.conf` 根路径映射 | 后端 `test_site_seo_files.py`；Staging 网站/API 根路径均返回 HTTP 200，robots 为 `text/plain; charset=utf-8`，sitemap 为 `application/xml` | 已实现；默认关闭索引时全站禁止抓取并输出合法空站点地图 |
 | SEO-07 SPA 验收边界 | v3.0 规格 18.22、SEO 实施计划及 Web 运行时 head 管理 | 真实浏览器运行后 head 断言共 9 项通过；静态 HTML 保持安全默认 | 已实现首阶段浏览器运行时元信息；不宣称 SSR/预渲染收录保证 |
 | SEO-08 内容级 SEO 与 SSR 规划 | `项目文档/实施计划/SEO内容级字段与SSR实施计划.md`；`apps/api/src/password_detective/modules/community/seo_projection.py`；`apps/web/src/composables/useCommunitySeo.ts`；`apps/web/src/lib/seo.ts`；帖子/群组详情页 | 阶段 7-A 后端社区定向测试；阶段 7-B `test_community_post_seo.py`、`test_community_group_seo.py`、迁移头检查与 API 合同类型检查；Web `seo.test.ts` 及帖子/群组渲染测试覆盖合资格、无资格、非法 canonical、路由绑定和 `noindex` | 已实现受控 `seo` 投影、帖子/群组字段、迁移、授权编辑入口和浏览器运行时元数据兼容层；`eligible` 与 `indexable` 仍分离，动态内容保持 `noindex, nofollow` 且不进入 sitemap。用户字段、动态 sitemap、SSR/预渲染和百度推送仍待后续实施 |
+
+## 2026-08-26 桌面插件市场第 7 轮追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 审核积压、Runner 容量和策略 | `runner_service.get_review_metrics`、Admin `/plugin-reviews/metrics`、`review_policy.py` 与 `/plugin-review-policy` | 队列/容量/P95、双 Runner 并发、策略乐观并发和租约生效测试；Admin 策略控件渲染通过 | 本地已实现，未部署 |
+| 动态证据完整性 | 动态任务销毁证明绑定任务 ID，要求 AppContainer、断网、零子进程、工作目录销毁摘要 | 错误证明和不完整证据失败关闭，正常任务通过 | 本地已实现；真实 VM/ETW/隔离网络未验证 |
+| 签名密钥轮换 | 轮换来源必须为本人未撤销密钥；撤销写入公开签章撤销事实 | 轮换状态、签章撤销缓存和篡改缓存失败关闭测试通过 | 本地已实现，未部署 |
+| 桌面撤销与更新治理 | `PluginRevocationCache`、7 天缓存/高风险离线停用、在线安装权限/密钥/主版本变化确认、生命周期事件 | Windows 68 项；缓存签章、安装事件成功/失败和升级/回退/启停/卸载路径覆盖 | 本地已实现；真实公网 Windows 旅程未验证 |
+| 平台 API Broker | `authorize_broker_capability`、`PluginApiBroker`、PDPP `host/api/*`；宿主持有受保护会话和安装身份 | 用户授权撤销后 403；缺少插件能力拒绝；桌面委派响应不含 Token | 本地已实现；真实 OAuth 同意页和插件 UAT 未验证 |
+| 生产与 UAT 边界 | VM 快照、真实 mTLS、独立网络、对象存储/CDN、长时压力和三类 UAT | 当前无目标环境证据 | 未完成，不宣称公开市场生产批准 |

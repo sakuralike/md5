@@ -558,6 +558,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return session;
     }
 
+    public Task<DesktopSession> GetSessionForPluginBrokerAsync(
+        CancellationToken cancellationToken = default) =>
+        EnsureSessionAndRegistrationAsync(cancellationToken);
+
     private async Task RegisterInstallationAsync(DesktopSession session, CancellationToken cancellationToken)
     {
         _identity ??= await _identityService.GetOrCreateAsync(cancellationToken);

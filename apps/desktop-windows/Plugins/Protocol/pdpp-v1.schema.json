@@ -23,7 +23,10 @@
             "shutdown",
             "host/file/read",
             "host/storage/get",
-            "host/storage/set"
+            "host/storage/set",
+            "host/api/profile/read",
+            "host/api/hash/read",
+            "host/api/verification/submit"
           ]
         },
         "params": { "type": "object" }
@@ -56,6 +59,18 @@
         {
           "if": { "properties": { "method": { "const": "host/storage/set" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/storageSetParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/api/profile/read" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/api/hash/read" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/hashReadParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/api/verification/submit" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/verificationSubmitParams" } } }
         }
       ]
     },
@@ -118,6 +133,28 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$" },
         "value": {}
+      }
+    },
+    "hashReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": { "enum": ["md5", "sha1", "sha256", "sha512"] },
+        "digest": { "type": "string", "pattern": "^[a-fA-F0-9]{32,128}$" }
+      }
+    },
+    "verificationSubmitParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "fingerprint_algorithm", "fingerprint_digest", "candidate_digest", "outcome", "archive_format"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 36, "maxLength": 36 },
+        "fingerprint_algorithm": { "enum": ["md5", "sha1", "sha256", "sha512"] },
+        "fingerprint_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{32,128}$" },
+        "candidate_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "outcome": { "enum": ["success", "failure"] },
+        "archive_format": { "enum": ["zip", "7z"] }
       }
     },
     "successResponse": {

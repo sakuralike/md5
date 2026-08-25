@@ -55,8 +55,8 @@
                            Margin="12,0,0,0"
                            FontWeight="Bold"
                            Foreground="#A13F00"
-                           Text="未审核" />
-                <TextBlock Text="本地加载的插件没有平台审核签章，将始终以未审核状态运行。"
+                           Text="平台审核状态" />
+                <TextBlock Text="本地插件持续标记为未审核；在线插件必须验证平台签章和撤销列表。"
                            Foreground="#6B3500" />
             </DockPanel>
         </Border>
@@ -72,19 +72,89 @@
                         Content="退出安全模式"
                         Command="{Binding LeaveSafeModeCommand}"
                         Visibility="{Binding IsSafeMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                <TextBlock VerticalAlignment="Center" Text="{Binding SafeModeStatus}" />
+                <StackPanel>
+                    <TextBlock Text="{Binding SafeModeStatus}" />
+                    <TextBlock Margin="0,3,0,0" Foreground="#6B3500" Text="{Binding MarketOfflineStatus}" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
         <TabControl Grid.Row="2">
             <TabItem x:Name="OnlineMarketTab" Header="在线市场">
-                <Grid Background="White">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="在线插件市场尚未开放" />
-                        <TextBlock Margin="0,8,0,0"
-                                   Foreground="#666666"
-                                   Text="当前轮次仅支持加载并隔离运行本地未审核插件。" />
-                    </StackPanel>
+                <Grid Margin="10" Background="White">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Margin="0,0,0,8">
+                        <Button DockPanel.Dock="Right" Content="加载市场" Command="{Binding LoadMarketCommand}" />
+                        <TextBox Width="260" Text="{Binding MarketQuery, UpdateSourceTrigger=PropertyChanged}" ToolTip="搜索插件名称、摘要或标签" />
+                        <Button Margin="8,0,0,0" Content="查询" Command="{Binding LoadMarketCommand}" />
+                    </DockPanel>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ListBox ItemsSource="{Binding MarketPlugins}" SelectedItem="{Binding SelectedMarketPlugin}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="250" Margin="2" Padding="8" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="#555555" Text="{Binding LatestVersion, StringFormat=版本 {0}}" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="#006B3C" Text="平台已审核" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <GroupBox Header="平台插件详情">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="名称" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="{Binding SelectedMarketDetail.Name}" />
+                                        <TextBlock Grid.Row="1" Margin="0,6,0,0" Text="插件 ID" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Slug}" />
+                                        <TextBlock Grid.Row="2" Margin="0,6,0,0" Text="版本" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].Semver}" />
+                                        <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="风险" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].RiskTier}" />
+                                        <TextBlock Grid.Row="4" Margin="0,6,0,0" Text="权限" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].ApprovedCapabilities, StringFormat={}{0}}" TextWrapping="Wrap" />
+                                        <TextBlock Grid.Row="5" Margin="0,6,0,0" Text="平台策略" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].ReviewPolicyVersion}" />
+                                        <TextBlock Grid.Row="6" Margin="0,6,0,0" Text="开发者" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.DeveloperName}" />
+                                        <TextBlock Grid.Row="7" Margin="0,6,0,0" Text="最近审核" />
+                                        <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].PublishedAt}" />
+                                        <TextBlock Grid.Row="8" Margin="0,6,0,0" Text="签名指纹" />
+                                        <TextBlock Grid.Row="8" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedMarketDetail.Versions[0].SigningKeyFingerprint}" TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </GroupBox>
+                                <Button HorizontalAlignment="Left" Content="查看并验证详情" Command="{Binding LoadMarketDetailCommand}" />
+                                <Button HorizontalAlignment="Left" Content="下载、验签并安装平台插件" Command="{Binding InstallMarketCommand}" />
+                                <TextBlock Margin="0,8,0,0" Text="{Binding Status}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
             </TabItem>
 
@@ -139,7 +209,7 @@
                                                         BorderThickness="1">
                                                     <TextBlock Foreground="#B00020"
                                                                FontWeight="Bold"
-                                                               Text="未审核" />
+                                                               Text="{Binding ReviewLabel}" />
                                                 </Border>
                                                 <TextBlock Margin="8,2,0,0"
                                                            Foreground="#666666"
@@ -176,7 +246,7 @@
                                     <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="运行状态" />
                                     <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" Text="{Binding SelectedPluginState}" />
                                     <TextBlock Grid.Row="4" Margin="0,6,0,0" Text="审核状态" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" FontWeight="Bold" Foreground="#B00020" Text="未审核" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" FontWeight="Bold" Text="{Binding SelectedInstalledPlugin.ReviewLabel}" />
                                 </Grid>
                             </GroupBox>
 

@@ -238,6 +238,7 @@ public sealed class PluginProcessHostTests : IDisposable
         var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "broker-storage"));
         using var broker = new PluginHostBroker(
             "synthetic.csharp",
+            "1.0.0",
             ["file:read:selected", "storage:private"],
             new PluginPrivateStorage(paths));
         var input = broker.PrepareCommandInput(
@@ -275,10 +276,12 @@ public sealed class PluginProcessHostTests : IDisposable
         var storage = new PluginPrivateStorage(paths);
         using var allowed = new PluginHostBroker(
             "synthetic.csharp",
+            "1.0.0",
             ["storage:private"],
             storage);
         using var denied = new PluginHostBroker(
             "synthetic.denied",
+            "1.0.0",
             [],
             storage);
 
@@ -301,6 +304,38 @@ public sealed class PluginProcessHostTests : IDisposable
                 "host/storage/get",
                 JsonSerializer.SerializeToElement(new { key = "settings.current" })));
         Assert.Equal(-32001, exception.Code);
+    }
+
+    [Fact]
+    public async Task HostBrokerDelegatesPlatformApiWithoutReturningHostCredentials()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "api-broker-storage"));
+        var api = new RecordingPluginApiBroker();
+        using var allowed = new PluginHostBroker(
+            "synthetic.market",
+            "1.0.0",
+            ["api:profile:read"],
+            new PluginPrivateStorage(paths),
+            api);
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            "1.0.0",
+            [],
+            new PluginPrivateStorage(paths),
+            api);
+
+        var result = await allowed.HandleAsync(
+            "host/api/profile/read",
+            JsonSerializer.SerializeToElement(new { }));
+
+        Assert.True(result.GetProperty("authorized").GetBoolean());
+        Assert.Equal("synthetic.market", api.PluginSlug);
+        Assert.Equal("api:profile:read", api.Capability);
+        Assert.DoesNotContain("token", result.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        await Assert.ThrowsAsync<PdppHostRequestException>(
+            () => denied.HandleAsync(
+                "host/api/profile/read",
+                JsonSerializer.SerializeToElement(new { })));
     }
 
     public void Dispose()
@@ -425,4 +460,22 @@ public sealed class PluginProcessHostTests : IDisposable
     private sealed record SyntheticProbeResult(bool FileRead, bool NetworkConnected, string Language);
     private sealed record SyntheticEnvironmentResult(bool Present, string Language);
     private sealed record SyntheticFileReadResult(string Content, string Language);
+
+    private sealed class RecordingPluginApiBroker : IPluginApiBroker
+    {
+        public string PluginSlug { get; private set; } = string.Empty;
+        public string Capability { get; private set; } = string.Empty;
+
+        public Task<JsonElement> CallAsync(
+            string pluginSlug,
+            string pluginVersion,
+            string capability,
+            JsonElement parameters,
+            CancellationToken cancellationToken = default)
+        {
+            PluginSlug = pluginSlug;
+            Capability = capability;
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { authorized = true }));
+        }
+    }
 }

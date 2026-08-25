@@ -188,6 +188,13 @@ public sealed class PluginRuntimeAndWindowTests : IDisposable
         public bool ConfirmInstall(
             PluginPackageInspection inspection,
             PluginPermissionDecision permission) => false;
+        public bool ConfirmMarketInstall(
+            PasswordDetective.Desktop.Plugins.Market.MarketPluginDetail detail,
+            PasswordDetective.Desktop.Plugins.Market.MarketPluginVersion version,
+            PluginPermissionDecision permission,
+            IReadOnlyList<string> addedCapabilities,
+            bool signingKeyChanged,
+            bool majorVersionChanged) => false;
         public bool ConfirmUninstall(InstalledPlugin plugin) => false;
     }
 }

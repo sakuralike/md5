@@ -20,6 +20,8 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginArtifactZone,
     DesktopPluginRevocation,
     DesktopPluginRevocationScope,
+    DesktopPluginSigningKey,
+    DesktopPluginSigningKeyStatus,
     DesktopPluginStatus,
     DesktopPluginVersion,
     DesktopPluginVersionStatus,
@@ -81,6 +83,10 @@ def _package(
     plugin_id: str,
     version: str = "1.0.0",
     valid_signature: bool = True,
+    include_sbom: bool = True,
+    sbom_components: list[dict] | None = None,
+    extra_files: dict[str, bytes] | None = None,
+    publisher_key_id: str = "synthetic-ed25519-v1",
 ) -> tuple[bytes, str]:
     public_key = private_key.public_key().public_bytes(
         serialization.Encoding.Raw,
@@ -93,7 +99,7 @@ def _package(
         "version": version,
         "display_name": "合成市场插件",
         "description": "仅用于插件控制面自动化测试。",
-        "publisher_key_id": "synthetic-ed25519-v1",
+        "publisher_key_id": publisher_key_id,
         "publisher_public_key": public_key_base64,
         "protocol": {"min": 1, "max": 1},
         "host": {"min_version": "0.1.0", "max_version": "0.x"},
@@ -122,6 +128,17 @@ def _package(
         "bin/windows-arm64/plugin.exe": b"MZ-synthetic-arm64-plugin",
         "schemas/echo.schema.json": b'{"type":"object","properties":{}}',
     }
+    if include_sbom:
+        files["sbom.cdx.json"] = json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "version": 1,
+                "components": sbom_components or [],
+            },
+            separators=(",", ":"),
+        ).encode()
+    files.update(extra_files or {})
     signature = private_key.sign(_signature_payload(files))
     if not valid_signature:
         signature = bytes([signature[0] ^ 1]) + signature[1:]
@@ -139,6 +156,7 @@ def _create_project_and_key(
     *,
     slug: str,
     public_key_base64: str,
+    key_id: str = "synthetic-ed25519-v1",
 ) -> tuple[str, str]:
     project = client.post(
         "/api/v1/developer/plugins",
@@ -157,7 +175,7 @@ def _create_project_and_key(
         "/api/v1/developer/plugins/signing-keys",
         headers={**headers, "Idempotency-Key": f"key-{uuid4().hex}"},
         json={
-            "key_id": "synthetic-ed25519-v1",
+            "key_id": key_id,
             "public_key_base64": public_key_base64,
             "reauth_token": _reauthenticate(client, headers),
         },
@@ -218,12 +236,16 @@ def _current_version(client, headers: dict[str, str], project_id: str) -> dict:
     return response.json()["versions"][0]
 
 
-def _finalized_fixture(client, slug: str):
+def _finalized_fixture(client, slug: str, **package_options):
     headers, owner_id = _register_verified(client, "plugin_owner")
     private_key = Ed25519PrivateKey.generate()
-    package, public_key = _package(private_key, plugin_id=slug)
+    package, public_key = _package(private_key, plugin_id=slug, **package_options)
     project_id, signing_key_id = _create_project_and_key(
-        client, headers, slug=slug, public_key_base64=public_key
+        client,
+        headers,
+        slug=slug,
+        public_key_base64=public_key,
+        key_id=package_options.get("publisher_key_id", "synthetic-ed25519-v1"),
     )
     version = _create_version(
         client,
@@ -424,3 +446,137 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
         json={"architecture": "windows-x64", "semver": "1.0.0"},
     )
     assert blocked_ticket.status_code == 404
+
+
+def test_install_event_is_privacy_minimized_and_idempotent(client) -> None:
+    event = {
+        "event_id": "synthetic-install-event-001",
+        "plugin_slug": "com.synthetic.market-event",
+        "semver": "1.0.0",
+        "architecture": "windows-x64",
+        "source": "local_unreviewed",
+        "kind": "installed",
+        "result": "success",
+        "client_version": "0.1.0",
+    }
+    first = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={"Idempotency-Key": event["event_id"]},
+        json=event,
+    )
+    assert first.status_code == 202, first.text
+    replay = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={"Idempotency-Key": event["event_id"]},
+        json=event,
+    )
+    assert replay.status_code == 202
+    assert replay.json() == first.json()
+    mismatch = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={"Idempotency-Key": "different-event-id"},
+        json=event,
+    )
+    assert mismatch.status_code == 422
+
+
+def test_failed_market_install_event_is_accepted_for_withdrawn_version(client) -> None:
+    event = {
+        "event_id": "synthetic-market-failure-001",
+        "plugin_slug": "com.synthetic.withdrawn-market",
+        "semver": "1.0.0",
+        "architecture": "windows-x64",
+        "source": "market_reviewed",
+        "kind": "download_failed",
+        "result": "failure",
+        "client_version": "0.1.0",
+    }
+    _, owner_id = _register_verified(client, "market_failure_owner")
+    with client.app.state.database.session_factory() as db:
+        plugin = DesktopPlugin(
+            slug=event["plugin_slug"],
+            owner_user_id=owner_id,
+            name="Synthetic withdrawn market",
+            summary="Synthetic",
+            description="Synthetic",
+            category="development",
+            tags=[],
+            status=DesktopPluginStatus.DRAFT,
+        )
+        db.add(plugin)
+        db.commit()
+    response = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={"Idempotency-Key": event["event_id"]},
+        json=event,
+    )
+    assert response.status_code == 202, response.text
+
+
+def test_signing_key_rotation_and_revocation_publish_signed_cache_fact(client) -> None:
+    headers, _ = _register_verified(client, "plugin_key_rotation")
+    first_private = Ed25519PrivateKey.generate()
+    first_public = base64.b64encode(
+        first_private.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode()
+    project = client.post(
+        "/api/v1/developer/plugins",
+        headers={**headers, "Idempotency-Key": f"rotation-project-{uuid4().hex}"},
+        json={
+            "slug": "com.synthetic.key-rotation",
+            "name": "Synthetic key rotation",
+            "summary": "Synthetic key rotation",
+            "description": "Synthetic key rotation coverage.",
+            "category": "development",
+            "tags": [],
+        },
+    )
+    assert project.status_code == 201, project.text
+    first = client.post(
+        "/api/v1/developer/plugins/signing-keys",
+        headers={**headers, "Idempotency-Key": f"rotation-key-1-{uuid4().hex}"},
+        json={
+            "key_id": "synthetic-rotation-v1",
+            "public_key_base64": first_public,
+            "reauth_token": _reauthenticate(client, headers),
+        },
+    )
+    assert first.status_code == 201, first.text
+    second_private = Ed25519PrivateKey.generate()
+    second_public = base64.b64encode(
+        second_private.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode()
+    second = client.post(
+        "/api/v1/developer/plugins/signing-keys",
+        headers={**headers, "Idempotency-Key": f"rotation-key-2-{uuid4().hex}"},
+        json={
+            "key_id": "synthetic-rotation-v2",
+            "public_key_base64": second_public,
+            "rotated_from_id": first.json()["id"],
+            "reauth_token": _reauthenticate(client, headers),
+        },
+    )
+    assert second.status_code == 201, second.text
+    with client.app.state.database.session_factory() as db:
+        old = db.get(DesktopPluginSigningKey, first.json()["id"])
+        assert old is not None
+        assert old.status == DesktopPluginSigningKeyStatus.ROTATING
+    revoked = client.post(
+        f"/api/v1/developer/plugins/signing-keys/{second.json()['id']}/revoke",
+        headers={**headers, "Idempotency-Key": f"rotation-revoke-{uuid4().hex}"},
+        json={"reauth_token": _reauthenticate(client, headers)},
+    )
+    assert revoked.status_code == 200, revoked.text
+    revocations = client.get("/api/v1/desktop/plugins/revocations")
+    assert revocations.status_code == 200
+    item = next(
+        item for item in revocations.json()["items"] if item["scope"] == "signing_key"
+    )
+    assert item["signing_key_fingerprint"] == revoked.json()["fingerprint"]
+    assert item["platform_signature_payload"]["scope"] == "signing_key"

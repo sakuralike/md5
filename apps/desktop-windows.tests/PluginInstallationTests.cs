@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.IO;
 using PasswordDetective.Desktop.Plugins.Installation;
+using PasswordDetective.Desktop.Plugins.DynamicReview;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Permissions;
 using PasswordDetective.Desktop.Plugins.Registry;
@@ -216,6 +217,40 @@ public sealed class PluginInstallationTests : IDisposable
             result.GetProperty("output").GetProperty("message").GetString());
         Assert.Empty(Directory.EnumerateDirectories(
             Path.Combine(paths.RunsDirectory, installed.Plugin.PluginId)));
+    }
+
+    [Fact]
+    public async Task DynamicReviewExecutorUsesFreshAppContainerAndLeavesDestructionProof()
+    {
+        var pluginOutput = FindSyntheticPluginOutput();
+        var runtimeFiles = Directory.EnumerateFiles(pluginOutput)
+            .Where(path => Path.GetExtension(path) is not ".pdb")
+            .ToDictionary(
+                path => Path.GetFileName(path) == "pdpp-synthetic-plugin.exe"
+                    ? "bin/windows-x64/plugin.exe"
+                    : $"bin/windows-x64/{Path.GetFileName(path)}",
+                File.ReadAllBytes,
+                StringComparer.Ordinal);
+        var package = _factory.Create(
+            _directory,
+            pluginId: "com.synthetic.dynamic-review",
+            runtimeFiles: runtimeFiles);
+        var workspace = Path.Combine(_directory, "dynamic-review-workspace");
+        var executor = new DynamicReviewExecutor();
+
+        var result = await executor.ExecuteAsync(
+            package,
+            "synthetic-task-001",
+            workspace,
+            freshEnvironment: true);
+
+        Assert.Equal("passed", result.Outcome);
+        Assert.True(result.EvidenceComplete);
+        Assert.True(result.FreshEnvironment);
+        Assert.Equal(64, result.DestructionProofSha256.Length);
+        Assert.True(result.Summary.TryGetValue("appcontainer", out var appContainer));
+        Assert.True(Assert.IsType<bool>(appContainer));
+        Assert.False(Directory.Exists(Path.Combine(workspace, "synthetic-task-001")));
     }
 
     public void Dispose()

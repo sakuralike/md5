@@ -19,12 +19,16 @@ from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import Principal, get_current_principal
+from password_detective.modules.desktop_plugins.review_service import (
+    get_developer_review_report,
+)
 from password_detective.modules.desktop_plugins.schemas import (
     ArtifactUploadResponse,
     PluginProjectCreateRequest,
     PluginProjectDetailResponse,
     PluginProjectListResponse,
     PluginProjectUpdateRequest,
+    PluginStaticReviewReportResponse,
     PluginVersionCreateRequest,
     PluginVersionFinalizeRequest,
     PluginVersionResponse,
@@ -49,6 +53,7 @@ from password_detective.modules.desktop_plugins.service import (
     submit_version_for_review,
     update_project,
     upload_artifact,
+    withdraw_version,
 )
 
 router = APIRouter(prefix="/developer", tags=["开发者·桌面插件"])
@@ -151,6 +156,7 @@ def revoke_plugin_signing_key(
     payload: SigningKeyRevokeRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
     principal: Annotated[Principal, Depends(get_current_principal)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> SigningKeyResponse:
@@ -166,6 +172,7 @@ def revoke_plugin_signing_key(
     try:
         response = revoke_signing_key(
             db,
+            settings,
             key_id=signing_key_id,
             reauth_token=payload.reauth_token,
             principal=principal,
@@ -393,6 +400,77 @@ def finalize_plugin_version(
         response = finalize_version(
             db,
             settings,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _complete(db, lease, response, status.HTTP_200_OK)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.get(
+    "/plugin-versions/{version_id}/review-report",
+    response_model=PluginStaticReviewReportResponse,
+)
+def get_plugin_version_review_report(
+    version_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> PluginStaticReviewReportResponse:
+    return get_developer_review_report(
+        db,
+        version_id=version_id,
+        owner_user_id=principal.user.id,
+    )
+
+
+@router.get(
+    "/plugin-versions/{version_id}/review-runs",
+    response_model=PluginStaticReviewReportResponse,
+)
+def get_plugin_version_review_runs(
+    version_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> PluginStaticReviewReportResponse:
+    return get_developer_review_report(
+        db,
+        version_id=version_id,
+        owner_user_id=principal.user.id,
+    )
+
+
+@router.post(
+    "/plugin-versions/{version_id}/withdraw",
+    response_model=PluginVersionResponse,
+    dependencies=[
+        Depends(rate_limit("developer.plugin.version.withdraw", limit=30, window_seconds=3600))
+    ],
+)
+def withdraw_plugin_version(
+    version_id: str,
+    payload: PluginVersionSubmitRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginVersionResponse:
+    lease = _acquire(
+        db,
+        principal=principal,
+        scope="developer.plugin.version.withdraw",
+        key=idempotency_key,
+        payload={"version_id": version_id, **payload.model_dump()},
+    )
+    if cached := _cached(lease, PluginVersionResponse):
+        return cached
+    try:
+        response = withdraw_version(
+            db,
             version_id=version_id,
             payload=payload,
             principal=principal,

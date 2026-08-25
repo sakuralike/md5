@@ -43,6 +43,7 @@ class DesktopPluginVersionStatus(StrEnum):
     PUBLISHED = "published"
     YANKED = "yanked"
     REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
     REVOKED = "revoked"
 
 
@@ -82,6 +83,7 @@ class DesktopPluginRevocationScope(StrEnum):
 
 class DesktopPluginReviewEventKind(StrEnum):
     SUBMITTED = "submitted"
+    WITHDRAWN = "withdrawn"
     APPROVED = "approved"
     REJECTED = "rejected"
     PUBLISHED = "published"
@@ -99,6 +101,66 @@ class DesktopPluginReportStatus(StrEnum):
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
     DISMISSED = "dismissed"
+
+
+class DesktopPluginReviewRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    INFRASTRUCTURE_FAILED = "infrastructure_failed"
+    CANCELLED = "cancelled"
+
+
+class DesktopPluginReviewStage(StrEnum):
+    STRUCTURE = "structure"
+    SIGNATURE = "signature"
+    SBOM = "sbom"
+    VULNERABILITY = "vulnerability"
+    LICENSE = "license"
+    SECRET = "secret"
+    STATIC_BEHAVIOR = "static_behavior"
+    PE_ANALYSIS = "pe_analysis"
+    DYNAMIC_PROTOCOL = "dynamic_protocol"
+    DYNAMIC_RESOURCE = "dynamic_resource"
+    DYNAMIC_FILE = "dynamic_file"
+    DYNAMIC_PROCESS = "dynamic_process"
+    DYNAMIC_NETWORK = "dynamic_network"
+    DYNAMIC_CLEANUP = "dynamic_cleanup"
+
+
+class DesktopPluginFindingSeverity(StrEnum):
+    INFO = "info"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class DesktopPluginRunnerStatus(StrEnum):
+    READY = "ready"
+    BUSY = "busy"
+    OFFLINE = "offline"
+    REVOKED = "revoked"
+
+
+class DesktopPluginDynamicTaskStatus(StrEnum):
+    QUEUED = "queued"
+    LEASED = "leased"
+    PASSED = "passed"
+    BLOCKED = "blocked"
+    INFRASTRUCTURE_FAILED = "infrastructure_failed"
+    CANCELLED = "cancelled"
+
+
+class DesktopPluginInstallEventKind(StrEnum):
+    INSTALLED = "installed"
+    UPGRADED = "upgraded"
+    ROLLED_BACK = "rolled_back"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    UNINSTALLED = "uninstalled"
+    DOWNLOAD_FAILED = "download_failed"
 
 
 class DesktopPlugin(Base):
@@ -432,3 +494,176 @@ class DesktopPluginReport(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
+
+
+class DesktopPluginReviewRun(Base):
+    __tablename__ = "desktop_plugin_review_runs"
+    __table_args__ = (
+        Index("ix_desktop_plugin_review_runs_version_created", "version_id", "created_at"),
+        Index("ix_desktop_plugin_review_runs_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_versions.id", ondelete="CASCADE"), index=True
+    )
+    policy_version: Mapped[str] = mapped_column(String(64))
+    status: Mapped[DesktopPluginReviewRunStatus] = mapped_column(
+        Enum(DesktopPluginReviewRunStatus, native_enum=False, length=32),
+        default=DesktopPluginReviewRunStatus.QUEUED,
+        index=True,
+    )
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class DesktopPluginReviewFinding(Base):
+    __tablename__ = "desktop_plugin_review_findings"
+    __table_args__ = (
+        Index("ix_desktop_plugin_review_findings_run_created", "review_run_id", "created_at"),
+        Index("ix_desktop_plugin_review_findings_rule_severity", "rule_id", "severity"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    review_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_review_runs.id", ondelete="CASCADE"), index=True
+    )
+    dynamic_task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("desktop_plugin_dynamic_review_tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    stage: Mapped[DesktopPluginReviewStage] = mapped_column(
+        Enum(DesktopPluginReviewStage, native_enum=False, length=32), index=True
+    )
+    rule_id: Mapped[str] = mapped_column(String(64), index=True)
+    severity: Mapped[DesktopPluginFindingSeverity] = mapped_column(
+        Enum(DesktopPluginFindingSeverity, native_enum=False, length=16), index=True
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    detail: Mapped[str] = mapped_column(Text)
+    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    evidence_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    developer_visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class DesktopPluginRunnerAgent(Base):
+    __tablename__ = "desktop_plugin_runner_agents"
+    __table_args__ = (
+        UniqueConstraint("certificate_fingerprint", name="uq_desktop_plugin_runner_certificate"),
+        Index("ix_desktop_plugin_runner_status_heartbeat", "status", "last_heartbeat_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(128))
+    architecture: Mapped[str] = mapped_column(String(16), index=True)
+    certificate_fingerprint: Mapped[str] = mapped_column(String(64))
+    secret_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[DesktopPluginRunnerStatus] = mapped_column(
+        Enum(DesktopPluginRunnerStatus, native_enum=False, length=16),
+        default=DesktopPluginRunnerStatus.OFFLINE,
+        index=True,
+    )
+    policy_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    image_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    probe_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class DesktopPluginDynamicReviewTask(Base):
+    __tablename__ = "desktop_plugin_dynamic_review_tasks"
+    __table_args__ = (
+        UniqueConstraint(
+            "review_run_id", "artifact_id", name="uq_desktop_plugin_dynamic_task_run_artifact"
+        ),
+        Index("ix_desktop_plugin_dynamic_task_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    review_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_review_runs.id", ondelete="CASCADE"), index=True
+    )
+    artifact_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("desktop_plugin_artifacts.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[DesktopPluginDynamicTaskStatus] = mapped_column(
+        Enum(DesktopPluginDynamicTaskStatus, native_enum=False, length=32),
+        default=DesktopPluginDynamicTaskStatus.QUEUED,
+        index=True,
+    )
+    runner_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("desktop_plugin_runner_agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    task_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    result_summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    fresh_environment: Mapped[bool] = mapped_column(Boolean, default=False)
+    destruction_proof_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    leased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class DesktopPluginInstallEvent(Base):
+    __tablename__ = "desktop_plugin_install_events"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_desktop_plugin_install_events_event_id"),
+        Index("ix_desktop_plugin_install_events_plugin_created", "plugin_slug", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    event_id: Mapped[str] = mapped_column(String(64))
+    plugin_slug: Mapped[str] = mapped_column(String(128), index=True)
+    semver: Mapped[str] = mapped_column(String(32))
+    architecture: Mapped[str] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(32))
+    kind: Mapped[DesktopPluginInstallEventKind] = mapped_column(
+        Enum(DesktopPluginInstallEventKind, native_enum=False, length=24), index=True
+    )
+    result: Mapped[str] = mapped_column(String(32), default="success")
+    client_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
