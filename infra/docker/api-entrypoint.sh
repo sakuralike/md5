@@ -2,6 +2,11 @@
 set -eu
 
 RUNTIME_SECRET_DIR=/run/password-detective-secrets
+RUNTIME_DATA_DIRS="
+/var/lib/password-detective/desktop-plugins
+/var/lib/password-detective/desktop-updates
+/var/lib/password-detective/site-assets
+"
 FILE_VARIABLES="
 APP_SECRET_KEY_FILE
 DATABASE_URL_FILE
@@ -38,7 +43,16 @@ copy_file_backed_settings() {
     done
 }
 
+prepare_runtime_data_directories() {
+    for directory in $RUNTIME_DATA_DIRS; do
+        mkdir -p "$directory"
+        chown app:app "$directory"
+        chmod 0750 "$directory"
+    done
+}
+
 if [ "$(id -u)" = "0" ]; then
+    prepare_runtime_data_directories
     copy_file_backed_settings
     exec su-exec app "$@"
 fi

@@ -9,7 +9,10 @@ WORKDIR /app
 RUN apk upgrade --no-cache && \
     apk add --no-cache su-exec && \
     addgroup -S app && adduser -S -G app app && \
-    mkdir -p /var/lib/password-detective/desktop-updates /var/lib/password-detective/site-assets && \
+    mkdir -p \
+      /var/lib/password-detective/desktop-plugins \
+      /var/lib/password-detective/desktop-updates \
+      /var/lib/password-detective/site-assets && \
     chown -R app:app /var/lib/password-detective
 COPY apps/api/pyproject.toml ./
 COPY apps/api/src ./src
