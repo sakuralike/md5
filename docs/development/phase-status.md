@@ -964,3 +964,11 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 桌面在线生命周期 | 市场安装确认、风险/审核时间/权限差异、6 小时刷新、7 天缓存、高风险离线停用、生命周期事件 | Windows 68 项；事件成功/失败路径和缓存合同覆盖 | 本地已实现；真实公网 Windows 旅程未验证 |
 | 平台 API Broker | `host/api/profile/read`、`host/api/hash/read`、`host/api/verification/submit`；服务端实时复核发布、能力、应用 Scope 和用户授权 | Broker 授权撤销立即拒绝；桌面宿主能力委派测试；Token/私钥不进入插件响应 | 本地已实现；真实用户 UAT 未验证 |
 | 生产化边界 | VM、mTLS 证书链、对象存储/CDN、长时容量、开发者/Admin/桌面 UAT | 尚无目标环境证据 | 未完成，不宣称公开市场生产批准 |
+
+### 第 7 轮 Staging 部署复验（2026-08-26）
+
+- 已推送提交：`8f7b625b0c8d253530ef801a97148dc7f7b81295`；提交树 `49919370a4db968f0cc6cf45b5489949d28d4f72`；远端分支为 `ssh-release/codex/desktop-plugin-control-plane`。
+- 部署归档 SHA-256：`f5b348f364320c348697f2474010a1920b41274f542fa2f2db49cb54bb0e0c5d`；服务器备份：`/opt/password-detective-backups/20260825T191650Z-8f7b625`；数据库迁移为 `20260826_0060 (head)`。
+- 运行拓扑：API 2、Worker 3、Scheduler、API Proxy、Web、Admin、MySQL、Redis 和监控服务；应用镜像均为 `8f7b625`，API/Web/Admin 健康。
+- 目标环境 HTTP：`http://111.229.195.138:5173/api/v1/health/ready`、插件目录、撤销列表、Web 根路径和 Admin 根路径均返回 HTTP 200；API `:8000` 按既有拓扑仅绑定服务器本机，不作为公网入口。
+- Windows 专项为 70/70；UAT/Production、真实 Windows VM/mTLS/隔离网络和公开市场批准仍未完成。

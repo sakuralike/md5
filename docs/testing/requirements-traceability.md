@@ -690,3 +690,10 @@
 | 桌面撤销与更新治理 | `PluginRevocationCache`、7 天缓存/高风险离线停用、在线安装权限/密钥/主版本变化确认、生命周期事件 | Windows 68 项；缓存签章、安装事件成功/失败和升级/回退/启停/卸载路径覆盖 | 本地已实现；真实公网 Windows 旅程未验证 |
 | 平台 API Broker | `authorize_broker_capability`、`PluginApiBroker`、PDPP `host/api/*`；宿主持有受保护会话和安装身份 | 用户授权撤销后 403；缺少插件能力拒绝；桌面委派响应不含 Token | 本地已实现；真实 OAuth 同意页和插件 UAT 未验证 |
 | 生产与 UAT 边界 | VM 快照、真实 mTLS、独立网络、对象存储/CDN、长时压力和三类 UAT | 当前无目标环境证据 | 未完成，不宣称公开市场生产批准 |
+
+### 第 7 轮 Staging 发布证据
+
+- 本地提交 `8f7b625b0c8d253530ef801a97148dc7f7b81295` 已推送到 `ssh-release/codex/desktop-plugin-control-plane`，远端 ref 与本地提交一致。
+- 服务器归档摘要为 `f5b348f364320c348697f2474010a1920b41274f542fa2f2db49cb54bb0e0c5d`，备份目录为 `/opt/password-detective-backups/20260825T191650Z-8f7b625`，迁移为 `20260826_0060 (head)`。
+- API 2、Worker 3、Scheduler、Web、Admin 运行 `8f7b625`；公网 Web 代理下的 ready/catalog/revocations 和 Web/Admin 根路径返回 200。公网 API 端口未开放，保持既有本机 API Proxy 拓扑。
+- 本地质量门禁和 Staging 部署通过；真实 Windows/UAT/Production 未验收。
