@@ -3135,3 +3135,181 @@ export interface ThirdPartyAppReviewRequest {
   review_note?: string | null;
   trusted_verification_enabled: boolean;
 }
+
+export const DESKTOP_PLUGIN_ARCHITECTURES = [
+  "windows-x64",
+  "windows-arm64",
+] as const;
+
+export type DesktopPluginArchitecture =
+  (typeof DESKTOP_PLUGIN_ARCHITECTURES)[number];
+
+export const DESKTOP_PLUGIN_PROJECT_STATUSES = [
+  "draft",
+  "active",
+  "suspended",
+  "revoked",
+] as const;
+
+export type DesktopPluginProjectStatus =
+  (typeof DESKTOP_PLUGIN_PROJECT_STATUSES)[number];
+
+export const DESKTOP_PLUGIN_VERSION_STATUSES = [
+  "draft",
+  "uploading",
+  "quarantined",
+  "review_queued",
+  "auto_review_running",
+  "auto_review_failed",
+  "manual_review_ready",
+  "approved",
+  "published",
+  "yanked",
+  "rejected",
+  "revoked",
+] as const;
+
+export type DesktopPluginVersionStatus =
+  (typeof DESKTOP_PLUGIN_VERSION_STATUSES)[number];
+
+export const DESKTOP_PLUGIN_CAPABILITIES = [
+  "ui:command",
+  "storage:private",
+  "file:read:selected",
+  "api:profile:read",
+  "api:hash:read",
+  "api:verification:submit",
+  "network:internet",
+  "secret:candidate:ephemeral",
+  "process:spawn",
+  "system:persistence",
+  "credential:read",
+] as const;
+
+export type DesktopPluginCapability =
+  (typeof DESKTOP_PLUGIN_CAPABILITIES)[number];
+
+export const DESKTOP_PLUGIN_PATHS = {
+  catalog: "/desktop/plugins/catalog",
+  detail: "/desktop/plugins/{plugin_slug}",
+  version: "/desktop/plugins/{plugin_slug}/versions/{semver}",
+  downloadTicket: "/desktop/plugins/{plugin_slug}/download-ticket",
+  revocations: "/desktop/plugins/revocations",
+  developerProjects: "/developer/plugins",
+  developerSigningKeys: "/developer/plugins/signing-keys",
+  developerVersions: "/developer/plugins/{plugin_id}/versions",
+  uploadSession: "/developer/plugin-versions/{version_id}/upload-session",
+  finalize: "/developer/plugin-versions/{version_id}/finalize",
+} as const;
+
+export interface DesktopPluginArtifact {
+  id: string;
+  architecture: DesktopPluginArchitecture;
+  status: "uploading" | "quarantined" | "public" | "yanked" | "revoked";
+  zone: "quarantine" | "public" | "revoked";
+  artifact_filename: string;
+  size_bytes: number;
+  expanded_size_bytes: number | null;
+  sha256: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesktopPluginVersion {
+  id: string;
+  plugin_id: string;
+  semver: string;
+  status: DesktopPluginVersionStatus;
+  signing_key_id: string;
+  signing_key_fingerprint: string;
+  manifest_json: Record<string, unknown> | null;
+  manifest_sha256: string | null;
+  protocol_min: number;
+  protocol_max: number;
+  host_min: string;
+  host_max: string;
+  requested_capabilities: DesktopPluginCapability[];
+  approved_capabilities: DesktopPluginCapability[];
+  risk_tier: string;
+  release_notes: string;
+  source_review_mode: "source" | "reproducible" | "binary_only";
+  review_policy_version: string | null;
+  platform_key_id: string | null;
+  platform_signature_base64: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  finalized_at: string | null;
+  published_at: string | null;
+  artifacts: DesktopPluginArtifact[];
+}
+
+export interface DesktopPluginProject {
+  id: string;
+  slug: string;
+  owner_user_id: string;
+  linked_third_party_app_id: string | null;
+  name: string;
+  summary: string;
+  description: string;
+  category: string;
+  tags: string[];
+  website_url: string | null;
+  privacy_policy_url: string | null;
+  source_url: string | null;
+  status: DesktopPluginProjectStatus;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesktopPluginProjectDetail extends DesktopPluginProject {
+  versions: DesktopPluginVersion[];
+}
+
+export interface DesktopPluginCatalogItem {
+  slug: string;
+  name: string;
+  summary: string;
+  category: string;
+  tags: string[];
+  latest_version: string;
+  risk_tier: string;
+  review_policy_version: string;
+  published_at: string;
+  architectures: DesktopPluginArchitecture[];
+}
+
+export interface DesktopPluginCatalogResponse {
+  items: DesktopPluginCatalogItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface DesktopPluginDownloadTicketResponse {
+  download_url: string;
+  expires_at: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+}
+
+export interface DesktopPluginRevocation {
+  id: string;
+  scope: "plugin" | "version" | "signing_key";
+  plugin_slug: string | null;
+  semver: string | null;
+  signing_key_fingerprint: string | null;
+  reason_code: string;
+  affects_historical_versions: boolean;
+  effective_at: string;
+  batch_id: string;
+  platform_key_id: string;
+  platform_signature_base64: string;
+}
+
+export interface DesktopPluginRevocationListResponse {
+  generated_at: string;
+  policy_version: string;
+  items: DesktopPluginRevocation[];
+}

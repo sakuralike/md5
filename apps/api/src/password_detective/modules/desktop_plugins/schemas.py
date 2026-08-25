@@ -1,0 +1,455 @@
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from typing import Literal
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+PluginArchitecture = Literal["windows-x64", "windows-arm64"]
+PluginStatus = Literal["draft", "active", "suspended", "revoked"]
+PluginVersionStatus = Literal[
+    "draft",
+    "uploading",
+    "quarantined",
+    "review_queued",
+    "auto_review_running",
+    "auto_review_failed",
+    "manual_review_ready",
+    "approved",
+    "published",
+    "yanked",
+    "rejected",
+    "revoked",
+]
+PluginCategory = Literal[
+    "archive",
+    "file-analysis",
+    "workflow",
+    "report-export",
+    "community",
+    "development",
+]
+
+PLUGIN_CAPABILITIES = frozenset(
+    {
+        "ui:command",
+        "storage:private",
+        "file:read:selected",
+        "api:profile:read",
+        "api:hash:read",
+        "api:verification:submit",
+        "network:internet",
+        "secret:candidate:ephemeral",
+        "process:spawn",
+        "system:persistence",
+        "credential:read",
+    }
+)
+_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
+_SEMVER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_HOST_VERSION_PATTERN = re.compile(
+    r"^(?:(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|(0|[1-9][0-9]*)\.x)$"
+)
+
+
+def _strip(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("字段不能为空")
+    return normalized
+
+
+def _optional_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    parsed = urlsplit(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
+        raise ValueError("链接必须是不含凭据的 HTTP(S) URL")
+    return normalized
+
+
+def _normalize_tags(values: list[str]) -> list[str]:
+    normalized = [_strip(value).lower() for value in values]
+    if any(len(value) > 64 for value in normalized):
+        raise ValueError("标签长度不能超过 64 个字符")
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("标签不能重复")
+    return normalized
+
+
+def _normalize_capabilities(values: list[str]) -> list[str]:
+    normalized = [_strip(value) for value in values]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("权限不能重复")
+    unknown = sorted(set(normalized) - PLUGIN_CAPABILITIES)
+    if unknown:
+        raise ValueError(f"包含未知插件权限：{', '.join(unknown)}")
+    return normalized
+
+
+class PluginProjectCreateRequest(BaseModel):
+    slug: str = Field(min_length=3, max_length=128)
+    name: str = Field(min_length=2, max_length=128)
+    summary: str = Field(default="", max_length=320)
+    description: str = Field(default="", max_length=20_000)
+    category: PluginCategory = "development"
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    website_url: str | None = Field(default=None, max_length=2_000)
+    privacy_policy_url: str | None = Field(default=None, max_length=2_000)
+    source_url: str | None = Field(default=None, max_length=2_000)
+    linked_third_party_app_id: str | None = Field(default=None, min_length=36, max_length=36)
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if not _SLUG_PATTERN.fullmatch(normalized):
+            raise ValueError("插件 ID 必须是包含分隔符的小写反向域名式标识")
+        return normalized
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        return _strip(value)
+
+    @field_validator("summary", "description")
+    @classmethod
+    def strip_optional_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, values: list[str]) -> list[str]:
+        return _normalize_tags(values)
+
+    @field_validator("website_url", "privacy_policy_url", "source_url")
+    @classmethod
+    def validate_urls(cls, value: str | None) -> str | None:
+        return _optional_url(value)
+
+
+class PluginProjectUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=128)
+    summary: str | None = Field(default=None, max_length=320)
+    description: str | None = Field(default=None, max_length=20_000)
+    category: PluginCategory | None = None
+    tags: list[str] | None = Field(default=None, max_length=20)
+    website_url: str | None = Field(default=None, max_length=2_000)
+    privacy_policy_url: str | None = Field(default=None, max_length=2_000)
+    source_url: str | None = Field(default=None, max_length=2_000)
+    linked_third_party_app_id: str | None = Field(default=None, min_length=36, max_length=36)
+    version: int = Field(ge=1)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str | None) -> str | None:
+        return _strip(value) if value is not None else None
+
+    @field_validator("summary", "description")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, values: list[str] | None) -> list[str] | None:
+        return _normalize_tags(values) if values is not None else None
+
+    @field_validator("website_url", "privacy_policy_url", "source_url")
+    @classmethod
+    def validate_urls(cls, value: str | None) -> str | None:
+        return _optional_url(value)
+
+
+class SigningKeyCreateRequest(BaseModel):
+    key_id: str = Field(min_length=3, max_length=128)
+    public_key_base64: str = Field(min_length=40, max_length=128)
+    reauth_token: str = Field(min_length=32, max_length=256)
+    rotated_from_id: str | None = Field(default=None, min_length=36, max_length=36)
+
+    @field_validator("key_id", "public_key_base64", "reauth_token")
+    @classmethod
+    def strip_values(cls, value: str) -> str:
+        return _strip(value)
+
+
+class SigningKeyRevokeRequest(BaseModel):
+    reauth_token: str = Field(min_length=32, max_length=256)
+
+
+class SigningKeyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    key_id: str
+    public_key_base64: str
+    fingerprint: str
+    status: str
+    rotated_from_id: str | None
+    created_at: datetime
+    revoked_at: datetime | None
+
+
+class SigningKeyListResponse(BaseModel):
+    items: list[SigningKeyResponse]
+
+
+class PluginArtifactResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    architecture: PluginArchitecture
+    status: str
+    zone: str
+    artifact_filename: str
+    size_bytes: int
+    expanded_size_bytes: int | None
+    sha256: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class PluginVersionCreateRequest(BaseModel):
+    semver: str = Field(min_length=5, max_length=32)
+    signing_key_id: str = Field(min_length=36, max_length=36)
+    protocol_min: int = Field(default=1, ge=1, le=1)
+    protocol_max: int = Field(default=1, ge=1, le=1)
+    host_min: str = Field(default="0.1.0", min_length=5, max_length=32)
+    host_max: str = Field(default="0.x", min_length=3, max_length=32)
+    requested_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    release_notes: str = Field(default="", max_length=20_000)
+    source_review_mode: Literal["source", "reproducible", "binary_only"] = "binary_only"
+
+    @field_validator("semver")
+    @classmethod
+    def validate_semver(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _SEMVER_PATTERN.fullmatch(normalized):
+            raise ValueError("插件版本必须是严格 SemVer x.y.z")
+        return normalized
+
+    @field_validator("host_min", "host_max")
+    @classmethod
+    def validate_host_version(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _HOST_VERSION_PATTERN.fullmatch(normalized):
+            raise ValueError("宿主版本必须是 x.y.z 或 x.x")
+        return normalized
+
+    @field_validator("requested_capabilities")
+    @classmethod
+    def normalize_capabilities(cls, values: list[str]) -> list[str]:
+        return _normalize_capabilities(values)
+
+
+class PluginVersionFinalizeRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class PluginVersionResponse(BaseModel):
+    id: str
+    plugin_id: str
+    semver: str
+    status: PluginVersionStatus
+    signing_key_id: str
+    signing_key_fingerprint: str
+    manifest_json: dict | None
+    manifest_sha256: str | None
+    protocol_min: int
+    protocol_max: int
+    host_min: str
+    host_max: str
+    requested_capabilities: list[str]
+    approved_capabilities: list[str]
+    risk_tier: str
+    release_notes: str
+    source_review_mode: str
+    review_policy_version: str | None
+    platform_key_id: str | None
+    platform_signature_base64: str | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    finalized_at: datetime | None
+    published_at: datetime | None
+    artifacts: list[PluginArtifactResponse] = Field(default_factory=list)
+
+
+class PluginProjectResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    slug: str
+    owner_user_id: str
+    linked_third_party_app_id: str | None
+    name: str
+    summary: str
+    description: str
+    category: str
+    tags: list[str]
+    website_url: str | None
+    privacy_policy_url: str | None
+    source_url: str | None
+    status: PluginStatus
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PluginProjectDetailResponse(PluginProjectResponse):
+    versions: list[PluginVersionResponse] = Field(default_factory=list)
+
+
+class PluginProjectListResponse(BaseModel):
+    items: list[PluginProjectResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class UploadSessionCreateRequest(BaseModel):
+    architecture: PluginArchitecture
+    artifact_filename: str = Field(default="plugin.pdpkg", min_length=1, max_length=255)
+    size_bytes: int = Field(gt=0)
+    sha256: str = Field(min_length=64, max_length=64)
+
+    @field_validator("artifact_filename")
+    @classmethod
+    def validate_filename(cls, value: str) -> str:
+        normalized = _strip(value)
+        if "/" in normalized or "\\" in normalized or normalized != "plugin.pdpkg":
+            raise ValueError("插件制品文件名必须为 plugin.pdpkg")
+        return normalized
+
+    @field_validator("sha256")
+    @classmethod
+    def normalize_sha256(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) != 64 or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("sha256 必须是 64 位十六进制摘要")
+        return normalized
+
+
+class UploadSessionResponse(BaseModel):
+    id: str
+    plugin_version_id: str
+    artifact_id: str
+    architecture: PluginArchitecture
+    expected_size_bytes: int
+    expected_sha256: str
+    status: str
+    expires_at: datetime
+    upload_url: str
+
+
+class ArtifactUploadResponse(BaseModel):
+    artifact_id: str
+    status: Literal["uploaded"]
+    size_bytes: int
+    sha256: str
+
+
+class PublicPluginArtifactResponse(BaseModel):
+    architecture: PluginArchitecture
+    size_bytes: int
+    sha256: str
+    artifact_filename: str
+
+
+class PublicPluginVersionResponse(BaseModel):
+    semver: str
+    status: Literal["published"]
+    manifest_json: dict
+    manifest_sha256: str
+    signing_key_fingerprint: str
+    protocol_min: int
+    protocol_max: int
+    host_min: str
+    host_max: str
+    approved_capabilities: list[str]
+    risk_tier: str
+    review_policy_version: str
+    platform_key_id: str
+    platform_signature_base64: str
+    published_at: datetime
+    artifacts: list[PublicPluginArtifactResponse]
+
+
+class PublicPluginDetailResponse(BaseModel):
+    slug: str
+    name: str
+    summary: str
+    description: str
+    category: str
+    tags: list[str]
+    website_url: str | None
+    privacy_policy_url: str | None
+    source_url: str | None
+    versions: list[PublicPluginVersionResponse]
+
+
+class PublicPluginCatalogItem(BaseModel):
+    slug: str
+    name: str
+    summary: str
+    category: str
+    tags: list[str]
+    latest_version: str
+    risk_tier: str
+    review_policy_version: str
+    published_at: datetime
+    architectures: list[PluginArchitecture]
+
+
+class PublicPluginCatalogResponse(BaseModel):
+    items: list[PublicPluginCatalogItem]
+    page: int
+    page_size: int
+    total: int
+
+
+class DownloadTicketRequest(BaseModel):
+    architecture: PluginArchitecture
+    semver: str = Field(min_length=5, max_length=32)
+
+    @field_validator("semver")
+    @classmethod
+    def validate_semver(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _SEMVER_PATTERN.fullmatch(normalized):
+            raise ValueError("插件版本必须是严格 SemVer x.y.z")
+        return normalized
+
+
+class DownloadTicketResponse(BaseModel):
+    download_url: str
+    expires_at: datetime
+    artifact_sha256: str
+    artifact_size_bytes: int
+
+
+class PluginRevocationResponse(BaseModel):
+    id: str
+    scope: Literal["plugin", "version", "signing_key"]
+    plugin_slug: str | None
+    semver: str | None
+    signing_key_fingerprint: str | None
+    reason_code: str
+    affects_historical_versions: bool
+    effective_at: datetime
+    batch_id: str
+    platform_key_id: str
+    platform_signature_base64: str
+
+
+class PluginRevocationListResponse(BaseModel):
+    generated_at: datetime
+    policy_version: str
+    items: list[PluginRevocationResponse]

@@ -18,6 +18,7 @@ class ReauthenticationPurpose(StrEnum):
     ADMIN_USER_GOVERNANCE = "admin_user_governance"
     ADMIN_SETTINGS_GOVERNANCE = "admin_settings_governance"
     ADMIN_COMMUNITY_NOTIFICATION_OPS = "admin_community_notification_ops"
+    DESKTOP_PLUGIN_SIGNING_KEY = "desktop_plugin_signing_key"
 
 
 class ReauthenticationGrant(Base):

@@ -567,6 +567,16 @@
 - 服务器本机 `ready`、桌面公告、Web 公告接口均 HTTP 200；公网 Web `:5173`、Admin `:5174` 及其 `/api/v1` 代理同样 HTTP 200。
 - 公网 `:8000` 直连仍为 HTTP 502，标记为独立入口配置风险；不改变当前 Web/Admin 代理路径的通过结论。
 
+## 2026-08-25 桌面插件市场第 2 轮追踪
+
+| 需求 | 实现证据 | 自动化证据 | 当前状态 |
+|---|---|---|---|
+| 插件项目、版本与签名密钥控制面 | `db/models/desktop_plugin.py`、`modules/desktop_plugins/developer_router.py`、`service.py`、专用再认证用途 | `test_developer_finalizes_signed_package_and_projects_are_isolated` | 本地已实现；项目/版本幂等、乐观锁、开发者隔离和密钥所有权已覆盖 |
+| 隔离上传与 finalize | `storage.py` 四分区、`package_verifier.py`、迁移 `20260825_0056` | 合法签名冻结、无效签名拒绝、替换上传、跨分区写入拒绝；迁移前滚/回滚/再前滚 | 本地已验证；未批准对象不进入公开分区 |
+| 只读目录与兼容过滤 | `/desktop/plugins/catalog`、详情、版本、宿主/协议/架构过滤 | `test_public_market_filters_downloads_and_returns_signed_revocations` | 仅返回 active、published、public 且具备完整平台签章的合成版本 |
+| 下载票据与撤销 | 哈希存储的短期单次下载票据、公开分区校验、版本/项目/密钥撤销读取侧阻断、ETag | 首次下载 200、重放 410、撤销后目录隐藏/票据 404、条件请求 304 | 本地已验证；管理员发布与撤销写入由第 3 轮实现 |
+| 共享 API 合同 | `packages/api-contract/src/index.ts` 的路径、架构、状态、能力与响应类型 | API Contract typecheck；Vitest 8 项 | 已实现 |
+
 ## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |

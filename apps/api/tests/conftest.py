@@ -29,6 +29,7 @@ def client(tmp_path, notifications: MemoryNotificationGateway) -> Iterator[TestC
         notification_backend="memory",
         site_asset_storage_path=str(tmp_path / "site-assets"),
         desktop_update_storage_path=str(tmp_path / "desktop-updates"),
+        desktop_plugin_storage_path=str(tmp_path / "desktop-plugins"),
         auto_create_tables=True,
         cors_origins="http://testserver",
     )

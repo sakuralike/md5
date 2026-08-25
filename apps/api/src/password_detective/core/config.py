@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     community_avatar_max_bytes: int = Field(default=2_097_152, ge=1_024, le=10_485_760)
     desktop_announcement_image_max_bytes: int = Field(default=5_242_880, ge=1_024, le=20_971_520)
     desktop_update_storage_path: str = ".local/desktop-updates"
+    desktop_plugin_storage_path: str = ".local/desktop-plugins"
+    desktop_plugin_max_package_bytes: int = Field(
+        default=536_870_912, ge=1_048_576, le=2_147_483_648
+    )
+    desktop_plugin_max_expanded_bytes: int = Field(
+        default=1_073_741_824, ge=1_048_576, le=4_294_967_296
+    )
+    desktop_plugin_upload_ttl_minutes: int = Field(default=60, ge=5, le=1440)
+    desktop_plugin_download_ticket_ttl_seconds: int = Field(default=300, ge=30, le=3600)
     desktop_update_max_artifact_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )
@@ -317,6 +326,7 @@ class Settings(BaseSettings):
             if raw_path != ":memory:":
                 Path(raw_path).parent.mkdir(parents=True, exist_ok=True)
         Path(self.desktop_update_storage_path).mkdir(parents=True, exist_ok=True)
+        Path(self.desktop_plugin_storage_path).mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

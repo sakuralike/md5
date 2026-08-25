@@ -114,6 +114,7 @@ class ReauthenticationRequest(BaseModel):
         ReauthenticationPurpose.PASSWORD_CHANGE,
         ReauthenticationPurpose.TOTP_DISABLE,
         ReauthenticationPurpose.ACCOUNT_DELETION,
+        ReauthenticationPurpose.DESKTOP_PLUGIN_SIGNING_KEY,
     ]
     current_password: str = Field(min_length=1, max_length=128)
     totp_code: str | None = Field(

@@ -8,6 +8,8 @@ import type {
   CommunityDirectReadStateUpdateRequest,
   CommunityDirectStreamReadyEvent,
   CommunityDirectUnreadChangedEvent,
+  DesktopPluginCatalogResponse,
+  DesktopPluginRevocationListResponse,
   HomeDiscoveryResponse,
   PublicSiteConfig,
 } from "./index";
@@ -15,6 +17,9 @@ import {
   ApiError,
   COMMUNITY_SEARCH_MODES,
   COMMUNITY_SEARCH_RESULT_TYPES,
+  DESKTOP_PLUGIN_ARCHITECTURES,
+  DESKTOP_PLUGIN_PATHS,
+  DESKTOP_PLUGIN_VERSION_STATUSES,
   isPrivilegedRole,
   THIRD_PARTY_API_V1_PATHS,
   THIRD_PARTY_API_V1_SCOPES,
@@ -229,5 +234,41 @@ describe("shared API contract", () => {
       "client_version",
       "verified_at",
     ]);
+  });
+
+  it("publishes desktop plugin control-plane paths and response shapes", () => {
+    const catalog: DesktopPluginCatalogResponse = {
+      items: [
+        {
+          slug: "com.synthetic.plugin",
+          name: "Synthetic Plugin",
+          summary: "Synthetic summary",
+          category: "development",
+          tags: ["synthetic"],
+          latest_version: "1.0.0",
+          risk_tier: "standard",
+          review_policy_version: "synthetic-policy-v1",
+          published_at: "2026-08-25T00:00:00Z",
+          architectures: ["windows-x64"],
+        },
+      ],
+      page: 1,
+      page_size: 20,
+      total: 1,
+    };
+    const revocations: DesktopPluginRevocationListResponse = {
+      generated_at: "2026-08-25T00:00:00Z",
+      policy_version: "desktop-plugin-control-plane-v1",
+      items: [],
+    };
+
+    expect(DESKTOP_PLUGIN_ARCHITECTURES).toEqual([
+      "windows-x64",
+      "windows-arm64",
+    ]);
+    expect(DESKTOP_PLUGIN_VERSION_STATUSES).toContain("quarantined");
+    expect(DESKTOP_PLUGIN_PATHS.catalog).toBe("/desktop/plugins/catalog");
+    expect(catalog.items[0]?.latest_version).toBe("1.0.0");
+    expect(revocations.items).toEqual([]);
   });
 });

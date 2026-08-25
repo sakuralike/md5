@@ -40,6 +40,12 @@ from password_detective.modules.desktop_announcements.router import (
 from password_detective.modules.desktop_announcements.router import (
     public_router as desktop_announcements_router,
 )
+from password_detective.modules.desktop_plugins.developer_router import (
+    router as desktop_plugins_developer_router,
+)
+from password_detective.modules.desktop_plugins.market_router import (
+    router as desktop_plugins_market_router,
+)
 from password_detective.modules.desktop_updates.router import (
     admin_router as desktop_updates_admin_router,
 )
@@ -207,6 +213,8 @@ def create_app(
     app.include_router(web_announcements_admin_router, prefix="/api/v1")
     app.include_router(desktop_updates_router, prefix="/api/v1")
     app.include_router(desktop_updates_admin_router, prefix="/api/v1")
+    app.include_router(desktop_plugins_developer_router, prefix="/api/v1")
+    app.include_router(desktop_plugins_market_router, prefix="/api/v1")
     return app
 
 
