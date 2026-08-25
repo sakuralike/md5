@@ -572,10 +572,17 @@
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
 | 插件项目、版本与签名密钥控制面 | `db/models/desktop_plugin.py`、`modules/desktop_plugins/developer_router.py`、`service.py`、专用再认证用途 | `test_developer_finalizes_signed_package_and_projects_are_isolated` | 本地已实现；项目/版本幂等、乐观锁、开发者隔离和密钥所有权已覆盖 |
-| 隔离上传与 finalize | `storage.py` 四分区、`package_verifier.py`、迁移 `20260825_0056` | 合法签名冻结、无效签名拒绝、替换上传、跨分区写入拒绝；迁移前滚/回滚/再前滚 | 本地已验证；未批准对象不进入公开分区 |
+| 隔离上传与 finalize | `storage.py` 四分区、`package_verifier.py`、迁移 `20260825_0056`、`desktop-plugin-data` 共享卷和入口权限初始化 | 合法签名冻结、无效签名拒绝、替换上传、跨分区写入拒绝；迁移前滚/回滚/再前滚；Staging API 副本共享卷写入/读取 | 本地与 Staging 已验证；未批准对象不进入公开分区 |
 | 只读目录与兼容过滤 | `/desktop/plugins/catalog`、详情、版本、宿主/协议/架构过滤 | `test_public_market_filters_downloads_and_returns_signed_revocations` | 仅返回 active、published、public 且具备完整平台签章的合成版本 |
 | 下载票据与撤销 | 哈希存储的短期单次下载票据、公开分区校验、版本/项目/密钥撤销读取侧阻断、ETag | 首次下载 200、重放 410、撤销后目录隐藏/票据 404、条件请求 304 | 本地已验证；管理员发布与撤销写入由第 3 轮实现 |
-| 共享 API 合同 | `packages/api-contract/src/index.ts` 的路径、架构、状态、能力与响应类型 | API Contract typecheck；Vitest 8 项 | 已实现 |
+| 共享 API 合同 | `packages/api-contract/src/index.ts` 的路径、架构、状态、能力与响应类型 | API Contract typecheck；Vitest 8 项；Staging OpenAPI 包含开发者与市场路径 | 已实现并部署 |
+
+### Staging 发布复验（2026-08-25）
+
+- 部署修订：`dd50edce1bce`，Git tree `b9e2ee20cb76c1c6088cb22b2e0161edf3e113a1`，源码归档 SHA-256 `a5d7122a03e2fcb5cbf9d8b0542f6c070614b07140b5f681deaf7651dcc1d0d7`。
+- 运行拓扑：API 2、Worker 3、Scheduler、API Proxy、Web、Admin、MySQL、Redis 和监控服务；API/Worker 镜像为 `password-detective-api:dd50edce1bce`。
+- HTTP：本机 API ready/catalog/revocations 为 200，未授权开发者项目为 401，撤销列表条件请求为 304；公网 Web/Admin 根路径为 200，公网插件目录为 200。
+- UAT/Production：未执行，不以 Staging 结果替代业务验收或生产批准。
 
 ## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
 

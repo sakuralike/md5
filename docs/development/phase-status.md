@@ -868,11 +868,11 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 | 层级 | 当前证据 | 状态 |
 |---|---|---|
-| 数据与存储 | Alembic `20260825_0056`；项目、版本、签名密钥、制品、上传会话、下载票据与撤销事实；隔离/证据/公开/撤销四分区 | 本地已实现；SQLite 前滚、回滚、再前滚通过，目标 MySQL 待本轮部署验证 |
+| 数据与存储 | Alembic `20260825_0056`；项目、版本、签名密钥、制品、上传会话、下载票据与撤销事实；隔离/证据/公开/撤销四分区 | Staging MySQL 已迁移并复核 `20260825_0056 (head)`；`desktop_plugin_artifacts.size_bytes/expanded_size_bytes` 为 BIGINT |
 | 开发者控制面 | 本人项目 CRUD、乐观版本、第三方应用归属检查、专用再认证密钥登记/撤销、版本创建、隔离上传与 finalize | 本地已实现；跨开发者隔离、幂等重放、无效签名失败关闭和替换上传测试通过 |
 | 包与签名 | 与桌面端一致的受限 ZIP、路径/展开量/压缩比、逐文件 SHA-256、清单一致性和 Ed25519 签名 | 本地已验证；摘要或签名不符不能冻结版本 |
 | 公开市场 | 仅投影 `active + published + public + 完整平台签章` 版本；宿主/协议/架构过滤、单次下载票据、ETag 撤销列表 | 人工构造合成发布版本专项测试通过；真实平台审核和发布由第 3 轮实现 |
-| 发布状态 | API 专项 5 项、共享合同 8 项、Ruff、TypeScript 与迁移往返通过 | 统一门禁、远端推送和 Staging 部署待本轮发布步骤收口 |
+| 发布状态 | API 全量 `361 passed, 1 skipped`、覆盖率 86.24%；Web/Admin Vitest、TypeScript、构建；Windows 桌面 `65/65`；提交 `dd50edce1bce` 与远端同树 | Staging 已部署；备份 `/opt/password-detective-backups/20260825T083202Z-dd50edce1bce`；API 2、Worker 3、Scheduler、Web/Admin 保持运行；共享卷 `password-detective_desktop-plugin-data` 已验证跨 API 副本可读写 |
 
 ## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
 
