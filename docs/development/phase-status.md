@@ -882,7 +882,14 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | Admin 人工审核 | `/plugin-reviews` 审核队列、详情、权限差异、审核历史、批准、驳回、发布、下架、紧急撤销和举报处置 | 本地已实现；Admin lint/typecheck 与 52 文件 99 项测试通过 |
 | API 与数据 | Alembic `20260825_0057`；不可变审核事件、发布记录、举报记录；提交/审核/发布/下架/撤销/举报接口 | 插件 API 专项 10 项通过；管理员不能批准未申请权限；API 能力校验本人已批准应用及对应 Scope；举报创建和管理处置均幂等 |
 | 签章与撤销 | 发布和撤销使用可公开验证的 Ed25519 平台签章并返回公钥；撤销事实进入公开列表，公开制品移入撤销分区 | 本地验签、目录隐藏、公开文件移除和撤销分区存在性测试通过 |
-| 发布边界 | 第三轮只实现人工审核闭环 | 自动静态/供应链审核和 Windows 动态审核仍属于第 4、5 轮；统一门禁、远端和 Staging 待本轮发布步骤验证；UAT/Production 未批准 |
+| 发布边界 | 第三轮只实现人工审核闭环 | 自动静态/供应链审核和 Windows 动态审核仍属于第 4、5 轮；最终提交 `26e64c7a67fb`、tree `dd5f2c71e677`、Staging 迁移 `20260825_0057 (head)`、API 2/Worker 3/Scheduler/Web/Admin 和四视口页面复验通过；UAT/Production 未批准 |
+
+### 第 3 轮 Staging 发布复验（2026-08-25）
+
+- 最终修订：`26e64c7a67fb52a0040e1f812a188235af68ee26`，tree `dd5f2c71e677f2e5a63a987979190221b174f83e`，源码归档 SHA-256 `24796a737867c970fe847e7fc819cf38a258cf8eadada37dd2aec200676b8ed6`。
+- 备份：`/opt/password-detective-backups/20260825T104207Z-26e64c7`；MySQL 迁移 `20260825_0057 (head)`；API 2、Worker 3、Scheduler、Web、Admin 和共享卷 `password-detective_desktop-plugin-data` 通过复验。
+- HTTP：本机 API ready/catalog/revocations 为 200，未认证开发者/Admin/举报写入为 401；公网 Web `/developer/plugins` 与 Admin `/plugin-reviews` 为 200，API 代理为 200。
+- 浏览器：Chromium 桌面/移动共 4 个页面旅程通过；页面无横向溢出、非预期请求错误或页面异常，Admin 移动端固定顶栏遮挡已修复。
 
 ## 2026-08-16 WP5-I9 第 3 个开发切片：私信隐私生命周期治理
 

@@ -586,7 +586,14 @@
 | 权限与第三方 Scope | `api:*` 能力到 `profile:read/hash:read/desktop:verification` Scope 映射；批准权限子集校验 | 无关联应用、缺少 Scope、批准未申请权限均返回 422；合法 Scope 可提交 | 已实现；提交和管理员批准时均重新校验应用归属、批准状态和 Scope |
 | 平台签章与紧急撤销 | 公开 Ed25519 公钥、规范化签名载荷、发布/撤销签名、公开到撤销分区移动 | 独立公钥验签；撤销后目录隐藏、公开文件不存在、撤销文件存在、撤销列表 200 | 已实现人工发布与紧急撤销写入；自动恶意代码判定未实现 |
 | 用户举报与处置 | 认证举报接口、`desktop_plugin_reports`、Admin 举报列表和处置 | 创建幂等重放返回同一举报；处置幂等；工作流专项测试通过 | 已实现 API 入口和 Admin 处置；桌面在线市场用户界面仍属于后续轮次 |
-| 验收边界 | 本地专项、统一门禁、远端、Staging、UAT/Production 分层 | 插件 API 专项 10 项、API Contract 8 项通过；统一门禁及发布证据待本轮结束补齐 | 自动静态/供应链审核与 Windows 动态审核属于第 4、5 轮；UAT/Production 未批准 |
+| 验收边界 | 本地专项、统一门禁、远端、Staging、UAT/Production 分层 | 插件 API 专项 10 项、API Contract 8 项、统一门禁、远端同树、Staging 和 Chromium 四视口通过 | 自动静态/供应链审核与 Windows 动态审核属于第 4、5 轮；UAT/Production 未批准 |
+
+### 第 3 轮最终发布证据（2026-08-25）
+
+- 最终提交 `26e64c7a67fb52a0040e1f812a188235af68ee26` 与远端分支同 commit/tree；归档 SHA-256 `24796a737867c970fe847e7fc819cf38a258cf8eadada37dd2aec200676b8ed6`。
+- Staging 备份 `/opt/password-detective-backups/20260825T104207Z-26e64c7`，迁移 `20260825_0057 (head)`；API 2、Worker 3、Scheduler、Web、Admin 使用最终修订，共享插件卷跨 API/Worker 读写通过。
+- API OpenAPI 包含提交、Admin 队列和用户举报路径；未认证开发者/Admin/举报写入为 401，目录/撤销为 200；公网开发者中心和审核工作台为 200。
+- Chromium 桌面/移动四视口页面均通过，无页面异常、非预期 4xx/5xx 或横向溢出；UAT/Production 未批准。
 
 ### Staging 发布复验（2026-08-25）
 
