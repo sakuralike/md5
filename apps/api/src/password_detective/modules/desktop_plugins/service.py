@@ -299,7 +299,16 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
         versions = key_data.get("keys", {})
         current = str(key_data.get("latest_version", max(versions, key=int)))
         public_key = str(versions[current]["public_key"])
-        raw_public_key = base64.b64decode(public_key, validate=True)
+        try:
+            raw_public_key = base64.b64decode(public_key, validate=True)
+        except ValueError:
+            loaded_key = serialization.load_pem_public_key(public_key.encode("utf-8"))
+            raw_public_key = loaded_key.public_bytes(
+                serialization.Encoding.Raw,
+                serialization.PublicFormat.Raw,
+            )
+        if len(raw_public_key) != 32:
+            raise ValueError("invalid ed25519 public key")
         key_id = f"platform-ed25519-{hashlib.sha256(raw_public_key).hexdigest()[:16]}"
         return key_id, base64.b64encode(raw_public_key).decode("ascii"), base64.b64encode(
             base64.b64decode(signature.split(":", 2)[-1], validate=True)

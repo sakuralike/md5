@@ -41,7 +41,7 @@ internal sealed class SkinPlugin : PdppPlugin
         string command, JsonElement input, PdppHostClient host, CancellationToken cancellationToken)
     {
         var result = await host.ApplyThemeAsync(
-            input.GetProperty("preset").GetString()!, null, 1, false, cancellationToken);
+            input.GetProperty("preset").GetString()!, null, 1, false, false, cancellationToken);
         return new { applied = result.GetProperty("applied").GetBoolean() };
     }
 }
