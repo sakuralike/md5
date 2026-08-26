@@ -450,6 +450,8 @@ class PluginReviewPolicyUpdate(BaseModel):
     runner_offline_seconds: int = Field(default=90, ge=30, le=600)
     revocation_refresh_hours: int = Field(default=6, ge=1, le=24)
     revocation_max_stale_hours: int = Field(default=168, ge=24, le=720)
+    dynamic_review_enabled: bool = False
+    llm_review_enabled: bool = True
 
     @model_validator(mode="after")
     def validate_revocation_window(self) -> PluginReviewPolicyUpdate:

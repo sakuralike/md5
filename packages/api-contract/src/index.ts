@@ -3539,6 +3539,8 @@ export interface DesktopPluginReviewPolicy {
   runner_offline_seconds: number;
   revocation_refresh_hours: number;
   revocation_max_stale_hours: number;
+  dynamic_review_enabled: boolean;
+  llm_review_enabled: boolean;
   updated_at: string | null;
   updated_by: string | null;
 }

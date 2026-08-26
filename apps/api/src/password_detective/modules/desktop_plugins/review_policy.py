@@ -32,6 +32,8 @@ class PluginReviewPolicy:
     runner_offline_seconds: int = 90
     revocation_refresh_hours: int = 6
     revocation_max_stale_hours: int = 168
+    dynamic_review_enabled: bool = False
+    llm_review_enabled: bool = True
     updated_at: object | None = None
     updated_by: str | None = None
 

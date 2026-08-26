@@ -4,6 +4,7 @@ import { onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,6 +45,14 @@ async function savePolicy(): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+function updateDynamicReview(checked: boolean | "indeterminate"): void {
+  if (policy.value) policy.value.dynamic_review_enabled = checked === true;
+}
+
+function updateLlmReview(checked: boolean | "indeterminate"): void {
+  if (policy.value) policy.value.llm_review_enabled = checked === true;
 }
 
 async function createRunner(): Promise<void> {
@@ -102,6 +111,10 @@ onMounted(load);
           <div class="space-y-2"><Label for="policy-dynamic-attempts">动态重试上限</Label><Input id="policy-dynamic-attempts" v-model.number="policy.maximum_dynamic_attempts" type="number" min="1" max="5" /></div>
           <div class="space-y-2"><Label for="policy-revocation-refresh">撤销刷新（小时）</Label><Input id="policy-revocation-refresh" v-model.number="policy.revocation_refresh_hours" type="number" min="1" max="24" /></div>
           <div class="space-y-2"><Label for="policy-revocation-stale">离线过期（小时）</Label><Input id="policy-revocation-stale" v-model.number="policy.revocation_max_stale_hours" type="number" min="24" max="720" /></div>
+        </div>
+        <div class="flex flex-wrap gap-6">
+          <div class="flex items-center gap-3"><Checkbox id="policy-llm-review" :checked="policy.llm_review_enabled" @update:checked="updateLlmReview" /><Label for="policy-llm-review">启用大模型二次审核</Label></div>
+          <div class="flex items-center gap-3"><Checkbox id="policy-dynamic-review" :checked="policy.dynamic_review_enabled" @update:checked="updateDynamicReview" /><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
         </div>
         <Button :disabled="busy" @click="savePolicy">保存审核策略</Button>
       </section>

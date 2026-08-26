@@ -54,9 +54,10 @@ def test_static_review_passes_and_exposes_scoped_evidence(client) -> None:
     )
     assert report.status_code == 200, report.text
     body = report.json()
-    assert body["version_status"] == "auto_review_running"
-    assert body["runs"][0]["status"] == "running"
-    assert body["runs"][0]["dynamic_tasks"][0]["status"] == "queued"
+    assert body["version_status"] == "manual_review_ready"
+    assert body["runs"][0]["status"] == "passed"
+    assert body["runs"][0]["dynamic_tasks"] == []
+    assert body["runs"][0]["summary"]["dynamic_status"] == "disabled"
     assert body["runs"][0]["summary"]["blocking_finding_count"] == 0
     assert set(body["runs"][0]["summary"]["stages"]) == {
         "structure",
@@ -81,7 +82,7 @@ def test_static_review_passes_and_exposes_scoped_evidence(client) -> None:
         f"/api/v1/admin/plugin-reviews/versions/{version_id}", headers=admin_headers
     )
     assert detail.status_code == 200
-    assert detail.json()["review_runs"][0]["status"] == "running"
+    assert detail.json()["review_runs"][0]["status"] == "passed"
     with client.app.state.database.session_factory() as db:
         run = db.scalar(
             select(DesktopPluginReviewRun).where(DesktopPluginReviewRun.version_id == version_id)

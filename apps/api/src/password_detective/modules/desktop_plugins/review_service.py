@@ -11,12 +11,18 @@ from password_detective.db.audit import write_audit_log
 from password_detective.db.models.desktop_plugin import (
     DesktopPlugin,
     DesktopPluginArtifact,
+    DesktopPluginFindingSeverity,
     DesktopPluginReviewFinding,
     DesktopPluginReviewRun,
     DesktopPluginReviewRunStatus,
+    DesktopPluginReviewStage,
     DesktopPluginSigningKey,
     DesktopPluginVersion,
     DesktopPluginVersionStatus,
+)
+from password_detective.modules.desktop_plugins.llm_review import (
+    LlmReviewUnavailable,
+    review_plugin,
 )
 from password_detective.modules.desktop_plugins.review_policy import get_current_review_policy
 from password_detective.modules.desktop_plugins.runner_service import (
@@ -184,7 +190,7 @@ def process_pending_static_reviews(
                         & DesktopPluginReviewRun.lease_expires_at.is_not(None)
                         & (DesktopPluginReviewRun.lease_expires_at <= now)
                     ),
-                )
+                ),
             )
             .order_by(DesktopPluginReviewRun.created_at, DesktopPluginReviewRun.id)
             .limit(1)
@@ -265,7 +271,6 @@ def process_pending_static_reviews(
                     )
                 )
             evidence_key = storage.evidence_key(version.id, run.id, "static-review.json")
-            storage.write_evidence_json(evidence_key, result.evidence)
             run.evidence_storage_key = evidence_key
             run.summary_json = result.summary
             run.status = (
@@ -283,15 +288,72 @@ def process_pending_static_reviews(
             )
             version.version += 1
             if result.blocked:
+                storage.write_evidence_json(evidence_key, result.evidence)
                 failed += 1
             else:
+                llm = (
+                    review_plugin(settings, plugin=plugin, version=version, static_result=result)
+                    if policy.llm_review_enabled
+                    else None
+                )
+                llm_summary = {
+                    "enabled": policy.llm_review_enabled,
+                    "status": "not_configured" if policy.llm_review_enabled else "disabled",
+                }
+                if llm is not None:
+                    llm_summary = {
+                        "enabled": True,
+                        "verdict": llm.verdict,
+                        "risk_level": llm.risk_level,
+                    }
+                    if llm.verdict == "block":
+                        db.add(
+                            DesktopPluginReviewFinding(
+                                review_run_id=run.id,
+                                stage=DesktopPluginReviewStage.STATIC_BEHAVIOR,
+                                rule_id="PD-LLM-001",
+                                severity=DesktopPluginFindingSeverity.HIGH,
+                                title="LLM 审核要求阻断",
+                                detail=llm.summary,
+                                evidence_json={"risk_level": llm.risk_level},
+                                blocked=True,
+                                developer_visible=True,
+                            )
+                        )
+                        run.status = DesktopPluginReviewRunStatus.FAILED
+                        run.completed_at = utc_now()
+                        version.status = DesktopPluginVersionStatus.AUTO_REVIEW_FAILED
+                        failed += 1
                 run.summary_json = {
                     **result.summary,
                     "static_status": "passed",
-                    "dynamic_status": "pending",
+                    "llm_review": llm_summary,
+                    "dynamic_status": "pending" if policy.dynamic_review_enabled else "disabled",
                 }
-                enqueue_dynamic_tasks(db, review_run=run, artifacts=artifacts)
-                passed += 1
+                evidence = {**result.evidence, "llm_review": llm_summary}
+                storage.write_evidence_json(evidence_key, evidence)
+                if run.status == DesktopPluginReviewRunStatus.FAILED:
+                    pass
+                elif policy.dynamic_review_enabled:
+                    enqueue_dynamic_tasks(db, review_run=run, artifacts=artifacts)
+                    passed += 1
+                else:
+                    run.status = DesktopPluginReviewRunStatus.PASSED
+                    run.completed_at = utc_now()
+                    version.status = DesktopPluginVersionStatus.MANUAL_REVIEW_READY
+                    passed += 1
+        except LlmReviewUnavailable as exc:
+            retry_scheduled += int(
+                _mark_infrastructure_failure(
+                    run,
+                    version,
+                    code="desktop_plugin.llm_review_unavailable",
+                    safe_message=str(exc),
+                    maximum_attempts=policy.maximum_static_attempts,
+                )
+            )
+            failed += int(run.status == DesktopPluginReviewRunStatus.INFRASTRUCTURE_FAILED)
+            version.version += 1
         except StaticReviewInfrastructureError as exc:
             retry_scheduled += int(
                 _mark_infrastructure_failure(

@@ -22,6 +22,7 @@ from password_detective.db.models.desktop_plugin import (
 from password_detective.db.models.third_party_app import ThirdPartyApp, ThirdPartyAppStatus
 from password_detective.db.models.third_party_oauth import ThirdPartyAuthorization
 from password_detective.db.models.user import User, UserRole
+from password_detective.db.models.system_setting import SystemSetting
 from password_detective.modules.desktop_plugins.review_service import (
     process_pending_static_reviews,
 )
@@ -69,6 +70,18 @@ def _run_static_review(client) -> dict[str, int]:
             client.app.state.settings,
             worker_id="synthetic-static-review-worker",
         )
+
+
+def _enable_dynamic_review(client) -> None:
+    with client.app.state.database.session_factory() as db:
+        policy = db.get(SystemSetting, "desktop_plugin_review_policy")
+        if policy is None:
+            policy = SystemSetting(key="desktop_plugin_review_policy", version=1)
+            db.add(policy)
+        values = dict((policy.value_json or {}).get("value", {}))
+        values.update({"dynamic_review_enabled": True, "llm_review_enabled": False})
+        policy.value_json = {"value": values}
+        db.commit()
 
 
 def _complete_dynamic_review(client, admin_headers: dict[str, str]) -> None:
@@ -129,6 +142,7 @@ def _complete_dynamic_review(client, admin_headers: dict[str, str]) -> None:
 
 
 def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
+    _enable_dynamic_review(client)
     developer_headers, _, project_id, finalized, _, _, _ = _finalized_fixture(
         client, "com.synthetic.review-workflow"
     )
@@ -301,6 +315,7 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
 
 
 def test_manual_review_rejects_unrequested_capability_and_records_rejection(client) -> None:
+    _enable_dynamic_review(client)
     developer_headers, _, project_id, finalized, _, _, _ = _finalized_fixture(
         client, "com.synthetic.review-negative"
     )

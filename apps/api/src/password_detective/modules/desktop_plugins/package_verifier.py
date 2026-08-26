@@ -213,19 +213,6 @@ def _validate_manifest(
         ):
             raise _invalid("插件命令输入 Schema 缺失")
 
-        try:
-            schema = _read_json(_read_bounded(archive, entries[schema_path], _MAX_MANIFEST_BYTES), "命令输入 Schema")
-        except AppError:
-            raise
-        for field in schema.get("properties", {}).values():
-            if not isinstance(field, dict):
-                continue
-            if field.get("format") == "theme-background" and "ui:theme" not in required + optional:
-                raise _invalid("主题背景输入必须申请 ui:theme 权限")
-            if field.get("format") not in {None, "file", "theme-background"}:
-                raise _invalid("命令输入 Schema 包含不支持的格式")
-
-
 def verify_plugin_package(
     path: Path,
     *,

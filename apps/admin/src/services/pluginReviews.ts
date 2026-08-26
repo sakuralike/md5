@@ -126,6 +126,8 @@ export function savePluginReviewPolicy(
         runner_offline_seconds: policy.runner_offline_seconds,
         revocation_refresh_hours: policy.revocation_refresh_hours,
         revocation_max_stale_hours: policy.revocation_max_stale_hours,
+        dynamic_review_enabled: policy.dynamic_review_enabled,
+        llm_review_enabled: policy.llm_review_enabled,
       }),
     },
     token,

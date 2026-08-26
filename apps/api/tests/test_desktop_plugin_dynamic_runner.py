@@ -10,6 +10,7 @@ from test_desktop_plugin_static_review import _process, _submit
 
 from password_detective.core.time import utc_now
 from password_detective.db.models.desktop_plugin import DesktopPluginDynamicReviewTask
+from password_detective.db.models.system_setting import SystemSetting
 
 
 def _destruction_proof(task_id: str) -> str:
@@ -77,6 +78,15 @@ def _ready(client, headers: dict[str, str]):
 
 
 def _queued_dynamic_fixture(client, slug: str, **package_options):
+    with client.app.state.database.session_factory() as db:
+        policy = db.get(SystemSetting, "desktop_plugin_review_policy")
+        if policy is None:
+            policy = SystemSetting(key="desktop_plugin_review_policy", version=1)
+            db.add(policy)
+        values = dict((policy.value_json or {}).get("value", {}))
+        values.update({"dynamic_review_enabled": True, "llm_review_enabled": False})
+        policy.value_json = {"value": values}
+        db.commit()
     headers, _, project_id, finalized, package, _, _ = _finalized_fixture(
         client, slug, **package_options
     )

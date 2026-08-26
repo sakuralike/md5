@@ -26,6 +26,7 @@ FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "desktop_plugin_s3_access_key_id": "DESKTOP_PLUGIN_S3_ACCESS_KEY_ID",
     "desktop_plugin_s3_secret_access_key": "DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY",
     "desktop_plugin_signing_token": "DESKTOP_PLUGIN_SIGNING_TOKEN",
+    "desktop_plugin_llm_review_api_key": "DESKTOP_PLUGIN_LLM_REVIEW_API_KEY",
     "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
     "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
 }
@@ -105,6 +106,13 @@ class Settings(BaseSettings):
     desktop_plugin_signing_url: str = ""
     desktop_plugin_signing_token: SecretStr = SecretStr("")
     desktop_plugin_signing_key: str = "password-detective-plugin-platform"
+    desktop_plugin_llm_review_provider: Literal[
+        "disabled", "openai_compatible", "anthropic_compatible"
+    ] = "disabled"
+    desktop_plugin_llm_review_base_url: str = ""
+    desktop_plugin_llm_review_api_key: SecretStr = SecretStr("")
+    desktop_plugin_llm_review_model: str = ""
+    desktop_plugin_llm_review_timeout_seconds: int = Field(default=30, ge=5, le=120)
     desktop_plugin_max_package_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )
@@ -243,7 +251,6 @@ class Settings(BaseSettings):
                 raise ValueError(f"非本地环境的私信密钥至少需要 32 个字符: {version}")
         return self
 
-
     @model_validator(mode="after")
     def validate_notification_backend(self) -> Settings:
         if self.notification_backend == "webhook":
@@ -328,7 +335,6 @@ class Settings(BaseSettings):
         ):
             raise ValueError("DIRECT_MESSAGE_KEYRING 必须是字符串到字符串的 JSON 对象")
         return parsed
-
 
     @property
     def cors_origin_list(self) -> list[str]:
