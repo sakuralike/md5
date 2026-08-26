@@ -104,7 +104,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             plugin.GrantedCapabilities,
             _privateStorage,
             _apiBroker,
-            _themeService);
+            _themeService,
+            installedDirectory);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

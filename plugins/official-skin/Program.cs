@@ -36,6 +36,7 @@ internal sealed class OfficialSkinPlugin : PdppPlugin
             backgroundReference,
             1d,
             clearBackground,
+            string.IsNullOrWhiteSpace(backgroundReference),
             cancellationToken);
         return new
         {

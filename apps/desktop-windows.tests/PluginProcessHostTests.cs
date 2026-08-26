@@ -521,6 +521,7 @@ public sealed class PluginProcessHostTests : IDisposable
         public Task<JsonElement> ApplyAsync(
             string pluginId,
             JsonElement parameters,
+            string? installedDirectory = null,
             CancellationToken cancellationToken = default)
         {
             PluginId = pluginId;

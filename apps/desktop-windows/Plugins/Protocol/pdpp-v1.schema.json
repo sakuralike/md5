@@ -170,7 +170,8 @@
         "preset": { "enum": ["light", "dark", "forest", "contrast"] },
         "background_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
         "background_opacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
-        "clear_background": { "type": "boolean" }
+        "clear_background": { "type": "boolean" },
+        "use_default_background": { "type": "boolean" }
       }
     },
     "successResponse": {

@@ -3,6 +3,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import urllib.error
+import urllib.parse
+import urllib.request
 import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -247,6 +250,8 @@ def _platform_signature(
     settings: Settings, payload: dict[str, object]
 ) -> tuple[str, str, str]:
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if settings.desktop_plugin_signing_backend == "openbao_transit":
+        return _openbao_platform_signature(settings, canonical.encode("utf-8"))
     seed = hashlib.sha256(
         b"password-detective-plugin-platform-signing-v1\0"
         + settings.app_secret_key.encode("utf-8")
@@ -263,6 +268,44 @@ def _platform_signature(
         base64.b64encode(public_key).decode("ascii"),
         base64.b64encode(signature).decode("ascii"),
     )
+
+
+def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str, str, str]:
+    base_url = settings.desktop_plugin_signing_url.strip().rstrip("/")
+    token = settings.desktop_plugin_signing_token.get_secret_value().strip()
+    key_name = settings.desktop_plugin_signing_key.strip()
+    if not base_url or not token or not key_name:
+        raise AppError("desktop_plugin.signer_unavailable", "OpenBao 签名服务配置不完整", status_code=503)
+
+    headers = {"X-Vault-Token": token, "Content-Type": "application/json"}
+    sign_url = f"{base_url}/v1/transit/sign/{urllib.parse.quote(key_name, safe='')}"
+    request = urllib.request.Request(
+        sign_url,
+        data=json.dumps({"input": base64.b64encode(message).decode("ascii"), "hash_algorithm": "none"}).encode(),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            signed = json.loads(response.read(256 * 1024).decode("utf-8"))
+        signature = str(signed["data"]["signature"])
+        if not signature.startswith("vault:"):
+            raise ValueError("invalid signature format")
+        with urllib.request.urlopen(
+            urllib.request.Request(f"{base_url}/v1/transit/keys/{urllib.parse.quote(key_name, safe='')}", headers=headers),
+            timeout=5,
+        ) as response:
+            key_data = json.loads(response.read(256 * 1024).decode("utf-8"))["data"]
+        versions = key_data.get("keys", {})
+        current = str(key_data.get("latest_version", max(versions, key=int)))
+        public_key = str(versions[current]["public_key"])
+        raw_public_key = base64.b64decode(public_key, validate=True)
+        key_id = f"platform-ed25519-{hashlib.sha256(raw_public_key).hexdigest()[:16]}"
+        return key_id, base64.b64encode(raw_public_key).decode("ascii"), base64.b64encode(
+            base64.b64decode(signature.split(":", 2)[-1], validate=True)
+        ).decode("ascii")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+        raise AppError("desktop_plugin.signer_unavailable", "OpenBao 签名服务不可用", status_code=503) from exc
 
 
 def _publication_signature_payload(

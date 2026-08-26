@@ -28,6 +28,21 @@ services:
       timeout: 3s
       retries: 20
 
+  openbao:
+    image: openbao/openbao:2.2.0
+    command: ["server", "-config=/openbao/config/config.hcl"]
+    environment:
+      BAO_ADDR: http://openbao:8200
+    volumes:
+      - openbao-data:/openbao/data
+      - ./infra/openbao/config.hcl:/openbao/config/config.hcl:ro
+    expose: ["8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     build:
       context: .
@@ -97,6 +112,10 @@ services:
       DESKTOP_PLUGIN_S3_ACCESS_KEY_ID: ${DESKTOP_PLUGIN_S3_ACCESS_KEY_ID:-}
       DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY: ${DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY:-}
       DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: ${DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE:-true}
+      DESKTOP_PLUGIN_SIGNING_BACKEND: ${DESKTOP_PLUGIN_SIGNING_BACKEND:-derived}
+      DESKTOP_PLUGIN_SIGNING_URL: ${DESKTOP_PLUGIN_SIGNING_URL:-}
+      DESKTOP_PLUGIN_SIGNING_TOKEN: ${DESKTOP_PLUGIN_SIGNING_TOKEN:-}
+      DESKTOP_PLUGIN_SIGNING_KEY: ${DESKTOP_PLUGIN_SIGNING_KEY:-password-detective-plugin-platform}
     volumes:
       - desktop-update-data:/var/lib/password-detective/desktop-updates
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
@@ -274,3 +293,4 @@ volumes:
   desktop-update-data:
   desktop-plugin-data:
   site-asset-data:
+  openbao-data:

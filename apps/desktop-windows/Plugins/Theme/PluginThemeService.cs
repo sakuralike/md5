@@ -12,7 +12,7 @@ public sealed record PluginThemeSettings(
 public interface IPluginThemeService
 {
     string ImportBackground(string pluginId, string sourcePath);
-    Task<JsonElement> ApplyAsync(string pluginId, JsonElement parameters, CancellationToken cancellationToken = default);
+    Task<JsonElement> ApplyAsync(string pluginId, JsonElement parameters, string? installedDirectory = null, CancellationToken cancellationToken = default);
     Task ApplyPersistedAsync(CancellationToken cancellationToken = default);
 }
 
@@ -81,6 +81,7 @@ public sealed class PluginThemeService : IPluginThemeService
     public async Task<JsonElement> ApplyAsync(
         string pluginId,
         JsonElement parameters,
+        string? installedDirectory = null,
         CancellationToken cancellationToken = default)
     {
         if (!parameters.TryGetProperty("preset", out var presetElement)
@@ -100,7 +101,15 @@ public sealed class PluginThemeService : IPluginThemeService
         }
 
         string? backgroundFileName = null;
-        if (!ReadBoolean(parameters, "clear_background"))
+        if (ReadBoolean(parameters, "use_default_background") && !string.IsNullOrWhiteSpace(installedDirectory))
+        {
+            var bundled = Path.Combine(installedDirectory, "assets", "default-background.jpg");
+            if (File.Exists(bundled))
+            {
+                backgroundFileName = ImportBackground(pluginId, bundled);
+            }
+        }
+        if (!ReadBoolean(parameters, "clear_background") && backgroundFileName is null)
         {
             if (parameters.TryGetProperty("background_ref", out var reference))
             {

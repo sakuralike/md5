@@ -25,6 +25,7 @@ FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "direct_message_keyring": "DIRECT_MESSAGE_KEYRING",
     "desktop_plugin_s3_access_key_id": "DESKTOP_PLUGIN_S3_ACCESS_KEY_ID",
     "desktop_plugin_s3_secret_access_key": "DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY",
+    "desktop_plugin_signing_token": "DESKTOP_PLUGIN_SIGNING_TOKEN",
     "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
     "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
 }
@@ -100,6 +101,10 @@ class Settings(BaseSettings):
     desktop_plugin_s3_access_key_id: str = ""
     desktop_plugin_s3_secret_access_key: SecretStr = SecretStr("")
     desktop_plugin_s3_force_path_style: bool = True
+    desktop_plugin_signing_backend: Literal["derived", "openbao_transit"] = "derived"
+    desktop_plugin_signing_url: str = ""
+    desktop_plugin_signing_token: SecretStr = SecretStr("")
+    desktop_plugin_signing_key: str = "password-detective-plugin-platform"
     desktop_plugin_max_package_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )

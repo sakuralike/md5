@@ -53,6 +53,8 @@ SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHo
 
 `.pdpkg` 必须包含逐文件 SHA-256、开发者 Ed25519 签名和 CycloneDX 1.5 SBOM。私钥只能从安全构建环境注入。官方皮肤示例位于 `plugins/official-skin`：
 
+平台发布签章支持自建 OpenBao Transit。部署 `infra/openbao/config.hcl` 后运行 `infra/openbao/init-transit.sh` 创建不可导出的 Ed25519 Transit 密钥；API 仅持有受限 Transit Token，通过 `/v1/transit/sign/<key>` 请求签名，不读取私钥。生产环境应将 OpenBao 数据目录单独备份并启用 TLS 或内网 mTLS。
+
 ```powershell
 $env:PDPP_PUBLISHER_KEY_ID = "official-skin-key"
 $env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64 = "<secure-build-secret>"

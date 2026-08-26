@@ -68,6 +68,14 @@ var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
         {"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}
         """),
 };
+if (args.Length == 6)
+{
+    var bundledBackground = Path.Combine(Path.GetDirectoryName(args[2])!, "assets", "default-background.jpg");
+    if (File.Exists(bundledBackground))
+    {
+        files["assets/default-background.jpg"] = await File.ReadAllBytesAsync(bundledBackground);
+    }
+}
 var packageFiles = files.Select(pair => new PluginPackageFile(
         pair.Key,
         pair.Value.LongLength,

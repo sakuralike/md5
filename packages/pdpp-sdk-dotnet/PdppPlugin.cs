@@ -24,6 +24,7 @@ public sealed class PdppHostClient
         string? backgroundReference,
         double backgroundOpacity,
         bool clearBackground,
+        bool useDefaultBackground = false,
         CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>
@@ -31,6 +32,7 @@ public sealed class PdppHostClient
             ["preset"] = preset,
             ["background_opacity"] = backgroundOpacity,
             ["clear_background"] = clearBackground,
+            ["use_default_background"] = useDefaultBackground,
         };
         if (!string.IsNullOrWhiteSpace(backgroundReference))
         {

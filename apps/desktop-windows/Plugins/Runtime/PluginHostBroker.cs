@@ -14,6 +14,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
 
     private readonly string _pluginId;
     private readonly string _pluginVersion;
+    private readonly string? _installedDirectory;
     private readonly IReadOnlySet<string> _capabilities;
     private readonly PluginFileBroker _files = new(maximumChunkBytes: MaximumFileChunkBytes);
     private readonly PluginPrivateStorage _storage;
@@ -27,7 +28,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         IEnumerable<string> capabilities,
         PluginPrivateStorage storage,
         IPluginApiBroker? apiBroker = null,
-        IPluginThemeService? themeService = null)
+        IPluginThemeService? themeService = null,
+        string? installedDirectory = null)
     {
         _pluginId = pluginId;
         _pluginVersion = pluginVersion;
@@ -35,6 +37,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         _storage = storage;
         _apiBroker = apiBroker;
         _themeService = themeService;
+        _installedDirectory = installedDirectory;
     }
 
     public JsonElement PrepareCommandInput(
@@ -274,7 +277,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
                 new PdppHostRequestException(-32003, "主题宿主能力当前不可用。"));
         }
 
-        return _themeService.ApplyAsync(_pluginId, parameters, cancellationToken);
+        return _themeService.ApplyAsync(_pluginId, parameters, _installedDirectory, cancellationToken);
     }
 
     private static string ReadStorageKey(JsonElement parameters)

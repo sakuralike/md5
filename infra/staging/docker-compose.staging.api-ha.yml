@@ -1,4 +1,17 @@
 services:
+  openbao:
+    image: openbao/openbao:2.2.0
+    command: ["server", "-config=/openbao/config/config.hcl"]
+    volumes:
+      - openbao-data:/openbao/data
+      - ./infra/openbao/config.hcl:/openbao/config/config.hcl:ro
+    expose: ["8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     image: ${STAGING_API_IMAGE:-password-detective-api:staging}
     command: ["uvicorn", "password_detective.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -12,10 +25,16 @@ services:
       DESKTOP_PLUGIN_S3_BUCKET: ${DESKTOP_PLUGIN_S3_BUCKET:-password-detective-plugins}
       DESKTOP_PLUGIN_S3_REGION: ${DESKTOP_PLUGIN_S3_REGION:-us-east-1}
       DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: "true"
+      DESKTOP_PLUGIN_SIGNING_BACKEND: ${DESKTOP_PLUGIN_SIGNING_BACKEND:-openbao_transit}
+      DESKTOP_PLUGIN_SIGNING_URL: ${DESKTOP_PLUGIN_SIGNING_URL:-http://openbao:8200}
+      DESKTOP_PLUGIN_SIGNING_TOKEN: ${DESKTOP_PLUGIN_SIGNING_TOKEN:-}
+      DESKTOP_PLUGIN_SIGNING_KEY: ${DESKTOP_PLUGIN_SIGNING_KEY:-password-detective-plugin-platform}
     volumes:
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
     depends_on:
       plugin-object-storage:
+        condition: service_healthy
+      openbao:
         condition: service_healthy
 
   worker:
@@ -27,10 +46,16 @@ services:
       DESKTOP_PLUGIN_S3_BUCKET: ${DESKTOP_PLUGIN_S3_BUCKET:-password-detective-plugins}
       DESKTOP_PLUGIN_S3_REGION: ${DESKTOP_PLUGIN_S3_REGION:-us-east-1}
       DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: "true"
+      DESKTOP_PLUGIN_SIGNING_BACKEND: ${DESKTOP_PLUGIN_SIGNING_BACKEND:-openbao_transit}
+      DESKTOP_PLUGIN_SIGNING_URL: ${DESKTOP_PLUGIN_SIGNING_URL:-http://openbao:8200}
+      DESKTOP_PLUGIN_SIGNING_TOKEN: ${DESKTOP_PLUGIN_SIGNING_TOKEN:-}
+      DESKTOP_PLUGIN_SIGNING_KEY: ${DESKTOP_PLUGIN_SIGNING_KEY:-password-detective-plugin-platform}
     volumes:
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
     depends_on:
       plugin-object-storage:
+        condition: service_healthy
+      openbao:
         condition: service_healthy
 
   scheduler:
@@ -83,3 +108,4 @@ services:
 volumes:
   desktop-plugin-data:
   desktop-plugin-object-data:
+  openbao-data:
