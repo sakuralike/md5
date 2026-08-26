@@ -3,10 +3,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
-import secrets
+import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -246,15 +247,12 @@ def _write_audit(
     )
 
 
-def _platform_signature(
-    settings: Settings, payload: dict[str, object]
-) -> tuple[str, str, str]:
+def _platform_signature(settings: Settings, payload: dict[str, object]) -> tuple[str, str, str]:
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if settings.desktop_plugin_signing_backend == "openbao_transit":
         return _openbao_platform_signature(settings, canonical.encode("utf-8"))
     seed = hashlib.sha256(
-        b"password-detective-plugin-platform-signing-v1\0"
-        + settings.app_secret_key.encode("utf-8")
+        b"password-detective-plugin-platform-signing-v1\0" + settings.app_secret_key.encode("utf-8")
     ).digest()
     private_key = Ed25519PrivateKey.from_private_bytes(seed)
     public_key = private_key.public_key().public_bytes(
@@ -275,13 +273,17 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
     token = settings.desktop_plugin_signing_token.get_secret_value().strip()
     key_name = settings.desktop_plugin_signing_key.strip()
     if not base_url or not token or not key_name:
-        raise AppError("desktop_plugin.signer_unavailable", "OpenBao 签名服务配置不完整", status_code=503)
+        raise AppError(
+            "desktop_plugin.signer_unavailable", "OpenBao 签名服务配置不完整", status_code=503
+        )
 
     headers = {"X-Vault-Token": token, "Content-Type": "application/json"}
     sign_url = f"{base_url}/v1/transit/sign/{urllib.parse.quote(key_name, safe='')}"
     request = urllib.request.Request(
         sign_url,
-        data=json.dumps({"input": base64.b64encode(message).decode("ascii"), "hash_algorithm": "sha2-256"}).encode(),
+        data=json.dumps(
+            {"input": base64.b64encode(message).decode("ascii"), "hash_algorithm": "sha2-256"}
+        ).encode(),
         headers=headers,
         method="POST",
     )
@@ -292,7 +294,10 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
         if not signature.startswith("vault:"):
             raise ValueError("invalid signature format")
         with urllib.request.urlopen(
-            urllib.request.Request(f"{base_url}/v1/transit/keys/{urllib.parse.quote(key_name, safe='')}", headers=headers),
+            urllib.request.Request(
+                f"{base_url}/v1/transit/keys/{urllib.parse.quote(key_name, safe='')}",
+                headers=headers,
+            ),
             timeout=5,
         ) as response:
             key_data = json.loads(response.read(256 * 1024).decode("utf-8"))["data"]
@@ -310,11 +315,17 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
         if len(raw_public_key) != 32:
             raise ValueError("invalid ed25519 public key")
         key_id = f"platform-ed25519-{hashlib.sha256(raw_public_key).hexdigest()[:16]}"
-        return key_id, base64.b64encode(raw_public_key).decode("ascii"), base64.b64encode(
-            base64.b64decode(signature.split(":", 2)[-1], validate=True)
-        ).decode("ascii")
+        return (
+            key_id,
+            base64.b64encode(raw_public_key).decode("ascii"),
+            base64.b64encode(base64.b64decode(signature.split(":", 2)[-1], validate=True)).decode(
+                "ascii"
+            ),
+        )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
-        raise AppError("desktop_plugin.signer_unavailable", "OpenBao 签名服务不可用", status_code=503) from exc
+        raise AppError(
+            "desktop_plugin.signer_unavailable", "OpenBao 签名服务不可用", status_code=503
+        ) from exc
 
 
 def _publication_signature_payload(
@@ -365,6 +376,8 @@ def _revocation_signature_payload(
     if signing_key_fingerprint is not None:
         payload["signing_key_fingerprint"] = signing_key_fingerprint
     return payload
+
+
 def _review_event(
     db: Session,
     *,
@@ -420,9 +433,7 @@ def _owned_version(
     return row[0], row[1]
 
 
-def _validate_linked_app(
-    db: Session, *, app_id: str | None, owner_id: str
-) -> ThirdPartyApp | None:
+def _validate_linked_app(db: Session, *, app_id: str | None, owner_id: str) -> ThirdPartyApp | None:
     if app_id is None:
         return None
     app = db.scalar(
@@ -738,7 +749,11 @@ def register_signing_key(
         target_id=key.id,
         actor_id=principal.user.id,
         context=context,
-        details={"key_id": key.key_id, "fingerprint": fingerprint, "generated": generated_private_key is not None},
+        details={
+            "key_id": key.key_id,
+            "fingerprint": fingerprint,
+            "generated": generated_private_key is not None,
+        },
     )
     db.commit()
     db.refresh(key)
@@ -1291,8 +1306,7 @@ def _public_version_response(
                 artifacts,
                 published_at=version.published_at,
             )
-            if version.published_at is not None
-            and version.platform_signature_base64 is not None
+            if version.published_at is not None and version.platform_signature_base64 is not None
             else None
         ),
         published_at=version.published_at,
@@ -1641,23 +1655,25 @@ def record_install_event(
             )
         ).one_or_none()
         if row is None and payload.result == "success":
-            raise AppError(
-                "desktop_plugin.version_not_found", "插件版本不存在", status_code=404
-            )
+            raise AppError("desktop_plugin.version_not_found", "插件版本不存在", status_code=404)
         if row is not None:
             version, plugin = row
         else:
             version = plugin = None
-        if row is not None and payload.result == "success" and (
-            plugin.status != DesktopPluginStatus.ACTIVE
-            or version.status != DesktopPluginVersionStatus.PUBLISHED
-            or _is_revoked(
-                db,
-                plugin_id=plugin.id,
-                version_id=version.id,
-                signing_key_id=version.signing_key_id,
+        if (
+            row is not None
+            and payload.result == "success"
+            and (
+                plugin.status != DesktopPluginStatus.ACTIVE
+                or version.status != DesktopPluginVersionStatus.PUBLISHED
+                or _is_revoked(
+                    db,
+                    plugin_id=plugin.id,
+                    version_id=version.id,
+                    signing_key_id=version.signing_key_id,
+                )
+                or not _public_artifacts(db, version.id, payload.architecture)
             )
-            or not _public_artifacts(db, version.id, payload.architecture)
         ):
             raise AppError(
                 "desktop_plugin.version_not_available",
@@ -1736,9 +1752,7 @@ def withdraw_version(
     context: ClientContext,
 ) -> PluginVersionResponse:
     _require_verified(principal)
-    _, version = _owned_version(
-        db, version_id=version_id, owner_id=principal.user.id, lock=True
-    )
+    _, version = _owned_version(db, version_id=version_id, owner_id=principal.user.id, lock=True)
     if version.version != payload.version:
         raise AppError(
             "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
@@ -1881,8 +1895,7 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
                 artifacts,
                 published_at=version.published_at,
             )
-            if version.published_at is not None
-            and version.platform_signature_base64 is not None
+            if version.published_at is not None and version.platform_signature_base64 is not None
             else None
         ),
         artifacts=[_artifact_response(artifact) for artifact in artifacts],
@@ -1899,10 +1912,62 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
             )
             for event in events
         ],
-        review_runs=list_review_runs(
-            db, version_id=version.id, developer_visible_only=False
-        ),
+        review_runs=list_review_runs(db, version_id=version.id, developer_visible_only=False),
     )
+
+
+def get_review_source(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+) -> dict:
+    _, version = _admin_version(db, version_id=version_id)
+    artifact = db.scalar(
+        select(DesktopPluginArtifact).where(
+            DesktopPluginArtifact.plugin_version_id == version.id,
+            DesktopPluginArtifact.storage_key.is_not(None),
+        )
+    )
+    if artifact is None or artifact.storage_key is None:
+        raise AppError("desktop_plugin.source_not_found", "插件源码制品不存在", status_code=404)
+    allowed = {
+        ".cs",
+        ".csproj",
+        ".go",
+        ".json",
+        ".md",
+        ".ps1",
+        ".py",
+        ".rs",
+        ".toml",
+        ".xml",
+        ".yaml",
+        ".yml",
+    }
+    files = []
+    with zipfile.ZipFile(
+        DesktopPluginStorage(settings).quarantine_path(artifact.storage_key)
+    ) as archive:
+        for entry in archive.infolist():
+            path = entry.filename.rstrip("/")
+            if (
+                not path.startswith("source/")
+                or entry.is_dir()
+                or Path(path).suffix.lower() not in allowed
+            ):
+                continue
+            raw = archive.read(entry, 262_145)
+            files.append(
+                {
+                    "path": path,
+                    "content": raw[:262_144].decode("utf-8", errors="replace"),
+                    "truncated": len(raw) > 262_144,
+                }
+            )
+            if len(files) == 32:
+                break
+    return {"version_id": version.id, "files": files}
 
 
 def _admin_version(
@@ -1961,6 +2026,7 @@ def rerun_static_review(
 
 def approve_version(
     db: Session,
+    settings: Settings,
     *,
     version_id: str,
     payload: PluginVersionApproveRequest,
@@ -1975,6 +2041,13 @@ def approve_version(
     if version.status != DesktopPluginVersionStatus.MANUAL_REVIEW_READY:
         raise AppError(
             "desktop_plugin.version_not_approvable", "插件版本不处于人工审核状态", status_code=409
+        )
+    source = get_review_source(db, settings, version_id=version.id)
+    if not source["files"]:
+        raise AppError(
+            "desktop_plugin.source_required_for_approval",
+            "管理员批准前必须提供可审文本源码",
+            status_code=409,
         )
     _validate_api_capabilities(
         db,
@@ -2250,9 +2323,7 @@ def revoke_version(
         .with_for_update()
     ).all():
         revoked_key = storage.revoked_key(version.id, artifact.architecture, artifact.id)
-        source_keys = [
-            key for key in (artifact.public_storage_key, artifact.storage_key) if key
-        ]
+        source_keys = [key for key in (artifact.public_storage_key, artifact.storage_key) if key]
         storage.move_to_revoked(source_keys, revoked_key)
         artifact.storage_key = revoked_key
         artifact.public_storage_key = None

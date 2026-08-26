@@ -492,6 +492,17 @@ class PluginReviewLlmConnectionResponse(BaseModel):
     model: str
 
 
+class PluginReviewSourceFileResponse(BaseModel):
+    path: str
+    content: str
+    truncated: bool
+
+
+class PluginReviewSourceResponse(BaseModel):
+    version_id: str
+    files: list[PluginReviewSourceFileResponse]
+
+
 class PluginRunnerHeartbeatRequest(BaseModel):
     policy_version: str = Field(min_length=3, max_length=64)
     image_digest: str = Field(min_length=64, max_length=64)

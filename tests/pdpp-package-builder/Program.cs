@@ -75,6 +75,16 @@ if (args.Length == 6)
     {
         files["assets/default-background.jpg"] = await File.ReadAllBytesAsync(bundledBackground);
     }
+
+    var pluginDirectory = Path.GetDirectoryName(args[2])!;
+    foreach (var sourceName in new[] { "Program.cs", "PasswordDetective.OfficialSkin.csproj" })
+    {
+        var sourcePath = Path.Combine(pluginDirectory, sourceName);
+        if (File.Exists(sourcePath))
+        {
+            files[$"source/{sourceName}"] = await File.ReadAllBytesAsync(sourcePath);
+        }
+    }
 }
 var packageFiles = files.Select(pair => new PluginPackageFile(
         pair.Key,

@@ -39,6 +39,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReviewPolicyResponse,
     PluginReviewPolicyUpdate,
     PluginReviewQueueResponse,
+    PluginReviewSourceResponse,
     PluginVersionApproveRequest,
     PluginVersionPublishRequest,
     PluginVersionRejectRequest,
@@ -48,6 +49,7 @@ from password_detective.modules.desktop_plugins.schemas import (
 from password_detective.modules.desktop_plugins.service import (
     approve_version,
     get_review_detail,
+    get_review_source,
     list_reports,
     list_review_queue,
     publish_version,
@@ -108,12 +110,23 @@ def review_detail(
     return get_review_detail(db, version_id=version_id)
 
 
+@router.get("/versions/{version_id}/source", response_model=PluginReviewSourceResponse)
+def review_source(
+    version_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+) -> dict:
+    return get_review_source(db, settings, version_id=version_id)
+
+
 @router.post("/versions/{version_id}/approve", response_model=PluginReviewDetailResponse)
 def approve_plugin_version(
     version_id: str,
     payload: PluginVersionApproveRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
     principal: Annotated[Principal, Depends(require_admin_mfa)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> PluginReviewDetailResponse:
@@ -129,6 +142,7 @@ def approve_plugin_version(
     try:
         response = approve_version(
             db,
+            settings,
             version_id=version_id,
             payload=payload,
             principal=principal,

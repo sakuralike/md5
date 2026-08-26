@@ -138,6 +138,10 @@ export function savePluginReviewPolicy(
   );
 }
 
+export function getPluginReviewSource(token: string, versionId: string): Promise<{ files: Array<{ path: string; content: string; truncated: boolean }> }> {
+  return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source`, {}, token);
+}
+
 export function savePluginReviewLlmKey(token: string, apiKey: string): Promise<void> {
   return apiRequest(
     "/admin/plugin-review-policy/llm-key",
