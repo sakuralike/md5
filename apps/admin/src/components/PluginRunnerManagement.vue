@@ -75,8 +75,10 @@ function updateDynamicReview(checked: boolean | "indeterminate"): void {
   if (policy.value) policy.value.dynamic_review_enabled = checked === true;
 }
 
-function updateLlmReview(checked: boolean | "indeterminate"): void {
-  if (policy.value) policy.value.llm_review_enabled = checked === true;
+async function updateLlmReview(checked: boolean | "indeterminate"): Promise<void> {
+  if (!policy.value) return;
+  policy.value.llm_review_enabled = checked === true;
+  await saveLlmConfig();
 }
 
 async function saveLlmKey(): Promise<void> {
