@@ -60,6 +60,13 @@ describe("admin apiRequest", () => {
     expect(binaryHeaders.get("Content-Type")).toBeNull();
   });
 
+  it("accepts successful empty responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+    vi.stubGlobal("crypto", { randomUUID: () => "synthetic-request-id" });
+
+    await expect(apiRequest<void>("/admin/plugin-review-policy/llm-key", { method: "PUT" })).resolves.toBeUndefined();
+  });
+
   it("refreshes an expired access token and retries the protected request", async () => {
     const fetchMock = vi
       .fn()

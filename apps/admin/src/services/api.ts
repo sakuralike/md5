@@ -82,5 +82,6 @@ export async function apiRequest<T>(
     }
     throw new ApiError(response.status, body);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
