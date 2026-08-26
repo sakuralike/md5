@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewPolicy } from "../services/pluginReviews";
+import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewLlmKey, savePluginReviewPolicy, testPluginReviewLlm } from "../services/pluginReviews";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
@@ -18,6 +18,8 @@ const name = ref("");
 const architecture = ref<"windows-x64" | "windows-arm64">("windows-x64");
 const certificateFingerprint = ref("");
 const registrationSecret = ref("");
+const llmApiKey = ref("");
+const llmConnection = ref("");
 const error = ref("");
 const busy = ref(false);
 
@@ -53,6 +55,35 @@ function updateDynamicReview(checked: boolean | "indeterminate"): void {
 
 function updateLlmReview(checked: boolean | "indeterminate"): void {
   if (policy.value) policy.value.llm_review_enabled = checked === true;
+}
+
+async function saveLlmKey(): Promise<void> {
+  if (!llmApiKey.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await savePluginReviewLlmKey(auth.accessToken, llmApiKey.value);
+    llmApiKey.value = "";
+    await load();
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "保存模型 Key 失败";
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function testLlmConnection(): Promise<void> {
+  busy.value = true;
+  error.value = "";
+  llmConnection.value = "";
+  try {
+    const result = await testPluginReviewLlm(auth.accessToken);
+    llmConnection.value = `${result.provider} · ${result.model}`;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "大模型连接测试失败";
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function createRunner(): Promise<void> {
@@ -92,6 +123,29 @@ onMounted(load);
 </script>
 
 <template>
+  <div class="space-y-5">
+  <Card v-if="policy">
+    <CardHeader>
+      <CardTitle>大模型审核配置</CardTitle>
+      <CardDescription>模型 Key 仅加密保存在服务器，不会回显到管理端。</CardDescription>
+    </CardHeader>
+    <CardContent class="space-y-4">
+      <div class="flex items-center gap-3"><Checkbox id="policy-llm-review" :checked="policy.llm_review_enabled" @update:checked="updateLlmReview" /><Label for="policy-llm-review">启用大模型二次审核</Label></div>
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="space-y-2"><Label for="policy-llm-provider">模型协议</Label><Select v-model="policy.llm_provider"><SelectTrigger id="policy-llm-provider"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="disabled">未配置</SelectItem><SelectItem value="openai_compatible">OpenAI 兼容</SelectItem><SelectItem value="anthropic_compatible">Anthropic 兼容</SelectItem></SelectContent></Select></div>
+        <div class="space-y-2"><Label for="policy-llm-url">API 地址</Label><Input id="policy-llm-url" v-model="policy.llm_base_url" placeholder="https://api.deepseek.com" /></div>
+        <div class="space-y-2"><Label for="policy-llm-model">模型名称</Label><Input id="policy-llm-model" v-model="policy.llm_model" placeholder="deepseek-chat" /></div>
+        <div class="space-y-2"><Label for="policy-llm-timeout">模型超时（秒）</Label><Input id="policy-llm-timeout" v-model.number="policy.llm_timeout_seconds" type="number" min="5" max="120" /></div>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+        <div class="space-y-2"><Label for="policy-llm-key">模型 API Key</Label><Input id="policy-llm-key" v-model="llmApiKey" type="password" autocomplete="off" :placeholder="policy.llm_api_key_configured ? '已配置，填写以替换' : '填写模型 API Key'" /></div>
+        <Button variant="outline" :disabled="busy || !llmApiKey" @click="saveLlmKey">保存模型 Key</Button>
+        <Button variant="outline" :disabled="busy || !policy.llm_api_key_configured" @click="testLlmConnection">测试模型连接</Button>
+      </div>
+      <p v-if="llmConnection" class="text-xs text-muted-foreground">连接成功：{{ llmConnection }}</p>
+      <Button :disabled="busy" @click="savePolicy">保存大模型配置</Button>
+    </CardContent>
+  </Card>
   <Card>
     <CardHeader>
       <CardTitle>Windows 动态审核执行器</CardTitle>
@@ -112,16 +166,7 @@ onMounted(load);
           <div class="space-y-2"><Label for="policy-revocation-refresh">撤销刷新（小时）</Label><Input id="policy-revocation-refresh" v-model.number="policy.revocation_refresh_hours" type="number" min="1" max="24" /></div>
           <div class="space-y-2"><Label for="policy-revocation-stale">离线过期（小时）</Label><Input id="policy-revocation-stale" v-model.number="policy.revocation_max_stale_hours" type="number" min="24" max="720" /></div>
         </div>
-        <div class="flex flex-wrap gap-6">
-          <div class="flex items-center gap-3"><Checkbox id="policy-llm-review" :checked="policy.llm_review_enabled" @update:checked="updateLlmReview" /><Label for="policy-llm-review">启用大模型二次审核</Label></div>
-          <div class="flex items-center gap-3"><Checkbox id="policy-dynamic-review" :checked="policy.dynamic_review_enabled" @update:checked="updateDynamicReview" /><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
-        </div>
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div class="space-y-2"><Label for="policy-llm-provider">模型协议</Label><Select v-model="policy.llm_provider"><SelectTrigger id="policy-llm-provider"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="disabled">未配置</SelectItem><SelectItem value="openai_compatible">OpenAI 兼容</SelectItem><SelectItem value="anthropic_compatible">Anthropic 兼容</SelectItem></SelectContent></Select></div>
-          <div class="space-y-2"><Label for="policy-llm-url">API 地址</Label><Input id="policy-llm-url" v-model="policy.llm_base_url" placeholder="https://api.deepseek.com" /></div>
-          <div class="space-y-2"><Label for="policy-llm-model">模型名称</Label><Input id="policy-llm-model" v-model="policy.llm_model" placeholder="deepseek-chat" /></div>
-          <div class="space-y-2"><Label for="policy-llm-timeout">模型超时（秒）</Label><Input id="policy-llm-timeout" v-model.number="policy.llm_timeout_seconds" type="number" min="5" max="120" /></div>
-        </div>
+        <div class="flex items-center gap-3"><Checkbox id="policy-dynamic-review" :checked="policy.dynamic_review_enabled" @update:checked="updateDynamicReview" /><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
         <Button :disabled="busy" @click="savePolicy">保存审核策略</Button>
       </section>
       <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_minmax(0,1.4fr)_auto] lg:items-end">
@@ -145,4 +190,5 @@ onMounted(load);
       </div>
     </CardContent>
   </Card>
+  </div>
 </template>

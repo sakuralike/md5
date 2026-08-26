@@ -24,7 +24,10 @@ from password_detective.modules.desktop_plugins.llm_review import (
     LlmReviewUnavailable,
     review_plugin,
 )
-from password_detective.modules.desktop_plugins.review_policy import get_current_review_policy
+from password_detective.modules.desktop_plugins.review_policy import (
+    get_current_review_policy,
+    get_llm_api_key,
+)
 from password_detective.modules.desktop_plugins.runner_service import (
     enqueue_dynamic_tasks,
     list_dynamic_tasks,
@@ -298,6 +301,7 @@ def process_pending_static_reviews(
                         version=version,
                         static_result=result,
                         policy=policy,
+                        api_key=get_llm_api_key(db, settings),
                     )
                     if policy.llm_review_enabled
                     else None

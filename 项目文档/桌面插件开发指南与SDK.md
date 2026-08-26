@@ -72,7 +72,7 @@ LLM 审核配置：
 | `DESKTOP_PLUGIN_LLM_REVIEW_API_KEY_FILE` | Docker Secret 文件路径；不得使用管理端表单保存密钥。 |
 | `DESKTOP_PLUGIN_LLM_REVIEW_TIMEOUT_SECONDS` | 调用超时，默认 30 秒。 |
 
-默认关闭 Windows 动态审核，作为管理员可重新开启的备选策略。静态规则通过后，LLM 只读取清单、能力、SBOM/静态审核摘要和制品摘要；不上传二进制、用户文件、令牌或服务器秘密。LLM 阻断或已配置服务调用失败会失败关闭；未配置 LLM 服务时版本仍需管理员人工审核，绝不自动发布。
+默认关闭大模型审核和 Windows 动态审核；默认路径仅执行静态规则并进入管理员人工审核。两种自动审核均可由管理员单独启用。LLM 只读取清单、能力、SBOM/静态审核摘要和制品摘要；不上传二进制、用户文件、令牌或服务器秘密。LLM 阻断或已配置服务调用失败会失败关闭，绝不自动发布。
 
 DeepSeek 使用 OpenAI 兼容模式：模型协议选择 `openai_compatible`，API 地址填写 `https://api.deepseek.com`，模型填写 `deepseek-chat`。API Key 只从服务器秘密配置读取，管理端不显示、保存或回显该值。
 

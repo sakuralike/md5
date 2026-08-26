@@ -138,6 +138,18 @@ export function savePluginReviewPolicy(
   );
 }
 
+export function savePluginReviewLlmKey(token: string, apiKey: string): Promise<void> {
+  return apiRequest(
+    "/admin/plugin-review-policy/llm-key",
+    { method: "PUT", headers: mutationHeaders(), body: JSON.stringify({ api_key: apiKey }) },
+    token,
+  );
+}
+
+export function testPluginReviewLlm(token: string): Promise<{ connected: true; provider: string; model: string }> {
+  return apiRequest("/admin/plugin-review-policy/llm-test", { method: "POST" }, token);
+}
+
 export function createPluginRunner(
   token: string,
   payload: {

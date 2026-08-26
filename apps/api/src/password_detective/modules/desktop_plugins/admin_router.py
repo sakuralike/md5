@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from password_detective.core.config import Settings, get_settings
+from password_detective.core.errors import AppError
 from password_detective.core.idempotency import (
     IdempotencyLease,
     abandon_idempotency,
@@ -17,9 +19,12 @@ from password_detective.core.idempotency import (
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
+from password_detective.modules.desktop_plugins.llm_review import review_plugin
 from password_detective.modules.desktop_plugins.review_policy import (
     get_current_review_policy,
+    get_llm_api_key,
     review_policy_response,
+    save_llm_api_key,
     save_review_policy,
 )
 from password_detective.modules.desktop_plugins.runner_service import get_review_metrics
@@ -28,6 +33,8 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReportResponse,
     PluginReportReviewRequest,
     PluginReviewDetailResponse,
+    PluginReviewLlmConnectionResponse,
+    PluginReviewLlmKeyUpdate,
     PluginReviewMetricsResponse,
     PluginReviewPolicyResponse,
     PluginReviewPolicyUpdate,
@@ -343,6 +350,8 @@ def review_plugin_report(
     except Exception:
         _abort(db, lease)
         raise
+
+
 @router.get("/metrics", response_model=PluginReviewMetricsResponse)
 def review_metrics(
     db: Annotated[Session, Depends(get_db)],
@@ -356,7 +365,7 @@ def plugin_review_policy(
     db: Annotated[Session, Depends(get_db)],
     _: Annotated[Principal, Depends(require_admin_mfa)],
 ) -> PluginReviewPolicyResponse:
-    return review_policy_response(get_current_review_policy(db))
+    return review_policy_response(db, get_current_review_policy(db))
 
 
 @policy_router.put("", response_model=PluginReviewPolicyResponse)
@@ -388,3 +397,72 @@ def update_plugin_review_policy(
     except Exception:
         _abort(db, lease)
         raise
+
+
+@policy_router.put("/llm-key", status_code=status.HTTP_204_NO_CONTENT)
+def update_plugin_review_llm_key(
+    payload: PluginReviewLlmKeyUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> None:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin_review_policy.llm_key.save",
+        idempotency_key,
+        {"api_key": "redacted"},
+    )
+    if lease.cached_response is not None:
+        return None
+    try:
+        save_llm_api_key(
+            db,
+            settings,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(
+            db,
+            lease,
+            PluginReviewLlmConnectionResponse(
+                connected=True,
+                provider="openai_compatible",
+                model="key_saved",
+            ),
+        )
+        return None
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@policy_router.post("/llm-test", response_model=PluginReviewLlmConnectionResponse)
+def test_plugin_review_llm(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+) -> PluginReviewLlmConnectionResponse:
+    policy = get_current_review_policy(db)
+    result = review_plugin(
+        settings,
+        plugin=SimpleNamespace(slug="connectivity.probe"),
+        version=SimpleNamespace(
+            semver="0.0.0",
+            manifest_json={"schema": "pd.plugin/v1"},
+            requested_capabilities=[],
+        ),
+        static_result=SimpleNamespace(summary={"blocked": False}, evidence={"findings": []}),
+        policy=policy,
+        api_key=get_llm_api_key(db, settings),
+    )
+    if result is None:
+        raise AppError("desktop_plugin.llm_not_configured", "LLM Provider 未配置", status_code=409)
+    return PluginReviewLlmConnectionResponse(
+        connected=True,
+        provider=policy.llm_provider,
+        model=policy.llm_model,
+    )

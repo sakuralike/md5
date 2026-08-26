@@ -38,12 +38,13 @@ def review_plugin(
     version: DesktopPluginVersion,
     static_result: StaticReviewResult,
     policy: PluginReviewPolicy,
+    api_key: str | None = None,
 ) -> LlmReviewResult | None:
     provider = policy.llm_provider
     if provider == "disabled":
         return None
     base_url = policy.llm_base_url.rstrip("/")
-    api_key = settings.desktop_plugin_llm_review_api_key.get_secret_value().strip()
+    api_key = api_key or settings.desktop_plugin_llm_review_api_key.get_secret_value().strip()
     model = policy.llm_model.strip()
     if not base_url or not api_key or not model:
         raise LlmReviewUnavailable("LLM 审核服务配置不完整")

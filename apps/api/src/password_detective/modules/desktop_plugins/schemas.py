@@ -451,7 +451,7 @@ class PluginReviewPolicyUpdate(BaseModel):
     revocation_refresh_hours: int = Field(default=6, ge=1, le=24)
     revocation_max_stale_hours: int = Field(default=168, ge=24, le=720)
     dynamic_review_enabled: bool = False
-    llm_review_enabled: bool = True
+    llm_review_enabled: bool = False
     llm_provider: Literal["disabled", "openai_compatible", "anthropic_compatible"] = "disabled"
     llm_base_url: str = Field(default="", max_length=2_000)
     llm_model: str = Field(default="", max_length=128)
@@ -474,6 +474,22 @@ class PluginReviewPolicyResponse(PluginReviewPolicyUpdate):
     dynamic_engine_version: str
     updated_at: datetime | None
     updated_by: str | None
+    llm_api_key_configured: bool
+
+
+class PluginReviewLlmKeyUpdate(BaseModel):
+    api_key: str = Field(min_length=12, max_length=1_024)
+
+    @field_validator("api_key")
+    @classmethod
+    def normalize_api_key(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginReviewLlmConnectionResponse(BaseModel):
+    connected: Literal[True]
+    provider: Literal["openai_compatible", "anthropic_compatible"]
+    model: str
 
 
 class PluginRunnerHeartbeatRequest(BaseModel):

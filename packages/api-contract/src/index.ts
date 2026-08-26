@@ -3208,6 +3208,8 @@ export const DESKTOP_PLUGIN_PATHS = {
   adminRunners: "/admin/plugin-review-runners",
   adminPluginReviewMetrics: "/admin/plugin-reviews/metrics",
   adminPluginReviewPolicy: "/admin/plugin-review-policy",
+  adminPluginReviewLlmKey: "/admin/plugin-review-policy/llm-key",
+  adminPluginReviewLlmTest: "/admin/plugin-review-policy/llm-test",
   runnerHeartbeat: "/plugin-runner/heartbeat",
   runnerLease: "/plugin-runner/tasks/lease",
 } as const;
@@ -3545,6 +3547,7 @@ export interface DesktopPluginReviewPolicy {
   llm_base_url: string;
   llm_model: string;
   llm_timeout_seconds: number;
+  llm_api_key_configured: boolean;
   updated_at: string | null;
   updated_by: string | null;
 }
