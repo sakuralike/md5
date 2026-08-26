@@ -29,7 +29,7 @@ services:
       retries: 20
 
   openbao:
-    image: openbao/openbao:2.2.0
+    image: ${OPENBAO_IMAGE:-openbao/openbao:2.6.2}
     command: ["server", "-config=/openbao/config/config.hcl"]
     environment:
       BAO_ADDR: http://openbao:8200
