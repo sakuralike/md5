@@ -81,7 +81,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="8,5,8,7">
+    <Grid x:Name="MainLayout" Margin="8,5,8,7">
         <Grid.RowDefinitions>
             <RowDefinition Height="144" />
             <RowDefinition Height="*" />

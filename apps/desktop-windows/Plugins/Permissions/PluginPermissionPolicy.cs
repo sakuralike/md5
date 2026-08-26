@@ -12,6 +12,7 @@ public sealed class PluginPermissionPolicy
     public static readonly IReadOnlySet<string> LocallySupportedCapabilities = new HashSet<string>(
         [
             "ui:command",
+            "ui:theme",
             "storage:private",
             "file:read:selected",
         ],

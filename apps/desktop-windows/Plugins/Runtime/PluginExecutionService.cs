@@ -4,6 +4,7 @@ using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.Theme;
 
 namespace PasswordDetective.Desktop.Plugins.Runtime;
 
@@ -35,16 +36,19 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly PluginLogStore _logs;
     private readonly PluginPrivateStorage _privateStorage;
     private readonly IPluginApiBroker? _apiBroker;
+    private readonly IPluginThemeService? _themeService;
 
     public PluginExecutionService(
         PluginStoragePaths paths,
         PluginLogStore logs,
-        IPluginApiBroker? apiBroker = null)
+        IPluginApiBroker? apiBroker = null,
+        IPluginThemeService? themeService = null)
     {
         _paths = paths;
         _logs = logs;
         _privateStorage = new PluginPrivateStorage(paths);
         _apiBroker = apiBroker;
+        _themeService = themeService;
     }
 
     public async Task ValidateAsync(
@@ -99,7 +103,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             plugin.CurrentVersion,
             plugin.GrantedCapabilities,
             _privateStorage,
-            _apiBroker);
+            _apiBroker,
+            _themeService);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

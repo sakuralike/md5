@@ -31,11 +31,13 @@ PluginCategory = Literal[
     "report-export",
     "community",
     "development",
+    "theme",
 ]
 
 PLUGIN_CAPABILITIES = frozenset(
     {
         "ui:command",
+        "ui:theme",
         "storage:private",
         "file:read:selected",
         "api:profile:read",

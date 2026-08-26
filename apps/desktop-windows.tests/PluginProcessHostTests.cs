@@ -10,6 +10,7 @@ using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Runtime;
 using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.Theme;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -338,6 +339,37 @@ public sealed class PluginProcessHostTests : IDisposable
                 JsonSerializer.SerializeToElement(new { })));
     }
 
+    [Fact]
+    public async Task HostBrokerAllowsOnlyGrantedPluginToApplyStructuredTheme()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "theme-broker-storage"));
+        var theme = new RecordingThemeService();
+        using var allowed = new PluginHostBroker(
+            "official.theme",
+            "1.0.0",
+            ["ui:theme"],
+            new PluginPrivateStorage(paths),
+            themeService: theme);
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            "1.0.0",
+            [],
+            new PluginPrivateStorage(paths),
+            themeService: theme);
+
+        var result = await allowed.HandleAsync(
+            PdppProtocol.HostUiThemeApplyMethod,
+            JsonSerializer.SerializeToElement(new { preset = "forest", background_opacity = 0.7 }));
+
+        Assert.True(result.GetProperty("applied").GetBoolean());
+        Assert.Equal("official.theme", theme.PluginId);
+        Assert.Equal("forest", theme.Parameters.GetProperty("preset").GetString());
+        var exception = await Assert.ThrowsAsync<PdppHostRequestException>(() => denied.HandleAsync(
+            PdppProtocol.HostUiThemeApplyMethod,
+            JsonSerializer.SerializeToElement(new { preset = "dark" })));
+        Assert.Equal(-32001, exception.Code);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))
@@ -477,5 +509,25 @@ public sealed class PluginProcessHostTests : IDisposable
             Capability = capability;
             return Task.FromResult(JsonSerializer.SerializeToElement(new { authorized = true }));
         }
+    }
+
+    private sealed class RecordingThemeService : IPluginThemeService
+    {
+        public string PluginId { get; private set; } = string.Empty;
+        public JsonElement Parameters { get; private set; }
+
+        public string ImportBackground(string pluginId, string sourcePath) => "a".PadRight(32, 'a');
+
+        public Task<JsonElement> ApplyAsync(
+            string pluginId,
+            JsonElement parameters,
+            CancellationToken cancellationToken = default)
+        {
+            PluginId = pluginId;
+            Parameters = parameters.Clone();
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { applied = true }));
+        }
+
+        public Task ApplyPersistedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

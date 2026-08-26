@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.Theme;
 
 namespace PasswordDetective.Desktop.Plugins.Runtime;
 
@@ -17,6 +18,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
     private readonly PluginFileBroker _files = new(maximumChunkBytes: MaximumFileChunkBytes);
     private readonly PluginPrivateStorage _storage;
     private readonly IPluginApiBroker? _apiBroker;
+    private readonly IPluginThemeService? _themeService;
     private bool _disposed;
 
     public PluginHostBroker(
@@ -24,13 +26,15 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         string pluginVersion,
         IEnumerable<string> capabilities,
         PluginPrivateStorage storage,
-        IPluginApiBroker? apiBroker = null)
+        IPluginApiBroker? apiBroker = null,
+        IPluginThemeService? themeService = null)
     {
         _pluginId = pluginId;
         _pluginVersion = pluginVersion;
         _capabilities = capabilities.ToHashSet(StringComparer.Ordinal);
         _storage = storage;
         _apiBroker = apiBroker;
+        _themeService = themeService;
     }
 
     public JsonElement PrepareCommandInput(
@@ -80,6 +84,29 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
                 throw new InvalidOperationException("v1 不向插件授予目录枚举能力。");
             }
 
+            if (format.GetString() == "theme-background")
+            {
+                EnsureCapability("ui:theme");
+                if (!input.TryGetProperty(property.Name, out var backgroundPathElement)
+                    || backgroundPathElement.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(backgroundPathElement.GetString()))
+                {
+                    output.Remove(property.Name);
+                    continue;
+                }
+
+                if (_themeService is null)
+                {
+                    throw new InvalidOperationException("当前桌面端不支持主题背景。 ");
+                }
+
+                output[property.Name] = JsonSerializer.SerializeToNode(new
+                {
+                    background_ref = _themeService.ImportBackground(_pluginId, backgroundPathElement.GetString()!),
+                });
+                continue;
+            }
+
             if (format.GetString() != "file")
             {
                 continue;
@@ -116,6 +143,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             PdppProtocol.HostApiProfileReadMethod => CallApiAsync("api:profile:read", parameters, cancellationToken),
             PdppProtocol.HostApiHashReadMethod => CallApiAsync("api:hash:read", parameters, cancellationToken),
             PdppProtocol.HostApiVerificationSubmitMethod => CallApiAsync("api:verification:submit", parameters, cancellationToken),
+            PdppProtocol.HostUiThemeApplyMethod => ApplyThemeAsync(parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -235,6 +263,18 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             capability,
             parameters,
             cancellationToken);
+    }
+
+    private Task<JsonElement> ApplyThemeAsync(JsonElement parameters, CancellationToken cancellationToken)
+    {
+        EnsureCapability("ui:theme");
+        if (_themeService is null)
+        {
+            return Task.FromException<JsonElement>(
+                new PdppHostRequestException(-32003, "主题宿主能力当前不可用。"));
+        }
+
+        return _themeService.ApplyAsync(_pluginId, parameters, cancellationToken);
     }
 
     private static string ReadStorageKey(JsonElement parameters)

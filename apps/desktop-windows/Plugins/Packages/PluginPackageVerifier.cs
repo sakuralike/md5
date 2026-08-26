@@ -365,15 +365,18 @@ public sealed class PluginPackageVerifier
             }
 
             if (format.ValueKind != JsonValueKind.String
-                || format.GetString() != "file"
+                || format.GetString() is not ("file" or "theme-background")
                 || type.GetString() != "string")
             {
                 throw new PluginPackageException("v1 命令输入只支持 file 文件格式，不授予目录枚举能力。");
             }
 
-            if (!requestedCapabilities.Contains("file:read:selected"))
+            var requiredCapability = format.GetString() == "theme-background"
+                ? "ui:theme"
+                : "file:read:selected";
+            if (!requestedCapabilities.Contains(requiredCapability))
             {
-                throw new PluginPackageException("使用文件输入的插件必须申请 file:read:selected 权限。");
+                throw new PluginPackageException($"使用 {format.GetString()} 输入的插件必须申请 {requiredCapability} 权限。");
             }
         }
     }

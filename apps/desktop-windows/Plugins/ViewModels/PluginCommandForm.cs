@@ -215,6 +215,7 @@ public sealed class PluginCommandForm
         return (type, format) switch
         {
             ("string", "file") => PluginCommandFieldKind.File,
+            ("string", "theme-background") => PluginCommandFieldKind.File,
             ("string", "directory") => PluginCommandFieldKind.Directory,
             ("string", _) => PluginCommandFieldKind.Text,
             ("integer", _) => PluginCommandFieldKind.Integer,

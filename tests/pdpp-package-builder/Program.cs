@@ -7,9 +7,9 @@ using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Security;
 using PasswordDetective.Desktop.Plugins.Packages;
 
-if (args.Length != 2 || !File.Exists(args[0]))
+if (args.Length is not (2 or 6) || !File.Exists(args[0]))
 {
-    Console.Error.WriteLine("Usage: PdppPackageBuilder <plugin.exe> <output.pdpkg>");
+    Console.Error.WriteLine("Usage: PdppPackageBuilder <plugin.exe> <output.pdpkg> [<manifest.json> <schema.json> <sbom.cdx.json> <private-key-base64>]");
     return 2;
 }
 
@@ -22,9 +22,17 @@ if (!string.Equals(Path.GetExtension(outputPath), ".pdpkg", StringComparison.Ord
 }
 
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-var privateKey = new Ed25519PrivateKeyParameters(new SecureRandom());
+var privateKey = args.Length == 6
+    ? new Ed25519PrivateKeyParameters(Convert.FromBase64String(args[5]), 0)
+    : new Ed25519PrivateKeyParameters(new SecureRandom());
 var publicKey = privateKey.GeneratePublicKey().GetEncoded();
-var manifest = new PluginManifest(
+var manifest = args.Length == 6
+    ? JsonSerializer.Deserialize<PluginManifest>(
+        File.ReadAllText(args[2])
+            .Replace("$PUBLISHER_PUBLIC_KEY", Convert.ToBase64String(publicKey), StringComparison.Ordinal)
+            .Replace("$PUBLISHER_KEY_ID", Environment.GetEnvironmentVariable("PDPP_PUBLISHER_KEY_ID") ?? string.Empty, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("Custom manifest is invalid.")
+    : new PluginManifest(
     PluginPackageVerifier.ManifestSchema,
     "com.passworddetective.synthetic-echo",
     "1.0.0",
@@ -47,11 +55,15 @@ var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
 {
     [PluginPackageVerifier.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),
     ["bin/windows-x64/plugin.exe"] = await File.ReadAllBytesAsync(executablePath),
-    ["schemas/echo.schema.json"] = Encoding.UTF8.GetBytes(
+    [args.Length == 6 ? "schemas/apply.schema.json" : "schemas/echo.schema.json"] = args.Length == 6
+        ? await File.ReadAllBytesAsync(args[3])
+        : Encoding.UTF8.GetBytes(
         """
         {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
         """),
-    ["sbom.cdx.json"] = Encoding.UTF8.GetBytes(
+    ["sbom.cdx.json"] = args.Length == 6
+        ? await File.ReadAllBytesAsync(args[4])
+        : Encoding.UTF8.GetBytes(
         """
         {"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}
         """),

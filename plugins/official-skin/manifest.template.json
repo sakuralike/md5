@@ -1,0 +1,20 @@
+{
+  "schema": "pd.plugin/v1",
+  "plugin_id": "com.passworddetective.official-skin",
+  "version": "1.0.0",
+  "display_name": "官方皮肤",
+  "description": "由密码侦探社桌面端宿主渲染的预设配色与本地背景图片皮肤。",
+  "publisher_key_id": "$PUBLISHER_KEY_ID",
+  "publisher_public_key": "$PUBLISHER_PUBLIC_KEY",
+  "protocol": { "min": 1, "max": 1 },
+  "host": { "min_version": "0.1.0", "max_version": "0.x" },
+  "runtime": {
+    "kind": "process",
+    "entrypoints": { "windows-x64": "bin/windows-x64/plugin.exe" }
+  },
+  "commands": [
+    { "id": "apply", "title": "应用皮肤", "input_schema": "schemas/apply.schema.json" }
+  ],
+  "capabilities": { "required": ["ui:command", "ui:theme"], "optional": [] },
+  "limits": { "memory_mb": 128, "cpu_percent": 25, "command_timeout_seconds": 30, "child_processes": 0 }
+}

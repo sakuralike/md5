@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["preset"],
+  "properties": {
+    "preset": {
+      "type": "string",
+      "title": "预设配色",
+      "enum": ["light", "dark", "forest", "contrast"]
+    },
+    "background": {
+      "type": "string",
+      "title": "背景图片（PNG/JPG，最大 10 MB）",
+      "format": "theme-background"
+    },
+    "clear_background": {
+      "type": "boolean",
+      "title": "清除背景图片"
+    }
+  }
+}

@@ -1,5 +1,8 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using PasswordDetective.Desktop.Plugins.Installation;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Permissions;
@@ -7,6 +10,7 @@ using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Runtime;
 using PasswordDetective.Desktop.Plugins.Safety;
 using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.Theme;
 using PasswordDetective.Desktop.Plugins.UI;
 using PasswordDetective.Desktop.Plugins.ViewModels;
 using PasswordDetective.Desktop.Services;
@@ -19,6 +23,7 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly PluginStoragePaths _pluginPaths;
     private readonly PluginSafeMode _pluginSafeMode;
+    private readonly PluginThemeService _pluginThemeService;
     private PluginMarketplaceWindow? _pluginMarketplaceWindow;
 
     public MainWindow(PluginStoragePaths pluginPaths, PluginSafeMode pluginSafeMode)
@@ -26,6 +31,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _pluginPaths = pluginPaths;
         _pluginSafeMode = pluginSafeMode;
+        _pluginThemeService = new PluginThemeService(_pluginPaths.RootDirectory, ApplyThemeAsync);
         _viewModel = new MainWindowViewModel(
             new FileFingerprintService(),
             new ArchiveVerificationService(),
@@ -34,6 +40,7 @@ public partial class MainWindow : Window
             new ProtectedSessionStore(),
             new ExternalUriLauncher());
         DataContext = _viewModel;
+        Loaded += async (_, _) => await _pluginThemeService.ApplyPersistedAsync();
     }
 
     private void OpenPluginMarketplace_OnClick(object sender, RoutedEventArgs eventArgs)
@@ -64,7 +71,11 @@ public partial class MainWindow : Window
                     session.AccessToken,
                     session.AccountId);
             });
-        var execution = new PluginExecutionService(_pluginPaths, logs, pluginApiBroker);
+        var execution = new PluginExecutionService(
+            _pluginPaths,
+            logs,
+            pluginApiBroker,
+            _pluginThemeService);
         var installer = new PluginInstaller(
             _pluginPaths,
             new PluginPackageVerifier(),
@@ -110,5 +121,44 @@ public partial class MainWindow : Window
         {
             _viewModel.AcceptFile(files[0]);
         }
+    }
+
+    private Task ApplyThemeAsync(PluginThemeSettings settings, CancellationToken cancellationToken)
+    {
+        return Dispatcher.InvokeAsync(() =>
+        {
+            var background = new SolidColorBrush(settings.Preset switch
+            {
+                "dark" => Color.FromRgb(38, 45, 52),
+                "forest" => Color.FromRgb(38, 81, 61),
+                "contrast" => Color.FromRgb(0, 0, 0),
+                _ => Color.FromRgb(240, 240, 240),
+            });
+            Background = background;
+            if (string.IsNullOrWhiteSpace(settings.BackgroundFileName))
+            {
+                MainLayout.Background = null;
+                return;
+            }
+
+            var path = Path.Combine(_pluginPaths.RootDirectory, "theme-backgrounds", settings.BackgroundFileName);
+            if (!File.Exists(path))
+            {
+                MainLayout.Background = null;
+                return;
+            }
+
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new System.Uri(path, System.UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+            MainLayout.Background = new ImageBrush(image)
+            {
+                Stretch = Stretch.UniformToFill,
+                Opacity = settings.BackgroundOpacity,
+            };
+        }, System.Windows.Threading.DispatcherPriority.Normal, cancellationToken).Task;
     }
 }

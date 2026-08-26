@@ -26,7 +26,8 @@
             "host/storage/set",
             "host/api/profile/read",
             "host/api/hash/read",
-            "host/api/verification/submit"
+            "host/api/verification/submit",
+            "host/ui/theme/apply"
           ]
         },
         "params": { "type": "object" }
@@ -71,6 +72,10 @@
         {
           "if": { "properties": { "method": { "const": "host/api/verification/submit" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/verificationSubmitParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/ui/theme/apply" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/themeApplyParams" } } }
         }
       ]
     },
@@ -155,6 +160,17 @@
         "candidate_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "outcome": { "enum": ["success", "failure"] },
         "archive_format": { "enum": ["zip", "7z"] }
+      }
+    },
+    "themeApplyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preset"],
+      "properties": {
+        "preset": { "enum": ["light", "dark", "forest", "contrast"] },
+        "background_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "background_opacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
+        "clear_background": { "type": "boolean" }
       }
     },
     "successResponse": {
