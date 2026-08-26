@@ -523,6 +523,7 @@ def _version_response(db: Session, version: DesktopPluginVersion) -> PluginVersi
         updated_at=version.updated_at,
         finalized_at=version.finalized_at,
         published_at=version.published_at,
+        remediation_deadline_at=version.remediation_deadline_at,
         artifacts=[_artifact_response(artifact) for artifact in artifacts],
     )
 
@@ -1913,6 +1914,7 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
             for event in events
         ],
         review_runs=list_review_runs(db, version_id=version.id, developer_visible_only=False),
+        remediation_deadline_at=version.remediation_deadline_at,
     )
 
 
@@ -1929,7 +1931,14 @@ def get_review_source(
             DesktopPluginArtifact.storage_key.is_not(None),
         )
     )
-    if artifact is None or artifact.storage_key is None:
+    storage_key = (
+        artifact.public_storage_key
+        if artifact is not None and artifact.public_storage_key
+        else artifact.storage_key
+        if artifact is not None
+        else None
+    )
+    if artifact is None or storage_key is None:
         raise AppError("desktop_plugin.source_not_found", "插件源码制品不存在", status_code=404)
     allowed = {
         ".cs",
@@ -1946,9 +1955,13 @@ def get_review_source(
         ".yml",
     }
     files = []
-    with zipfile.ZipFile(
-        DesktopPluginStorage(settings).quarantine_path(artifact.storage_key)
-    ) as archive:
+    storage = DesktopPluginStorage(settings)
+    package_path = (
+        storage.public_path(storage_key)
+        if artifact.public_storage_key
+        else storage.quarantine_path(storage_key)
+    )
+    with zipfile.ZipFile(package_path) as archive:
         for entry in archive.infolist():
             path = entry.filename.rstrip("/")
             if (
@@ -2109,6 +2122,7 @@ def reject_version(
             "desktop_plugin.version_not_rejectable", "插件版本不处于人工审核状态", status_code=409
         )
     version.status = DesktopPluginVersionStatus.REJECTED
+    version.remediation_deadline_at = utc_now() + timedelta(days=payload.remediation_days)
     version.reviewer_user_id = principal.user.id
     version.review_policy_version = "manual-review-v1"
     version.version += 1
@@ -2239,6 +2253,7 @@ def yank_version(
         publication.yanked_at = utc_now()
         publication.yanked_by_user_id = principal.user.id
     version.status = DesktopPluginVersionStatus.YANKED
+    version.remediation_deadline_at = utc_now() + timedelta(days=payload.remediation_days)
     version.yanked_at = utc_now()
     version.version += 1
     for artifact in db.scalars(
@@ -2347,6 +2362,45 @@ def revoke_version(
     )
     db.commit()
     return get_review_detail(db, version_id=version.id)
+
+
+def delete_version(
+    db: Session,
+    *,
+    version_id: str,
+    principal: Principal,
+    context: ClientContext,
+) -> None:
+    _, version = _admin_version(db, version_id=version_id, lock=True)
+    db.delete(version)
+    _write_audit(
+        db,
+        action="desktop_plugin.version.deleted",
+        target_type="desktop_plugin_version",
+        target_id=version_id,
+        actor_id=principal.user.id,
+        context=context,
+        details={},
+    )
+    db.commit()
+
+
+def delete_due_remediation_versions(db: Session) -> int:
+    now = utc_now()
+    versions = list(
+        db.scalars(
+            select(DesktopPluginVersion).where(
+                DesktopPluginVersion.remediation_deadline_at.is_not(None),
+                DesktopPluginVersion.remediation_deadline_at <= now,
+                DesktopPluginVersion.status.in_((DesktopPluginVersionStatus.REJECTED, DesktopPluginVersionStatus.YANKED)),
+            )
+        ).all()
+    )
+    for version in versions:
+        db.delete(version)
+    if versions:
+        db.commit()
+    return len(versions)
 
 
 def create_report(

@@ -51,16 +51,16 @@ export function approvePluginVersion(
   });
 }
 
-export function rejectPluginVersion(token: string, detail: DesktopPluginReviewDetail, reviewNote: string) {
-  return mutateVersion(token, detail.version_id, "reject", { version: detail.version, review_note: reviewNote });
+export function rejectPluginVersion(token: string, detail: DesktopPluginReviewDetail, reviewNote: string, remediationDays = 7) {
+  return mutateVersion(token, detail.version_id, "reject", { version: detail.version, review_note: reviewNote, remediation_days: remediationDays });
 }
 
 export function publishPluginVersion(token: string, detail: DesktopPluginReviewDetail) {
   return mutateVersion(token, detail.version_id, "publish", { version: detail.version, channel: "stable" });
 }
 
-export function yankPluginVersion(token: string, detail: DesktopPluginReviewDetail, reason: string) {
-  return mutateVersion(token, detail.version_id, "yank", { version: detail.version, reason });
+export function yankPluginVersion(token: string, detail: DesktopPluginReviewDetail, reason: string, remediationDays = 7) {
+  return mutateVersion(token, detail.version_id, "yank", { version: detail.version, reason, remediation_days: remediationDays });
 }
 
 export function revokePluginVersion(token: string, detail: DesktopPluginReviewDetail, reason: string) {
@@ -140,6 +140,14 @@ export function savePluginReviewPolicy(
 
 export function getPluginReviewSource(token: string, versionId: string): Promise<{ files: Array<{ path: string; content: string; truncated: boolean }> }> {
   return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source`, {}, token);
+}
+
+export function reviewPluginSourceWithLlm(token: string, versionId: string): Promise<{ verdict: string; risk_level: string; summary: string }> {
+  return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source/llm-review`, { method: "POST" }, token);
+}
+
+export function deletePluginVersion(token: string, versionId: string): Promise<void> {
+  return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}`, { method: "DELETE", headers: mutationHeaders() }, token);
 }
 
 export function savePluginReviewLlmKey(token: string, apiKey: string): Promise<void> {

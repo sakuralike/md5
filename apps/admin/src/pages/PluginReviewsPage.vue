@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import type { DesktopPluginCapability, DesktopPluginReport, DesktopPluginReviewDetail, DesktopPluginReviewMetrics, DesktopPluginReviewQueueItem } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import PluginRunnerManagement from "../components/PluginRunnerManagement.vue";
-import { approvePluginVersion, getPluginReview, getPluginReviewMetrics, getPluginReviewSource, listPluginReports, listPluginReviews, publishPluginVersion, rejectPluginVersion, resolvePluginReport, revokePluginVersion, rerunPluginStaticReview, yankPluginVersion } from "../services/pluginReviews";
+import { approvePluginVersion, deletePluginVersion, getPluginReview, getPluginReviewMetrics, listPluginReports, listPluginReviews, publishPluginVersion, rejectPluginVersion, resolvePluginReport, revokePluginVersion, rerunPluginStaticReview, yankPluginVersion } from "../services/pluginReviews";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
+const router = useRouter();
 const queue = ref<DesktopPluginReviewQueueItem[]>([]);
 const reports = ref<DesktopPluginReport[]>([]);
 const metrics = ref<DesktopPluginReviewMetrics | null>(null);
@@ -22,6 +25,7 @@ const note = ref("按人工审核策略检查通过。");
 const error = ref("");
 const success = ref("");
 const busy = ref(false);
+const remediationDays = ref(7);
 const canApprove = computed(() => selected.value?.status === "manual_review_ready");
 
 function statusLabel(status: string): string {
@@ -42,11 +46,7 @@ async function load(): Promise<void> {
 
 async function selectReview(item: DesktopPluginReviewQueueItem): Promise<void> {
   selected.value = await getPluginReview(auth.accessToken, item.version_id);
-  try {
-    sourceFiles.value = (await getPluginReviewSource(auth.accessToken, item.version_id)).files;
-  } catch {
-    sourceFiles.value = [];
-  }
+  sourceFiles.value = [];
   approvedCapabilities.value = [...selected.value.requested_capabilities];
 }
 
@@ -65,16 +65,31 @@ async function run(action: "approve" | "reject" | "publish" | "yank" | "revoke")
     selected.value = action === "approve"
       ? await approvePluginVersion(auth.accessToken, current, approvedCapabilities.value, note.value)
       : action === "reject"
-        ? await rejectPluginVersion(auth.accessToken, current, note.value)
+        ? await rejectPluginVersion(auth.accessToken, current, note.value, remediationDays.value)
         : action === "publish"
           ? await publishPluginVersion(auth.accessToken, current)
           : action === "yank"
-            ? await yankPluginVersion(auth.accessToken, current, note.value)
+            ? await yankPluginVersion(auth.accessToken, current, note.value, remediationDays.value)
             : await revokePluginVersion(auth.accessToken, current, note.value);
     success.value = "插件审核状态已更新。";
     await load();
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "插件审核操作失败";
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function removeSelected(): Promise<void> {
+  if (!selected.value) return;
+  busy.value = true;
+  try {
+    await deletePluginVersion(auth.accessToken, selected.value.version_id);
+    selected.value = null;
+    await load();
+    success.value = "插件版本已删除。";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "插件删除失败";
   } finally {
     busy.value = false;
   }
@@ -110,9 +125,9 @@ onMounted(load);
 
 <template>
   <section class="space-y-6 pt-16 lg:pt-0">
-    <Button v-if="selected && ['auto_review_failed','review_queued'].includes(selected.status)" size="sm" variant="outline" :disabled="busy" @click="rerun">重新执行自动审核</Button>
+    <div class="flex flex-wrap gap-2"><Button v-if="selected && ['auto_review_failed','review_queued'].includes(selected.status)" size="sm" variant="outline" :disabled="busy" @click="rerun">重新执行自动审核</Button><Button v-if="selected" size="sm" variant="destructive" :disabled="busy" @click="removeSelected">删除插件版本</Button><Button v-if="selected" size="sm" variant="outline" @click="router.push(`/plugin-reviews/${selected.version_id}/source`)">打开源码审查</Button></div>
     <header class="space-y-2"><p class="text-xs font-semibold text-primary">PLUGIN MARKETPLACE</p><h1 class="text-3xl font-semibold">插件商城管理</h1><p class="text-sm text-muted-foreground">审核权限差异、签名摘要、版本历史、发布状态与用户举报。</p></header>
-    <div v-if="error" class="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"><strong class="block">操作未完成</strong><p class="mt-1">{{ error }}</p></div>
+    <div v-if="error" class="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"><strong class="block">操作未完成</strong><p class="mt-1">{{ error }}</p></div><div v-if="selected" class="flex items-center gap-3 text-sm"><Label for="remediation-days">整改时间（天）</Label><Input id="remediation-days" v-model.number="remediationDays" type="number" min="1" max="30" class="h-10 w-24" /></div>
     <div v-if="success" class="rounded-md border border-primary/40 bg-primary/10 p-4 text-sm"><strong class="block">操作成功</strong><p class="mt-1 text-muted-foreground">{{ success }}</p></div>
     <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.4fr)]">
       <Card><CardHeader><CardTitle>审核队列</CardTitle><CardDescription>选择版本查看完整审核事实。</CardDescription></CardHeader><CardContent class="space-y-3"><Button v-for="item in queue" :key="item.version_id" variant="outline" class="h-auto w-full justify-between p-4 text-left" @click="selectReview(item)"><span><strong class="block">{{ item.plugin_name }} {{ item.semver }}</strong><small class="text-muted-foreground">{{ item.plugin_slug }}</small></span><Badge>{{ statusLabel(item.status) }}</Badge></Button><p v-if="queue.length === 0" class="text-sm text-muted-foreground">暂无待审核插件版本。</p></CardContent></Card>

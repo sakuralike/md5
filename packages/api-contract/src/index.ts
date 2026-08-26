@@ -3255,6 +3255,7 @@ export interface DesktopPluginVersion {
   updated_at: string;
   finalized_at: string | null;
   published_at: string | null;
+  remediation_deadline_at: string | null;
   artifacts: DesktopPluginArtifact[];
 }
 
@@ -3565,6 +3566,7 @@ export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem 
   artifacts: DesktopPluginArtifact[];
   events: DesktopPluginReviewEvent[];
   review_runs: DesktopPluginStaticReviewRun[];
+  remediation_deadline_at: string | null;
 }
 
 export interface DesktopPluginReviewQueueResponse {

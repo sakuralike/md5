@@ -76,7 +76,10 @@ export async function apiRequest<T>(
       const refreshedToken = await refreshAccessToken();
       if (refreshedToken) {
         response = await sendRequest(path, options, refreshedToken);
-        if (response.ok) return (await response.json()) as T;
+        if (response.ok) {
+          if (response.status === 204) return undefined as T;
+          return (await response.json()) as T;
+        }
         throw new ApiError(response.status, await readApiError(response));
       }
     }

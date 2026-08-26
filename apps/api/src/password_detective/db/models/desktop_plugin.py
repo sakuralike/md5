@@ -282,6 +282,7 @@ class DesktopPluginVersion(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     yanked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remediation_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class DesktopPluginArtifact(Base):

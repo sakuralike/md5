@@ -18,6 +18,7 @@ import RewardOrdersPage from "../pages/RewardOrdersPage.vue";
 import RegistrationSettingsPage from "../pages/RegistrationSettingsPage.vue";
 import RoleChangesPage from "../pages/RoleChangesPage.vue";
 import PluginReviewsPage from "../pages/PluginReviewsPage.vue";
+import PluginSourceReviewPage from "../pages/PluginSourceReviewPage.vue";
 import SystemSettingsPage from "../pages/SystemSettingsPage.vue";
 import TotpSetupPage from "../pages/TotpSetupPage.vue";
 import TrustCasesPage from "../pages/TrustCasesPage.vue";
@@ -47,6 +48,7 @@ const router = createRouter({
     { path: "/trust-cases", component: TrustCasesPage, meta: { requiresAdmin: true } },
     { path: "/third-party-apps", component: ThirdPartyAppsPage, meta: { requiresAdmin: true } },
     { path: "/plugin-reviews", component: PluginReviewsPage, meta: { requiresAdmin: true } },
+    { path: "/plugin-reviews/:versionId/source", component: PluginSourceReviewPage, meta: { requiresAdmin: true } },
     { path: "/community", component: CommunityModerationPage, meta: { requiresAdmin: true } },
     { path: "/community/settings", component: CommunityConfigurationPage, meta: { requiresAdmin: true } },
     { path: "/community/notifications", component: CommunityNotificationOutboxPage, meta: { requiresAdmin: true } },

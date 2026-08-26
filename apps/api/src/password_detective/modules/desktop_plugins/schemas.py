@@ -278,6 +278,7 @@ class PluginVersionApproveRequest(BaseModel):
 class PluginVersionRejectRequest(BaseModel):
     version: int = Field(ge=1)
     review_note: str = Field(min_length=1, max_length=2_000)
+    remediation_days: int = Field(default=7, ge=1, le=30)
 
     @field_validator("review_note")
     @classmethod
@@ -301,6 +302,7 @@ class PluginVersionPublishRequest(BaseModel):
 class PluginVersionYankRequest(BaseModel):
     version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=2_000)
+    remediation_days: int = Field(default=7, ge=1, le=30)
 
     @field_validator("reason")
     @classmethod
@@ -649,6 +651,7 @@ class PluginReviewDetailResponse(PluginReviewQueueItem):
     artifacts: list[PluginArtifactResponse]
     events: list[PluginReviewEventResponse]
     review_runs: list[PluginStaticReviewRunResponse]
+    remediation_deadline_at: datetime | None = None
 
 
 class PluginReportCreateRequest(BaseModel):
@@ -722,6 +725,7 @@ class PluginVersionResponse(BaseModel):
     updated_at: datetime
     finalized_at: datetime | None
     published_at: datetime | None
+    remediation_deadline_at: datetime | None = None
     artifacts: list[PluginArtifactResponse] = Field(default_factory=list)
 
 

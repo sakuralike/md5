@@ -22,6 +22,7 @@ const llmApiKey = ref("");
 const llmConnection = ref("");
 const error = ref("");
 const busy = ref(false);
+const saved = ref("");
 
 async function load(): Promise<void> {
   try {
@@ -42,8 +43,29 @@ async function savePolicy(): Promise<void> {
   error.value = "";
   try {
     policy.value = await savePluginReviewPolicy(auth.accessToken, policy.value);
+    saved.value = "审核策略已保存";
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "审核策略保存失败";
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function saveLlmConfig(): Promise<void> {
+  if (!policy.value) return;
+  busy.value = true;
+  error.value = "";
+  saved.value = "";
+  try {
+    policy.value = await savePluginReviewPolicy(auth.accessToken, policy.value);
+    if (llmApiKey.value.trim()) {
+      await savePluginReviewLlmKey(auth.accessToken, llmApiKey.value.trim());
+      llmApiKey.value = "";
+    }
+    await load();
+    saved.value = "大模型配置已保存";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "大模型配置保存失败";
   } finally {
     busy.value = false;
   }
@@ -143,7 +165,8 @@ onMounted(load);
         <Button variant="outline" :disabled="busy || !policy.llm_api_key_configured" @click="testLlmConnection">测试模型连接</Button>
       </div>
       <p v-if="llmConnection" class="text-xs text-muted-foreground">连接成功：{{ llmConnection }}</p>
-      <Button :disabled="busy" @click="savePolicy">保存大模型配置</Button>
+      <Button :disabled="busy" @click="saveLlmConfig">保存大模型配置</Button>
+      <p v-if="saved" class="text-xs text-muted-foreground">{{ saved }}</p>
     </CardContent>
   </Card>
   <Card>

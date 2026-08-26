@@ -20,6 +20,7 @@ from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
 from password_detective.modules.desktop_plugins.llm_review import review_plugin
+from password_detective.modules.desktop_plugins.static_review import StaticReviewResult
 from password_detective.modules.desktop_plugins.review_policy import (
     get_current_review_policy,
     get_llm_api_key,
@@ -48,6 +49,7 @@ from password_detective.modules.desktop_plugins.schemas import (
 )
 from password_detective.modules.desktop_plugins.service import (
     approve_version,
+    delete_version,
     get_review_detail,
     get_review_source,
     list_reports,
@@ -58,6 +60,7 @@ from password_detective.modules.desktop_plugins.service import (
     review_report,
     revoke_version,
     yank_version,
+    _admin_version,
 )
 
 router = APIRouter(prefix="/admin/plugin-reviews", tags=["管理端·插件审核"])
@@ -118,6 +121,31 @@ def review_source(
     _: Annotated[Principal, Depends(require_admin_mfa)],
 ) -> dict:
     return get_review_source(db, settings, version_id=version_id)
+
+
+@router.post("/versions/{version_id}/source/llm-review")
+def review_plugin_source_with_llm(
+    version_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+) -> dict:
+    plugin, version = _admin_version(db, version_id=version_id)
+    source = get_review_source(db, settings, version_id=version_id)
+    result = review_plugin(
+        settings,
+        plugin=plugin,
+        version=version,
+        static_result=StaticReviewResult(
+            findings=(),
+            summary={"source_files": len(source["files"])},
+            evidence={"findings": [{"path": item["path"], "content": item["content"]} for item in source["files"]]},
+        ),
+        policy=get_current_review_policy(db),
+    )
+    if result is None:
+        raise AppError("desktop_plugin.llm_review_disabled", "大模型审核未启用", status_code=409)
+    return {"verdict": result.verdict, "risk_level": result.risk_level, "summary": result.summary}
 
 
 @router.post("/versions/{version_id}/approve", response_model=PluginReviewDetailResponse)
@@ -320,6 +348,21 @@ def revoke_plugin_version(
     except Exception:
         _abort(db, lease)
         raise
+
+
+@router.delete("/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_plugin_version(
+    version_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+) -> None:
+    delete_version(
+        db,
+        version_id=version_id,
+        principal=principal,
+        context=get_client_context(request),
+    )
 
 
 @router.get("/reports", response_model=PluginReportListResponse)
