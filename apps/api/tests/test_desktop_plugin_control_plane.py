@@ -210,6 +210,31 @@ def _create_version(
     return response.json()
 
 
+def test_developer_signing_key_can_be_generated_server_side(client):
+    headers, _ = _register_verified(client, "generated_key")
+    response = client.post(
+        "/api/v1/developer/plugins/signing-keys",
+        headers={**headers, "Idempotency-Key": f"generated-key-{uuid4().hex}"},
+        json={"reauth_token": _reauthenticate(client, headers)},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["key_id"].startswith("generated-ed25519-")
+    assert len(base64.b64decode(body["public_key_base64"], validate=True)) == 32
+    private_key = Ed25519PrivateKey.from_private_bytes(
+        base64.b64decode(body["private_key_base64"], validate=True)
+    )
+    assert base64.b64encode(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode() == body["public_key_base64"]
+    listed = client.get("/api/v1/developer/plugins/signing-keys", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["private_key_base64"] is None
+
+
 def _upload(client, headers: dict[str, str], version_id: str, package: bytes) -> None:
     session = client.post(
         f"/api/v1/developer/plugin-versions/{version_id}/upload-session",

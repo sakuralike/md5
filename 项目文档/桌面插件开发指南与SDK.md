@@ -55,6 +55,17 @@ SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHo
 
 平台发布签章支持自建 OpenBao Transit。部署 `infra/openbao/config.hcl` 后运行 `infra/openbao/init-transit.sh` 创建不可导出的 Ed25519 Transit 密钥；API 仅持有受限 Transit Token，通过 `/v1/transit/sign/<key>` 请求签名，不读取私钥。生产环境应将 OpenBao 数据目录单独备份并启用 TLS 或内网 mTLS。
 
+后端配置项：
+
+| 环境变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `DESKTOP_PLUGIN_SIGNING_BACKEND` | 是 | `openbao_transit` 启用 Transit；`derived` 仅用于本地开发。 |
+| `DESKTOP_PLUGIN_SIGNING_URL` | 是 | API 容器访问的 OpenBao 地址，例如 `http://openbao:8200`。 |
+| `DESKTOP_PLUGIN_SIGNING_TOKEN_FILE` | 是 | 指向 Docker Secret 文件；Token 只授予目标 Transit key 的 `sign` 和 `read`。 |
+| `DESKTOP_PLUGIN_SIGNING_KEY` | 是 | Transit 密钥名，默认 `password-detective-plugin-platform`。 |
+
+OpenBao 服务建议使用文件存储卷、单独网络、不可导出 Ed25519 key、短期周期 Token 和审计设备。不要把 root token、解封密钥或签名 Token 写入 Git、普通 API 日志或镜像层。管理员插件审核、批准、发布、下架、撤销和策略管理均要求管理员 MFA；Runner 注册和撤销额外要求纯管理员角色。
+
 ```powershell
 $env:PDPP_PUBLISHER_KEY_ID = "official-skin-key"
 $env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64 = "<secure-build-secret>"

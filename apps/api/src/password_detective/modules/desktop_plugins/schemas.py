@@ -170,15 +170,15 @@ class PluginProjectUpdateRequest(BaseModel):
 
 
 class SigningKeyCreateRequest(BaseModel):
-    key_id: str = Field(min_length=3, max_length=128)
-    public_key_base64: str = Field(min_length=40, max_length=128)
+    key_id: str | None = Field(default=None, min_length=3, max_length=128)
+    public_key_base64: str | None = Field(default=None, min_length=40, max_length=128)
     reauth_token: str = Field(min_length=32, max_length=256)
     rotated_from_id: str | None = Field(default=None, min_length=36, max_length=36)
 
     @field_validator("key_id", "public_key_base64", "reauth_token")
     @classmethod
-    def strip_values(cls, value: str) -> str:
-        return _strip(value)
+    def strip_values(cls, value: str | None) -> str | None:
+        return _strip(value) if value is not None else None
 
 
 class SigningKeyRevokeRequest(BaseModel):
@@ -196,6 +196,7 @@ class SigningKeyResponse(BaseModel):
     rotated_from_id: str | None
     created_at: datetime
     revoked_at: datetime | None
+    private_key_base64: str | None = None
 
 
 class SigningKeyListResponse(BaseModel):

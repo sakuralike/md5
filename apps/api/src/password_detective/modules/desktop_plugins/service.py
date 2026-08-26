@@ -663,7 +663,26 @@ def register_signing_key(
     context: ClientContext,
 ) -> SigningKeyResponse:
     _require_verified(principal)
-    _, fingerprint = _decode_public_key(payload.public_key_base64)
+    generated_private_key: Ed25519PrivateKey | None = None
+    if payload.public_key_base64 is None:
+        generated_private_key = Ed25519PrivateKey.generate()
+        raw_public_key = generated_private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+        public_key_base64 = base64.b64encode(raw_public_key).decode("ascii")
+        fingerprint = hashlib.sha256(raw_public_key).hexdigest()
+        key_id = payload.key_id or f"generated-ed25519-{fingerprint[:16]}"
+    else:
+        if payload.key_id is None:
+            raise AppError(
+                "desktop_plugin.signing_key_id_required",
+                "手动登记公钥时必须提供密钥 ID",
+                status_code=422,
+            )
+        _, fingerprint = _decode_public_key(payload.public_key_base64)
+        public_key_base64 = payload.public_key_base64
+        key_id = payload.key_id
     rotated_from: DesktopPluginSigningKey | None = None
     if payload.rotated_from_id is not None:
         rotated_from = db.scalar(
@@ -689,7 +708,7 @@ def register_signing_key(
     if db.scalar(
         select(DesktopPluginSigningKey.id).where(
             or_(
-                DesktopPluginSigningKey.key_id == payload.key_id,
+                DesktopPluginSigningKey.key_id == key_id,
                 DesktopPluginSigningKey.fingerprint == fingerprint,
             )
         )
@@ -704,8 +723,8 @@ def register_signing_key(
     )
     key = DesktopPluginSigningKey(
         owner_user_id=principal.user.id,
-        key_id=payload.key_id,
-        public_key_base64=payload.public_key_base64,
+        key_id=key_id,
+        public_key_base64=public_key_base64,
         fingerprint=fingerprint,
     )
     if rotated_from is not None:
@@ -719,11 +738,24 @@ def register_signing_key(
         target_id=key.id,
         actor_id=principal.user.id,
         context=context,
-        details={"key_id": key.key_id, "fingerprint": fingerprint},
+        details={"key_id": key.key_id, "fingerprint": fingerprint, "generated": generated_private_key is not None},
     )
     db.commit()
     db.refresh(key)
-    return SigningKeyResponse.model_validate(key)
+    response = SigningKeyResponse.model_validate(key)
+    if generated_private_key is not None:
+        response = response.model_copy(
+            update={
+                "private_key_base64": base64.b64encode(
+                    generated_private_key.private_bytes(
+                        serialization.Encoding.Raw,
+                        serialization.PrivateFormat.Raw,
+                        serialization.NoEncryption(),
+                    )
+                ).decode("ascii")
+            }
+        )
+    return response
 
 
 def list_signing_keys(db: Session, *, principal: Principal) -> SigningKeyListResponse:
