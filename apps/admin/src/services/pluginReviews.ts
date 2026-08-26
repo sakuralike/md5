@@ -158,6 +158,14 @@ export function savePluginReviewLlmKey(token: string, apiKey: string): Promise<v
   );
 }
 
+export function savePluginReviewLlmEnabled(token: string, enabled: boolean): Promise<DesktopPluginReviewPolicy> {
+  return apiRequest(
+    "/admin/plugin-review-policy/llm-enabled",
+    { method: "PUT", headers: mutationHeaders(), body: JSON.stringify({ enabled }) },
+    token,
+  );
+}
+
 export function testPluginReviewLlm(token: string): Promise<{ connected: true; provider: string; model: string }> {
   return apiRequest("/admin/plugin-review-policy/llm-test", { method: "POST" }, token);
 }

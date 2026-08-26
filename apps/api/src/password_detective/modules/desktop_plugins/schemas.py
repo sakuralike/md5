@@ -488,6 +488,10 @@ class PluginReviewLlmKeyUpdate(BaseModel):
         return _strip(value)
 
 
+class PluginReviewLlmEnabledUpdate(BaseModel):
+    enabled: bool
+
+
 class PluginReviewLlmConnectionResponse(BaseModel):
     connected: Literal[True]
     provider: Literal["openai_compatible", "anthropic_compatible"]

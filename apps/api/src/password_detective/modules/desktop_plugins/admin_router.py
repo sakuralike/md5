@@ -27,6 +27,7 @@ from password_detective.modules.desktop_plugins.review_policy import (
     get_llm_api_key,
     review_policy_response,
     save_llm_api_key,
+    save_llm_review_enabled,
     save_review_policy,
 )
 from password_detective.modules.desktop_plugins.runner_service import get_review_metrics
@@ -36,6 +37,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReportReviewRequest,
     PluginReviewDetailResponse,
     PluginReviewLlmConnectionResponse,
+    PluginReviewLlmEnabledUpdate,
     PluginReviewLlmKeyUpdate,
     PluginReviewMetricsResponse,
     PluginReviewPolicyResponse,
@@ -495,6 +497,37 @@ def update_plugin_review_llm_key(
             ),
         )
         return None
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@policy_router.put("/llm-enabled", response_model=PluginReviewPolicyResponse)
+def update_plugin_review_llm_enabled(
+    payload: PluginReviewLlmEnabledUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewPolicyResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin_review_policy.llm_enabled.save",
+        idempotency_key,
+        payload.model_dump(mode="json"),
+    )
+    if lease.cached_response is not None:
+        return PluginReviewPolicyResponse.model_validate(lease.cached_response)
+    try:
+        response = save_llm_review_enabled(
+            db,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
     except Exception:
         _abort(db, lease)
         raise

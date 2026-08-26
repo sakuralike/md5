@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewLlmKey, savePluginReviewPolicy, testPluginReviewLlm } from "../services/pluginReviews";
+import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewLlmEnabled, savePluginReviewLlmKey, savePluginReviewPolicy, testPluginReviewLlm } from "../services/pluginReviews";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
@@ -79,7 +79,17 @@ function updateDynamicReview(checked: boolean | "indeterminate"): void {
 async function updateLlmReview(checked: boolean | "indeterminate"): Promise<void> {
   if (!policy.value) return;
   policy.value.llm_review_enabled = checked === true;
-  await saveLlmConfig();
+  busy.value = true;
+  error.value = "";
+  try {
+    policy.value = await savePluginReviewLlmEnabled(auth.accessToken, policy.value.llm_review_enabled);
+    saved.value = "大模型审核开关已保存";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "大模型审核开关保存失败";
+    await load();
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function saveLlmKey(): Promise<void> {
