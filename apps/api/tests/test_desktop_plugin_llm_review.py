@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from password_detective.core.config import Settings
 from password_detective.modules.desktop_plugins import llm_review
+from password_detective.modules.desktop_plugins.review_policy import PluginReviewPolicy
 
 
 def _arguments(provider: str) -> tuple[Settings, SimpleNamespace, SimpleNamespace, SimpleNamespace]:
@@ -49,6 +50,11 @@ def test_openai_compatible_llm_review_uses_chat_completions(monkeypatch) -> None
         plugin=plugin,
         version=version,
         static_result=review,
+        policy=PluginReviewPolicy(
+            llm_provider="openai_compatible",
+            llm_base_url="https://llm.synthetic.example",
+            llm_model="synthetic-model",
+        ),
     )
 
     assert result is not None and result.verdict == "pass"
@@ -83,6 +89,11 @@ def test_anthropic_compatible_llm_review_uses_messages(monkeypatch) -> None:
         plugin=plugin,
         version=version,
         static_result=review,
+        policy=PluginReviewPolicy(
+            llm_provider="anthropic_compatible",
+            llm_base_url="https://llm.synthetic.example",
+            llm_model="synthetic-model",
+        ),
     )
 
     assert result is not None and result.verdict == "needs_manual_review"

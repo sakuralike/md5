@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from password_detective.core.config import Settings
 from password_detective.db.models.desktop_plugin import DesktopPlugin, DesktopPluginVersion
+from password_detective.modules.desktop_plugins.review_policy import PluginReviewPolicy
 from password_detective.modules.desktop_plugins.static_review import StaticReviewResult
 
 
@@ -36,13 +37,14 @@ def review_plugin(
     plugin: DesktopPlugin,
     version: DesktopPluginVersion,
     static_result: StaticReviewResult,
+    policy: PluginReviewPolicy,
 ) -> LlmReviewResult | None:
-    provider = settings.desktop_plugin_llm_review_provider
+    provider = policy.llm_provider
     if provider == "disabled":
         return None
-    base_url = settings.desktop_plugin_llm_review_base_url.rstrip("/")
+    base_url = policy.llm_base_url.rstrip("/")
     api_key = settings.desktop_plugin_llm_review_api_key.get_secret_value().strip()
-    model = settings.desktop_plugin_llm_review_model.strip()
+    model = policy.llm_model.strip()
     if not base_url or not api_key or not model:
         raise LlmReviewUnavailable("LLM 审核服务配置不完整")
     payload = {
@@ -68,7 +70,7 @@ def review_plugin(
             ],
         }
         response_text = _post(
-            url, headers, body, settings.desktop_plugin_llm_review_timeout_seconds
+            url, headers, body, policy.llm_timeout_seconds
         )
         result_text = json.loads(response_text)["choices"][0]["message"]["content"]
     else:
@@ -86,7 +88,7 @@ def review_plugin(
             "messages": [{"role": "user", "content": content}],
         }
         response_text = _post(
-            url, headers, body, settings.desktop_plugin_llm_review_timeout_seconds
+            url, headers, body, policy.llm_timeout_seconds
         )
         result_text = json.loads(response_text)["content"][0]["text"]
     try:

@@ -116,6 +116,12 @@ onMounted(load);
           <div class="flex items-center gap-3"><Checkbox id="policy-llm-review" :checked="policy.llm_review_enabled" @update:checked="updateLlmReview" /><Label for="policy-llm-review">启用大模型二次审核</Label></div>
           <div class="flex items-center gap-3"><Checkbox id="policy-dynamic-review" :checked="policy.dynamic_review_enabled" @update:checked="updateDynamicReview" /><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
         </div>
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="space-y-2"><Label for="policy-llm-provider">模型协议</Label><Select v-model="policy.llm_provider"><SelectTrigger id="policy-llm-provider"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="disabled">未配置</SelectItem><SelectItem value="openai_compatible">OpenAI 兼容</SelectItem><SelectItem value="anthropic_compatible">Anthropic 兼容</SelectItem></SelectContent></Select></div>
+          <div class="space-y-2"><Label for="policy-llm-url">API 地址</Label><Input id="policy-llm-url" v-model="policy.llm_base_url" placeholder="https://api.deepseek.com" /></div>
+          <div class="space-y-2"><Label for="policy-llm-model">模型名称</Label><Input id="policy-llm-model" v-model="policy.llm_model" placeholder="deepseek-chat" /></div>
+          <div class="space-y-2"><Label for="policy-llm-timeout">模型超时（秒）</Label><Input id="policy-llm-timeout" v-model.number="policy.llm_timeout_seconds" type="number" min="5" max="120" /></div>
+        </div>
         <Button :disabled="busy" @click="savePolicy">保存审核策略</Button>
       </section>
       <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_minmax(0,1.4fr)_auto] lg:items-end">

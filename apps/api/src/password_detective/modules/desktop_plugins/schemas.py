@@ -452,11 +452,19 @@ class PluginReviewPolicyUpdate(BaseModel):
     revocation_max_stale_hours: int = Field(default=168, ge=24, le=720)
     dynamic_review_enabled: bool = False
     llm_review_enabled: bool = True
+    llm_provider: Literal["disabled", "openai_compatible", "anthropic_compatible"] = "disabled"
+    llm_base_url: str = Field(default="", max_length=2_000)
+    llm_model: str = Field(default="", max_length=128)
+    llm_timeout_seconds: int = Field(default=30, ge=5, le=120)
 
     @model_validator(mode="after")
     def validate_revocation_window(self) -> PluginReviewPolicyUpdate:
         if self.revocation_max_stale_hours <= self.revocation_refresh_hours:
             raise ValueError("撤销缓存最大离线时长必须大于刷新间隔")
+        if self.llm_provider != "disabled" and (
+            not _optional_url(self.llm_base_url) or not _strip(self.llm_model)
+        ):
+            raise ValueError("启用 LLM Provider 时必须配置 HTTPS API 地址和模型名")
         return self
 
 

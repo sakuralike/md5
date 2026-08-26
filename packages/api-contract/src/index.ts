@@ -3541,6 +3541,10 @@ export interface DesktopPluginReviewPolicy {
   revocation_max_stale_hours: number;
   dynamic_review_enabled: boolean;
   llm_review_enabled: boolean;
+  llm_provider: "disabled" | "openai_compatible" | "anthropic_compatible";
+  llm_base_url: string;
+  llm_model: string;
+  llm_timeout_seconds: number;
   updated_at: string | null;
   updated_by: string | null;
 }

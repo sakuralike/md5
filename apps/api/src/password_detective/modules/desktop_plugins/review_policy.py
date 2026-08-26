@@ -34,6 +34,10 @@ class PluginReviewPolicy:
     revocation_max_stale_hours: int = 168
     dynamic_review_enabled: bool = False
     llm_review_enabled: bool = True
+    llm_provider: str = "disabled"
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: int = 30
     updated_at: object | None = None
     updated_by: str | None = None
 

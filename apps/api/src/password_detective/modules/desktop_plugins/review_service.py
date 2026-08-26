@@ -292,7 +292,13 @@ def process_pending_static_reviews(
                 failed += 1
             else:
                 llm = (
-                    review_plugin(settings, plugin=plugin, version=version, static_result=result)
+                    review_plugin(
+                        settings,
+                        plugin=plugin,
+                        version=version,
+                        static_result=result,
+                        policy=policy,
+                    )
                     if policy.llm_review_enabled
                     else None
                 )

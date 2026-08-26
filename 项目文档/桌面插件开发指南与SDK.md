@@ -68,13 +68,13 @@ LLM 审核配置：
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `DESKTOP_PLUGIN_LLM_REVIEW_PROVIDER` | `openai_compatible`、`anthropic_compatible` 或 `disabled`。 |
-| `DESKTOP_PLUGIN_LLM_REVIEW_BASE_URL` | OpenAI 兼容服务地址或 Anthropic API 地址，不带 `/v1/...` 后缀。 |
-| `DESKTOP_PLUGIN_LLM_REVIEW_MODEL` | 供应商模型标识。 |
+| 模型协议/API 地址/模型名称 | 在插件商城管理的审核策略中保存。 |
 | `DESKTOP_PLUGIN_LLM_REVIEW_API_KEY_FILE` | Docker Secret 文件路径；不得使用管理端表单保存密钥。 |
 | `DESKTOP_PLUGIN_LLM_REVIEW_TIMEOUT_SECONDS` | 调用超时，默认 30 秒。 |
 
 默认关闭 Windows 动态审核，作为管理员可重新开启的备选策略。静态规则通过后，LLM 只读取清单、能力、SBOM/静态审核摘要和制品摘要；不上传二进制、用户文件、令牌或服务器秘密。LLM 阻断或已配置服务调用失败会失败关闭；未配置 LLM 服务时版本仍需管理员人工审核，绝不自动发布。
+
+DeepSeek 使用 OpenAI 兼容模式：模型协议选择 `openai_compatible`，API 地址填写 `https://api.deepseek.com`，模型填写 `deepseek-chat`。API Key 只从服务器秘密配置读取，管理端不显示、保存或回显该值。
 
 OpenBao 服务建议使用文件存储卷、单独网络、不可导出 Ed25519 key、短期周期 Token 和审计设备。不要把 root token、解封密钥或签名 Token 写入 Git、普通 API 日志或镜像层。管理员插件审核、批准、发布、下架、撤销和策略管理均要求管理员 MFA；Runner 注册和撤销额外要求纯管理员角色。
 
