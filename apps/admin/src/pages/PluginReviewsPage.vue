@@ -42,7 +42,11 @@ async function load(): Promise<void> {
 
 async function selectReview(item: DesktopPluginReviewQueueItem): Promise<void> {
   selected.value = await getPluginReview(auth.accessToken, item.version_id);
-  sourceFiles.value = (await getPluginReviewSource(auth.accessToken, item.version_id)).files;
+  try {
+    sourceFiles.value = (await getPluginReviewSource(auth.accessToken, item.version_id)).files;
+  } catch {
+    sourceFiles.value = [];
+  }
   approvedCapabilities.value = [...selected.value.requested_capabilities];
 }
 
