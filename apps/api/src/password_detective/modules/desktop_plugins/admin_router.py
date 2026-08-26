@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import Annotated
 
@@ -65,6 +66,7 @@ from password_detective.modules.desktop_plugins.service import (
 
 router = APIRouter(prefix="/admin/plugin-reviews", tags=["管理端·插件审核"])
 policy_router = APIRouter(prefix="/admin/plugin-review-policy", tags=["管理端·插件审核策略"])
+logger = logging.getLogger(__name__)
 
 
 def _lease(
@@ -145,6 +147,7 @@ def review_plugin_source_with_llm(
     )
     if result is None:
         raise AppError("desktop_plugin.llm_review_disabled", "大模型审核未启用", status_code=409)
+    logger.info("desktop_plugin_source_llm_review_completed", extra={"version_id": version_id, "verdict": result.verdict, "risk_level": result.risk_level})
     return {"verdict": result.verdict, "risk_level": result.risk_level, "summary": result.summary}
 
 

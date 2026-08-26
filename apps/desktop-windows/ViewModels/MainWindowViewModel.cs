@@ -200,20 +200,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         finally
         {
-            try
-            {
-                await CheckForUpdatesCoreAsync(CancellationToken.None);
-            }
-            catch
-            {
-                UpdateStatus = "暂时无法连接后端更新通道，可稍后手动重试。";
-            }
+            UpdateStatus = "桌面版本升级检测暂时关闭。";
             NotifyCommands();
         }
     }
 
     private async Task CheckForUpdatesAsync()
     {
+        UpdateStatus = "桌面版本升级检测暂时关闭。";
+        return;
+#pragma warning disable CS0162
         BeginOperation("正在检查桌面端稳定通道更新…");
         try
         {
@@ -238,6 +234,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             EndOperation();
         }
+#pragma warning restore CS0162
     }
 
     private async Task CheckForUpdatesCoreAsync(CancellationToken cancellationToken)
