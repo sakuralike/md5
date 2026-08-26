@@ -97,14 +97,17 @@ async function createAndSubmit(): Promise<void> {
       linked_third_party_app_id: form.value.linkedThirdPartyAppId === "none"
         ? null : form.value.linkedThirdPartyAppId,
     });
-    const reauth = await apiRequest<{ reauth_token: string }>(
-      "/me/security/reauthenticate",
-      { method: "POST", body: JSON.stringify({ purpose: "desktop_plugin_signing_key", current_password: form.value.currentPassword }) },
-      auth.accessToken,
-    );
-    const signingKey = generatedSigningKey.value ?? await registerPluginSigningKey(auth.accessToken, {
-      key_id: form.value.keyId, public_key_base64: form.value.publicKey, reauth_token: reauth.reauth_token,
-    });
+    let signingKey = generatedSigningKey.value;
+    if (!signingKey) {
+      const reauth = await apiRequest<{ reauth_token: string }>(
+        "/me/security/reauthenticate",
+        { method: "POST", body: JSON.stringify({ purpose: "desktop_plugin_signing_key", current_password: form.value.currentPassword }) },
+        auth.accessToken,
+      );
+      signingKey = await registerPluginSigningKey(auth.accessToken, {
+        key_id: form.value.keyId, public_key_base64: form.value.publicKey, reauth_token: reauth.reauth_token,
+      });
+    }
     let version = await createPluginVersion(auth.accessToken, project.id, {
       semver: form.value.semver, signing_key_id: signingKey.id,
       requested_capabilities: selectedCapabilities.value,
