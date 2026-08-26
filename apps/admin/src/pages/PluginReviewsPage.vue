@@ -105,7 +105,7 @@ onMounted(load);
 <template>
   <section class="space-y-6 pt-16 lg:pt-0">
     <Button v-if="selected && ['auto_review_failed','review_queued'].includes(selected.status)" size="sm" variant="outline" :disabled="busy" @click="rerun">重新执行自动审核</Button>
-    <header class="space-y-2"><p class="text-xs font-semibold text-primary">PLUGIN REVIEW</p><h1 class="text-3xl font-semibold">插件审核工作台</h1><p class="text-sm text-muted-foreground">审核权限差异、签名摘要、版本历史、发布状态与用户举报。</p></header>
+    <header class="space-y-2"><p class="text-xs font-semibold text-primary">PLUGIN MARKETPLACE</p><h1 class="text-3xl font-semibold">插件商城管理</h1><p class="text-sm text-muted-foreground">审核权限差异、签名摘要、版本历史、发布状态与用户举报。</p></header>
     <div v-if="error" class="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"><strong class="block">操作未完成</strong><p class="mt-1">{{ error }}</p></div>
     <div v-if="success" class="rounded-md border border-primary/40 bg-primary/10 p-4 text-sm"><strong class="block">操作成功</strong><p class="mt-1 text-muted-foreground">{{ success }}</p></div>
     <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.4fr)]">

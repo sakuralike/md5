@@ -33,7 +33,7 @@ vi.mock("../services/pluginReviews", () => ({
 describe("PluginReviewsPage", () => {
   it("renders the controlled plugin review workbench", async () => {
     const html = await renderToString(createSSRApp(PluginReviewsPage));
-    expect(html).toContain("插件审核工作台");
+    expect(html).toContain("插件商城管理");
     expect(html).toContain("审核队列");
     expect(html).toContain("版本审核详情");
     expect(html).toContain("用户举报");

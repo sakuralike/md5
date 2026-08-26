@@ -142,7 +142,7 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: UserRoundCog,
   },
   {
-    label: "插件审核",
+    label: "插件商城管理",
     path: "/plugin-reviews",
     description: "审核插件版本权限、发布、下架、撤销与用户举报。",
     group: "安全运营",

@@ -8,8 +8,10 @@ function key(prefix: string): string {
 export interface SigningKeyRecord {
   id: string;
   key_id: string;
+  public_key_base64: string;
   fingerprint: string;
   status: string;
+  private_key_base64: string | null;
 }
 
 export async function listDeveloperPlugins(token: string): Promise<DesktopPluginProjectDetail[]> {
@@ -37,7 +39,7 @@ export function createDeveloperPlugin(token: string, payload: Record<string, unk
 
 export async function registerPluginSigningKey(
   token: string,
-  payload: { key_id: string; public_key_base64: string; reauth_token: string },
+  payload: { key_id?: string; public_key_base64?: string; reauth_token: string },
 ): Promise<SigningKeyRecord> {
   return apiRequest(
     "/developer/plugins/signing-keys",
