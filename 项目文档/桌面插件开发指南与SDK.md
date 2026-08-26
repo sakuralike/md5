@@ -66,6 +66,8 @@ SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHo
 
 OpenBao 服务建议使用文件存储卷、单独网络、不可导出 Ed25519 key、短期周期 Token 和审计设备。不要把 root token、解封密钥或签名 Token 写入 Git、普通 API 日志或镜像层。管理员插件审核、批准、发布、下架、撤销和策略管理均要求管理员 MFA；Runner 注册和撤销额外要求纯管理员角色。
 
+开发者可向 `POST /api/v1/developer/plugins/signing-keys` 只提交 `reauth_token`，由服务器生成 Ed25519 密钥对并登记公钥；私钥 Base64 仅在创建响应中返回一次，后续列表和读取接口只返回公钥。开发者必须立即将该私钥保存到本地安全存储，并作为 `PDPP_PUBLISHER_PRIVATE_KEY_BASE64` 传给打包脚本；服务端不保存开发者私钥。
+
 ```powershell
 $env:PDPP_PUBLISHER_KEY_ID = "official-skin-key"
 $env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64 = "<secure-build-secret>"

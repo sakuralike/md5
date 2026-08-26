@@ -30,6 +30,7 @@ const approvedApplications = computed(() => applications.value.filter(
 ));
 const capabilityLabels: Record<DesktopPluginCapability, string> = {
   "ui:command": "用户界面命令",
+  "ui:theme": "应用受控主题和背景",
   "storage:private": "私有存储",
   "file:read:selected": "读取用户选择的文件",
   "api:profile:read": "读取用户公开资料",

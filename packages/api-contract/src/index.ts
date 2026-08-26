@@ -3175,6 +3175,7 @@ export type DesktopPluginVersionStatus =
 
 export const DESKTOP_PLUGIN_CAPABILITIES = [
   "ui:command",
+  "ui:theme",
   "storage:private",
   "file:read:selected",
   "api:profile:read",
