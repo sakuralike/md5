@@ -3,10 +3,12 @@ FROM python:3.12.13-alpine3.23 AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     PIP_DEFAULT_TIMEOUT=120
 
 WORKDIR /app
-RUN apk upgrade --no-cache && \
+RUN sed -i 's#https://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories && \
+    apk upgrade --no-cache && \
     apk add --no-cache su-exec && \
     addgroup -S app && adduser -S -G app app && \
     mkdir -p \

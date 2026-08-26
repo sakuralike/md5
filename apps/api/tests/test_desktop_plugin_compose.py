@@ -45,3 +45,14 @@ def test_staging_plugin_storage_uses_private_minio_backend() -> None:
     assert "desktop-plugin-object-data" in staging
     assert "minio/health/live" in staging
     assert 'ports: !reset []' in staging
+
+
+def test_container_dependency_downloads_use_domestic_mirrors() -> None:
+    api_dockerfile = (ROOT / "infra/docker/api.Dockerfile").read_text(encoding="utf-8")
+    frontend_dockerfile = (ROOT / "infra/docker/frontend.Dockerfile").read_text(encoding="utf-8")
+
+    assert "PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple" in api_dockerfile
+    assert "mirrors.aliyun.com/alpine" in api_dockerfile
+    assert "COREPACK_NPM_REGISTRY=https://registry.npmmirror.com" in frontend_dockerfile
+    assert "mirrors.aliyun.com/alpine" in frontend_dockerfile
+    assert "pnpm config set registry https://registry.npmmirror.com" in frontend_dockerfile
