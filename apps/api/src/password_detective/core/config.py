@@ -23,6 +23,8 @@ FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "candidate_secret_dedup_key": "CANDIDATE_SECRET_DEDUP_KEY",
     "direct_message_key_version": "DIRECT_MESSAGE_KEY_VERSION",
     "direct_message_keyring": "DIRECT_MESSAGE_KEYRING",
+    "desktop_plugin_s3_access_key_id": "DESKTOP_PLUGIN_S3_ACCESS_KEY_ID",
+    "desktop_plugin_s3_secret_access_key": "DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY",
     "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
     "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
 }
@@ -91,6 +93,13 @@ class Settings(BaseSettings):
     desktop_announcement_image_max_bytes: int = Field(default=5_242_880, ge=1_024, le=20_971_520)
     desktop_update_storage_path: str = ".local/desktop-updates"
     desktop_plugin_storage_path: str = ".local/desktop-plugins"
+    desktop_plugin_storage_backend: Literal["filesystem", "s3"] = "filesystem"
+    desktop_plugin_s3_endpoint_url: str = ""
+    desktop_plugin_s3_bucket: str = "password-detective-plugins"
+    desktop_plugin_s3_region: str = "us-east-1"
+    desktop_plugin_s3_access_key_id: str = ""
+    desktop_plugin_s3_secret_access_key: SecretStr = SecretStr("")
+    desktop_plugin_s3_force_path_style: bool = True
     desktop_plugin_max_package_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )

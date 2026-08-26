@@ -4,7 +4,6 @@ import base64
 import hashlib
 import json
 import secrets
-import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -862,7 +861,7 @@ def create_upload_session(
         for session in sessions:
             db.delete(session)
         if existing.storage_key:
-            storage.quarantine_path(existing.storage_key).unlink(missing_ok=True)
+            storage.delete(existing.storage_key)
         db.delete(existing)
         db.flush()
     raw_token = "plugin_upload_" + secrets.token_urlsafe(32)
@@ -2007,13 +2006,8 @@ def publish_version(
             raise AppError(
                 "desktop_plugin.artifact_not_ready", "制品未处于隔离待发布状态", status_code=409
             )
-        source = storage.quarantine_path(artifact.storage_key)
         public_key = storage.public_key(version.id, artifact.architecture, artifact.id)
-        destination = storage.public_path(public_key)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(destination.suffix + ".publish")
-        shutil.copyfile(source, temporary)
-        temporary.replace(destination)
+        storage.publish(artifact.storage_key, public_key)
         artifact.public_storage_key = public_key
         artifact.status = DesktopPluginArtifactStatus.PUBLIC
         artifact.zone = DesktopPluginArtifactZone.PUBLIC
@@ -2172,19 +2166,10 @@ def revoke_version(
         .with_for_update()
     ).all():
         revoked_key = storage.revoked_key(version.id, artifact.architecture, artifact.id)
-        destination = storage.revoked_path(revoked_key)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        source: Path | None = None
-        if artifact.public_storage_key:
-            public_source = storage.public_path(artifact.public_storage_key)
-            if public_source.is_file():
-                source = public_source
-        if source is None and artifact.storage_key:
-            quarantine_source = storage.quarantine_path(artifact.storage_key)
-            if quarantine_source.is_file():
-                source = quarantine_source
-        if source is not None:
-            source.replace(destination)
+        source_keys = [
+            key for key in (artifact.public_storage_key, artifact.storage_key) if key
+        ]
+        storage.move_to_revoked(source_keys, revoked_key)
         artifact.storage_key = revoked_key
         artifact.public_storage_key = None
         artifact.status = DesktopPluginArtifactStatus.REVOKED

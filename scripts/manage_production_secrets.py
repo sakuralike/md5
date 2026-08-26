@@ -34,6 +34,8 @@ REQUIRED_FILES = (
 OPTIONAL_FILES = (
     "notification_webhook_secret",
     "notification_smtp_password",
+    "desktop_plugin_s3_access_key_id",
+    "desktop_plugin_s3_secret_access_key",
 )
 ALL_FILES = REQUIRED_FILES + OPTIONAL_FILES
 MAX_FILE_BYTES = 64 * 1024
@@ -104,6 +106,8 @@ def build_initial_bundle(candidate_version: str = "v1") -> dict[str, str]:
     mysql_password = _random_secret()
     mysql_root_password = _random_secret()
     redis_password = _random_secret()
+    plugin_s3_access_key_id = "pdplugins" + secrets.token_hex(4)
+    plugin_s3_secret_access_key = _random_secret()
     return {
         "app_secret_key": app_secret,
         "candidate_secret_key_version": candidate_version,
@@ -125,6 +129,8 @@ def build_initial_bundle(candidate_version: str = "v1") -> dict[str, str]:
         "redis_url": f"redis://:{quote(redis_password, safe='')}@redis:6379/0",
         "notification_webhook_secret": "",
         "notification_smtp_password": "",
+        "desktop_plugin_s3_access_key_id": plugin_s3_access_key_id,
+        "desktop_plugin_s3_secret_access_key": plugin_s3_secret_access_key,
     }
 
 

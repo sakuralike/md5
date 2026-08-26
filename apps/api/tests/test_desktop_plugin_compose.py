@@ -32,3 +32,16 @@ def test_plugin_storage_volume_is_writable_after_container_start() -> None:
     assert "prepare_runtime_data_directories" in entrypoint
     assert "chown app:app" in entrypoint
     assert staging.count(PLUGIN_VOLUME) == 3
+
+
+def test_staging_plugin_storage_uses_private_minio_backend() -> None:
+    staging = (ROOT / "infra/staging/docker-compose.staging.api-ha.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "DESKTOP_PLUGIN_STORAGE_BACKEND: s3" in staging
+    assert "http://plugin-object-storage:9000" in staging
+    assert "plugin-object-storage:" in staging
+    assert "desktop-plugin-object-data" in staging
+    assert "minio/health/live" in staging
+    assert 'ports: !reset []' in staging

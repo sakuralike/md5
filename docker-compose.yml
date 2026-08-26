@@ -90,6 +90,13 @@ services:
       DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES: ${DESKTOP_ANNOUNCEMENT_IMAGE_MAX_BYTES:-5242880}
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
       DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+      DESKTOP_PLUGIN_STORAGE_BACKEND: ${DESKTOP_PLUGIN_STORAGE_BACKEND:-filesystem}
+      DESKTOP_PLUGIN_S3_ENDPOINT_URL: ${DESKTOP_PLUGIN_S3_ENDPOINT_URL:-}
+      DESKTOP_PLUGIN_S3_BUCKET: ${DESKTOP_PLUGIN_S3_BUCKET:-password-detective-plugins}
+      DESKTOP_PLUGIN_S3_REGION: ${DESKTOP_PLUGIN_S3_REGION:-us-east-1}
+      DESKTOP_PLUGIN_S3_ACCESS_KEY_ID: ${DESKTOP_PLUGIN_S3_ACCESS_KEY_ID:-}
+      DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY: ${DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY:-}
+      DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: ${DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE:-true}
     volumes:
       - desktop-update-data:/var/lib/password-detective/desktop-updates
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
@@ -159,6 +166,13 @@ services:
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
       DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+      DESKTOP_PLUGIN_STORAGE_BACKEND: ${DESKTOP_PLUGIN_STORAGE_BACKEND:-filesystem}
+      DESKTOP_PLUGIN_S3_ENDPOINT_URL: ${DESKTOP_PLUGIN_S3_ENDPOINT_URL:-}
+      DESKTOP_PLUGIN_S3_BUCKET: ${DESKTOP_PLUGIN_S3_BUCKET:-password-detective-plugins}
+      DESKTOP_PLUGIN_S3_REGION: ${DESKTOP_PLUGIN_S3_REGION:-us-east-1}
+      DESKTOP_PLUGIN_S3_ACCESS_KEY_ID: ${DESKTOP_PLUGIN_S3_ACCESS_KEY_ID:-}
+      DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY: ${DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY:-}
+      DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: ${DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE:-true}
     volumes:
       - desktop-update-data:/var/lib/password-detective/desktop-updates
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
@@ -220,6 +234,13 @@ services:
       AUTO_CREATE_TABLES: "false"
       DESKTOP_UPDATE_STORAGE_PATH: /var/lib/password-detective/desktop-updates
       DESKTOP_PLUGIN_STORAGE_PATH: /var/lib/password-detective/desktop-plugins
+      DESKTOP_PLUGIN_STORAGE_BACKEND: ${DESKTOP_PLUGIN_STORAGE_BACKEND:-filesystem}
+      DESKTOP_PLUGIN_S3_ENDPOINT_URL: ${DESKTOP_PLUGIN_S3_ENDPOINT_URL:-}
+      DESKTOP_PLUGIN_S3_BUCKET: ${DESKTOP_PLUGIN_S3_BUCKET:-password-detective-plugins}
+      DESKTOP_PLUGIN_S3_REGION: ${DESKTOP_PLUGIN_S3_REGION:-us-east-1}
+      DESKTOP_PLUGIN_S3_ACCESS_KEY_ID: ${DESKTOP_PLUGIN_S3_ACCESS_KEY_ID:-}
+      DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY: ${DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY:-}
+      DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE: ${DESKTOP_PLUGIN_S3_FORCE_PATH_STYLE:-true}
     command: ["celery", "-A", "password_detective.worker.celery_app", "beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
