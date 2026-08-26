@@ -3210,6 +3210,7 @@ export const DESKTOP_PLUGIN_PATHS = {
   adminPluginReviewPolicy: "/admin/plugin-review-policy",
   adminPluginReviewLlmKey: "/admin/plugin-review-policy/llm-key",
   adminPluginReviewLlmTest: "/admin/plugin-review-policy/llm-test",
+  adminPluginReviewSource: "/admin/plugin-reviews/versions/{version_id}/source",
   runnerHeartbeat: "/plugin-runner/heartbeat",
   runnerLease: "/plugin-runner/tasks/lease",
 } as const;
