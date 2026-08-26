@@ -7,7 +7,7 @@ internal sealed class OfficialSkinPlugin : PdppPlugin
 {
     public OfficialSkinPlugin() : base(
         "com.passworddetective.official-skin",
-        "1.0.0",
+        "1.0.1",
         ["ui:command", "ui:theme"])
     {
     }

@@ -14,7 +14,7 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 } else {
     $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 }
-$PublishDirectory = Join-Path $Root ".local/official-skin/publish"
+$PublishDirectory = Join-Path $Root ".local/official-skin/publish-1.0.1"
 New-Item -ItemType Directory -Force -Path $PublishDirectory, (Split-Path -Parent $OutputPath) | Out-Null
 
 & dotnet publish (Join-Path $Root "plugins/official-skin/PasswordDetective.OfficialSkin.csproj") `
