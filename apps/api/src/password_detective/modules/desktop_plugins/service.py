@@ -281,7 +281,7 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
     sign_url = f"{base_url}/v1/transit/sign/{urllib.parse.quote(key_name, safe='')}"
     request = urllib.request.Request(
         sign_url,
-        data=json.dumps({"input": base64.b64encode(message).decode("ascii"), "hash_algorithm": "none"}).encode(),
+        data=json.dumps({"input": base64.b64encode(message).decode("ascii"), "hash_algorithm": "sha2-256"}).encode(),
         headers=headers,
         method="POST",
     )
