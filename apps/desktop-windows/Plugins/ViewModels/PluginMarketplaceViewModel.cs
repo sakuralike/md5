@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -366,19 +367,33 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
             var artifact = version.Artifacts.FirstOrDefault(item => item.Architecture == architecture)
                 ?? throw new InvalidOperationException("在线插件不包含当前架构制品。");
             architecture = artifact.Architecture;
-            failureStage = "download_ticket";
-            var ticket = await _marketApi.IssuePluginDownloadTicketAsync(
-                _serverBaseUrl,
-                detail.Slug,
-                version.Semver,
-                architecture);
             _paths.EnsureDirectories();
-            failureStage = "artifact_download";
-            await _marketApi.DownloadPluginArtifactAsync(
-                ticket.DownloadUrl,
-                temporaryPath,
-                ticket.ArtifactSha256,
-                ticket.ArtifactSizeBytes);
+            for (var attempt = 1; attempt <= 3; attempt++)
+            {
+                TryDeleteFile(temporaryPath);
+                try
+                {
+                    failureStage = "download_ticket";
+                    var ticket = await _marketApi.IssuePluginDownloadTicketAsync(
+                        _serverBaseUrl,
+                        detail.Slug,
+                        version.Semver,
+                        architecture);
+                    failureStage = "artifact_download";
+                    await _marketApi.DownloadPluginArtifactAsync(
+                        ticket.DownloadUrl,
+                        temporaryPath,
+                        ticket.ArtifactSha256,
+                        ticket.ArtifactSizeBytes);
+                    break;
+                }
+                catch (Exception exception) when (
+                    attempt < 3 && exception is HttpRequestException or IOException)
+                {
+                    TryDeleteFile(temporaryPath);
+                    await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt));
+                }
+            }
             failureStage = "package_inspection";
             var inspection = await _installer.InspectAsync(temporaryPath);
             var permission = _permissionPolicy.EvaluateMarket(
