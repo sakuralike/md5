@@ -141,6 +141,23 @@ public sealed class PluginPackageVerifierTests : IDisposable
     }
 
     [Fact]
+    public async Task IsolatedWpfWindowCapabilityIsLocallySupported()
+    {
+        var path = _factory.Create(
+            _directory,
+            pluginId: "com.synthetic.wpf-window",
+            requiredCapabilities: ["ui:command", "ui:window"]);
+        var inspection = await new PluginPackageVerifier().VerifyAsync(path);
+
+        var decision = new PluginPermissionPolicy().Evaluate(
+            inspection.Manifest,
+            ["ui:command", "ui:window"]);
+
+        Assert.Empty(decision.DeniedRequired);
+        Assert.Contains("ui:window", decision.Granted);
+    }
+
+    [Fact]
     public async Task FileSchemaRequiresCapabilityAndDirectorySchemaIsRejected()
     {
         var fileWithoutCapability = _factory.Create(

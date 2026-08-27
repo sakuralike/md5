@@ -10,22 +10,22 @@ if ([string]::IsNullOrWhiteSpace($PrivateKey) -or [string]::IsNullOrWhiteSpace($
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $Root ".local/official-skin/official-skin.pdpkg"
+    $OutputPath = Join-Path $Root ".local/official-archive-security/official-archive-security.pdpkg"
 } else {
     $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 }
-$PublishDirectory = Join-Path $Root ".local/official-skin/publish-1.1.0"
+$PublishDirectory = Join-Path $Root ".local/official-archive-security/publish-1.0.0"
 New-Item -ItemType Directory -Force -Path $PublishDirectory, (Split-Path -Parent $OutputPath) | Out-Null
 
-& dotnet publish (Join-Path $Root "plugins/official-skin/PasswordDetective.OfficialSkin.csproj") `
+& dotnet publish (Join-Path $Root "plugins/official-archive-security/PasswordDetective.OfficialArchiveSecurity.csproj") `
     --configuration Release --runtime win-x64 --self-contained true /p:PublishSingleFile=true /p:DebugType=None --output $PublishDirectory
-if ($LASTEXITCODE -ne 0) { throw "Official skin publish failed." }
+if ($LASTEXITCODE -ne 0) { throw "Official archive security publish failed." }
 
 & dotnet run --project (Join-Path $Root "tests/pdpp-package-builder/PdppPackageBuilder.csproj") --configuration Release -- `
-    (Join-Path $PublishDirectory "password-detective-official-skin.exe") $OutputPath `
+    (Join-Path $PublishDirectory "password-detective-official-archive-security.exe") $OutputPath `
     (Join-Path $PSScriptRoot "manifest.template.json") `
-    (Join-Path $PSScriptRoot "schemas/apply.schema.json") `
+    (Join-Path $PSScriptRoot "schemas/inspect.schema.json") `
     (Join-Path $PSScriptRoot "sbom.cdx.json") $PrivateKey
-if ($LASTEXITCODE -ne 0) { throw "Official skin package build failed." }
+if ($LASTEXITCODE -ne 0) { throw "Official archive security package build failed." }
 
-Write-Host "Official skin package created: $OutputPath"
+Write-Host "Official archive security package created: $OutputPath"

@@ -1,6 +1,6 @@
 # 桌面插件开发指南与 SDK
 
-本文档面向密码侦探社桌面端 PDPP v1 插件开发者。插件以独立进程运行，通过 JSON-RPC 2.0 over stdio 与宿主通信；插件不能加载到宿主进程，也不能注入 XAML、HTML、脚本或任意 WPF 对象。
+本文档面向密码侦探社桌面端 PDPP v1 插件开发者。插件以独立进程运行，通过 JSON-RPC 2.0 over stdio 与宿主通信；插件不能加载到宿主进程，也不能向主进程注入 XAML、HTML、脚本或 WPF 对象。申请 `ui:window` 后，插件可以在自己的 AppContainer 进程中创建自有 WPF 窗口。
 
 ## 目录结构
 
@@ -31,8 +31,9 @@ plugins/my-plugin/
 | `host/api/hash/read` | `api:hash:read` | 通过宿主代理查询授权哈希摘要 |
 | `host/api/verification/submit` | `api:verification:submit` | 通过宿主代理提交一次性验证回执 |
 | `host/ui/theme/apply` | `ui:theme` | 应用宿主支持的受控主题 |
+| `host/ui/window/open` | `ui:window` | 申请创建插件自有隔离 WPF 窗口；宿主只校验窗口元数据，不加载插件 UI |
 
-Broker 不提供目录枚举、任意文件写入、凭据读取、后台常驻、子进程派生或任意网络请求。文件引用只在当前命令会话内有效，插件不得把原始文件路径或授权令牌写入输出。
+Broker 不提供目录枚举、任意文件写入、凭据读取、后台常驻、子进程派生或任意网络请求。`ui:window` 只允许插件在自己的隔离进程中创建窗口，尺寸限制为 320x240 到 1920x1200；宿主不加载第三方 DLL/XAML，不授予主进程窗口句柄。文件引用只在当前命令会话内有效，插件不得把原始文件路径或授权令牌写入输出。
 
 ## 主题 Broker
 
@@ -42,7 +43,7 @@ Broker 不提供目录枚举、任意文件写入、凭据读取、后台常驻�
 {"preset":"forest","background_ref":"32 位引用","background_opacity":0.8,"clear_background":false}
 ```
 
-预设为 `light`、`dark`、`forest`、`contrast`。背景图片由 `theme-background` 字段触发宿主文件选择器，宿主只接受 PNG/JPG/JPEG 且不超过 10 MB，复制后返回不透明引用。插件不会获得原始路径；宿主负责渲染、持久化和恢复主题。
+预设为 `light`、`dark`、`forest`、`contrast`、`ocean`、`rose`、`amber`、`slate`。背景图片由 `theme-background` 字段触发宿主文件选择器，宿主只接受 PNG/JPG/JPEG 且不超过 10 MB，复制后返回不透明引用。插件不会获得原始路径；宿主负责渲染、持久化和恢复主题。
 
 ## C# SDK
 
@@ -62,6 +63,8 @@ internal sealed class SkinPlugin : PdppPlugin
     }
 }
 ```
+
+需要自有 WPF 窗口时，另外引用 `packages/pdpp-sdk-dotnet-wpf/PasswordDetective.Pdpp.Wpf.Sdk.csproj`，申请 `ui:window`，并通过 `PdppWpfWindow.ShowAsync` 在插件自己的 STA 线程中创建窗口。该窗口不属于宿主主进程，插件仍受 AppContainer、Job Object、超时和资源限制约束。
 
 SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHostClient.CallAsync`。Broker 错误会以 `PdppHostException` 抛出并保留错误码。文件类插件可使用 `PluginSelectedFile.FromJson`、`ReadFileAsync`、`ReadFileToEndAsync` 和 `DigestFileAsync`；状态型插件可使用 `GetStorageAsync`、`SetStorageAsync`、`RemoveStorageAsync`；需要平台数据时使用 `ReadProfileAsync`、`ReadHashAsync` 和 `SubmitVerificationAsync`。
 

@@ -133,6 +133,10 @@ public partial class MainWindow : Window
                 "dark" => Color.FromRgb(38, 45, 52),
                 "forest" => Color.FromRgb(38, 81, 61),
                 "contrast" => Color.FromRgb(0, 0, 0),
+                "ocean" => Color.FromRgb(221, 235, 247),
+                "rose" => Color.FromRgb(252, 228, 236),
+                "amber" => Color.FromRgb(255, 243, 205),
+                "slate" => Color.FromRgb(226, 232, 240),
                 _ => Color.FromRgb(240, 240, 240),
             });
             Background = background;

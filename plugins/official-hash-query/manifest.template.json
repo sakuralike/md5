@@ -1,0 +1,20 @@
+{
+  "schema": "pd.plugin/v1",
+  "plugin_id": "com.passworddetective.official-hash-query",
+  "version": "1.0.0",
+  "display_name": "官方哈希查询助手",
+  "description": "通过宿主 API Broker 查询授权档案中的哈希摘要和候选状态。",
+  "publisher_key_id": "$PUBLISHER_KEY_ID",
+  "publisher_public_key": "$PUBLISHER_PUBLIC_KEY",
+  "protocol": { "min": 1, "max": 1 },
+  "host": { "min_version": "0.1.0", "max_version": "0.x" },
+  "runtime": {
+    "kind": "process",
+    "entrypoints": { "windows-x64": "bin/windows-x64/plugin.exe" }
+  },
+  "commands": [
+    { "id": "query", "title": "查询哈希", "input_schema": "schemas/query.schema.json" }
+  ],
+  "capabilities": { "required": ["ui:command", "api:hash:read"], "optional": [] },
+  "limits": { "memory_mb": 128, "cpu_percent": 15, "command_timeout_seconds": 30, "child_processes": 0 }
+}

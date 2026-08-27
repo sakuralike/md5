@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["archive"],
+  "properties": {
+    "archive": {
+      "type": "string",
+      "title": "归档文件",
+      "format": "file"
+    }
+  }
+}

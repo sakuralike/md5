@@ -62,6 +62,7 @@ public static class PackageInspector
         [
             "ui:command",
             "ui:theme",
+            "ui:window",
             "storage:private",
             "file:read:selected",
             "api:profile:read",

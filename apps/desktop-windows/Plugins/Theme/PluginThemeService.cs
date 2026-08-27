@@ -21,7 +21,7 @@ public sealed class PluginThemeService : IPluginThemeService
     public const long MaximumBackgroundBytes = 10 * 1024 * 1024;
 
     private static readonly IReadOnlySet<string> Presets = new HashSet<string>(
-        ["light", "dark", "forest", "contrast"],
+        ["light", "dark", "forest", "contrast", "ocean", "rose", "amber", "slate"],
         StringComparer.Ordinal);
 
     private readonly string _backgroundDirectory;

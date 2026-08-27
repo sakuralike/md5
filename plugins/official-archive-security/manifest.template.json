@@ -1,0 +1,20 @@
+{
+  "schema": "pd.plugin/v1",
+  "plugin_id": "com.passworddetective.official-archive-security",
+  "version": "1.0.0",
+  "display_name": "官方归档安全检查器",
+  "description": "检查 ZIP、7z、RAR、TAR、GZ 和 BZ2 归档的路径、压缩比、展开大小、加密条目和可执行文件风险。",
+  "publisher_key_id": "$PUBLISHER_KEY_ID",
+  "publisher_public_key": "$PUBLISHER_PUBLIC_KEY",
+  "protocol": { "min": 1, "max": 1 },
+  "host": { "min_version": "0.1.0", "max_version": "0.x" },
+  "runtime": {
+    "kind": "process",
+    "entrypoints": { "windows-x64": "bin/windows-x64/plugin.exe" }
+  },
+  "commands": [
+    { "id": "inspect", "title": "检查归档安全", "input_schema": "schemas/inspect.schema.json" }
+  ],
+  "capabilities": { "required": ["ui:command", "file:read:selected"], "optional": [] },
+  "limits": { "memory_mb": 256, "cpu_percent": 25, "command_timeout_seconds": 120, "child_processes": 0 }
+}

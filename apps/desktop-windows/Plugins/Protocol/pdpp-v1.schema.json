@@ -29,7 +29,8 @@
             "host/api/profile/read",
             "host/api/hash/read",
             "host/api/verification/submit",
-            "host/ui/theme/apply"
+            "host/ui/theme/apply",
+            "host/ui/window/open"
           ]
         },
         "params": { "type": "object" }
@@ -86,6 +87,10 @@
         {
           "if": { "properties": { "method": { "const": "host/ui/theme/apply" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/themeApplyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/ui/window/open" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/windowOpenParams" } } }
         }
       ]
     },
@@ -186,11 +191,23 @@
       "additionalProperties": false,
       "required": ["preset"],
       "properties": {
-        "preset": { "enum": ["light", "dark", "forest", "contrast"] },
+        "preset": { "enum": ["light", "dark", "forest", "contrast", "ocean", "rose", "amber", "slate"] },
         "background_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
         "background_opacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
         "clear_background": { "type": "boolean" },
         "use_default_background": { "type": "boolean" }
+      }
+    },
+    "windowOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_id", "title", "width", "height"],
+      "properties": {
+        "window_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "width": { "type": "number", "minimum": 320, "maximum": 1920 },
+        "height": { "type": "number", "minimum": 240, "maximum": 1200 },
+        "modal": { "type": "boolean" }
       }
     },
     "successResponse": {

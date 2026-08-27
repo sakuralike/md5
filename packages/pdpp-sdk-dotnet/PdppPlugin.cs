@@ -42,6 +42,18 @@ public sealed class PdppHostClient
         return await CallAsync("host/ui/theme/apply", payload, cancellationToken);
     }
 
+    public Task<JsonElement> RequestWindowAsync(
+        string windowId,
+        string title,
+        double width,
+        double height,
+        bool modal = true,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(
+            "host/ui/window/open",
+            new { window_id = windowId, title, width, height, modal },
+            cancellationToken);
+
     public async Task<PluginFileReadResult> ReadFileAsync(
         string fileReference,
         long offset,

@@ -43,6 +43,32 @@ public sealed class PluginThemeServiceTests : IDisposable
         Assert.False(unauthorized.GetProperty("has_background").GetBoolean());
     }
 
+    [Theory]
+    [InlineData("light")]
+    [InlineData("dark")]
+    [InlineData("forest")]
+    [InlineData("contrast")]
+    [InlineData("ocean")]
+    [InlineData("rose")]
+    [InlineData("amber")]
+    [InlineData("slate")]
+    public async Task AppliesEveryOfficialSkinPreset(string preset)
+    {
+        PluginThemeSettings? applied = null;
+        var service = new PluginThemeService(_directory, (settings, _) =>
+        {
+            applied = settings;
+            return Task.CompletedTask;
+        });
+
+        var result = await service.ApplyAsync(
+            "official.skin",
+            JsonSerializer.SerializeToElement(new { preset }));
+
+        Assert.True(result.GetProperty("applied").GetBoolean());
+        Assert.Equal(preset, applied?.Preset);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

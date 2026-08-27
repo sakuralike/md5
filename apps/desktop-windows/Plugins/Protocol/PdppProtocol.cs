@@ -16,6 +16,7 @@ public static class PdppProtocol
     public const string HostApiHashReadMethod = "host/api/hash/read";
     public const string HostApiVerificationSubmitMethod = "host/api/verification/submit";
     public const string HostUiThemeApplyMethod = "host/ui/theme/apply";
+    public const string HostUiWindowOpenMethod = "host/ui/window/open";
     public const string HostFileDigestMethod = "host/file/digest";
     public const string HostStorageRemoveMethod = "host/storage/remove";
     public const int DefaultMaximumMessageBytes = 1024 * 1024;

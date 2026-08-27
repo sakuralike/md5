@@ -13,6 +13,7 @@ public sealed class PluginPermissionPolicy
         [
             "ui:command",
             "ui:theme",
+            "ui:window",
             "storage:private",
             "file:read:selected",
         ],

@@ -5,7 +5,7 @@
     "preset": {
       "type": "string",
       "title": "预设配色",
-      "enum": ["light", "dark", "forest", "contrast"]
+      "enum": ["light", "dark", "forest", "contrast", "ocean", "rose", "amber", "slate"]
     },
     "background": {
       "type": "string",

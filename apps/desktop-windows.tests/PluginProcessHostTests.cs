@@ -389,6 +389,46 @@ public sealed class PluginProcessHostTests : IDisposable
         Assert.Equal(-32001, exception.Code);
     }
 
+    [Fact]
+    public async Task HostBrokerAuthorizesIsolatedPluginOwnedWindowOnlyWithCapability()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "window-broker-storage"));
+        using var allowed = new PluginHostBroker(
+            "official.window",
+            "1.0.0",
+            ["ui:window"],
+            new PluginPrivateStorage(paths));
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            "1.0.0",
+            [],
+            new PluginPrivateStorage(paths));
+
+        var result = await allowed.HandleAsync(
+            PdppProtocol.HostUiWindowOpenMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                window_id = "inspector",
+                title = "合成窗口",
+                width = 640,
+                height = 480,
+                modal = true,
+            }));
+
+        Assert.True(result.GetProperty("opened").GetBoolean());
+        Assert.True(result.GetProperty("process_owned").GetBoolean());
+        Assert.Equal("inspector", result.GetProperty("window_id").GetString());
+        await Assert.ThrowsAsync<PdppHostRequestException>(() => denied.HandleAsync(
+            PdppProtocol.HostUiWindowOpenMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                window_id = "denied",
+                title = "合成窗口",
+                width = 640,
+                height = 480,
+            })));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))

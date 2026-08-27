@@ -5,8 +5,8 @@
   "components": [
     {
       "type": "application",
-      "name": "password-detective-official-skin",
-      "version": "1.1.0",
+      "name": "password-detective-official-hash-query",
+      "version": "1.0.0",
       "licenses": [{ "license": { "id": "MIT" } }]
     }
   ]

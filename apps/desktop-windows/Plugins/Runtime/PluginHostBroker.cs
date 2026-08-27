@@ -149,6 +149,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             PdppProtocol.HostApiHashReadMethod => CallApiAsync("api:hash:read", parameters, cancellationToken),
             PdppProtocol.HostApiVerificationSubmitMethod => CallApiAsync("api:verification:submit", parameters, cancellationToken),
             PdppProtocol.HostUiThemeApplyMethod => ApplyThemeAsync(parameters, cancellationToken),
+            PdppProtocol.HostUiWindowOpenMethod => OpenWindowAsync(parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -329,6 +330,45 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         }
 
         return _themeService.ApplyAsync(_pluginId, parameters, _installedDirectory, cancellationToken);
+    }
+
+    private Task<JsonElement> OpenWindowAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("ui:window");
+        cancellationToken.ThrowIfCancellationRequested();
+        if (parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("window_id", out var idElement)
+            || idElement.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(idElement.GetString())
+            || idElement.GetString()!.Length > 64
+            || !parameters.TryGetProperty("title", out var titleElement)
+            || titleElement.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(titleElement.GetString())
+            || titleElement.GetString()!.Length > 120
+            || !parameters.TryGetProperty("width", out var widthElement)
+            || !widthElement.TryGetDouble(out var width)
+            || width is < 320 or > 1920
+            || !parameters.TryGetProperty("height", out var heightElement)
+            || !heightElement.TryGetDouble(out var height)
+            || height is < 240 or > 1200
+            || parameters.TryGetProperty("modal", out var modalElement)
+                && modalElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            throw new PdppHostRequestException(-32602, "窗口参数无效。窗口尺寸必须在 320x240 到 1920x1200 之间。");
+        }
+
+        return Task.FromResult(JsonSerializer.SerializeToElement(new
+        {
+            opened = true,
+            window_id = idElement.GetString(),
+            title = titleElement.GetString(),
+            width,
+            height,
+            modal = modalElement.ValueKind == JsonValueKind.True,
+            process_owned = true,
+        }));
     }
 
     private static string ReadStorageKey(JsonElement parameters)
