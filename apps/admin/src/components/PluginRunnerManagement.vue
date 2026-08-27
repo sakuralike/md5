@@ -4,12 +4,10 @@ import { onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewLlmEnabled, savePluginReviewLlmKey, savePluginReviewPolicy, testPluginReviewLlm } from "../services/pluginReviews";
+import { createPluginRunner, getPluginReviewPolicy, listPluginRunners, revokePluginRunner, savePluginReviewDynamicEnabled, savePluginReviewLlmEnabled, savePluginReviewLlmKey, savePluginReviewPolicy, testPluginReviewLlm } from "../services/pluginReviews";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
@@ -72,13 +70,24 @@ async function saveLlmConfig(): Promise<void> {
   }
 }
 
-function updateDynamicReview(checked: boolean | "indeterminate"): void {
-  if (policy.value) policy.value.dynamic_review_enabled = checked === true;
+async function updateDynamicReview(): Promise<void> {
+  if (!policy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    policy.value = await savePluginReviewDynamicEnabled(auth.accessToken, !policy.value.dynamic_review_enabled);
+    saved.value = "Windows 动态审核开关已保存";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "Windows 动态审核开关保存失败";
+    await load();
+  } finally {
+    busy.value = false;
+  }
 }
 
-async function updateLlmReview(checked: boolean | "indeterminate"): Promise<void> {
+async function updateLlmReview(): Promise<void> {
   if (!policy.value) return;
-  policy.value.llm_review_enabled = checked === true;
+  policy.value.llm_review_enabled = !policy.value.llm_review_enabled;
   busy.value = true;
   error.value = "";
   try {
@@ -165,7 +174,7 @@ onMounted(load);
       <CardDescription>模型 Key 仅加密保存在服务器，不会回显到管理端。</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      <div class="flex items-center gap-3"><Switch id="policy-llm-review" :checked="policy.llm_review_enabled" @update:checked="updateLlmReview" /><Label for="policy-llm-review">启用大模型二次审核</Label></div>
+      <div class="flex items-center gap-3"><Button type="button" size="sm" :variant="policy.llm_review_enabled ? 'default' : 'outline'" :disabled="busy" @click="updateLlmReview">{{ policy.llm_review_enabled ? '已启用' : '未启用' }}</Button><Label for="policy-llm-review">启用大模型二次审核</Label></div>
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div class="space-y-2"><Label for="policy-llm-provider">模型协议</Label><Select v-model="policy.llm_provider"><SelectTrigger id="policy-llm-provider"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="disabled">未配置</SelectItem><SelectItem value="openai_compatible">OpenAI 兼容</SelectItem><SelectItem value="anthropic_compatible">Anthropic 兼容</SelectItem></SelectContent></Select></div>
         <div class="space-y-2"><Label for="policy-llm-url">API 地址</Label><Input id="policy-llm-url" v-model="policy.llm_base_url" placeholder="https://api.deepseek.com" /></div>
@@ -202,7 +211,7 @@ onMounted(load);
           <div class="space-y-2"><Label for="policy-revocation-refresh">撤销刷新（小时）</Label><Input id="policy-revocation-refresh" v-model.number="policy.revocation_refresh_hours" type="number" min="1" max="24" /></div>
           <div class="space-y-2"><Label for="policy-revocation-stale">离线过期（小时）</Label><Input id="policy-revocation-stale" v-model.number="policy.revocation_max_stale_hours" type="number" min="24" max="720" /></div>
         </div>
-        <div class="flex items-center gap-3"><Switch id="policy-dynamic-review" :checked="policy.dynamic_review_enabled" @update:checked="updateDynamicReview" /><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
+        <div class="flex items-center gap-3"><Button type="button" size="sm" :variant="policy.dynamic_review_enabled ? 'default' : 'outline'" :disabled="busy" @click="updateDynamicReview">{{ policy.dynamic_review_enabled ? '已启用' : '未启用' }}</Button><Label for="policy-dynamic-review">启用 Windows 动态审核</Label></div>
         <Button :disabled="busy" @click="savePolicy">保存审核策略</Button>
       </section>
       <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_minmax(0,1.4fr)_auto] lg:items-end">

@@ -17,15 +17,16 @@ from password_detective.core.idempotency import (
     payload_digest,
     require_idempotency_key,
 )
+from password_detective.db.audit import write_audit_log
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
 from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
 from password_detective.modules.desktop_plugins.llm_review import review_plugin
-from password_detective.modules.desktop_plugins.static_review import StaticReviewResult
 from password_detective.modules.desktop_plugins.review_policy import (
     get_current_review_policy,
     get_llm_api_key,
     review_policy_response,
+    save_dynamic_review_enabled,
     save_llm_api_key,
     save_llm_review_enabled,
     save_review_policy,
@@ -36,6 +37,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReportResponse,
     PluginReportReviewRequest,
     PluginReviewDetailResponse,
+    PluginReviewDynamicEnabledUpdate,
     PluginReviewLlmConnectionResponse,
     PluginReviewLlmEnabledUpdate,
     PluginReviewLlmKeyUpdate,
@@ -44,6 +46,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReviewPolicyUpdate,
     PluginReviewQueueResponse,
     PluginReviewSourceResponse,
+    PluginSourceLlmReviewRequest,
     PluginVersionApproveRequest,
     PluginVersionPublishRequest,
     PluginVersionRejectRequest,
@@ -51,6 +54,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionYankRequest,
 )
 from password_detective.modules.desktop_plugins.service import (
+    _admin_version,
     approve_version,
     delete_version,
     get_review_detail,
@@ -63,8 +67,8 @@ from password_detective.modules.desktop_plugins.service import (
     review_report,
     revoke_version,
     yank_version,
-    _admin_version,
 )
+from password_detective.modules.desktop_plugins.static_review import StaticReviewResult
 
 router = APIRouter(prefix="/admin/plugin-reviews", tags=["管理端·插件审核"])
 policy_router = APIRouter(prefix="/admin/plugin-review-policy", tags=["管理端·插件审核策略"])
@@ -130,9 +134,11 @@ def review_source(
 @router.post("/versions/{version_id}/source/llm-review")
 def review_plugin_source_with_llm(
     version_id: str,
+    payload: PluginSourceLlmReviewRequest,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
-    _: Annotated[Principal, Depends(require_admin_mfa)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
 ) -> dict:
     plugin, version = _admin_version(db, version_id=version_id)
     source = get_review_source(db, settings, version_id=version_id)
@@ -143,13 +149,40 @@ def review_plugin_source_with_llm(
         static_result=StaticReviewResult(
             findings=(),
             summary={"source_files": len(source["files"])},
-            evidence={"findings": [{"path": item["path"], "content": item["content"]} for item in source["files"]]},
+            evidence={
+                "findings": [
+                    {"path": item["path"], "content": item["content"]}
+                    for item in source["files"]
+                ]
+            },
         ),
         policy=get_current_review_policy(db),
+        api_key=get_llm_api_key(db, settings),
+        instruction=payload.instruction,
     )
     if result is None:
         raise AppError("desktop_plugin.llm_review_disabled", "大模型审核未启用", status_code=409)
-    logger.info("desktop_plugin_source_llm_review_completed", extra={"version_id": version_id, "verdict": result.verdict, "risk_level": result.risk_level})
+    logger.info(
+        "desktop_plugin_source_llm_review_completed",
+        extra={
+            "version_id": version_id,
+            "verdict": result.verdict,
+            "risk_level": result.risk_level,
+        },
+    )
+    context = get_client_context(request)
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="desktop_plugin.source.llm_review",
+        target_type="desktop_plugin_version",
+        target_id=version_id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"verdict": result.verdict, "risk_level": result.risk_level},
+    )
+    db.commit()
     return {"verdict": result.verdict, "risk_level": result.risk_level, "summary": result.summary}
 
 
@@ -559,3 +592,31 @@ def test_plugin_review_llm(
         provider=policy.llm_provider,
         model=policy.llm_model,
     )
+
+
+@policy_router.put("/dynamic-enabled", response_model=PluginReviewPolicyResponse)
+def update_plugin_review_dynamic_enabled(
+    payload: PluginReviewDynamicEnabledUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewPolicyResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin_review_policy.dynamic_enabled.save",
+        idempotency_key,
+        payload.model_dump(mode="json"),
+    )
+    if lease.cached_response is not None:
+        return PluginReviewPolicyResponse.model_validate(lease.cached_response)
+    try:
+        response = save_dynamic_review_enabled(
+            db, payload=payload, principal=principal, context=get_client_context(request)
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise

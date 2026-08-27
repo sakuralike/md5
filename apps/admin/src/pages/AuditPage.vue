@@ -213,7 +213,7 @@ onMounted(loadLogs);
           <ShieldCheck class="h-4 w-4" aria-hidden="true" />
           N2 Governance Workbench
         </div>
-        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-950">审计日志</h1>
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-950">全局系统日志（审计日志）</h1>
         <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
           查询已落库的真实业务审计事件，查看脱敏详情，并按当前筛选条件导出受限 CSV。
         </p>

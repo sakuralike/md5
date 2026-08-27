@@ -50,7 +50,7 @@ const auth = useAdminAuthStore();
 
     <main
       id="main-content"
-      class="mx-auto min-h-screen w-full max-w-screen-2xl px-4 pb-7 pt-28 sm:px-6 sm:pb-8 sm:pt-32 lg:pb-10"
+      class="mx-auto min-h-screen w-full max-w-screen-2xl px-4 pb-7 pt-28 sm:px-6 sm:pb-8 sm:pt-32 lg:pb-10 [&_input]:max-h-10 [&_input]:h-10 [&_textarea]:max-h-32 [&_[role=combobox]]:max-h-10"
       :class="auth.isAuthenticated ? 'lg:pl-[18rem] lg:pr-8' : 'lg:px-8'"
       tabindex="-1"
     >

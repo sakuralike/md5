@@ -16,8 +16,9 @@ from password_detective.db.models.system_setting import SystemSetting
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.desktop_plugins.schemas import (
-    PluginReviewLlmKeyUpdate,
+    PluginReviewDynamicEnabledUpdate,
     PluginReviewLlmEnabledUpdate,
+    PluginReviewLlmKeyUpdate,
     PluginReviewPolicyResponse,
     PluginReviewPolicyUpdate,
 )
@@ -181,7 +182,9 @@ def save_llm_review_enabled(
     }
     values["llm_review_enabled"] = payload.enabled
     if record is None:
-        record = SystemSetting(key=PLUGIN_REVIEW_POLICY_KEY, value_json={"value": values}, version=1)
+        record = SystemSetting(
+            key=PLUGIN_REVIEW_POLICY_KEY, value_json={"value": values}, version=1
+        )
         db.add(record)
     else:
         record.value_json = {"value": values}
@@ -194,6 +197,46 @@ def save_llm_review_enabled(
         action="desktop_plugin.review_policy.llm_enabled_saved",
         target_type="desktop_plugin_review_policy",
         target_id="llm_review_enabled",
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={"enabled": payload.enabled, "version": record.version},
+    )
+    db.commit()
+    return review_policy_response(db, get_current_review_policy(db))
+
+
+def save_dynamic_review_enabled(
+    db: Session,
+    *,
+    payload: PluginReviewDynamicEnabledUpdate,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewPolicyResponse:
+    record = db.get(SystemSetting, PLUGIN_REVIEW_POLICY_KEY)
+    current = get_current_review_policy(db)
+    values = {
+        key: value
+        for key, value in current.__dict__.items()
+        if key not in {"version", "updated_at", "updated_by"}
+    }
+    values["dynamic_review_enabled"] = payload.enabled
+    if record is None:
+        record = SystemSetting(
+            key=PLUGIN_REVIEW_POLICY_KEY, value_json={"value": values}, version=1
+        )
+        db.add(record)
+    else:
+        record.value_json = {"value": values}
+        record.version += 1
+    record.updated_by = principal.user.id
+    record.updated_at = utc_now()
+    write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="desktop_plugin.review_policy.dynamic_enabled_saved",
+        target_type="desktop_plugin_review_policy",
+        target_id="dynamic_review_enabled",
         result="success",
         ip_prefix=context.ip_prefix,
         request_id=context.request_id,

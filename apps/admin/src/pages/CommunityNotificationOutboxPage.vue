@@ -172,6 +172,7 @@ function kindLabel(value: CommunityNotificationKind): string {
     group_application: "群组申请",
     group_decision: "群组审批",
     group_role_change: "群组角色变更",
+    plugin_review: "插件审核",
   };
   return labels[value];
 }

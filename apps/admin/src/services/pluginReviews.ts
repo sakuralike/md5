@@ -142,8 +142,8 @@ export function getPluginReviewSource(token: string, versionId: string): Promise
   return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source`, {}, token);
 }
 
-export function reviewPluginSourceWithLlm(token: string, versionId: string): Promise<{ verdict: string; risk_level: string; summary: string }> {
-  return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source/llm-review`, { method: "POST" }, token);
+export function reviewPluginSourceWithLlm(token: string, versionId: string, instruction: string): Promise<{ verdict: string; risk_level: string; summary: string }> {
+  return apiRequest(`/admin/plugin-reviews/versions/${encodeURIComponent(versionId)}/source/llm-review`, { method: "POST", body: JSON.stringify({ instruction }) }, token);
 }
 
 export function deletePluginVersion(token: string, versionId: string): Promise<void> {
@@ -161,6 +161,14 @@ export function savePluginReviewLlmKey(token: string, apiKey: string): Promise<v
 export function savePluginReviewLlmEnabled(token: string, enabled: boolean): Promise<DesktopPluginReviewPolicy> {
   return apiRequest(
     "/admin/plugin-review-policy/llm-enabled",
+    { method: "PUT", headers: mutationHeaders(), body: JSON.stringify({ enabled }) },
+    token,
+  );
+}
+
+export function savePluginReviewDynamicEnabled(token: string, enabled: boolean): Promise<DesktopPluginReviewPolicy> {
+  return apiRequest(
+    "/admin/plugin-review-policy/dynamic-enabled",
     { method: "PUT", headers: mutationHeaders(), body: JSON.stringify({ enabled }) },
     token,
   );

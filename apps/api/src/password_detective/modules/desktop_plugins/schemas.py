@@ -492,6 +492,21 @@ class PluginReviewLlmEnabledUpdate(BaseModel):
     enabled: bool
 
 
+class PluginReviewDynamicEnabledUpdate(BaseModel):
+    enabled: bool
+
+
+class PluginSourceLlmReviewRequest(BaseModel):
+    instruction: str = Field(
+        default="请分析源码中的恶意行为、数据外传和权限滥用风险。", min_length=1, max_length=2_000
+    )
+
+    @field_validator("instruction")
+    @classmethod
+    def normalize_instruction(cls, value: str) -> str:
+        return _strip(value)
+
+
 class PluginReviewLlmConnectionResponse(BaseModel):
     connected: Literal[True]
     provider: Literal["openai_compatible", "anthropic_compatible"]

@@ -39,6 +39,7 @@ def review_plugin(
     static_result: StaticReviewResult,
     policy: PluginReviewPolicy,
     api_key: str | None = None,
+    instruction: str | None = None,
 ) -> LlmReviewResult | None:
     provider = policy.llm_provider
     if provider == "disabled":
@@ -56,6 +57,7 @@ def review_plugin(
             "summary": static_result.summary,
             "findings": static_result.evidence["findings"],
         },
+        "review_instruction": instruction or "请分析源码中的恶意行为、数据外传和权限滥用风险。",
     }
     content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     if provider == "openai_compatible":

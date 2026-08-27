@@ -128,7 +128,7 @@ export const adminSettingsNavigationItems: readonly AdminNavigationItem[] = [
     icon: Megaphone,
   },
   {
-    label: "审计日志",
+    label: "全局系统日志",
     path: "/audit",
     description: "筛选、查看并导出受控审计记录。",
     group: "安全运营",

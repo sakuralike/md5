@@ -311,6 +311,24 @@ async function saveSettings(): Promise<void> {
   }
 }
 
+async function saveSettingsSection(keys: Array<keyof OperationalSettingsSnapshot>): Promise<void> {
+  resetMessages();
+  mutationBusy.value = true;
+  try {
+    const current = normalizedSnapshot();
+    const payload = cloneOperationalSettingsSnapshot(baselineSnapshot.value);
+    const section = Object.fromEntries(keys.map((key) => [key, current[key]])) as Partial<OperationalSettingsSnapshot>;
+    Object.assign(payload, section);
+    const response = await saveCurrentSettings(payload, auth.accessToken, createClientId());
+    useSnapshot(response.settings);
+    success.value = "当前设置项已保存并立即生效。";
+  } catch (value) {
+    error.value = describeError(value);
+  } finally {
+    mutationBusy.value = false;
+  }
+}
+
 async function loadSeoSettings(): Promise<void> {
   seoLoading.value = true;
   seoError.value = "";
@@ -455,11 +473,13 @@ onMounted(refreshPage);
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="flex items-center gap-2 text-sm font-medium text-foreground"><ImageUp class="size-4 text-primary" />上传 Logo 图片</p><p class="mt-1 text-xs text-muted-foreground">支持 PNG、JPEG、WebP，最大 2 MB。</p></div><Input aria-label="上传 Logo 图片" type="file" accept="image/png,image/jpeg,image/webp" class="max-w-xs" :disabled="logoUploadBusy" @change="handleLogoUpload" /></div>
           <p v-if="logoUploadMessage" class="mt-3 text-sm text-primary">{{ logoUploadMessage }}</p><p v-if="logoUploadError" class="mt-3 text-sm text-destructive">{{ logoUploadError }}</p>
         </div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['site_name', 'site_logo_url'])"><Save class="mr-2 size-4" />保存站点品牌</Button></div>
       </section>
 
       <section id="site-navigation" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5 flex items-start justify-between gap-4"><div><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Navigation class="size-5 text-primary" />站点导航</h2><p class="mt-1 text-sm text-muted-foreground">顶部导航仅显示这里保存并启用的菜单项；路径可以手动输入，也可以选择现有页面。</p></div><Button type="button" variant="outline" :disabled="form.site_navigation.length >= 8" @click="addNavigationItem"><Plus class="mr-2 size-4" />新增导航</Button></div>
         <div class="space-y-3"><div v-for="(item, index) in form.site_navigation" :key="`${item.path}-${index}`" class="rounded-xl border border-border p-4"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto_auto]"><div class="space-y-2"><Label :for="`navigation-label-${index}`">名称</Label><Input :id="`navigation-label-${index}`" v-model="item.label" /></div><div class="grid gap-3 sm:grid-cols-2"><div class="space-y-2"><Label :for="`navigation-path-${index}`">手动输入路径</Label><Input :id="`navigation-path-${index}`" v-model="item.path" placeholder="/custom-page" /></div><div class="space-y-2"><Label :for="`navigation-preset-${index}`">选择现有页面</Label><Select :model-value="selectedNavigationPreset(item.path)" @update:model-value="applyNavigationPath(index, $event)"><SelectTrigger :id="`navigation-preset-${index}`"><SelectValue placeholder="选择页面" /></SelectTrigger><SelectContent><SelectItem v-for="option in navigationPathOptions" :key="option.path" :value="option.path">{{ option.label }}（{{ option.path }}）</SelectItem></SelectContent></Select></div></div><div class="flex items-end gap-4 pb-2"><Label class="flex items-center gap-2"><Checkbox :model-value="item.enabled" @update:model-value="item.enabled = $event === true" />启用</Label><Label class="flex items-center gap-2"><Checkbox :model-value="item.requires_auth" @update:model-value="item.requires_auth = $event === true" />登录后可见</Label></div><div class="flex items-end justify-end"><Button type="button" variant="ghost" :disabled="form.site_navigation.length <= 1" @click="removeNavigationItem(index)"><Trash2 class="mr-2 size-4" />删除</Button></div></div></div></div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['site_navigation'])"><Save class="mr-2 size-4" />保存站点导航</Button></div>
       </section>
 
       <section id="site-legal" class="glass-panel scroll-mt-28 p-6">
@@ -473,6 +493,7 @@ onMounted(refreshPage);
           <div class="space-y-2"><Label for="copyright-text">版权信息</Label><Input id="copyright-text" v-model="form.copyright_text" maxlength="200" placeholder="版权所有者与年份" /></div>
           <div class="space-y-2"><Label for="public-contact-email">公开联系邮箱</Label><Input id="public-contact-email" v-model="form.public_contact_email" type="email" maxlength="254" placeholder="contact@synthetic.example.com" /></div>
         </div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['icp_record', 'public_security_record', 'copyright_text', 'public_contact_email'])"><Save class="mr-2 size-4" />保存备案与联系信息</Button></div>
       </section>
 
       <section id="maintenance-governance" class="glass-panel scroll-mt-28 p-6">
@@ -492,6 +513,7 @@ onMounted(refreshPage);
             <p class="text-xs text-muted-foreground">每行一个 IPv4 或 IPv6 CIDR。请求来源仅在可信代理链解析后参与匹配，空白名单不会放行。</p>
           </div>
         </div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['maintenance_enabled', 'maintenance_message', 'maintenance_allowed_ip_cidrs'])"><Save class="mr-2 size-4" />保存维护治理</Button></div>
       </section>
 
       <section id="session-governance" class="glass-panel scroll-mt-28 p-6">
@@ -507,6 +529,7 @@ onMounted(refreshPage);
             <p class="text-xs text-muted-foreground">拒绝策略不会静默退出已有设备；撤销策略会为新登录腾出一个会话名额。</p>
           </div>
         </div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['max_active_sessions', 'session_overflow_policy'])"><Save class="mr-2 size-4" />保存登录设备治理</Button></div>
       </section>
 
       <section id="seo-settings" class="glass-panel scroll-mt-28 p-6" data-section="seo-settings">
@@ -554,6 +577,7 @@ onMounted(refreshPage);
       <section id="operational-policy" class="glass-panel scroll-mt-28 p-6">
         <div class="mb-5"><h2 class="flex items-center gap-2 text-lg font-semibold text-foreground"><Server class="size-5 text-primary" />运行参数</h2><p class="mt-1 text-sm text-muted-foreground">这些设置会在保存后直接更新运行时配置。</p></div>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div class="space-y-2"><Label for="daily-quota">每日明文查看配额</Label><Input id="daily-quota" v-model.number="form.daily_reveal_quota" type="number" min="1" max="1000" /></div><div class="space-y-2"><Label for="referral-reward-points" class="flex items-center gap-2"><Gift class="size-4 text-primary" />邀请注册奖励积分</Label><Input id="referral-reward-points" v-model.number="form.referral_reward_points" type="number" min="0" max="10000" /><p class="text-xs text-muted-foreground">每次邀请链接注册成功后，邀请人和新用户各获得相同积分。</p></div><div class="space-y-2"><Label for="reauth-ttl">再认证有效期（分钟）</Label><Input id="reauth-ttl" v-model.number="form.reauthentication_ttl_minutes" type="number" min="1" max="15" /></div><div class="space-y-2"><Label for="deletion-grace">账号删除宽限期（小时）</Label><Input id="deletion-grace" v-model.number="form.privacy_deletion_grace_hours" type="number" min="1" max="720" /></div><div class="space-y-2"><Label for="min-client">桌面端最低版本</Label><Input id="min-client" v-model="form.desktop_min_client_version" placeholder="1.0.0" /></div><div class="space-y-2"><Label for="download-cache">升级下载缓存（秒）</Label><Input id="download-cache" v-model.number="form.desktop_update_download_cache_seconds" type="number" min="60" max="31536000" /></div></div>
+        <div class="mt-4 flex justify-end"><Button :disabled="mutationBusy" @click="saveSettingsSection(['daily_reveal_quota', 'referral_reward_points', 'reauthentication_ttl_minutes', 'privacy_deletion_grace_hours', 'desktop_min_client_version', 'desktop_update_download_cache_seconds'])"><Save class="mr-2 size-4" />保存运行参数</Button></div>
       </section>
 
       <section id="email-delivery" class="glass-panel scroll-mt-28 p-6">

@@ -213,6 +213,7 @@ class CommunityNotificationKind(StrEnum):
     GROUP_DECISION = "group_decision"
     GROUP_ROLE_CHANGE = "group_role_change"
     DIRECT_MESSAGE = "direct_message"
+    PLUGIN_REVIEW = "plugin_review"
 
 
 class CommunityNotificationOutboxStatus(StrEnum):

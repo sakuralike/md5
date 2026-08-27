@@ -368,3 +368,22 @@ def test_admin_review_policy_is_versioned_and_controls_new_leases(client) -> Non
     assert lease.status_code == 200, lease.text
     expires_at = datetime.fromisoformat(lease.json()["expires_at"].replace("Z", "+00:00"))
     assert 120 <= (expires_at - utc_now()).total_seconds() <= 181
+
+
+def test_admin_can_independently_toggle_llm_and_dynamic_reviews(client) -> None:
+    headers = _admin_headers(client)
+    llm = client.put(
+        "/api/v1/admin/plugin-review-policy/llm-enabled",
+        headers={**headers, "Idempotency-Key": f"llm-enabled-{uuid4().hex}"},
+        json={"enabled": True},
+    )
+    assert llm.status_code == 200, llm.text
+    assert llm.json()["llm_review_enabled"] is True
+    dynamic = client.put(
+        "/api/v1/admin/plugin-review-policy/dynamic-enabled",
+        headers={**headers, "Idempotency-Key": f"dynamic-enabled-{uuid4().hex}"},
+        json={"enabled": True},
+    )
+    assert dynamic.status_code == 200, dynamic.text
+    assert dynamic.json()["llm_review_enabled"] is True
+    assert dynamic.json()["dynamic_review_enabled"] is True

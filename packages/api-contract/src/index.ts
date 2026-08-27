@@ -1711,7 +1711,8 @@ export type CommunityNotificationKind =
   | "group_application"
   | "group_decision"
   | "group_role_change"
-  | "direct_message";
+  | "direct_message"
+  | "plugin_review";
 export type CommunityNotificationSource =
   | "post"
   | "comment"

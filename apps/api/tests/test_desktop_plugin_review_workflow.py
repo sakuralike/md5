@@ -19,10 +19,10 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginArtifact,
     DesktopPluginVersion,
 )
+from password_detective.db.models.system_setting import SystemSetting
 from password_detective.db.models.third_party_app import ThirdPartyApp, ThirdPartyAppStatus
 from password_detective.db.models.third_party_oauth import ThirdPartyAuthorization
 from password_detective.db.models.user import User, UserRole
-from password_detective.db.models.system_setting import SystemSetting
 from password_detective.modules.desktop_plugins.review_service import (
     process_pending_static_reviews,
 )
@@ -144,7 +144,9 @@ def _complete_dynamic_review(client, admin_headers: dict[str, str]) -> None:
 def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
     _enable_dynamic_review(client)
     developer_headers, _, project_id, finalized, _, _, _ = _finalized_fixture(
-        client, "com.synthetic.review-workflow"
+        client,
+        "com.synthetic.review-workflow",
+        extra_files={"source/Plugin.cs": b"// synthetic reviewable source\n"},
     )
     version_id = finalized["id"]
     current = _current_version(client, developer_headers, project_id)
@@ -317,7 +319,9 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
 def test_manual_review_rejects_unrequested_capability_and_records_rejection(client) -> None:
     _enable_dynamic_review(client)
     developer_headers, _, project_id, finalized, _, _, _ = _finalized_fixture(
-        client, "com.synthetic.review-negative"
+        client,
+        "com.synthetic.review-negative",
+        extra_files={"source/Plugin.cs": b"// reviewable\n"},
     )
     version_id = finalized["id"]
     current = _current_version(client, developer_headers, project_id)

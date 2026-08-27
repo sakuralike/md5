@@ -22,6 +22,10 @@ from password_detective.core.errors import AppError
 from password_detective.core.security import hash_opaque_token
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
+from password_detective.db.models.community import (
+    CommunityNotificationKind,
+    CommunityNotificationSource,
+)
 from password_detective.db.models.desktop_plugin import (
     DesktopPlugin,
     DesktopPluginArtifact,
@@ -53,6 +57,7 @@ from password_detective.db.models.user import User
 from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.auth.reauthentication import consume_reauthentication_grant
+from password_detective.modules.community.notification_service import create_notification
 from password_detective.modules.desktop_plugins.package_verifier import verify_plugin_package
 from password_detective.modules.desktop_plugins.review_service import (
     enqueue_static_review,
@@ -2108,7 +2113,6 @@ def reject_version(
     context: ClientContext,
 ) -> PluginReviewDetailResponse:
     plugin, version = _admin_version(db, version_id=version_id, lock=True)
-    del plugin
     if version.version != payload.version:
         raise AppError(
             "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
@@ -2141,6 +2145,20 @@ def reject_version(
         actor_id=principal.user.id,
         context=context,
         details={"reason": payload.review_note},
+    )
+    create_notification(
+        db,
+        recipient_id=plugin.owner_user_id,
+        actor_id=principal.user.id,
+        kind=CommunityNotificationKind.PLUGIN_REVIEW,
+        source_type=CommunityNotificationSource.USER,
+        source_id=version.id,
+        post_id=None,
+        comment_id=None,
+        preview=(
+            f"插件 {plugin.name} {version.semver} 已驳回，请在 "
+            f"{version.remediation_deadline_at:%Y-%m-%d %H:%M} 前完成整改。"
+        ),
     )
     db.commit()
     return get_review_detail(db, version_id=version.id)
@@ -2278,6 +2296,20 @@ def yank_version(
         context=context,
         details={"reason": payload.reason},
     )
+    create_notification(
+        db,
+        recipient_id=plugin.owner_user_id,
+        actor_id=principal.user.id,
+        kind=CommunityNotificationKind.PLUGIN_REVIEW,
+        source_type=CommunityNotificationSource.USER,
+        source_id=version.id,
+        post_id=None,
+        comment_id=None,
+        preview=(
+            f"插件 {plugin.name} {version.semver} 已下架，请在 "
+            f"{version.remediation_deadline_at:%Y-%m-%d %H:%M} 前完成整改。"
+        ),
+    )
     db.commit()
     return get_review_detail(db, version_id=version.id)
 
@@ -2392,7 +2424,9 @@ def delete_due_remediation_versions(db: Session) -> int:
             select(DesktopPluginVersion).where(
                 DesktopPluginVersion.remediation_deadline_at.is_not(None),
                 DesktopPluginVersion.remediation_deadline_at <= now,
-                DesktopPluginVersion.status.in_((DesktopPluginVersionStatus.REJECTED, DesktopPluginVersionStatus.YANKED)),
+                DesktopPluginVersion.status.in_(
+                    (DesktopPluginVersionStatus.REJECTED, DesktopPluginVersionStatus.YANKED)
+                ),
             )
         ).all()
     )

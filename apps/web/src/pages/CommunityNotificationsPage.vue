@@ -42,6 +42,7 @@ const notificationFilters: NotificationFilter[] = [
   { value: "group_decision", label: "群组决定" },
   { value: "group_role_change", label: "角色变更" },
   { value: "direct_message", label: "私信" },
+  { value: "plugin_review", label: "插件审核" },
 ];
 
 const notificationLabels: Record<CommunityNotificationKind, string> = {
@@ -53,6 +54,7 @@ const notificationLabels: Record<CommunityNotificationKind, string> = {
   group_decision: "群组决定",
   group_role_change: "群组角色变更",
   direct_message: "私信",
+  plugin_review: "插件审核",
 };
 
 const auth = useAuthStore();
