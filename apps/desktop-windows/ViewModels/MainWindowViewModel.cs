@@ -15,7 +15,7 @@ namespace PasswordDetective.Desktop.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    public const string ClientVersion = "0.1.0";
+    public static string ClientVersion => ApplicationVersion.Current;
     public const string DefaultServerBaseUrl = "http://111.229.195.138:5173/api/v1/";
     private readonly IFileFingerprintService _fingerprintService;
     private readonly IArchiveVerificationService _archiveVerificationService;
@@ -93,6 +93,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public string ClientVersionText => ClientVersion;
+    public string WindowTitle => ApplicationVersion.WindowTitle;
     public string SelectedFile
     {
         get => _selectedFile;

@@ -20,6 +20,7 @@ import {
 import { Textarea } from "../components/ui/textarea";
 import {
   buildDesktopReleasePayload,
+  calculateArtifactSha256,
   createDesktopRelease,
   formatArtifactSize,
   listDesktopReleases,
@@ -38,6 +39,7 @@ const error = ref("");
 const success = ref("");
 const artifact = ref<File | null>(null);
 const artifactInputKey = ref(0);
+const artifactDigestBusy = ref(false);
 const retryArtifacts = reactive<Record<string, File | undefined>>({});
 
 const draft = reactive({
@@ -75,8 +77,24 @@ async function refreshReleases(showError = true): Promise<void> {
   }
 }
 
-function onArtifactSelected(event: Event): void {
-  artifact.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+async function onArtifactSelected(event: Event): Promise<void> {
+  const selected = (event.target as HTMLInputElement).files?.[0] ?? null;
+  artifact.value = selected;
+  draft.artifactSha256 = "";
+  if (!selected) return;
+  artifactDigestBusy.value = true;
+  clearMessages();
+  try {
+    const digest = await calculateArtifactSha256(selected);
+    if (artifact.value === selected) draft.artifactSha256 = digest;
+  } catch (caught) {
+    if (artifact.value === selected) {
+      artifact.value = null;
+      error.value = errorMessage(caught, "无法计算制品 SHA-256");
+    }
+  } finally {
+    artifactDigestBusy.value = false;
+  }
 }
 
 function onRetryArtifactSelected(releaseId: string, event: Event): void {
@@ -92,6 +110,7 @@ function resetDraft(): void {
   draft.distributionAuthorized = false;
   draft.legalDeclaration = "";
   artifact.value = null;
+  artifactDigestBusy.value = false;
   artifactInputKey.value += 1;
 }
 
@@ -313,16 +332,17 @@ onMounted(() => refreshReleases());
           制品 SHA-256
           <Input
             id="artifact-sha256"
-            v-model="draft.artifactSha256"
+            :model-value="draft.artifactSha256"
             class="font-mono"
             minlength="64"
             maxlength="64"
             autocomplete="off"
             spellcheck="false"
             required
+            readonly
           />
           <small class="leading-5 text-muted-foreground">
-            上传时和发布前均由后端重新计算；不要从聊天记录或非受控来源复制摘要。
+            {{ artifactDigestBusy ? "正在计算 SHA-256…" : draft.artifactSha256 ? "已根据所选文件自动计算；上传时和发布前后端会再次校验。" : "选择升级制品后自动计算。" }}
           </small>
         </Label>
 
@@ -349,7 +369,7 @@ onMounted(() => refreshReleases());
           />
         </Label>
 
-        <Button type="submit" :disabled="Boolean(activeAction)">
+        <Button type="submit" :disabled="Boolean(activeAction) || artifactDigestBusy || !draft.artifactSha256">
           {{ activeAction === "create" ? "创建并上传中…" : "创建草稿并上传" }}
         </Button>
       </form>

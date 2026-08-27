@@ -2,6 +2,7 @@ import type { DesktopRelease } from "@password-detective/api-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDesktopReleasePayload,
+  calculateArtifactSha256,
   formatArtifactSize,
   uploadDesktopReleaseArtifact,
   validateArtifactForRelease,
@@ -71,6 +72,13 @@ describe("desktop release administration", () => {
       distribution_authorized: true,
       legal_declaration: "该合成制品由项目构建，具备合法分发授权。",
     });
+  });
+
+  it("calculates SHA-256 from the selected artifact", async () => {
+    const selected = new Blob(["synthetic artifact"]);
+    await expect(calculateArtifactSha256(selected)).resolves.toBe(
+      "169e73adeeb9ee2cbf78b5878c95ebef88d580774a6005a367c8e35458658027",
+    );
   });
 
   it("rejects unsafe or inconsistent release metadata", () => {

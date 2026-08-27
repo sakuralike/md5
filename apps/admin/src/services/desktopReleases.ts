@@ -65,6 +65,11 @@ export interface ArtifactDescriptor {
   type: string;
 }
 
+export async function calculateArtifactSha256(artifact: Blob): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", await artifact.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function buildDesktopReleasePayload(
   input: DesktopReleaseDraftInput,
   artifact: ArtifactDescriptor,

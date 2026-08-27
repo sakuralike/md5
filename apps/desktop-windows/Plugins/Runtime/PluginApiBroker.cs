@@ -140,7 +140,7 @@ public sealed class PluginApiBroker : IPluginApiBroker
                 request.CandidateId,
                 request.FingerprintAlgorithm,
                 request.FingerprintDigest,
-                MainWindowViewModelsClientVersion),
+                ApplicationVersion.Current),
             cancellationToken);
         var verifiedAt = DateTimeOffset.UtcNow;
         var canonical = new DesktopReceiptPayload(
@@ -154,7 +154,7 @@ public sealed class PluginApiBroker : IPluginApiBroker
             request.CandidateDigest,
             request.Outcome,
             request.ArchiveFormat,
-            MainWindowViewModelsClientVersion,
+            ApplicationVersion.Current,
             verifiedAt);
         var signature = await _identityService.SignAsync(
             DesktopReceiptCanonicalizer.Build(canonical),
@@ -173,14 +173,12 @@ public sealed class PluginApiBroker : IPluginApiBroker
                 request.CandidateDigest,
                 request.Outcome,
                 request.ArchiveFormat,
-                MainWindowViewModelsClientVersion,
+                ApplicationVersion.Current,
                 verifiedAt,
                 signature),
             cancellationToken);
         return JsonSerializer.SerializeToElement(receipt, JsonOptions);
     }
-
-    private const string MainWindowViewModelsClientVersion = "0.1.0";
 
     private static void EnsureEmpty(JsonElement parameters)
     {
