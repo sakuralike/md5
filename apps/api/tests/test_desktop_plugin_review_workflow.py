@@ -235,6 +235,7 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
     ).json()
     public_version = public_detail["versions"][0]
     assert public_version["published_at"].endswith("Z")
+    assert public_version["release_notes"] == "合成发布说明"
     assert public_version["published_at"] == public_version["platform_signature_payload"][
         "published_at"
     ]
@@ -322,6 +323,56 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
         assert DesktopPluginStorage(client.app.state.settings).revoked_path(
             artifact.storage_key
         ).is_file()
+
+
+def test_canary_publication_can_be_promoted_to_stable(client) -> None:
+    developer_headers, _, project_id, finalized, _, _, _ = _finalized_fixture(
+        client,
+        "com.synthetic.canary-promotion",
+        extra_files={"source/Program.cs": b"internal static class CanaryPromotion { }"},
+    )
+    current = _current_version(client, developer_headers, project_id)
+    submitted = client.post(
+        f"/api/v1/developer/plugin-versions/{finalized['id']}/submit",
+        headers={**developer_headers, "Idempotency-Key": "canary-promotion-submit"},
+        json={"version": current["version"]},
+    )
+    assert submitted.status_code == 200, submitted.text
+    assert _run_static_review(client)["passed"] == 1
+
+    admin_headers = _admin_headers(client)
+    detail = client.get(
+        f"/api/v1/admin/plugin-reviews/versions/{finalized['id']}", headers=admin_headers
+    ).json()
+    approved = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{finalized['id']}/approve",
+        headers={**admin_headers, "Idempotency-Key": "canary-promotion-approve"},
+        json={
+            "version": detail["version"],
+            "approved_capabilities": ["ui:command", "storage:private"],
+            "review_note": "Synthetic canary promotion approval.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    canary = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{finalized['id']}/publish",
+        headers={**admin_headers, "Idempotency-Key": "canary-promotion-publish"},
+        json={"version": approved.json()["version"], "channel": "canary"},
+    )
+    assert canary.status_code == 200, canary.text
+    assert canary.json()["status"] == "published"
+
+    stable = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{finalized['id']}/publish",
+        headers={**admin_headers, "Idempotency-Key": "canary-promotion-stable"},
+        json={"version": canary.json()["version"], "channel": "stable"},
+    )
+    assert stable.status_code == 200, stable.text
+    assert stable.json()["status"] == "published"
+    catalog = client.get("/api/v1/desktop/plugins/catalog")
+    assert any(
+        item["slug"] == "com.synthetic.canary-promotion" for item in catalog.json()["items"]
+    )
 
 
 def test_manual_review_rejects_unrequested_capability_and_records_rejection(client) -> None:

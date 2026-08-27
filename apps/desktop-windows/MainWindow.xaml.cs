@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly PluginStoragePaths _pluginPaths;
     private readonly PluginSafeMode _pluginSafeMode;
     private readonly PluginThemeService _pluginThemeService;
+    private readonly InstallationIdentityService _installationIdentityService;
     private PluginMarketplaceWindow? _pluginMarketplaceWindow;
 
     public MainWindow(PluginStoragePaths pluginPaths, PluginSafeMode pluginSafeMode)
@@ -31,11 +32,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         _pluginPaths = pluginPaths;
         _pluginSafeMode = pluginSafeMode;
+        _installationIdentityService = new InstallationIdentityService();
         _pluginThemeService = new PluginThemeService(_pluginPaths.RootDirectory, ApplyThemeAsync);
         _viewModel = new MainWindowViewModel(
             new FileFingerprintService(),
             new ArchiveVerificationService(),
-            new InstallationIdentityService(),
+            _installationIdentityService,
             new DesktopApiClient(),
             new ProtectedSessionStore(),
             new ExternalUriLauncher());
@@ -86,7 +88,8 @@ public partial class MainWindow : Window
             registry,
             execution,
             _pluginSafeMode,
-            logs);
+            logs,
+            installer);
         var viewModel = new PluginMarketplaceViewModel(
             _pluginPaths,
             installer,
@@ -96,7 +99,20 @@ public partial class MainWindow : Window
             _pluginSafeMode,
             new PluginDialogService(),
             _viewModel.ServerBaseUrl,
-            logs);
+            logs,
+            accessTokenProvider: async cancellationToken =>
+            {
+                try
+                {
+                    var session = await _viewModel.GetSessionForPluginBrokerAsync(cancellationToken);
+                    return session.AccessToken;
+                }
+                catch (InvalidOperationException)
+                {
+                    return null;
+                }
+            },
+            identityService: _installationIdentityService);
         _pluginMarketplaceWindow = new PluginMarketplaceWindow(viewModel)
         {
             Owner = this,

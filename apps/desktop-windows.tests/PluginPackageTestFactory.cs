@@ -24,6 +24,7 @@ internal sealed class PluginPackageTestFactory
         string commandTitle = "回显输入",
         string commandSchemaPath = "schemas/echo.schema.json",
         byte[]? commandSchema = null,
+        PluginMigrationManifest? migration = null,
         IReadOnlyDictionary<string, byte[]>? runtimeFiles = null,
         IReadOnlyDictionary<string, byte[]>? additionalFiles = null,
         Action<ZipArchive>? mutateArchive = null)
@@ -49,10 +50,11 @@ internal sealed class PluginPackageTestFactory
                     ["windows-arm64"] = "bin/windows-arm64/plugin.exe",
                 }),
             [new PluginCommandManifest(commandId, commandTitle, commandSchemaPath)],
-            new PluginCapabilitiesManifest(
-                requiredCapabilities ?? ["ui:command"],
-                optionalCapabilities ?? ["storage:private"]),
-            new PluginLimitsManifest(128, 25, 30, 0));
+             new PluginCapabilitiesManifest(
+                 requiredCapabilities ?? ["ui:command"],
+                 optionalCapabilities ?? ["storage:private"]),
+             new PluginLimitsManifest(128, 25, 30, 0),
+             migration);
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
         {
             [PluginPackageVerifier.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),

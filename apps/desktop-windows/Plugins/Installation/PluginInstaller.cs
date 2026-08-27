@@ -95,7 +95,9 @@ public sealed class PluginInstaller
             packagePath,
             userGrantedCapabilities.Intersect(approvedCapabilities, StringComparer.Ordinal),
             marketReviewed: true,
-            cancellationToken);
+            cancellationToken,
+            approvedCapabilities,
+            marketVersion.RiskTier);
         var market = local.Plugin with
         {
             Source = PluginSource.MarketReviewed,
@@ -119,7 +121,9 @@ public sealed class PluginInstaller
         string packagePath,
         IEnumerable<string> userGrantedCapabilities,
         bool marketReviewed,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IEnumerable<string>? approvedCapabilities = null,
+        string riskTier = "standard")
     {
         await _lock.WaitAsync(cancellationToken);
         try
@@ -135,6 +139,17 @@ public sealed class PluginInstaller
                     $"本地策略或用户未授予必需权限：{string.Join("、", permission.DeniedRequired)}。");
             }
 
+            var requestedCapabilities = inspection.Manifest.Capabilities.Required
+                .Concat(inspection.Manifest.Capabilities.Optional)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            var approvedCapabilitySnapshot = (approvedCapabilities ?? requestedCapabilities)
+                .Intersect(requestedCapabilities, StringComparer.Ordinal)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
             var existing = await _registry.GetAsync(inspection.Manifest.PluginId, cancellationToken);
             InstalledPluginVersion? existingVersion = null;
             _ = existing?.Versions.TryGetValue(inspection.Manifest.Version, out existingVersion);
@@ -142,6 +157,19 @@ public sealed class PluginInstaller
                 && existingVersion.PackageSha256 != inspection.PackageSha256)
             {
                 throw new PluginInstallException("同一插件版本已存在不同制品，版本不可变。");
+            }
+
+            if (existing is not null
+                && !string.Equals(
+                    existing.CurrentVersion,
+                    inspection.Manifest.Version,
+                    StringComparison.Ordinal)
+                && PluginSemver.Compare(
+                    PluginSemver.Parse(inspection.Manifest.Version),
+                    PluginSemver.Parse(existing.CurrentVersion)) < 0)
+            {
+                throw new PluginInstallException(
+                    $"目标插件版本 {inspection.Manifest.Version} 低于当前版本 {existing.CurrentVersion}，已拒绝降级安装。请使用回退操作。");
             }
 
             var cachedPackage = await CachePackageAsync(inspection, cancellationToken);
@@ -181,8 +209,84 @@ public sealed class PluginInstaller
                 await VerifyInstalledFilesAsync(finalDirectory, inspection, cancellationToken);
             }
 
+            var isUpgrade = existing is not null
+                            && existing.CurrentVersion != inspection.Manifest.Version
+                            && _validator is IPluginUpgradeValidator;
+            var migrationDeclaration = inspection.Manifest.Migration;
+            if (isUpgrade
+                && migrationDeclaration?.Required == true
+                && !migrationDeclaration.FromVersions.Contains(
+                    existing!.CurrentVersion,
+                    StringComparer.Ordinal))
+            {
+                throw new PluginInstallException(
+                    $"插件迁移声明不支持从 {existing.CurrentVersion} 升级到 {inspection.Manifest.Version}。");
+            }
+            var migrationWillRun = isUpgrade
+                                   && (migrationDeclaration is null
+                                       || migrationDeclaration.Required);
+            var dataDirectory = _paths.PluginDataDirectory(inspection.Manifest.PluginId);
+            var dataExisted = isUpgrade && Directory.Exists(dataDirectory);
+            var dataBackup = isUpgrade
+                ? Path.Combine(
+                    _paths.StagingDirectory,
+                    $"migration-data-{inspection.Manifest.PluginId}-{Guid.NewGuid():N}")
+                : null;
+            var dataBackupReady = false;
+            var migrationStarted = false;
+            DateTimeOffset? migrationStartedAt = null;
+            var migrationRecords = existing?.MigrationRecords?.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.Ordinal)
+                ?? new Dictionary<string, PluginMigrationRecord>(StringComparer.Ordinal);
             try
             {
+                if (dataExisted && dataBackup is not null)
+                {
+                    CopyDirectory(dataDirectory, dataBackup);
+                    dataBackupReady = true;
+                }
+                if (migrationWillRun && _validator is IPluginUpgradeValidator upgradeValidator)
+                {
+                    migrationStarted = true;
+                    migrationStartedAt = DateTimeOffset.UtcNow;
+                    migrationRecords[inspection.Manifest.Version] = new PluginMigrationRecord(
+                        existing!.CurrentVersion,
+                        inspection.Manifest.Version,
+                        "running",
+                        migrationStartedAt.Value,
+                        null,
+                        null);
+                    var migrationResult = await upgradeValidator.MigrateAsync(
+                        inspection,
+                        finalDirectory,
+                        existing!.CurrentVersion,
+                        permission.Granted,
+                        cancellationToken);
+                    migrationRecords[inspection.Manifest.Version] = migrationRecords[
+                        inspection.Manifest.Version] with
+                    {
+                        Status = "completed",
+                        CompletedAt = DateTimeOffset.UtcNow,
+                        Steps = migrationResult.Steps.Select(step => new PluginMigrationStepRecord(
+                            step.StepId,
+                            step.Status,
+                            step.AttemptCount)).ToArray(),
+                    };
+                }
+                else if (isUpgrade)
+                {
+                    var timestamp = DateTimeOffset.UtcNow;
+                    migrationRecords[inspection.Manifest.Version] = new PluginMigrationRecord(
+                        existing!.CurrentVersion,
+                        inspection.Manifest.Version,
+                        "not_required",
+                        timestamp,
+                        timestamp,
+                        null,
+                        []);
+                }
                 await _validator.ValidateAsync(
                     inspection,
                     finalDirectory,
@@ -229,7 +333,18 @@ public sealed class PluginInstaller
                     LastError: null,
                     InstalledAt: existing?.InstalledAt ?? now,
                     UpdatedAt: now,
-                    LastStartedAt: null);
+                    LastStartedAt: null,
+                    RiskTier: riskTier,
+                    PermissionConsents: MergePermissionConsent(
+                        existing?.PermissionConsents,
+                        inspection.Manifest.Version,
+                        requestedCapabilities,
+                        approvedCapabilitySnapshot,
+                        permission.Granted,
+                        inspection.PublisherKeyFingerprint,
+                        riskTier,
+                        now),
+                    MigrationRecords: migrationRecords);
                 await _registry.UpsertAsync(installed, cancellationToken);
                 CleanupUnretainedVersions(inspection.Manifest.PluginId, retainedVersions.Keys);
                 foreach (var removed in removedVersions)
@@ -242,14 +357,76 @@ public sealed class PluginInstaller
 
                 return new PluginInstallResult(installed, inspection, permission.DeniedOptional);
             }
-            catch
+            catch (Exception installationException)
             {
                 if (newlyExtracted)
                 {
                     DeleteDirectory(finalDirectory);
                 }
+                if (migrationStarted)
+                {
+                    try
+                    {
+                        DeleteDirectory(dataDirectory);
+                        if (dataExisted && dataBackupReady && dataBackup is not null)
+                        {
+                            CopyDirectory(dataBackup, dataDirectory);
+                        }
+                    }
+                    catch (Exception restoreException)
+                        when (restoreException is IOException or UnauthorizedAccessException)
+                    {
+                        throw new PluginInstallException(
+                            "插件升级失败，且无法恢复升级前的私有数据快照。",
+                            new AggregateException(installationException, restoreException));
+                    }
+                }
+
+                if (isUpgrade && existing is not null)
+                {
+                    var failureTime = DateTimeOffset.UtcNow;
+                    var failedRecords = existing.MigrationRecords?.ToDictionary(
+                        pair => pair.Key,
+                        pair => pair.Value,
+                        StringComparer.Ordinal)
+                        ?? new Dictionary<string, PluginMigrationRecord>(StringComparer.Ordinal);
+                    failedRecords[inspection.Manifest.Version] = new PluginMigrationRecord(
+                        existing.CurrentVersion,
+                        inspection.Manifest.Version,
+                        "failed",
+                        migrationStartedAt ?? failureTime,
+                        failureTime,
+                        installationException.Message.Length > 512
+                            ? installationException.Message[..512]
+                            : installationException.Message,
+                        installationException is PluginMigrationException migrationException
+                            ? migrationException.Steps.Select(step => new PluginMigrationStepRecord(
+                                step.StepId,
+                                step.Status,
+                                step.AttemptCount)).ToArray()
+                            : []);
+                    try
+                    {
+                        await _registry.UpdateAsync(
+                            existing.PluginId,
+                            plugin => plugin with
+                            {
+                                MigrationRecords = failedRecords,
+                                UpdatedAt = failureTime,
+                            },
+                            CancellationToken.None);
+                    }
+                    catch (Exception)
+                    {
+                        // Migration failure must preserve the original installation error.
+                    }
+                }
 
                 throw;
+            }
+            finally
+            {
+                TryDeleteDirectory(dataBackup);
             }
         }
         finally
@@ -324,10 +501,8 @@ public sealed class PluginInstaller
                 _paths.StagingDirectory,
                 $"uninstall-{pluginId}-{Guid.NewGuid():N}");
             var installedDirectory = Path.Combine(_paths.InstalledDirectory, pluginId);
-            var dataDirectory = _paths.PluginDataDirectory(pluginId);
             Directory.CreateDirectory(tombstone);
             MoveIfPresent(installedDirectory, Path.Combine(tombstone, "installed"));
-            MoveIfPresent(dataDirectory, Path.Combine(tombstone, "data"));
             try
             {
                 await _registry.RemoveAsync(pluginId, cancellationToken);
@@ -335,7 +510,6 @@ public sealed class PluginInstaller
             catch
             {
                 MoveIfPresent(Path.Combine(tombstone, "installed"), installedDirectory);
-                MoveIfPresent(Path.Combine(tombstone, "data"), dataDirectory);
                 throw;
             }
 
@@ -540,6 +714,36 @@ public sealed class PluginInstaller
         Directory.Move(source, destination);
     }
 
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
+        }
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(destination, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
+    }
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (path is null)
+        {
+            return;
+        }
+        try
+        {
+            DeleteDirectory(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     private async Task TryDeleteUnreferencedPackageAsync(
         string packageSha256,
         string removedPluginId,
@@ -566,6 +770,32 @@ public sealed class PluginInstaller
         }
     }
 
+    private static IReadOnlyDictionary<string, PluginPermissionConsent> MergePermissionConsent(
+        IReadOnlyDictionary<string, PluginPermissionConsent>? existing,
+        string version,
+        IReadOnlyList<string> requestedCapabilities,
+        IReadOnlyList<string> approvedCapabilities,
+        IReadOnlyList<string> grantedCapabilities,
+        string publisherKeyFingerprint,
+        string riskTier,
+        DateTimeOffset consentedAt)
+    {
+        var consents = existing?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal)
+            ?? new Dictionary<string, PluginPermissionConsent>(StringComparer.Ordinal);
+        consents[version] = new PluginPermissionConsent(
+            version,
+            requestedCapabilities,
+            approvedCapabilities,
+            grantedCapabilities,
+            publisherKeyFingerprint,
+            riskTier,
+            consentedAt);
+        return consents;
+    }
+
     private static void DeleteDirectory(string path)
     {
         if (!Directory.Exists(path))
@@ -580,4 +810,5 @@ public sealed class PluginInstaller
 
         Directory.Delete(path, recursive: true);
     }
+
 }

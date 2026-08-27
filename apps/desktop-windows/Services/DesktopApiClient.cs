@@ -81,12 +81,40 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
     public Task<MarketPluginCatalogResponse> GetPluginCatalogAsync(
         string serverBaseUrl,
         string? query = null,
+        int page = 1,
+        int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        var suffix = string.IsNullOrWhiteSpace(query)
-            ? "desktop/plugins/catalog?architecture=windows-x64&host_version=0.1.0&protocol_version=1"
-            : $"desktop/plugins/catalog?architecture=windows-x64&host_version=0.1.0&protocol_version=1&q={Uri.EscapeDataString(query)}";
+        var suffix = "desktop/plugins/catalog?architecture=windows-x64"
+                     + "&host_version=0.1.0&protocol_version=1"
+                     + $"&page={page}&page_size={pageSize}";
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            suffix += $"&q={Uri.EscapeDataString(query)}";
+        }
         return GetAsync<MarketPluginCatalogResponse>(serverBaseUrl, suffix, cancellationToken);
+    }
+
+    public Task<MarketPluginCatalogResponse> GetCanaryPluginCatalogAsync(
+        string serverBaseUrl,
+        string accessToken,
+        string? query = null,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var suffix = "desktop/plugins/canary/catalog?architecture=windows-x64"
+                     + "&host_version=0.1.0&protocol_version=1"
+                     + $"&page={page}&page_size={pageSize}";
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            suffix += $"&q={Uri.EscapeDataString(query)}";
+        }
+        return GetAsync<MarketPluginCatalogResponse>(
+            serverBaseUrl,
+            suffix,
+            accessToken,
+            cancellationToken);
     }
 
     public Task<MarketPluginDetail> GetPluginDetailAsync(
@@ -96,6 +124,17 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
         GetAsync<MarketPluginDetail>(
             serverBaseUrl,
             $"desktop/plugins/{Uri.EscapeDataString(slug)}",
+            cancellationToken);
+
+    public Task<MarketPluginDetail> GetCanaryPluginDetailAsync(
+        string serverBaseUrl,
+        string accessToken,
+        string slug,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<MarketPluginDetail>(
+            serverBaseUrl,
+            $"desktop/plugins/canary/{Uri.EscapeDataString(slug)}",
+            accessToken,
             cancellationToken);
 
     public Task<MarketPluginRevocationList> GetPluginRevocationsAsync(
@@ -144,15 +183,46 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             null,
             cancellationToken);
 
+    public Task<MarketPluginDownloadTicket> IssueCanaryPluginDownloadTicketAsync(
+        string serverBaseUrl,
+        string accessToken,
+        string versionId,
+        string architecture,
+        Guid installationId,
+        string signature,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<PluginCanaryDownloadRequest, MarketPluginDownloadTicket>(
+            serverBaseUrl,
+            $"admin/plugin-reviews/versions/{Uri.EscapeDataString(versionId)}/canary-download-ticket",
+            new PluginCanaryDownloadRequest(architecture, installationId, signature),
+            accessToken,
+            cancellationToken);
+
     public async Task DownloadPluginArtifactAsync(
         string downloadUrl,
         string destinationPath,
         string expectedSha256,
         long expectedSizeBytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? accessToken = null,
+        Guid? installationId = null,
+        string? canarySignature = null)
     {
-        using var response = await _httpClient.GetAsync(
-            downloadUrl,
+        using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+        if (installationId.HasValue)
+        {
+            request.Headers.Add("X-Plugin-Installation-Id", installationId.Value.ToString("D"));
+        }
+        if (!string.IsNullOrWhiteSpace(canarySignature))
+        {
+            request.Headers.Add("X-Plugin-Canary-Signature", canarySignature);
+        }
+        using var response = await _httpClient.SendAsync(
+            request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -184,6 +254,7 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
     public async Task RecordPluginInstallEventAsync(
         string serverBaseUrl,
         PluginInstallEventRequest payload,
+        string? accessToken = null,
         CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(
@@ -193,6 +264,10 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             Content = JsonContent.Create(payload, options: JsonOptions),
         };
         request.Headers.Add("Idempotency-Key", payload.EventId);
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
         request.Headers.UserAgent.ParseAdd("PasswordDetective-Desktop/0.1.0");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -367,6 +442,11 @@ public sealed record DownloadTicketRequest(
     [property: JsonPropertyName("architecture")] string Architecture,
     [property: JsonPropertyName("semver")] string Semver);
 
+public sealed record PluginCanaryDownloadRequest(
+    [property: JsonPropertyName("architecture")] string Architecture,
+    [property: JsonPropertyName("installation_id")] Guid InstallationId,
+    [property: JsonPropertyName("signature")] string Signature);
+
 public sealed record PluginInstallEventRequest(
     [property: JsonPropertyName("event_id")] string EventId,
     [property: JsonPropertyName("plugin_slug")] string PluginSlug,
@@ -375,7 +455,32 @@ public sealed record PluginInstallEventRequest(
     [property: JsonPropertyName("source")] string Source,
     [property: JsonPropertyName("kind")] string Kind,
     [property: JsonPropertyName("result")] string Result,
-    [property: JsonPropertyName("client_version")] string ClientVersion);
+    [property: JsonPropertyName("client_version")] string ClientVersion,
+    [property: JsonPropertyName("permission_evidence")] PluginPermissionEvidencePayload? PermissionEvidence = null,
+    [property: JsonPropertyName("migration_evidence")] PluginMigrationEvidencePayload? MigrationEvidence = null,
+    [property: JsonPropertyName("installation_id")] Guid? InstallationId = null,
+    [property: JsonPropertyName("evidence_signature")] string? EvidenceSignature = null);
+
+public sealed record PluginPermissionEvidencePayload(
+    [property: JsonPropertyName("requested_capabilities")] IReadOnlyList<string> RequestedCapabilities,
+    [property: JsonPropertyName("approved_capabilities")] IReadOnlyList<string> ApprovedCapabilities,
+    [property: JsonPropertyName("granted_capabilities")] IReadOnlyList<string> GrantedCapabilities,
+    [property: JsonPropertyName("publisher_key_fingerprint")] string PublisherKeyFingerprint,
+    [property: JsonPropertyName("risk_tier")] string RiskTier,
+    [property: JsonPropertyName("consented_at")] DateTimeOffset ConsentedAt);
+
+public sealed record PluginMigrationEvidencePayload(
+    [property: JsonPropertyName("from_version")] string FromVersion,
+    [property: JsonPropertyName("to_version")] string ToVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("started_at")] DateTimeOffset StartedAt,
+    [property: JsonPropertyName("completed_at")] DateTimeOffset? CompletedAt,
+    [property: JsonPropertyName("steps")] IReadOnlyList<PluginMigrationStepEvidencePayload> Steps);
+
+public sealed record PluginMigrationStepEvidencePayload(
+    [property: JsonPropertyName("step_id")] string StepId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("attempt_count")] int AttemptCount);
 
 public sealed class DesktopApiException(
     int statusCode,

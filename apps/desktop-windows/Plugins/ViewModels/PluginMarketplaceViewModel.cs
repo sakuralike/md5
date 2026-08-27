@@ -36,6 +36,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
     private readonly PasswordDetective.Desktop.Services.DesktopApiClient _marketApi;
     private readonly PluginRevocationCache _revocationCache;
     private readonly string _serverBaseUrl;
+    private readonly Func<CancellationToken, Task<string?>>? _accessTokenProvider;
+    private readonly PasswordDetective.Desktop.Services.IInstallationIdentityService? _identityService;
     private PluginPackageInspection? _selectedPackage;
     private InstalledPlugin? _selectedInstalledPlugin;
     private PluginCommandManifest? _selectedCommand;
@@ -46,12 +48,15 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
     private bool _isBusy;
     private MarketPluginCatalogItem? _selectedMarketPlugin;
     private MarketPluginDetail? _selectedMarketDetail;
+    private PluginUpdateCandidate? _selectedPluginUpdate;
     private string _marketQuery = string.Empty;
+    private string _pluginUpdateSummary = "尚未检查插件更新。";
     private readonly HashSet<string> _revokedMarketVersions = new(StringComparer.Ordinal);
     private readonly HashSet<string> _revokedMarketPlugins = new(StringComparer.Ordinal);
     private readonly HashSet<string> _revokedMarketSigningKeys = new(StringComparer.Ordinal);
     private PluginRevocationCacheSnapshot? _revocationSnapshot;
     private bool _offlineMarketBlocked;
+    private bool _isCanaryMode;
 
     private static readonly TimeSpan RevocationRefreshInterval = TimeSpan.FromHours(6);
     private static readonly TimeSpan RevocationCacheTtl = TimeSpan.FromDays(7);
@@ -65,7 +70,10 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         PluginSafeMode safeMode,
         IPluginDialogService dialogs,
         string? serverBaseUrl = null,
-        PluginLogStore? logs = null)
+        PluginLogStore? logs = null,
+        PasswordDetective.Desktop.Services.DesktopApiClient? marketApi = null,
+        Func<CancellationToken, Task<string?>>? accessTokenProvider = null,
+        PasswordDetective.Desktop.Services.IInstallationIdentityService? identityService = null)
     {
         _paths = paths;
         _installer = installer;
@@ -75,10 +83,12 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         _safeMode = safeMode;
         _logs = logs ?? new PluginLogStore(paths);
         _dialogs = dialogs;
-        _marketApi = new PasswordDetective.Desktop.Services.DesktopApiClient();
+        _marketApi = marketApi ?? new PasswordDetective.Desktop.Services.DesktopApiClient();
         _revocationCache = new PluginRevocationCache(paths);
         _serverBaseUrl = serverBaseUrl ?? string.Empty;
-        InitializeCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
+        _accessTokenProvider = accessTokenProvider;
+        _identityService = identityService;
+        InitializeCommand = new AsyncRelayCommand(InitializeAsync, () => !IsBusy);
         BrowsePackageCommand = new AsyncRelayCommand(BrowsePackageAsync, () => !IsBusy);
         InstallPackageCommand = new AsyncRelayCommand(InstallPackageAsync, () => !IsBusy && SelectedPackage is not null);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
@@ -89,13 +99,23 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         UninstallCommand = new AsyncRelayCommand(UninstallAsync, () => !IsBusy && SelectedInstalledPlugin is not null);
         LeaveSafeModeCommand = new RelayCommand(LeaveSafeMode, () => _safeMode.IsActive && !IsBusy);
         LoadMarketCommand = new AsyncRelayCommand(LoadMarketAsync, () => !IsBusy && !string.IsNullOrWhiteSpace(_serverBaseUrl));
+        LoadCanaryMarketCommand = new AsyncRelayCommand(
+            LoadCanaryMarketAsync,
+            () => !IsBusy && !string.IsNullOrWhiteSpace(_serverBaseUrl));
         LoadMarketDetailCommand = new AsyncRelayCommand(LoadMarketDetailAsync, () => !IsBusy && SelectedMarketPlugin is not null);
         InstallMarketCommand = new AsyncRelayCommand(InstallMarketAsync, () => !IsBusy && SelectedMarketDetail is not null);
+        CheckPluginUpdatesCommand = new AsyncRelayCommand(
+            CheckPluginUpdatesAsync,
+            () => !IsBusy && !string.IsNullOrWhiteSpace(_serverBaseUrl));
+        UpgradeSelectedPluginCommand = new AsyncRelayCommand(
+            UpgradeSelectedPluginAsync,
+            () => !IsBusy && SelectedPluginUpdate is not null);
     }
 
     public ObservableCollection<InstalledPlugin> InstalledPlugins { get; } = [];
     public ObservableCollection<PluginCommandManifest> AvailableCommands { get; } = [];
     public ObservableCollection<MarketPluginCatalogItem> MarketPlugins { get; } = [];
+    public ObservableCollection<PluginUpdateCandidate> PluginUpdates { get; } = [];
 
     public MarketPluginCatalogItem? SelectedMarketPlugin
     {
@@ -116,10 +136,40 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         private set => SetField(ref _selectedMarketDetail, value);
     }
 
+    public PluginUpdateCandidate? SelectedPluginUpdate
+    {
+        get => _selectedPluginUpdate;
+        set
+        {
+            if (SetField(ref _selectedPluginUpdate, value))
+            {
+                NotifyCommands();
+            }
+        }
+    }
+
     public string MarketQuery
     {
         get => _marketQuery;
         set => SetField(ref _marketQuery, value);
+    }
+
+    public string PluginUpdateSummary
+    {
+        get => _pluginUpdateSummary;
+        private set => SetField(ref _pluginUpdateSummary, value);
+    }
+
+    public bool IsCanaryMode
+    {
+        get => _isCanaryMode;
+        private set
+        {
+            if (SetField(ref _isCanaryMode, value))
+            {
+                OnPropertyChanged(nameof(MarketChannelLabel));
+            }
+        }
     }
 
     public PluginPackageInspection? SelectedPackage
@@ -236,14 +286,20 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
     public string SelectedPluginState => SelectedInstalledPlugin is null
         ? "请选择已安装插件"
         : $"{SelectedInstalledPlugin.RuntimeStatus} / {(SelectedInstalledPlugin.Enabled ? "已启用" : "已停用")}";
+    public string MarketChannelLabel => IsCanaryMode
+        ? "内部 Canary 通道（管理员账号）"
+        : "公开 stable 通道";
 
     public AsyncRelayCommand InitializeCommand { get; }
     public AsyncRelayCommand BrowsePackageCommand { get; }
     public AsyncRelayCommand InstallPackageCommand { get; }
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand LoadMarketCommand { get; }
+    public AsyncRelayCommand LoadCanaryMarketCommand { get; }
     public AsyncRelayCommand LoadMarketDetailCommand { get; }
     public AsyncRelayCommand InstallMarketCommand { get; }
+    public AsyncRelayCommand CheckPluginUpdatesCommand { get; }
+    public AsyncRelayCommand UpgradeSelectedPluginCommand { get; }
     public AsyncRelayCommand ToggleEnabledCommand { get; }
     public AsyncRelayCommand HealthCheckCommand { get; }
     public AsyncRelayCommand ExecuteCommand { get; }
@@ -253,8 +309,181 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    private async Task InitializeAsync()
+    {
+        await RefreshAsync();
+        if (!string.IsNullOrWhiteSpace(_serverBaseUrl))
+        {
+            await CheckPluginUpdatesAsync();
+        }
+    }
+
+    internal async Task CheckPluginUpdatesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_serverBaseUrl))
+        {
+            PluginUpdateSummary = "未配置插件市场地址。";
+            return;
+        }
+
+        BeginOperation("正在检查已安装插件的 stable 更新…");
+        try
+        {
+            const int pageSize = 100;
+            var page = 1;
+            var catalogItems = new List<MarketPluginCatalogItem>();
+            MarketPluginCatalogResponse catalog;
+            do
+            {
+                catalog = await _marketApi.GetPluginCatalogAsync(
+                    _serverBaseUrl,
+                    page: page,
+                    pageSize: pageSize);
+                catalogItems.AddRange(catalog.Items);
+                page++;
+            } while (catalogItems.Count < catalog.Total && catalog.Items.Count > 0);
+
+            var installed = await _registry.GetAllAsync();
+            var updates = FindPluginUpdates(
+                installed,
+                catalogItems,
+                _revokedMarketPlugins,
+                _revokedMarketVersions);
+            PluginUpdates.Clear();
+            foreach (var update in updates)
+            {
+                PluginUpdates.Add(update);
+            }
+            SelectedPluginUpdate = PluginUpdates.FirstOrDefault();
+            UpdatePluginUpdateSummary();
+            Status = PluginUpdates.Count == 0
+                ? "已检查插件更新，当前没有可用的 stable 更新。"
+                : $"已发现 {PluginUpdates.Count} 个插件更新，可选择后执行升级。";
+        }
+        catch (Exception exception)
+        {
+            PluginUpdateSummary = "插件更新检查失败。";
+            Status = UserMessage("检查插件更新失败", exception);
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task UpgradeSelectedPluginAsync()
+    {
+        var candidate = SelectedPluginUpdate;
+        if (candidate is null)
+        {
+            return;
+        }
+
+        var installed = await _registry.GetAsync(candidate.PluginSlug);
+        if (installed is null
+            || !string.Equals(installed.CurrentVersion, candidate.CurrentVersion, StringComparison.Ordinal))
+        {
+            await CheckPluginUpdatesAsync();
+            Status = "本地插件版本已变化，请重新选择升级项。";
+            return;
+        }
+
+        SelectedMarketPlugin = candidate.CatalogItem;
+        await LoadMarketDetailAsync();
+        var target = SelectedMarketDetail is null
+            ? null
+            : PluginSemver.LatestOrDefault(SelectedMarketDetail.Versions);
+        if (target is null
+            || !string.Equals(target.Semver, candidate.TargetVersion, StringComparison.Ordinal))
+        {
+            MarkUpdateFailure(candidate, "市场版本已变化，请重新检查插件更新。");
+            return;
+        }
+
+        await InstallMarketAsync();
+        var updated = await _registry.GetAsync(candidate.PluginSlug);
+        if (updated is not null
+            && string.Equals(updated.CurrentVersion, candidate.TargetVersion, StringComparison.Ordinal))
+        {
+            PluginUpdates.Remove(candidate);
+            SelectedPluginUpdate = PluginUpdates.FirstOrDefault();
+            UpdatePluginUpdateSummary();
+            Status = $"{candidate.Name} 已升级到 {candidate.TargetVersion}。";
+        }
+        else if (!Status.StartsWith("已取消", StringComparison.Ordinal))
+        {
+            MarkUpdateFailure(candidate, Status);
+        }
+    }
+
+    internal static IReadOnlyList<PluginUpdateCandidate> FindPluginUpdates(
+        IEnumerable<InstalledPlugin> installedPlugins,
+        IEnumerable<MarketPluginCatalogItem> catalogItems,
+        IReadOnlySet<string>? revokedPlugins = null,
+        IReadOnlySet<string>? revokedVersions = null)
+    {
+        var catalog = catalogItems
+            .GroupBy(item => item.Slug, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(
+                        item => PluginSemver.Parse(item.LatestVersion),
+                        Comparer<(int Major, int Minor, int Patch)>.Create(PluginSemver.Compare))
+                    .First(),
+                StringComparer.Ordinal);
+        return installedPlugins
+            .Where(plugin => plugin.Source == PluginSource.MarketReviewed)
+            .Where(plugin => catalog.ContainsKey(plugin.PluginId))
+            .Select(plugin => new { Plugin = plugin, Catalog = catalog[plugin.PluginId] })
+            .Where(item => revokedPlugins?.Contains(item.Plugin.PluginId) != true)
+            .Where(item => revokedVersions?.Contains(
+                $"{item.Plugin.PluginId}@{item.Catalog.LatestVersion}") != true)
+            .Where(item => PluginSemver.Compare(
+                PluginSemver.Parse(item.Catalog.LatestVersion),
+                PluginSemver.Parse(item.Plugin.CurrentVersion)) > 0)
+            .Select(item => new PluginUpdateCandidate(item.Catalog, item.Plugin.CurrentVersion))
+            .OrderBy(item => item.Name, StringComparer.CurrentCulture)
+            .ToArray();
+    }
+
+    private void MarkUpdateFailure(PluginUpdateCandidate candidate, string message)
+    {
+        var index = PluginUpdates.IndexOf(candidate);
+        if (index < 0)
+        {
+            return;
+        }
+        var failed = candidate with { State = "failed", LastError = message };
+        PluginUpdates[index] = failed;
+        SelectedPluginUpdate = failed;
+        PluginUpdateSummary = $"有 {PluginUpdates.Count} 个可用更新，其中升级失败项可重试。";
+        Status = message;
+    }
+
+    private void UpdatePluginUpdateSummary()
+    {
+        PluginUpdateSummary = PluginUpdates.Count == 0
+            ? "当前没有可用的 stable 更新。"
+            : $"有 {PluginUpdates.Count} 个 stable 更新可用。";
+    }
+
+    private void RemovePluginUpdate(string pluginSlug, string? targetVersion = null)
+    {
+        var candidate = PluginUpdates.FirstOrDefault(item =>
+            item.PluginSlug == pluginSlug
+            && (targetVersion is null || item.TargetVersion == targetVersion));
+        if (candidate is null)
+        {
+            return;
+        }
+        PluginUpdates.Remove(candidate);
+        SelectedPluginUpdate = PluginUpdates.FirstOrDefault();
+        UpdatePluginUpdateSummary();
+    }
+
     private async Task LoadMarketAsync()
     {
+        IsCanaryMode = false;
         BeginOperation("正在验证平台撤销列表并读取在线插件市场…");
         try
         {
@@ -293,6 +522,43 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task LoadCanaryMarketAsync()
+    {
+        var accessToken = await TryGetAccessTokenAsync();
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            Status = "加载 Canary 市场需要已登录的管理员账号。";
+            return;
+        }
+
+        IsCanaryMode = true;
+        BeginOperation("正在验证管理员权限并读取内部 Canary 市场…");
+        try
+        {
+            var catalog = await _marketApi.GetCanaryPluginCatalogAsync(
+                _serverBaseUrl,
+                accessToken,
+                MarketQuery);
+            MarketPlugins.Clear();
+            foreach (var item in catalog.Items)
+            {
+                MarketPlugins.Add(item);
+            }
+            SelectedMarketPlugin = MarketPlugins.FirstOrDefault();
+            Status = $"内部 Canary 市场已加载 {MarketPlugins.Count} 个受控插件。";
+        }
+        catch (Exception exception)
+        {
+            MarketPlugins.Clear();
+            SelectedMarketPlugin = null;
+            Status = UserMessage("读取 Canary 市场失败", exception);
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
     private async Task LoadMarketDetailAsync()
     {
         if (SelectedMarketPlugin is null)
@@ -303,8 +569,16 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         BeginOperation("正在验证插件详情与平台签章…");
         try
         {
-            var detail = await _marketApi.GetPluginDetailAsync(_serverBaseUrl, SelectedMarketPlugin.Slug);
-            var version = detail.Versions.FirstOrDefault();
+            var detail = IsCanaryMode
+                ? await _marketApi.GetCanaryPluginDetailAsync(
+                    _serverBaseUrl,
+                    await TryGetAccessTokenAsync()
+                        ?? throw new InvalidOperationException("加载 Canary 详情需要管理员登录。"),
+                    SelectedMarketPlugin.Slug)
+                : await _marketApi.GetPluginDetailAsync(
+                    _serverBaseUrl,
+                    SelectedMarketPlugin.Slug);
+            var version = PluginSemver.LatestOrDefault(detail.Versions);
             if (version is null)
             {
                 throw new InvalidOperationException("在线插件没有可安装版本。");
@@ -333,7 +607,7 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
     private async Task InstallMarketAsync()
     {
         var detail = SelectedMarketDetail;
-        var version = detail?.Versions.FirstOrDefault();
+        var version = detail is null ? null : PluginSemver.LatestOrDefault(detail.Versions);
         if (detail is null || version is null)
         {
             return;
@@ -367,6 +641,22 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
             var artifact = version.Artifacts.FirstOrDefault(item => item.Architecture == architecture)
                 ?? throw new InvalidOperationException("在线插件不包含当前架构制品。");
             architecture = artifact.Architecture;
+            var canaryAccessToken = IsCanaryMode
+                ? await TryGetAccessTokenAsync()
+                    ?? throw new InvalidOperationException("下载 Canary 插件需要管理员登录。")
+                : null;
+            var canaryIdentity = IsCanaryMode
+                ? await (_identityService
+                    ?? throw new InvalidOperationException("Canary 下载缺少安装实例身份。"))
+                    .GetOrCreateAsync()
+                : null;
+            var canaryTicketSignature = canaryIdentity is null
+                ? null
+                : await _identityService!.SignAsync(
+                    PasswordDetective.Desktop.Services.PluginCanaryCanonicalizer.BuildTicketRequest(
+                        version.VersionId,
+                        architecture,
+                        canaryIdentity.InstallationId));
             _paths.EnsureDirectories();
             for (var attempt = 1; attempt <= 3; attempt++)
             {
@@ -374,17 +664,34 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                 try
                 {
                     failureStage = "download_ticket";
-                    var ticket = await _marketApi.IssuePluginDownloadTicketAsync(
-                        _serverBaseUrl,
-                        detail.Slug,
-                        version.Semver,
-                        architecture);
+                    var ticket = IsCanaryMode
+                        ? await _marketApi.IssueCanaryPluginDownloadTicketAsync(
+                            _serverBaseUrl,
+                            canaryAccessToken!,
+                            version.VersionId,
+                            architecture,
+                            canaryIdentity!.InstallationId,
+                            canaryTicketSignature!)
+                        : await _marketApi.IssuePluginDownloadTicketAsync(
+                            _serverBaseUrl,
+                            detail.Slug,
+                            version.Semver,
+                            architecture);
                     failureStage = "artifact_download";
+                    var canaryDownloadSignature = canaryIdentity is null
+                        ? null
+                        : await _identityService!.SignAsync(
+                            PasswordDetective.Desktop.Services.PluginCanaryCanonicalizer.BuildDownload(
+                                ticket.DownloadUrl,
+                                canaryIdentity.InstallationId));
                     await _marketApi.DownloadPluginArtifactAsync(
                         ticket.DownloadUrl,
                         temporaryPath,
                         ticket.ArtifactSha256,
-                        ticket.ArtifactSizeBytes);
+                        ticket.ArtifactSizeBytes,
+                        accessToken: canaryAccessToken,
+                        installationId: canaryIdentity?.InstallationId,
+                        canarySignature: canaryDownloadSignature);
                     break;
                 }
                 catch (Exception exception) when (
@@ -433,6 +740,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                     detail,
                     version,
                     permission,
+                    existingMarket?.CurrentVersion,
+                    existingMarket?.RiskTier,
                     addedCapabilities,
                     signingKeyChanged,
                     majorVersionChanged))
@@ -446,6 +755,7 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                 version,
                 permission.Granted);
             await RefreshInstalledAsync(result.Plugin.PluginId);
+            RemovePluginUpdate(detail.Slug, version.Semver);
             try
             {
                 await RecordInstallEventBestEffortAsync(
@@ -454,7 +764,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                     artifact.Architecture,
                     marketEventKind,
                     "success",
-                    PluginSource.MarketReviewed);
+                    PluginSource.MarketReviewed,
+                    result.Plugin);
             }
             catch
             {
@@ -478,13 +789,18 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
             catch (Exception)
             {
             }
+            var failedPlugin = await _registry.GetAsync(detail.Slug);
+            var failedEventKind = failedPlugin?.MigrationRecords?.ContainsKey(version.Semver) == true
+                ? "upgraded"
+                : "download_failed";
             await RecordInstallEventBestEffortAsync(
                 detail.Slug,
                 version.Semver,
                 architecture,
-                "download_failed",
+                failedEventKind,
                 "failure",
-                PluginSource.MarketReviewed);
+                PluginSource.MarketReviewed,
+                failedPlugin);
             Status = UserMessage("平台插件安装失败", exception);
         }
         finally
@@ -783,11 +1099,12 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         var pluginVersion = SelectedInstalledPlugin.CurrentVersion;
         var pluginSource = SelectedInstalledPlugin.Source;
         var pluginArchitecture = GetInstalledArchitecture(SelectedInstalledPlugin);
-        BeginOperation("正在卸载插件及其私有数据…");
+        BeginOperation("正在卸载插件（保留私有数据）…");
         try
         {
             await _installer.UninstallAsync(pluginId);
             await RefreshInstalledAsync(null);
+            RemovePluginUpdate(pluginId);
             await RecordInstallEventBestEffortAsync(
                 pluginId,
                 pluginVersion,
@@ -843,7 +1160,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         string architecture,
         string kind,
         string result,
-        string source)
+        string source,
+        InstalledPlugin? evidencePlugin = null)
     {
         if (string.IsNullOrWhiteSpace(_serverBaseUrl))
         {
@@ -852,21 +1170,85 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
 
         try
         {
+            var accessToken = await TryGetAccessTokenAsync();
+            var permissionEvidence = source == PluginSource.MarketReviewed
+                                     && evidencePlugin?.PermissionConsents?.TryGetValue(
+                                         semver,
+                                         out var consent) == true
+                ? new PasswordDetective.Desktop.Services.PluginPermissionEvidencePayload(
+                    consent.RequestedCapabilities,
+                    consent.ApprovedCapabilities,
+                    consent.GrantedCapabilities,
+                    consent.PublisherKeyFingerprint,
+                    consent.RiskTier,
+                    consent.ConsentedAt)
+                : null;
+            var migrationEvidence = source == PluginSource.MarketReviewed
+                                    && evidencePlugin?.MigrationRecords?.TryGetValue(
+                                        semver,
+                                        out var migration) == true
+                ? new PasswordDetective.Desktop.Services.PluginMigrationEvidencePayload(
+                    migration.FromVersion,
+                    migration.ToVersion,
+                    migration.Status,
+                    migration.StartedAt,
+                    migration.CompletedAt,
+                    (migration.Steps ?? []).Select(step =>
+                        new PasswordDetective.Desktop.Services.PluginMigrationStepEvidencePayload(
+                            step.StepId,
+                            step.Status,
+                            step.AttemptCount)).ToArray())
+                : null;
+            var eventId = Guid.NewGuid().ToString("N");
+            var canSignEvidence = !string.IsNullOrWhiteSpace(accessToken)
+                                  && _identityService is not null
+                                  && (permissionEvidence is not null || migrationEvidence is not null);
+            var identity = canSignEvidence
+                ? await _identityService!.GetOrCreateAsync(CancellationToken.None)
+                : null;
+            var unsignedPayload = new PasswordDetective.Desktop.Services.PluginInstallEventRequest(
+                eventId,
+                pluginSlug,
+                semver,
+                architecture,
+                source,
+                kind,
+                result,
+                PluginPackageVerifier.HostVersion,
+                canSignEvidence ? permissionEvidence : null,
+                canSignEvidence ? migrationEvidence : null,
+                identity?.InstallationId);
+            var signature = identity is null
+                ? null
+                : await _identityService!.SignAsync(
+                    PasswordDetective.Desktop.Services.PluginInstallEvidenceCanonicalizer.Build(
+                        unsignedPayload),
+                    CancellationToken.None);
             await _marketApi.RecordPluginInstallEventAsync(
                 _serverBaseUrl,
-                new PasswordDetective.Desktop.Services.PluginInstallEventRequest(
-                    Guid.NewGuid().ToString("N"),
-                    pluginSlug,
-                    semver,
-                    architecture,
-                    source,
-                    kind,
-                    result,
-                    PluginPackageVerifier.HostVersion));
+                unsignedPayload with { EvidenceSignature = signature },
+                accessToken);
         }
         catch
         {
             // Telemetry failure must not change a verified local state transition.
+        }
+    }
+
+    private async Task<string?> TryGetAccessTokenAsync()
+    {
+        if (_accessTokenProvider is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _accessTokenProvider(CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -1051,8 +1433,11 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         UninstallCommand.NotifyCanExecuteChanged();
         LeaveSafeModeCommand.NotifyCanExecuteChanged();
         LoadMarketCommand.NotifyCanExecuteChanged();
+        LoadCanaryMarketCommand.NotifyCanExecuteChanged();
         LoadMarketDetailCommand.NotifyCanExecuteChanged();
         InstallMarketCommand.NotifyCanExecuteChanged();
+        CheckPluginUpdatesCommand.NotifyCanExecuteChanged();
+        UpgradeSelectedPluginCommand.NotifyCanExecuteChanged();
     }
 
     private static string ResolveContainedPath(string root, string relativePath)

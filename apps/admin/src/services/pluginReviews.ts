@@ -55,8 +55,37 @@ export function rejectPluginVersion(token: string, detail: DesktopPluginReviewDe
   return mutateVersion(token, detail.version_id, "reject", { version: detail.version, review_note: reviewNote, remediation_days: remediationDays });
 }
 
-export function publishPluginVersion(token: string, detail: DesktopPluginReviewDetail) {
-  return mutateVersion(token, detail.version_id, "publish", { version: detail.version, channel: "stable" });
+export function publishPluginVersion(
+  token: string,
+  detail: DesktopPluginReviewDetail,
+  channel: "stable" | "canary" = "stable",
+) {
+  return mutateVersion(token, detail.version_id, "publish", { version: detail.version, channel });
+}
+
+export function rollbackPluginVersion(
+  token: string,
+  detail: DesktopPluginReviewDetail,
+  reason: string,
+): Promise<DesktopPluginReviewDetail> {
+  return mutateVersion(token, detail.version_id, "rollback", {
+    version: detail.version,
+    reason,
+  });
+}
+
+export function issueCanaryPluginDownload(
+  token: string,
+  detail: DesktopPluginReviewDetail,
+): Promise<{ download_url: string; artifact_sha256: string; artifact_size_bytes: number }> {
+  return apiRequest(
+    `/admin/plugin-reviews/versions/${encodeURIComponent(detail.version_id)}/canary-download-ticket`,
+    {
+      method: "POST",
+      body: JSON.stringify({ architecture: "windows-x64" }),
+    },
+    token,
+  );
 }
 
 export function yankPluginVersion(token: string, detail: DesktopPluginReviewDetail, reason: string, remediationDays = 7) {

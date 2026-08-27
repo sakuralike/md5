@@ -104,6 +104,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
 
         if (method is not (PdppProtocol.InitializeMethod
             or PdppProtocol.HealthCheckMethod
+            or PdppProtocol.MigrateMethod
             or PdppProtocol.ExecuteCommandMethod
             or PdppProtocol.ShutdownMethod))
         {

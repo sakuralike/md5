@@ -37,6 +37,8 @@ for line in sys.stdin:
         )
     elif method == "health/check":
         write_result(message_id, {"status": "healthy"})
+    elif method == "lifecycle/migrate":
+        write_result(message_id, {"status": "not_required", "steps": []})
     elif method == "command/execute" and parameters["command"] == "echo":
         write_result(
             message_id,

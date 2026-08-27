@@ -61,6 +61,46 @@ public sealed class PluginRuntimeAndWindowTests : IDisposable
     }
 
     [Fact]
+    public async Task ThreeConsecutiveFailuresAutomaticallyRollbackToPreviousVersion()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_directory, "auto-rollback"));
+        var registry = new PluginRegistry(paths);
+        var failingExecution = new FailingExecutionService();
+        var installer = new PluginInstaller(
+            paths,
+            new PluginPackageVerifier(),
+            new PluginPermissionPolicy(),
+            registry,
+            failingExecution);
+        var first = await installer.InstallLocalAsync(
+            new PluginPackageTestFactory().Create(_directory, version: "1.0.0"),
+            ["ui:command", "storage:private"]);
+        await installer.InstallLocalAsync(
+            new PluginPackageTestFactory().Create(_directory, version: "1.1.0"),
+            ["ui:command", "storage:private"]);
+        var runtime = new PluginRuntimeService(
+            registry,
+            failingExecution,
+            new PluginSafeMode(paths),
+            new PluginLogStore(paths),
+            installer);
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => runtime.CheckHealthAsync(first.Plugin.PluginId));
+        }
+
+        var rolledBack = await registry.GetAsync(first.Plugin.PluginId);
+        Assert.NotNull(rolledBack);
+        Assert.Equal("1.0.0", rolledBack!.CurrentVersion);
+        Assert.Equal("1.1.0", rolledBack.RollbackVersion);
+        Assert.True(rolledBack.Enabled);
+        Assert.Equal("ready", rolledBack.RuntimeStatus);
+        Assert.Equal(0, rolledBack.ConsecutiveFailures);
+    }
+
+    [Fact]
     public void PreviousUncleanMarkerStartsSafeModeAndCanBeLeftForCurrentSession()
     {
         var paths = new PluginStoragePaths(Path.Combine(_directory, "safe-mode"));
@@ -119,6 +159,10 @@ public sealed class PluginRuntimeAndWindowTests : IDisposable
                 Assert.Equal("已安装", window.InstalledPluginsTab.Header);
                 Assert.Equal("本地插件", window.LocalPluginsTab.Header);
                 Assert.NotNull(window.UnreviewedBanner);
+                Assert.NotNull(window.PluginUpdatesList);
+                Assert.False(viewModel.CheckPluginUpdatesCommand.CanExecute(null));
+                Assert.False(viewModel.LoadCanaryMarketCommand.CanExecute(null));
+                Assert.Equal("公开 stable 通道", viewModel.MarketChannelLabel);
                 Assert.Equal(PluginSource.LocalUnreviewedLabel, viewModel.ReviewLabel);
                 window.Close();
             }
@@ -192,6 +236,8 @@ public sealed class PluginRuntimeAndWindowTests : IDisposable
             PasswordDetective.Desktop.Plugins.Market.MarketPluginDetail detail,
             PasswordDetective.Desktop.Plugins.Market.MarketPluginVersion version,
             PluginPermissionDecision permission,
+            string? currentVersion,
+            string? currentRiskTier,
             IReadOnlyList<string> addedCapabilities,
             bool signingKeyChanged,
             bool majorVersionChanged) => false;

@@ -10,6 +10,7 @@ public static class PdppProtocol
     public const string ProtocolVersion = "1.0";
     public const string InitializeMethod = "initialize";
     public const string HealthCheckMethod = "health/check";
+    public const string MigrateMethod = "lifecycle/migrate";
     public const string ExecuteCommandMethod = "command/execute";
     public const string ShutdownMethod = "shutdown";
     public const string HostApiProfileReadMethod = "host/api/profile/read";
@@ -63,6 +64,19 @@ public sealed record PdppInitializeResult(
 
 public sealed record PdppHealthResult(
     [property: JsonPropertyName("status")] string Status);
+
+public sealed record PdppMigrateParams(
+    [property: JsonPropertyName("from_version")] string FromVersion,
+    [property: JsonPropertyName("to_version")] string ToVersion);
+
+public sealed record PdppMigrateResult(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("steps")] IReadOnlyList<PdppMigrationStepResult>? Steps = null);
+
+public sealed record PdppMigrationStepResult(
+    [property: JsonPropertyName("step_id")] string StepId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("attempt_count")] int AttemptCount);
 
 public sealed record PdppCommandParams(
     [property: JsonPropertyName("command")] string Command,

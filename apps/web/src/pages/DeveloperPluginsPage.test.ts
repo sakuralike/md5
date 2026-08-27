@@ -5,7 +5,7 @@ import DeveloperPluginsPage from "./DeveloperPluginsPage.vue";
 
 vi.mock("../stores/auth", () => ({ useAuthStore: () => ({ accessToken: "synthetic-token" }) }));
 vi.mock("../services/developerPlugins", () => ({
-  listDeveloperPlugins: vi.fn().mockResolvedValue([]), createDeveloperPlugin: vi.fn(),
+  listDeveloperPlugins: vi.fn().mockResolvedValue([]), listPluginSigningKeys: vi.fn().mockResolvedValue([]), createDeveloperPlugin: vi.fn(),
   registerPluginSigningKey: vi.fn(), createPluginVersion: vi.fn(), uploadPluginPackage: vi.fn(),
   finalizePluginVersion: vi.fn(), submitPluginVersion: vi.fn(), getPluginReviewReport: vi.fn(), withdrawPluginVersion: vi.fn(),
 }));
@@ -23,6 +23,9 @@ describe("DeveloperPluginsPage", () => {
     expect(html).toContain("用户界面命令");
     expect(html).toContain("读取用户选择的文件");
     expect(html).toContain("关联第三方应用");
+    expect(html).toContain("插件项目");
+    expect(html).toContain("已登记签名密钥");
+    expect(html).toContain("发布说明");
     expect(html).toContain("自动审核报告");
     expect(html).toContain("创建、上传并提交审核");
     expect(html).not.toContain("synthetic-token");

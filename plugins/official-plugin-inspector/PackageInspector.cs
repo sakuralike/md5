@@ -92,6 +92,27 @@ public static class PackageInspector
             "limits",
         ],
         StringComparer.Ordinal);
+    private static readonly IReadOnlySet<string> CommandSchemaRootFields = new HashSet<string>(
+        ["type", "properties", "required", "additionalProperties"],
+        StringComparer.Ordinal);
+    private static readonly IReadOnlySet<string> CommandSchemaPropertyFields = new HashSet<string>(
+        [
+            "type",
+            "title",
+            "description",
+            "enum",
+            "format",
+            "default",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ],
+        StringComparer.Ordinal);
 
     public static PackageInspectionReport CreateSizeFailure(
         PluginSelectedFile selected,
@@ -253,7 +274,10 @@ public static class PackageInspector
 
             var valid = true;
             var actualFields = root.EnumerateObject().Select(item => item.Name).ToHashSet(StringComparer.Ordinal);
-            if (!actualFields.SetEquals(ManifestFields))
+            if (!ManifestFields.IsSubsetOf(actualFields)
+                || actualFields.Except(ManifestFields, StringComparer.Ordinal)
+                    .Except(["migration"], StringComparer.Ordinal)
+                    .Any())
             {
                 AddManifestError(findings, "manifest.fields", "Manifest 字段不完整或包含未知字段。");
                 valid = false;
@@ -337,6 +361,7 @@ public static class PackageInspector
             valid &= ValidateProtocolAndHost(root, findings);
             valid &= ValidateRuntime(root, entries, findings);
             valid &= ValidateLimits(root, findings);
+            valid &= ValidateMigration(root, findings);
             return new ManifestFacts(valid, pluginId, version, publicKey, commandCount, capabilities);
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException or DecoderFallbackException)
@@ -373,6 +398,59 @@ public static class PackageInspector
         return valid;
     }
 
+    private static bool ValidateMigration(
+        JsonElement root,
+        List<PackageInspectionFinding> findings)
+    {
+        if (!root.TryGetProperty("migration", out var migration)
+            || migration.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (migration.ValueKind != JsonValueKind.Object)
+        {
+            AddManifestError(findings, "manifest.migration", "插件迁移声明必须是对象。");
+            return false;
+        }
+
+        var valid = true;
+        var fields = migration.EnumerateObject().Select(item => item.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!fields.SetEquals(["required", "from_versions", "strategy"]))
+        {
+            valid = false;
+        }
+
+        var required = migration.TryGetProperty("required", out var requiredValue)
+                       && requiredValue.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        var strategy = ReadString(migration, "strategy");
+        var fromVersions = ReadArray(migration, "from_versions");
+        if (!required
+            || strategy != "idempotent"
+            || fromVersions is null
+            || fromVersions.Value.GetArrayLength() > 128
+            || fromVersions.Value.EnumerateArray().Any(
+                item => item.ValueKind != JsonValueKind.String
+                        || item.GetString() is not { } version
+                        || !VersionPattern.IsMatch(version))
+            || fromVersions.Value.EnumerateArray().Select(item => item.GetString())
+                .Where(value => value is not null)
+                .Distinct(StringComparer.Ordinal)
+                .Count() != fromVersions.Value.GetArrayLength()
+            || requiredValue.GetBoolean() && fromVersions.Value.GetArrayLength() == 0)
+        {
+            valid = false;
+        }
+
+        if (!valid)
+        {
+            AddManifestError(findings, "manifest.migration", "插件迁移声明无效，必须使用幂等策略和有效来源版本。");
+        }
+
+        return valid;
+    }
+
     private static bool ValidateCommandSchema(
         ZipArchiveEntry entry,
         IReadOnlyCollection<string> capabilities,
@@ -383,6 +461,7 @@ public static class PackageInspector
             using var document = JsonDocument.Parse(ReadEntry(entry, MaximumManifestBytes));
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object
+                || root.EnumerateObject().Any(item => !CommandSchemaRootFields.Contains(item.Name))
                 || ReadString(root, "type") != "object"
                 || !root.TryGetProperty("properties", out var properties)
                 || properties.ValueKind != JsonValueKind.Object
@@ -398,7 +477,14 @@ public static class PackageInspector
             if (root.TryGetProperty("required", out var required)
                 && (required.ValueKind != JsonValueKind.Array
                     || required.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String
-                                                             || !propertyNames.Contains(item.GetString()!))))
+                                                             || !propertyNames.Contains(item.GetString()!))
+                    || required.EnumerateArray().Select(item => item.GetString())
+                        .Distinct(StringComparer.Ordinal).Count() != required.GetArrayLength()))
+            {
+                throw new JsonException();
+            }
+            if (root.TryGetProperty("additionalProperties", out var additionalProperties)
+                && additionalProperties.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             {
                 throw new JsonException();
             }
@@ -408,6 +494,9 @@ public static class PackageInspector
                 var schema = property.Value;
                 var type = schema.ValueKind == JsonValueKind.Object ? ReadString(schema, "type") : null;
                 if (property.Name.Length is < 1 or > 128
+                    || schema.ValueKind != JsonValueKind.Object
+                    || schema.EnumerateObject().Any(
+                        item => !CommandSchemaPropertyFields.Contains(item.Name))
                     || type is not ("string" or "integer" or "number" or "boolean"))
                 {
                     throw new JsonException();
@@ -419,32 +508,49 @@ public static class PackageInspector
                 {
                     throw new JsonException();
                 }
+                if (schema.TryGetProperty("description", out var description)
+                    && (description.ValueKind != JsonValueKind.String
+                        || description.GetString()!.Length > 500))
+                {
+                    throw new JsonException();
+                }
                 if (schema.TryGetProperty("enum", out var enumValues)
                     && (type != "string"
                         || enumValues.ValueKind != JsonValueKind.Array
                         || enumValues.GetArrayLength() is < 1 or > 100
-                        || enumValues.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String)))
+                        || enumValues.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String)
+                        || enumValues.EnumerateArray().Select(item => item.GetRawText())
+                            .Distinct(StringComparer.Ordinal).Count() != enumValues.GetArrayLength()))
                 {
                     throw new JsonException();
                 }
-                if (!schema.TryGetProperty("format", out var format))
+                if (schema.TryGetProperty("default", out var defaultValue)
+                    && (!MatchesSchemaType(defaultValue, type)
+                        || schema.TryGetProperty("enum", out enumValues)
+                        && !enumValues.EnumerateArray().Any(
+                            item => item.GetRawText() == defaultValue.GetRawText())))
                 {
-                    continue;
+                    throw new JsonException();
                 }
 
-                var formatName = format.ValueKind == JsonValueKind.String ? format.GetString() : null;
-                var requiredCapability = formatName switch
+                if (schema.TryGetProperty("format", out var format))
                 {
-                    "file" => "file:read:selected",
-                    "theme-background" => "ui:theme",
-                    _ => null,
-                };
-                if (type != "string"
-                    || requiredCapability is null
-                    || !capabilities.Contains(requiredCapability, StringComparer.Ordinal))
-                {
-                    throw new JsonException();
+                    var formatName = format.ValueKind == JsonValueKind.String ? format.GetString() : null;
+                    var requiredCapability = formatName switch
+                    {
+                        "file" => "file:read:selected",
+                        "theme-background" => "ui:theme",
+                        _ => null,
+                    };
+                    if (type != "string"
+                        || requiredCapability is null
+                        || !capabilities.Contains(requiredCapability, StringComparer.Ordinal))
+                    {
+                        throw new JsonException();
+                    }
                 }
+
+                ValidateCommandSchemaConstraints(schema, type);
             }
             return true;
         }
@@ -456,6 +562,66 @@ public static class PackageInspector
                 "命令输入 Schema 包含无效字段类型、格式或权限声明。",
                 entry.FullName));
             return false;
+        }
+    }
+
+    private static bool MatchesSchemaType(JsonElement value, string type) => type switch
+    {
+        "string" => value.ValueKind == JsonValueKind.String,
+        "integer" => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out _),
+        "number" => value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out _),
+        "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+        _ => false,
+    };
+
+    private static void ValidateCommandSchemaConstraints(JsonElement schema, string type)
+    {
+        var stringConstraintNames = new[] { "minLength", "maxLength", "pattern" };
+        var numericConstraintNames = new[]
+        {
+            "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+        };
+        if (type != "string" && stringConstraintNames.Any(name => schema.TryGetProperty(name, out _))
+            || type is not ("integer" or "number")
+            && numericConstraintNames.Any(name => schema.TryGetProperty(name, out _)))
+        {
+            throw new JsonException();
+        }
+
+        var minimumLength = 0;
+        if (schema.TryGetProperty("minLength", out var minLength)
+            && (!minLength.TryGetInt32(out minimumLength) || minimumLength < 0)
+            || schema.TryGetProperty("maxLength", out var maxLength)
+            && (!maxLength.TryGetInt32(out var maximumLength) || maximumLength < minimumLength))
+        {
+            throw new JsonException();
+        }
+        if (schema.TryGetProperty("pattern", out var pattern))
+        {
+            if (pattern.ValueKind != JsonValueKind.String || pattern.GetString()!.Length > 512)
+            {
+                throw new JsonException();
+            }
+        }
+
+        if (schema.TryGetProperty("minimum", out _)
+            && schema.TryGetProperty("exclusiveMinimum", out _)
+            || schema.TryGetProperty("maximum", out _)
+            && schema.TryGetProperty("exclusiveMaximum", out _))
+        {
+            throw new JsonException();
+        }
+        foreach (var name in numericConstraintNames)
+        {
+            if (schema.TryGetProperty(name, out var value)
+                && (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out _)))
+            {
+                throw new JsonException();
+            }
+        }
+        if (schema.TryGetProperty("multipleOf", out var multipleOf) && multipleOf.GetDouble() <= 0)
+        {
+            throw new JsonException();
         }
     }
 

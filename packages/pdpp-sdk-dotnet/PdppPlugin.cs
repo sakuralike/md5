@@ -7,6 +7,15 @@ public sealed class PdppHostException(int code, string message) : Exception(mess
     public int Code { get; } = code;
 }
 
+public sealed record PdppMigrationStep(
+    string StepId,
+    string Status,
+    int AttemptCount);
+
+public sealed record PdppMigrationResult(
+    string Status,
+    IReadOnlyList<PdppMigrationStep> Steps);
+
 public sealed class PdppHostClient
 {
     private readonly TextReader _input;
@@ -271,6 +280,18 @@ public abstract class PdppPlugin
                     case "health/check":
                         await host.WriteAsync(new { jsonrpc = "2.0", id, result = new { status = "healthy" } }, cancellationToken);
                         break;
+                    case "lifecycle/migrate":
+                        await host.WriteAsync(new
+                        {
+                            jsonrpc = "2.0",
+                            id,
+                            result = await MigrateAsync(
+                                parameters.GetProperty("from_version").GetString() ?? string.Empty,
+                                parameters.GetProperty("to_version").GetString() ?? string.Empty,
+                                host,
+                                cancellationToken),
+                        }, cancellationToken);
+                        break;
                     case "command/execute":
                         await host.WriteAsync(new
                         {
@@ -307,6 +328,13 @@ public abstract class PdppPlugin
         JsonElement input,
         PdppHostClient host,
         CancellationToken cancellationToken);
+
+    protected virtual Task<PdppMigrationResult> MigrateAsync(
+        string fromVersion,
+        string toVersion,
+        PdppHostClient host,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new PdppMigrationResult("not_required", []));
 
     private static Task WriteErrorAsync(
         PdppHostClient host,

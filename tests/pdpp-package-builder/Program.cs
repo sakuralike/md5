@@ -1,11 +1,15 @@
 using System.IO.Compression;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Security;
+using PasswordDetective.Desktop.Plugins;
 using PasswordDetective.Desktop.Plugins.Packages;
+using PasswordDetective.Desktop.Plugins.Protocol;
+using PasswordDetective.Desktop.Plugins.Windows;
 
 if (args.Length is not (2 or 6) || !File.Exists(args[0]))
 {
@@ -116,6 +120,18 @@ else
         {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
         """);
 }
+var sourceCommit = ResolveSourceCommit(args.Length == 6 ? Path.GetDirectoryName(args[2])! : null);
+var sourceFiles = FileRecords(files, path => path.StartsWith("source/", StringComparison.Ordinal));
+var binaries = FileRecords(files, path => path.StartsWith("bin/", StringComparison.Ordinal));
+var sbom = FileRecord("sbom.cdx.json", files["sbom.cdx.json"]);
+files["provenance.json"] = JsonSerializer.SerializeToUtf8Bytes(new
+{
+    schema = "pd.plugin.provenance/v1",
+    source_commit = sourceCommit,
+    source_files = sourceFiles,
+    sbom,
+    binaries,
+});
 var packageFiles = files.Select(pair => new PluginPackageFile(
         pair.Key,
         pair.Value.LongLength,
@@ -149,6 +165,111 @@ using (var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create))
 }
 
 var inspection = await new PluginPackageVerifier().VerifyAsync(outputPath);
+await ValidateAppContainerAsync(outputPath, inspection);
 Console.WriteLine(
     $"Created {inspection.Manifest.PluginId} {inspection.Manifest.Version}: {outputPath}");
 return 0;
+
+static object[] FileRecords(
+    IReadOnlyDictionary<string, byte[]> files,
+    Func<string, bool> predicate) =>
+    files.Where(pair => predicate(pair.Key))
+        .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+        .Select(pair => FileRecord(pair.Key, pair.Value))
+        .ToArray();
+
+static object FileRecord(string path, byte[] content) => new
+{
+    path,
+    size_bytes = content.LongLength,
+    sha256 = Convert.ToHexStringLower(SHA256.HashData(content)),
+};
+
+static string ResolveSourceCommit(string? repositoryPath)
+{
+    var configured = Environment.GetEnvironmentVariable("PDPP_SOURCE_COMMIT")?.Trim().ToLowerInvariant();
+    if (IsCommit(configured))
+    {
+        return configured!;
+    }
+    if (repositoryPath is not null)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = $"-C \"{repositoryPath}\" rev-parse HEAD",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
+        process?.WaitForExit();
+        var detected = process?.StandardOutput.ReadToEnd().Trim().ToLowerInvariant();
+        if (process?.ExitCode == 0 && IsCommit(detected))
+        {
+            return detected!;
+        }
+    }
+    return new string('0', 40);
+}
+
+static bool IsCommit(string? value) =>
+    value is { Length: 40 or 64 } && value.All(Uri.IsHexDigit);
+
+static async Task ValidateAppContainerAsync(
+    string packagePath,
+    PluginPackageInspection inspection)
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        "password-detective-package-gate",
+        Guid.NewGuid().ToString("N"));
+    try
+    {
+        Directory.CreateDirectory(root);
+        ZipFile.ExtractToDirectory(packagePath, root);
+        var executable = Path.Combine(
+            root,
+            inspection.EntryPointPath.Replace('/', Path.DirectorySeparatorChar));
+        var options = new PluginProcessStartOptions
+        {
+            PluginId = inspection.Manifest.PluginId,
+            ExecutablePath = executable,
+            WorkingDirectory = root,
+            Arguments = ["--pdpp", "--manifest", Path.Combine(root, PluginPackageVerifier.ManifestPath)],
+            MemoryLimitBytes = inspection.Manifest.Limits.MemoryMb * 1024L * 1024L,
+            ActiveProcessLimit = 1,
+            CpuRatePercent = inspection.Manifest.Limits.CpuPercent,
+            ReadOnlyDirectories = [root],
+            DeleteAppContainerProfileOnDispose = true,
+        };
+        await using var host = await PluginProcessHost.StartAsync(options);
+        var initialized = await host.InitializeAsync(
+            PluginPackageVerifier.HostVersion,
+            inspection.Manifest.Capabilities.Required,
+            TimeSpan.FromSeconds(15));
+        var migration = await host.InvokeAsync<PdppMigrateParams, PdppMigrateResult>(
+            PdppProtocol.MigrateMethod,
+            new PdppMigrateParams(inspection.Manifest.Version, inspection.Manifest.Version),
+            TimeSpan.FromSeconds(10));
+        var health = await host.InvokeAsync<object, PdppHealthResult>(
+            PdppProtocol.HealthCheckMethod,
+            new { },
+            TimeSpan.FromSeconds(10));
+        if (!host.IsAppContainer
+            || initialized.PluginId != inspection.Manifest.PluginId
+            || migration.Status is not ("migrated" or "not_required")
+            || migration.Status == "not_required" && (migration.Steps?.Count ?? 0) != 0
+            || health.Status != "healthy")
+        {
+            throw new InvalidOperationException("PDPP AppContainer package gate failed.");
+        }
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}

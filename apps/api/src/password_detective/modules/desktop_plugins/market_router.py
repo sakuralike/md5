@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from password_detective.modules.auth.dependencies import (
     Principal,
     get_current_principal,
     get_optional_principal,
+    require_admin_only_mfa,
 )
 from password_detective.modules.desktop_plugins.schemas import (
     DownloadTicketRequest,
@@ -45,6 +46,7 @@ from password_detective.modules.desktop_plugins.service import (
     authorize_broker_capability,
     create_download_ticket,
     create_report,
+    get_canary_plugin,
     get_public_plugin,
     get_public_version,
     list_public_catalog,
@@ -101,6 +103,50 @@ def plugin_revocations(
 
 
 @router.get(
+    "/canary/catalog",
+    response_model=PublicPluginCatalogResponse,
+)
+def canary_plugin_catalog(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_only_mfa)],
+    query: Annotated[str | None, Query(max_length=128)] = None,
+    category: PluginCategory | None = None,
+    architecture: PluginArchitecture = "windows-x64",
+    host_version: Annotated[str, Query(min_length=5, max_length=32)] = "0.1.0",
+    protocol_version: Annotated[int, Query(ge=1, le=1)] = 1,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PublicPluginCatalogResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    return list_public_catalog(
+        db,
+        query=query,
+        category=category,
+        architecture=architecture,
+        host_version=host_version,
+        protocol_version=protocol_version,
+        page=page,
+        page_size=page_size,
+        publication_channel="canary",
+    )
+
+
+@router.get(
+    "/canary/{plugin_slug}",
+    response_model=PublicPluginDetailResponse,
+)
+def canary_plugin_detail(
+    plugin_slug: str,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> PublicPluginDetailResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    return get_canary_plugin(db, slug=plugin_slug)
+
+
+@router.get(
     "/downloads/{token}",
     name="download_desktop_plugin_artifact",
     dependencies=[Depends(rate_limit("desktop.plugin.download", limit=60, window_seconds=60))],
@@ -109,8 +155,22 @@ def download_plugin_artifact(
     token: str,
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal | None, Depends(get_optional_principal)],
+    installation_id: Annotated[
+        str | None, Header(alias="X-Plugin-Installation-Id", max_length=36)
+    ] = None,
+    canary_signature: Annotated[
+        str | None, Header(alias="X-Plugin-Canary-Signature", max_length=2048)
+    ] = None,
 ) -> FileResponse:
-    artifact, path = prepare_download(db, settings, raw_token=token)
+    artifact, path = prepare_download(
+        db,
+        settings,
+        raw_token=token,
+        user_id=principal.user.id if principal else None,
+        installation_id=installation_id,
+        signature=canary_signature,
+    )
     digest = base64.b64encode(bytes.fromhex(artifact.sha256)).decode("ascii")
     return FileResponse(
         path,

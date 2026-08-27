@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Registry;
@@ -17,7 +18,34 @@ public interface IPluginInstallValidator
         CancellationToken cancellationToken = default);
 }
 
-public interface IPluginExecutionService : IPluginInstallValidator
+public interface IPluginUpgradeValidator : IPluginInstallValidator
+{
+    Task<PluginMigrationExecutionResult> MigrateAsync(
+        PluginPackageInspection inspection,
+        string installedDirectory,
+        string fromVersion,
+        IReadOnlyList<string> grantedCapabilities,
+        CancellationToken cancellationToken = default) => Task.FromResult(
+            new PluginMigrationExecutionResult("not_required", []));
+}
+
+public sealed record PluginMigrationStepExecution(
+    string StepId,
+    string Status,
+    int AttemptCount);
+
+public sealed record PluginMigrationExecutionResult(
+    string Status,
+    IReadOnlyList<PluginMigrationStepExecution> Steps);
+
+public sealed class PluginMigrationException(
+    string message,
+    IReadOnlyList<PluginMigrationStepExecution> steps) : PdppProtocolException(message)
+{
+    public IReadOnlyList<PluginMigrationStepExecution> Steps { get; } = steps;
+}
+
+public interface IPluginExecutionService : IPluginUpgradeValidator
 {
     Task<JsonElement> ExecuteAsync(
         InstalledPlugin plugin,
@@ -32,6 +60,9 @@ public interface IPluginExecutionService : IPluginInstallValidator
 
 public sealed class PluginExecutionService : IPluginExecutionService
 {
+    private static readonly Regex MigrationStepIdPattern = new(
+        "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
     private readonly PluginStoragePaths _paths;
     private readonly PluginLogStore _logs;
     private readonly PluginPrivateStorage _privateStorage;
@@ -142,6 +173,71 @@ public sealed class PluginExecutionService : IPluginExecutionService
                     $"Plugin emitted {host.StandardError.Length} characters to stderr.",
                     CancellationToken.None);
             }
+        }
+    }
+
+    public async Task<PluginMigrationExecutionResult> MigrateAsync(
+        PluginPackageInspection inspection,
+        string installedDirectory,
+        string fromVersion,
+        IReadOnlyList<string> grantedCapabilities,
+        CancellationToken cancellationToken = default)
+    {
+        await using var session = await StartHostAsync(
+            inspection.Manifest,
+            inspection.EntryPointPath,
+            installedDirectory,
+            grantedCapabilities,
+            cancellationToken);
+        var host = session.Host;
+        await host.InitializeAsync(
+            PluginPackageVerifier.HostVersion,
+            grantedCapabilities,
+            TimeSpan.FromSeconds(15),
+            cancellationToken);
+        var result = await host.InvokeAsync<PdppMigrateParams, PdppMigrateResult>(
+            PdppProtocol.MigrateMethod,
+            new PdppMigrateParams(fromVersion, inspection.Manifest.Version),
+            TimeSpan.FromSeconds(inspection.Manifest.Limits.CommandTimeoutSeconds),
+            cancellationToken);
+        var steps = (result.Steps ?? [])
+            .Select(step => new PluginMigrationStepExecution(
+                step.StepId,
+                step.Status,
+                step.AttemptCount))
+            .ToArray();
+        ValidateMigrationResult(inspection.Manifest, result.Status, steps);
+        if (result.Status == "failed")
+        {
+            throw new PluginMigrationException("插件数据迁移返回失败状态。", steps);
+        }
+        return new PluginMigrationExecutionResult(result.Status, steps);
+    }
+
+    private static void ValidateMigrationResult(
+        PluginManifest manifest,
+        string status,
+        IReadOnlyList<PluginMigrationStepExecution> steps)
+    {
+        if (status is not ("migrated" or "not_required" or "failed")
+            || steps.Count > 64
+            || steps.Select(step => step.StepId).Distinct(StringComparer.Ordinal).Count()
+            != steps.Count
+            || steps.Any(step => string.IsNullOrWhiteSpace(step.StepId)
+                                 || step.StepId.Length > 128
+                                 || !MigrationStepIdPattern.IsMatch(step.StepId)
+                                 || step.Status is not ("completed" or "skipped" or "failed")
+                                 || step.AttemptCount is < 1 or > 10))
+        {
+            throw new PdppProtocolException("插件数据迁移返回了无效的分步证据。");
+        }
+        if (status == "not_required" && steps.Count != 0
+            || status == "migrated" && steps.Any(step => step.Status == "failed")
+            || status == "failed" && !steps.Any(step => step.Status == "failed")
+            || manifest.Migration?.Required == true && status == "not_required"
+            || manifest.Migration?.Required == true && steps.Count == 0)
+        {
+            throw new PdppProtocolException("插件数据迁移状态与分步证据不一致。");
         }
     }
 

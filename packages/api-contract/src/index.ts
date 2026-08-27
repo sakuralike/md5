@@ -3197,6 +3197,8 @@ export const DESKTOP_PLUGIN_PATHS = {
   detail: "/desktop/plugins/{plugin_slug}",
   version: "/desktop/plugins/{plugin_slug}/versions/{semver}",
   downloadTicket: "/desktop/plugins/{plugin_slug}/download-ticket",
+  canaryCatalog: "/desktop/plugins/canary/catalog",
+  canaryDetail: "/desktop/plugins/canary/{plugin_slug}",
   revocations: "/desktop/plugins/revocations",
   brokerAuthorize: "/desktop/plugins/{plugin_slug}/broker/authorize",
   developerProjects: "/developer/plugins",
@@ -3212,6 +3214,7 @@ export const DESKTOP_PLUGIN_PATHS = {
   adminPluginReviewLlmKey: "/admin/plugin-review-policy/llm-key",
   adminPluginReviewLlmTest: "/admin/plugin-review-policy/llm-test",
   adminPluginReviewSource: "/admin/plugin-reviews/versions/{version_id}/source",
+  adminPluginInstallEvidence: "/admin/plugin-reviews/install-evidence",
   runnerHeartbeat: "/plugin-runner/heartbeat",
   runnerLease: "/plugin-runner/tasks/lease",
 } as const;
@@ -3325,6 +3328,7 @@ export interface DesktopPluginPublicVersion {
   host_max: string;
   approved_capabilities: DesktopPluginCapability[];
   risk_tier: string;
+  release_notes: string;
   review_policy_version: string;
   platform_key_id: string;
   platform_public_key_base64: string;
@@ -3364,6 +3368,57 @@ export interface DesktopPluginInstallEventRequest {
   kind: "installed" | "upgraded" | "rolled_back" | "enabled" | "disabled" | "uninstalled" | "download_failed";
   result: "success" | "failure";
   client_version: string | null;
+  permission_evidence?: DesktopPluginPermissionEvidence | null;
+  migration_evidence?: DesktopPluginMigrationEvidence | null;
+  installation_id?: string | null;
+  evidence_signature?: string | null;
+}
+
+export interface DesktopPluginPermissionEvidence {
+  requested_capabilities: string[];
+  approved_capabilities: string[];
+  granted_capabilities: string[];
+  publisher_key_fingerprint: string;
+  risk_tier: "low" | "standard" | "medium" | "high" | "critical";
+  consented_at: string;
+}
+
+export interface DesktopPluginMigrationEvidence {
+  from_version: string;
+  to_version: string;
+  status: "completed" | "not_required" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  steps: DesktopPluginMigrationStepEvidence[];
+}
+
+export interface DesktopPluginMigrationStepEvidence {
+  step_id: string;
+  status: "completed" | "skipped" | "failed";
+  attempt_count: number;
+}
+
+export interface DesktopPluginInstallEvidenceItem {
+  event_id: string;
+  plugin_slug: string;
+  semver: string;
+  architecture: DesktopPluginArchitecture;
+  kind: string;
+  result: string;
+  client_version: string | null;
+  user_id: string | null;
+  installation_id: string | null;
+  evidence_payload_hash: string | null;
+  created_at: string;
+  permission_evidence: DesktopPluginPermissionEvidence | null;
+  migration_evidence: DesktopPluginMigrationEvidence | null;
+}
+
+export interface DesktopPluginInstallEvidenceListResponse {
+  items: DesktopPluginInstallEvidenceItem[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface DesktopPluginInstallEventResponse {
@@ -3568,6 +3623,7 @@ export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem 
   events: DesktopPluginReviewEvent[];
   review_runs: DesktopPluginStaticReviewRun[];
   remediation_deadline_at: string | null;
+  publication_channels: string[];
 }
 
 export interface DesktopPluginReviewQueueResponse {

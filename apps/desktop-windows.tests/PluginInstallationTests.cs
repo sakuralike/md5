@@ -46,10 +46,25 @@ public sealed class PluginInstallationTests : IDisposable
         Assert.Equal(PluginSource.LocalUnreviewed, first.Plugin.Source);
         Assert.Equal("1.2.0", third.Plugin.CurrentVersion);
         Assert.Equal("1.1.0", third.Plugin.RollbackVersion);
+        Assert.Equal(2, validator.MigrationCount);
         Assert.Equal(2, third.Plugin.Versions.Count);
         Assert.False(Directory.Exists(paths.InstalledVersionDirectory(first.Plugin.PluginId, "1.0.0")));
         Assert.True(Directory.Exists(paths.InstalledVersionDirectory(second.Plugin.PluginId, "1.1.0")));
         Assert.True(Directory.Exists(paths.InstalledVersionDirectory(third.Plugin.PluginId, "1.2.0")));
+        Assert.True(third.Plugin.PermissionConsents!.TryGetValue("1.2.0", out var consent));
+        Assert.Equal(["storage:private", "ui:command"], consent!.GrantedCapabilities);
+        Assert.Equal(["storage:private", "ui:command"], consent.ApprovedCapabilities);
+        Assert.Equal("completed", third.Plugin.MigrationRecords!["1.2.0"].Status);
+        Assert.Equal("1.1.0", third.Plugin.MigrationRecords["1.2.0"].FromVersion);
+        var migrationStep = Assert.Single(third.Plugin.MigrationRecords["1.2.0"].Steps!);
+        Assert.Equal("settings.copy", migrationStep.StepId);
+        Assert.Equal(2, migrationStep.AttemptCount);
+
+        var privateStorage = new PluginPrivateStorage(paths);
+        await privateStorage.SetAsync(
+            third.Plugin.PluginId,
+            "settings.current",
+            JsonSerializer.SerializeToElement(new { retained = true }));
 
         var rolledBack = await installer.RollbackAsync(third.Plugin.PluginId);
 
@@ -61,7 +76,8 @@ public sealed class PluginInstallationTests : IDisposable
 
         Assert.Null(await registry.GetAsync(third.Plugin.PluginId));
         Assert.False(Directory.Exists(Path.Combine(paths.InstalledDirectory, third.Plugin.PluginId)));
-        Assert.False(Directory.Exists(paths.PluginDataDirectory(third.Plugin.PluginId)));
+        Assert.True(Directory.Exists(paths.PluginDataDirectory(third.Plugin.PluginId)));
+        Assert.NotNull(await privateStorage.GetAsync(third.Plugin.PluginId, "settings.current"));
     }
 
     [Fact]
@@ -78,6 +94,43 @@ public sealed class PluginInstallationTests : IDisposable
 
         Assert.Null(await registry.GetAsync("com.synthetic.failed-plugin"));
         Assert.False(Directory.Exists(paths.InstalledVersionDirectory("com.synthetic.failed-plugin", "1.0.0")));
+    }
+
+    [Fact]
+    public async Task FailedMigrationKeepsCurrentVersionAndRemovesNewDirectory()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_directory, "migration-failure"));
+        var registry = new PluginRegistry(paths);
+        var validator = new RecordingValidator();
+        var installer = CreateInstaller(paths, registry, validator);
+        var version1 = _factory.Create(_directory, version: "1.0.0");
+        var version2 = _factory.Create(_directory, version: "1.1.0");
+        await installer.InstallLocalAsync(version1, ["ui:command", "storage:private"]);
+        var privateStorage = new PluginPrivateStorage(paths);
+        await privateStorage.SetAsync(
+            "com.synthetic.local-plugin",
+            "migration.state",
+            JsonSerializer.SerializeToElement(new { version = 1 }));
+        validator.MigrationAction = () => privateStorage.SetAsync(
+            "com.synthetic.local-plugin",
+            "migration.state",
+            JsonSerializer.SerializeToElement(new { version = 2 }));
+        validator.MigrationFailure = new PluginMigrationException(
+            "synthetic migration failure",
+            [new PluginMigrationStepExecution("settings.copy", "failed", 3)]);
+
+        await Assert.ThrowsAsync<PluginMigrationException>(
+            () => installer.InstallLocalAsync(version2, ["ui:command", "storage:private"]));
+
+        var installed = await registry.GetAsync("com.synthetic.local-plugin");
+        Assert.NotNull(installed);
+        Assert.Equal("1.0.0", installed!.CurrentVersion);
+        Assert.False(Directory.Exists(paths.InstalledVersionDirectory(installed.PluginId, "1.1.0")));
+        var restored = await privateStorage.GetAsync(installed.PluginId, "migration.state");
+        Assert.Equal(1, restored?.GetProperty("version").GetInt32());
+        Assert.Equal("failed", installed.MigrationRecords!["1.1.0"].Status);
+        Assert.Equal("1.0.0", installed.MigrationRecords["1.1.0"].FromVersion);
+        Assert.Equal(3, Assert.Single(installed.MigrationRecords["1.1.0"].Steps!).AttemptCount);
     }
 
     [Fact]
@@ -100,6 +153,26 @@ public sealed class PluginInstallationTests : IDisposable
             () => installer.InstallLocalAsync(replacement, ["ui:command", "storage:private"]));
 
         Assert.Contains("版本不可变", exception.Message);
+    }
+
+    [Fact]
+    public async Task DowngradeInstallIsRejectedAndRollbackRemainsExplicit()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_directory, "downgrade-plugins"));
+        var registry = new PluginRegistry(paths);
+        var installer = CreateInstaller(paths, registry, new RecordingValidator());
+        var current = _factory.Create(_directory, version: "1.2.0");
+        var older = _factory.Create(_directory, version: "1.1.0");
+
+        await installer.InstallLocalAsync(current, ["ui:command", "storage:private"]);
+
+        var exception = await Assert.ThrowsAsync<PluginInstallException>(
+            () => installer.InstallLocalAsync(older, ["ui:command", "storage:private"]));
+
+        Assert.Contains("已拒绝降级安装", exception.Message);
+        var installed = await registry.GetAsync("com.synthetic.local-plugin");
+        Assert.NotNull(installed);
+        Assert.Equal("1.2.0", installed!.CurrentVersion);
     }
 
     [Fact]
@@ -379,10 +452,35 @@ public sealed class PluginInstallationTests : IDisposable
             "net10.0");
     }
 
-    private sealed class RecordingValidator : IPluginInstallValidator
+    private sealed class RecordingValidator : IPluginUpgradeValidator
     {
         public int ValidationCount { get; private set; }
+        public int MigrationCount { get; private set; }
         public Exception? Failure { get; init; }
+        public Exception? MigrationFailure { get; set; }
+        public Func<Task>? MigrationAction { get; set; }
+
+        public async Task<PluginMigrationExecutionResult> MigrateAsync(
+            PluginPackageInspection inspection,
+            string installedDirectory,
+            string fromVersion,
+            IReadOnlyList<string> grantedCapabilities,
+            CancellationToken cancellationToken = default)
+        {
+            MigrationCount++;
+            Assert.True(Directory.Exists(installedDirectory));
+            if (MigrationAction is not null)
+            {
+                await MigrationAction();
+            }
+            if (MigrationFailure is not null)
+            {
+                throw MigrationFailure;
+            }
+            return new PluginMigrationExecutionResult(
+                "migrated",
+                [new PluginMigrationStepExecution("settings.copy", "completed", 2)]);
+        }
 
         public Task ValidateAsync(
             PluginPackageInspection inspection,

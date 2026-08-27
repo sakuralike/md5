@@ -33,6 +33,63 @@ public sealed class PluginPackageVerifierTests : IDisposable
     }
 
     [Fact]
+    public async Task IdempotentMigrationDeclarationIsAccepted()
+    {
+        var path = _factory.Create(
+            _directory,
+            migration: new PluginMigrationManifest(true, ["1.0.0"], "idempotent"));
+
+        var inspection = await new PluginPackageVerifier().VerifyAsync(path);
+
+        Assert.NotNull(inspection.Manifest.Migration);
+        Assert.True(inspection.Manifest.Migration!.Required);
+        Assert.Equal(["1.0.0"], inspection.Manifest.Migration.FromVersions);
+    }
+
+    [Fact]
+    public async Task NonIdempotentMigrationDeclarationIsRejected()
+    {
+        var path = _factory.Create(
+            _directory,
+            migration: new PluginMigrationManifest(true, ["1.0.0"], "best_effort"));
+
+        var exception = await Assert.ThrowsAsync<PluginPackageException>(
+            () => new PluginPackageVerifier().VerifyAsync(path));
+
+        Assert.Contains("迁移声明无效", exception.Message);
+    }
+
+    [Fact]
+    public async Task SupportedCommandSchemaConstraintsAreAccepted()
+    {
+        var path = _factory.Create(
+            _directory,
+            commandSchema: Encoding.UTF8.GetBytes(
+                """
+                {"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string","title":"文本","description":"合成测试字段","minLength":1,"maxLength":64,"pattern":"^[a-z]+$","enum":["safe","plain"],"default":"safe"},"count":{"type":"integer","minimum":0,"maximum":10,"multipleOf":1,"default":0}}}
+                """));
+
+        var inspection = await new PluginPackageVerifier().VerifyAsync(path);
+
+        Assert.Equal("com.synthetic.local-plugin", inspection.Manifest.PluginId);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}}")]
+    [InlineData("{\"type\":\"object\",\"properties\":{\"value\":{\"oneOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]}}}")]
+    public async Task UnsupportedComplexCommandSchemasAreRejected(string schema)
+    {
+        var path = _factory.Create(
+            _directory,
+            commandSchema: Encoding.UTF8.GetBytes(schema));
+
+        var exception = await Assert.ThrowsAsync<PluginPackageException>(
+            () => new PluginPackageVerifier().VerifyAsync(path));
+
+        Assert.Contains("Schema", exception.Message);
+    }
+
+    [Fact]
     public async Task TamperedSignatureIsRejected()
     {
         var path = _factory.Create(
@@ -50,6 +107,25 @@ public sealed class PluginPackageVerifierTests : IDisposable
             () => new PluginPackageVerifier().VerifyAsync(path));
 
         Assert.Contains("签名无效", exception.Message);
+    }
+
+    [Fact]
+    public async Task SignedProvenanceMustMatchPackagedFiles()
+    {
+        var path = _factory.Create(
+            _directory,
+            additionalFiles: new Dictionary<string, byte[]>
+            {
+                [PluginPackageVerifier.ProvenancePath] = Encoding.UTF8.GetBytes(
+                    """
+                    {"schema":"pd.plugin.provenance/v1","source_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source_files":[],"sbom":{"path":"sbom.cdx.json","size_bytes":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"binaries":[]}
+                    """),
+            });
+
+        var exception = await Assert.ThrowsAsync<PluginPackageException>(
+            () => new PluginPackageVerifier().VerifyAsync(path));
+
+        Assert.Contains("构建溯源", exception.Message);
     }
 
     [Fact]

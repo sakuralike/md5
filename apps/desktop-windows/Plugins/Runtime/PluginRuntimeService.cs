@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PasswordDetective.Desktop.Plugins.Installation;
 using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Safety;
 using PasswordDetective.Desktop.Plugins.Storage;
@@ -13,17 +14,20 @@ public sealed class PluginRuntimeService
     private readonly IPluginExecutionService _execution;
     private readonly PluginSafeMode _safeMode;
     private readonly PluginLogStore _logs;
+    private readonly PluginInstaller? _installer;
 
     public PluginRuntimeService(
         PluginRegistry registry,
         IPluginExecutionService execution,
         PluginSafeMode safeMode,
-        PluginLogStore logs)
+        PluginLogStore logs,
+        PluginInstaller? installer = null)
     {
         _registry = registry;
         _execution = execution;
         _safeMode = safeMode;
         _logs = logs;
+        _installer = installer;
     }
 
     public async Task<JsonElement> ExecuteAsync(
@@ -143,11 +147,52 @@ public sealed class PluginRuntimeService
                 return plugin with
                 {
                     ConsecutiveFailures = failures,
-                    Enabled = failures < FailureDisableThreshold,
-                    RuntimeStatus = failures < FailureDisableThreshold ? "failed" : "disabled",
+                    Enabled = true,
+                    RuntimeStatus = "failed",
                     LastError = safeMessage,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 };
+            },
+            cancellationToken);
+
+        var failedPlugin = await _registry.GetAsync(pluginId, cancellationToken);
+        if (failedPlugin is null || failedPlugin.ConsecutiveFailures < FailureDisableThreshold)
+        {
+            return;
+        }
+
+        if (_installer is not null && failedPlugin.CanRollback)
+        {
+            try
+            {
+                var rolledBack = await _installer.RollbackAsync(pluginId, cancellationToken);
+                await _logs.AppendAsync(
+                    pluginId,
+                    "warning",
+                    $"连续失败达到 {FailureDisableThreshold} 次，已自动回退到 {rolledBack.CurrentVersion}。",
+                    cancellationToken);
+                return;
+            }
+            catch (Exception rollbackException)
+            {
+                await _logs.AppendAsync(
+                    pluginId,
+                    "error",
+                    $"自动回退失败：{rollbackException.GetType().Name}。插件已停用。",
+                    cancellationToken);
+            }
+        }
+
+        await _registry.UpdateAsync(
+            pluginId,
+            plugin => plugin with
+            {
+                Enabled = false,
+                RuntimeStatus = "disabled",
+                LastError = _installer is not null && plugin.CanRollback
+                    ? "插件运行失败，自动回退失败，插件已停用。"
+                    : safeMessage,
+                UpdatedAt = DateTimeOffset.UtcNow,
             },
             cancellationToken);
     }

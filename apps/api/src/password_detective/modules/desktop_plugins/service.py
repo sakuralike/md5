@@ -9,7 +9,9 @@ import urllib.parse
 import urllib.request
 import zipfile
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -69,8 +71,13 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginArtifactResponse,
     PluginBrokerAuthorizationRequest,
     PluginBrokerAuthorizationResponse,
+    PluginCanaryDownloadRequest,
     PluginInstallEventRequest,
     PluginInstallEventResponse,
+    PluginInstallEvidenceItem,
+    PluginInstallEvidenceListResponse,
+    PluginMigrationEvidence,
+    PluginPermissionEvidence,
     PluginProjectCreateRequest,
     PluginProjectDetailResponse,
     PluginProjectListResponse,
@@ -93,6 +100,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionRejectRequest,
     PluginVersionResponse,
     PluginVersionRevokeRequest,
+    PluginVersionRollbackRequest,
     PluginVersionSubmitRequest,
     PluginVersionYankRequest,
     PublicPluginArtifactResponse,
@@ -107,6 +115,10 @@ from password_detective.modules.desktop_plugins.schemas import (
     UploadSessionResponse,
 )
 from password_detective.modules.desktop_plugins.storage import DesktopPluginStorage
+from password_detective.modules.desktop_verification.service import (
+    _active_installation,
+    _verify_signature,
+)
 
 _REVOCATION_POLICY_VERSION = "desktop-plugin-control-plane-v1"
 _API_CAPABILITY_SCOPES = {
@@ -218,6 +230,88 @@ def _aware(value: datetime) -> datetime:
 
 def _signature_timestamp(value: datetime) -> str:
     return _aware(value).astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _evidence_timestamp(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    return (
+        _aware(value)
+        .astimezone(UTC)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def build_install_evidence_payload(payload: PluginInstallEventRequest) -> bytes:
+    permission = payload.permission_evidence
+    migration = payload.migration_evidence
+    values = (
+        ("version", "desktop-plugin-install-evidence-v1"),
+        ("event_id", payload.event_id),
+        ("installation_id", str(payload.installation_id or "")),
+        ("plugin_slug", payload.plugin_slug),
+        ("semver", payload.semver),
+        ("architecture", payload.architecture),
+        ("source", payload.source),
+        ("kind", payload.kind),
+        ("result", payload.result),
+        ("client_version", payload.client_version or ""),
+        (
+            "permission_requested",
+            ",".join(permission.requested_capabilities) if permission else "",
+        ),
+        (
+            "permission_approved",
+            ",".join(permission.approved_capabilities) if permission else "",
+        ),
+        (
+            "permission_granted",
+            ",".join(permission.granted_capabilities) if permission else "",
+        ),
+        ("publisher_key_fingerprint", permission.publisher_key_fingerprint if permission else ""),
+        ("risk_tier", permission.risk_tier if permission else ""),
+        ("consented_at", _evidence_timestamp(permission.consented_at) if permission else ""),
+        ("migration_from", migration.from_version if migration else ""),
+        ("migration_to", migration.to_version if migration else ""),
+        ("migration_status", migration.status if migration else ""),
+        ("migration_started_at", _evidence_timestamp(migration.started_at) if migration else ""),
+        (
+            "migration_completed_at",
+            _evidence_timestamp(migration.completed_at) if migration else "",
+        ),
+        (
+            "migration_steps",
+            ";".join(
+                f"{step.step_id}:{step.status}:{step.attempt_count}"
+                for step in sorted(migration.steps, key=lambda item: item.step_id)
+            )
+            if migration
+            else "",
+        ),
+    )
+    return ("\n".join(f"{key}={value}" for key, value in values) + "\n").encode()
+
+
+def build_canary_ticket_payload(
+    version_id: str, payload: PluginCanaryDownloadRequest
+) -> bytes:
+    values = (
+        ("version", "desktop-plugin-canary-ticket-v1"),
+        ("version_id", version_id),
+        ("architecture", payload.architecture),
+        ("installation_id", str(payload.installation_id)),
+    )
+    return ("\n".join(f"{key}={value}" for key, value in values) + "\n").encode()
+
+
+def build_canary_download_payload(raw_token: str, installation_id: str) -> bytes:
+    values = (
+        ("version", "desktop-plugin-canary-download-v1"),
+        ("token", raw_token),
+        ("installation_id", installation_id),
+    )
+    return ("\n".join(f"{key}={value}" for key, value in values) + "\n").encode()
 
 
 def _require_verified(principal: Principal) -> None:
@@ -898,6 +992,46 @@ def create_version(
         )
     ):
         raise AppError("desktop_plugin.version_conflict", "同一插件版本已存在", status_code=409)
+    published_versions = list(
+        db.scalars(
+            select(DesktopPluginVersion).where(
+                DesktopPluginVersion.plugin_id == plugin.id,
+                DesktopPluginVersion.status == DesktopPluginVersionStatus.PUBLISHED,
+            )
+        ).all()
+    )
+    if published_versions:
+        previous = max(published_versions, key=lambda item: _parse_semver(item.semver))
+        previous_semver = _parse_semver(previous.semver)
+        target_semver = _parse_semver(payload.semver)
+        if target_semver <= previous_semver:
+            raise AppError(
+                "desktop_plugin.version_not_increasing",
+                "新版本必须高于当前已发布版本",
+                status_code=409,
+                details={"current_version": previous.semver},
+            )
+        if target_semver[:2] == previous_semver[:2] and (
+            key.fingerprint != previous.signing_key_fingerprint
+            or set(payload.requested_capabilities) != set(previous.requested_capabilities)
+        ):
+            raise AppError(
+                "desktop_plugin.patch_upgrade_incompatible",
+                "补丁版本不能变更申请权限或开发者签名密钥",
+                status_code=422,
+            )
+        if target_semver[0] > previous_semver[0]:
+            protocol_changed = (
+                payload.protocol_min != previous.protocol_min
+                or payload.protocol_max != previous.protocol_max
+            )
+            host_min_increased = _parse_semver(payload.host_min) > _parse_semver(previous.host_min)
+            if not payload.release_notes.strip() or not (protocol_changed or host_min_increased):
+                raise AppError(
+                    "desktop_plugin.major_upgrade_compatibility_required",
+                    "主版本升级必须提高宿主最低版本或协议范围，并提供发布说明",
+                    status_code=422,
+                )
     version = DesktopPluginVersion(
         plugin_id=plugin.id,
         signing_key_fingerprint=key.fingerprint,
@@ -1170,6 +1304,7 @@ def finalize_version(
             host_min=version.host_min,
             host_max=version.host_max,
             requested_capabilities=list(version.requested_capabilities),
+            source_review_mode=version.source_review_mode,
             max_expanded_bytes=settings.desktop_plugin_max_expanded_bytes,
         )
         artifact.expanded_size_bytes = inspection.expanded_size_bytes
@@ -1181,6 +1316,42 @@ def finalize_version(
             "desktop_plugin.manifest_mismatch",
             "不同架构制品的插件清单不一致",
             status_code=422,
+        )
+    published_versions = list(
+        db.scalars(
+            select(DesktopPluginVersion).where(
+                DesktopPluginVersion.plugin_id == plugin.id,
+                DesktopPluginVersion.status == DesktopPluginVersionStatus.PUBLISHED,
+            )
+        ).all()
+    )
+    if published_versions:
+        previous = max(published_versions, key=lambda item: _parse_semver(item.semver))
+        previous_artifact = db.scalar(
+            select(DesktopPluginArtifact)
+            .where(
+                DesktopPluginArtifact.plugin_version_id == previous.id,
+                DesktopPluginArtifact.storage_key.is_not(None),
+            )
+            .order_by(DesktopPluginArtifact.architecture)
+        )
+        _validate_manifest_upgrade_compatibility(
+            previous=previous,
+            target_semver=version.semver,
+            target_manifest=inspections[0].manifest,
+        )
+        _validate_schema_upgrade_compatibility(
+            previous=previous,
+            target_semver=version.semver,
+            target_manifest=inspections[0].manifest,
+            previous_package=(
+                storage.public_path(previous_artifact.public_storage_key)
+                if previous_artifact is not None and previous_artifact.public_storage_key
+                else storage.quarantine_path(previous_artifact.storage_key)
+                if previous_artifact is not None and previous_artifact.storage_key
+                else None
+            ),
+            target_package=storage.quarantine_path(artifacts[0].storage_key),
         )
     now = utc_now()
     version.manifest_json = inspections[0].manifest
@@ -1213,6 +1384,221 @@ def _parse_semver(value: str) -> tuple[int, int, int]:
     if len(parts) != 3 or any(not part.isdigit() for part in parts):
         return (-1, -1, -1)
     return int(parts[0]), int(parts[1]), int(parts[2])
+
+
+def _validate_manifest_upgrade_compatibility(
+    *,
+    previous: DesktopPluginVersion,
+    target_semver: str,
+    target_manifest: dict,
+) -> None:
+    previous_semver = _parse_semver(previous.semver)
+    target = _parse_semver(target_semver)
+    if target[0] != previous_semver[0] or previous.manifest_json is None:
+        return
+    previous_capabilities = previous.manifest_json.get("capabilities", {})
+    target_capabilities = target_manifest.get("capabilities", {})
+    previous_required = set(previous_capabilities.get("required", []))
+    previous_optional = set(previous_capabilities.get("optional", []))
+    target_required = set(target_capabilities.get("required", []))
+    target_optional = set(target_capabilities.get("optional", []))
+    if (
+        not previous_required.issubset(target_required)
+        or not previous_optional.issubset(target_optional)
+        or target_required & target_optional
+        or target[:2] == previous_semver[:2]
+        and (target_required != previous_required or target_optional != previous_optional)
+    ):
+        raise AppError(
+            "desktop_plugin.upgrade_capability_incompatible",
+            "补丁版本不能变更权限语义；次版本不能删除或重新分类已有权限",
+            status_code=422,
+        )
+    previous_commands = {
+        command["id"]: command for command in previous.manifest_json.get("commands", [])
+    }
+    target_commands = {command["id"]: command for command in target_manifest.get("commands", [])}
+    changed = any(
+        command_id not in target_commands or target_commands[command_id] != command
+        for command_id, command in previous_commands.items()
+    )
+    if changed or (target[:2] == previous_semver[:2] and target_commands != previous_commands):
+        raise AppError(
+            "desktop_plugin.upgrade_command_incompatible",
+            "补丁版本不能变更命令定义；次版本不能删除或修改已有命令",
+            status_code=422,
+        )
+
+
+def _validate_schema_upgrade_compatibility(
+    *,
+    previous: DesktopPluginVersion,
+    target_semver: str,
+    target_manifest: dict,
+    previous_package: Path | None,
+    target_package: Path,
+) -> None:
+    previous_semver = _parse_semver(previous.semver)
+    target = _parse_semver(target_semver)
+    if target[0] != previous_semver[0] or previous.manifest_json is None:
+        return
+    if previous_package is None:
+        return
+    if not previous_package.is_file() or not target_package.is_file():
+        raise AppError(
+            "desktop_plugin.previous_schema_unavailable",
+            "无法读取上一版本或目标版本的命令 Schema",
+            status_code=422,
+        )
+    with (
+        zipfile.ZipFile(previous_package) as previous_archive,
+        zipfile.ZipFile(target_package) as target_archive,
+    ):
+        previous_commands = {
+            command["id"]: command for command in previous.manifest_json.get("commands", [])
+        }
+        target_commands = {
+            command["id"]: command for command in target_manifest.get("commands", [])
+        }
+        for command_id, previous_command in previous_commands.items():
+            target_command = target_commands.get(command_id)
+            if target_command is None:
+                continue
+            try:
+                previous_schema = json.loads(
+                    previous_archive.read(previous_command["input_schema"]).decode("utf-8")
+                )
+                target_schema = json.loads(
+                    target_archive.read(target_command["input_schema"]).decode("utf-8")
+                )
+            except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise AppError(
+                    "desktop_plugin.schema_unavailable",
+                    "无法读取已有命令的 JSON Schema",
+                    status_code=422,
+                ) from exc
+            if not _schema_is_backward_compatible(previous_schema, target_schema):
+                raise AppError(
+                    "desktop_plugin.upgrade_schema_incompatible",
+                    "补丁或次版本不能改变已有命令 Schema 的字段类型、必填语义或约束",
+                    status_code=422,
+                )
+
+
+def _schema_is_backward_compatible(previous: dict[str, Any], target: dict[str, Any]) -> bool:
+    if not isinstance(previous, dict) or not isinstance(target, dict):
+        return False
+    if previous.get("type") != target.get("type"):
+        return False
+    if previous.get("type") == "object":
+        previous_properties = previous.get("properties", {})
+        target_properties = target.get("properties", {})
+        if not isinstance(previous_properties, dict) or not isinstance(target_properties, dict):
+            return False
+        previous_required = set(previous.get("required", []))
+        target_required = set(target.get("required", []))
+        if not target_required.issubset(previous_required):
+            return False
+        if previous.get("additionalProperties", True) and not target.get(
+            "additionalProperties", True
+        ):
+            return False
+        for name, previous_property in previous_properties.items():
+            target_property = target_properties.get(name)
+            if not isinstance(previous_property, dict) or not isinstance(target_property, dict):
+                return False
+            if not _schema_is_backward_compatible(previous_property, target_property):
+                return False
+        return True
+    if previous.get("type") not in {"string", "integer", "number", "boolean"}:
+        return False
+
+    previous_enum = previous.get("enum")
+    target_enum = target.get("enum")
+    if previous_enum is None and target_enum is not None:
+        return False
+    if previous_enum is not None and target_enum is not None:
+        previous_values = {_schema_value_token(value) for value in previous_enum}
+        target_values = {_schema_value_token(value) for value in target_enum}
+        if not previous_values.issubset(target_values):
+            return False
+
+    if previous.get("format") != target.get("format"):
+        return False
+    if previous.get("default", _SCHEMA_MISSING) != target.get("default", _SCHEMA_MISSING):
+        return False
+    previous_pattern = previous.get("pattern")
+    target_pattern = target.get("pattern")
+    if target_pattern is not None and target_pattern != previous_pattern:
+        return False
+    if target.get("minLength", 0) > previous.get("minLength", 0):
+        return False
+    if target.get("maxLength", float("inf")) < previous.get("maxLength", float("inf")):
+        return False
+    if not _lower_bound_is_compatible(previous, target):
+        return False
+    if not _upper_bound_is_compatible(previous, target):
+        return False
+    return _multiple_of_is_compatible(previous.get("multipleOf"), target.get("multipleOf"))
+
+
+_SCHEMA_MISSING = object()
+
+
+def _schema_value_token(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _schema_lower_bound(schema: dict[str, Any]) -> tuple[Decimal, bool] | None:
+    if "exclusiveMinimum" in schema:
+        return Decimal(str(schema["exclusiveMinimum"])), True
+    if "minimum" in schema:
+        return Decimal(str(schema["minimum"])), False
+    return None
+
+
+def _schema_upper_bound(schema: dict[str, Any]) -> tuple[Decimal, bool] | None:
+    if "exclusiveMaximum" in schema:
+        return Decimal(str(schema["exclusiveMaximum"])), True
+    if "maximum" in schema:
+        return Decimal(str(schema["maximum"])), False
+    return None
+
+
+def _lower_bound_is_compatible(previous: dict[str, Any], target: dict[str, Any]) -> bool:
+    previous_bound = _schema_lower_bound(previous)
+    target_bound = _schema_lower_bound(target)
+    if target_bound is None:
+        return True
+    if previous_bound is None or target_bound[0] > previous_bound[0]:
+        return False
+    return target_bound[0] != previous_bound[0] or not (
+        target_bound[1] and not previous_bound[1]
+    )
+
+
+def _upper_bound_is_compatible(previous: dict[str, Any], target: dict[str, Any]) -> bool:
+    previous_bound = _schema_upper_bound(previous)
+    target_bound = _schema_upper_bound(target)
+    if target_bound is None:
+        return True
+    if previous_bound is None or target_bound[0] < previous_bound[0]:
+        return False
+    return target_bound[0] != previous_bound[0] or not (
+        target_bound[1] and not previous_bound[1]
+    )
+
+
+def _multiple_of_is_compatible(previous: Any, target: Any) -> bool:
+    if target is None:
+        return True
+    if previous is None:
+        return False
+    try:
+        ratio = Decimal(str(previous)) / Decimal(str(target))
+    except (InvalidOperation, ZeroDivisionError):
+        return False
+    return ratio == ratio.to_integral_value()
 
 
 def _host_compatible(minimum: str, maximum: str, current: str) -> bool:
@@ -1264,7 +1650,7 @@ def _is_revoked(db: Session, *, plugin_id: str, version_id: str, signing_key_id:
 
 
 def _public_version_response(
-    db: Session, version: DesktopPluginVersion
+    db: Session, version: DesktopPluginVersion, publication_channel: str = "stable"
 ) -> PublicPluginVersionResponse | None:
     plugin = db.get(DesktopPlugin, version.plugin_id)
     artifacts = _public_artifacts(db, version.id)
@@ -1279,6 +1665,7 @@ def _public_version_response(
         or version.platform_signature_base64 is None
         or plugin is None
         or not artifacts
+        or not _has_publication(db, version.id, publication_channel)
         or _is_revoked(
             db,
             plugin_id=version.plugin_id,
@@ -1301,6 +1688,7 @@ def _public_version_response(
         host_max=version.host_max,
         approved_capabilities=list(version.approved_capabilities),
         risk_tier=version.risk_tier,
+        release_notes=version.release_notes,
         review_policy_version=version.review_policy_version,
         platform_key_id=version.platform_key_id,
         platform_public_key_base64=version.platform_public_key_base64,
@@ -1338,6 +1726,7 @@ def list_public_catalog(
     protocol_version: int,
     page: int,
     page_size: int,
+    publication_channel: str = "stable",
 ) -> PublicPluginCatalogResponse:
     statement = (
         select(DesktopPlugin, User)
@@ -1370,12 +1759,12 @@ def list_public_catalog(
             for version in versions
             if _host_compatible(version.host_min, version.host_max, host_version)
             and _public_artifacts(db, version.id, architecture)
-            and _public_version_response(db, version) is not None
+            and _public_version_response(db, version, publication_channel) is not None
         ]
         if not compatible:
             continue
         latest = max(compatible, key=lambda version: _parse_semver(version.semver))
-        public = _public_version_response(db, latest)
+        public = _public_version_response(db, latest, publication_channel)
         assert public is not None
         items.append(
             PublicPluginCatalogItem(
@@ -1404,6 +1793,16 @@ def list_public_catalog(
 
 
 def get_public_plugin(db: Session, *, slug: str) -> PublicPluginDetailResponse:
+    return _get_plugin_detail(db, slug=slug, publication_channel="stable")
+
+
+def get_canary_plugin(db: Session, *, slug: str) -> PublicPluginDetailResponse:
+    return _get_plugin_detail(db, slug=slug, publication_channel="canary")
+
+
+def _get_plugin_detail(
+    db: Session, *, slug: str, publication_channel: str
+) -> PublicPluginDetailResponse:
     row = db.execute(
         select(DesktopPlugin, User)
         .join(User, User.id == DesktopPlugin.owner_user_id)
@@ -1428,8 +1827,9 @@ def get_public_plugin(db: Session, *, slug: str) -> PublicPluginDetailResponse:
     public_versions = [
         response
         for version in versions
-        if (response := _public_version_response(db, version)) is not None
+        if (response := _public_version_response(db, version, publication_channel)) is not None
     ]
+    public_versions.sort(key=lambda response: _parse_semver(response.semver), reverse=True)
     if not public_versions:
         raise AppError("desktop_plugin.not_found", "插件不存在", status_code=404)
     return PublicPluginDetailResponse(
@@ -1463,6 +1863,19 @@ def get_public_version(db: Session, *, slug: str, semver: str) -> PublicPluginVe
     return response
 
 
+def _has_publication(db: Session, version_id: str, channel: str) -> bool:
+    return (
+        db.scalar(
+            select(DesktopPluginPublication.id).where(
+                DesktopPluginPublication.version_id == version_id,
+                DesktopPluginPublication.channel == channel,
+                DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+            )
+        )
+        is not None
+    )
+
+
 def create_download_ticket(
     db: Session,
     settings: Settings,
@@ -1491,7 +1904,7 @@ def create_download_ticket(
             DesktopPluginArtifact.public_storage_key.is_not(None),
         )
     ).one_or_none()
-    if row is None:
+    if row is None or not _has_stable_publication(db, row[1].id):
         raise AppError("desktop_plugin.artifact_missing", "可下载插件制品不存在", status_code=404)
     artifact = row[0]
     if _is_revoked(
@@ -1529,7 +1942,13 @@ def create_download_ticket(
 
 
 def prepare_download(
-    db: Session, settings: Settings, *, raw_token: str
+    db: Session,
+    settings: Settings,
+    *,
+    raw_token: str,
+    user_id: str | None = None,
+    installation_id: str | None = None,
+    signature: str | None = None,
 ) -> tuple[DesktopPluginArtifact, Path]:
     ticket = db.scalar(
         select(DesktopPluginDownloadTicket)
@@ -1541,6 +1960,30 @@ def prepare_download(
             "desktop_plugin.download_ticket_invalid",
             "下载票据无效、已使用或已过期",
             status_code=410,
+        )
+    if ticket.channel == "canary":
+        if (
+            user_id is None
+            or installation_id is None
+            or signature is None
+            or ticket.user_id != user_id
+            or ticket.installation_id != installation_id
+        ):
+            raise AppError(
+                "desktop_plugin.canary_download_authentication_failed",
+                "Canary 下载账号或设备不匹配",
+                status_code=403,
+            )
+        installation = _active_installation(
+            db,
+            installation_id,
+            user_id,
+            for_update=False,
+        )
+        _verify_signature(
+            installation.public_key_der,
+            build_canary_download_payload(raw_token, installation_id),
+            signature,
         )
     row = db.execute(
         select(DesktopPluginArtifact, DesktopPluginVersion, DesktopPlugin)
@@ -1652,6 +2095,37 @@ def record_install_event(
         )
     ):
         return PluginInstallEventResponse(accepted=True, event_id=payload.event_id)
+    version = plugin = None
+    installation_id = None
+    evidence_payload_hash = None
+    if payload.permission_evidence is not None or payload.migration_evidence is not None:
+        if user_id is None:
+            raise AppError(
+                "desktop_plugin.evidence_authentication_required",
+                "升级证据必须由已登录桌面会话提交",
+                status_code=401,
+            )
+        if payload.source != "market_reviewed":
+            raise AppError(
+                "desktop_plugin.evidence_source_invalid",
+                "只有平台审核插件允许提交升级证据",
+                status_code=422,
+            )
+        installation = _active_installation(
+            db,
+            str(payload.installation_id),
+            user_id,
+            for_update=False,
+        )
+        canonical_payload = build_install_evidence_payload(payload)
+        _verify_signature(
+            installation.public_key_der,
+            canonical_payload,
+            payload.evidence_signature or "",
+        )
+        installation_id = installation.id
+        evidence_payload_hash = hashlib.sha256(canonical_payload).hexdigest()
+
     if payload.source == "market_reviewed":
         row = db.execute(
             select(DesktopPluginVersion, DesktopPlugin)
@@ -1687,6 +2161,57 @@ def record_install_event(
                 "平台插件版本当前不可用",
                 status_code=409,
             )
+        if payload.permission_evidence is not None:
+            evidence = payload.permission_evidence
+            if (
+                payload.kind not in {"installed", "upgraded"}
+                or payload.result != "success"
+                or version is None
+                or evidence.requested_capabilities != sorted(version.requested_capabilities)
+                or evidence.approved_capabilities != sorted(version.approved_capabilities)
+                or not set(evidence.granted_capabilities).issubset(
+                    set(evidence.approved_capabilities)
+                )
+                or evidence.publisher_key_fingerprint != version.signing_key_fingerprint
+                or evidence.risk_tier != version.risk_tier
+                or _aware(evidence.consented_at) > utc_now() + timedelta(minutes=5)
+            ):
+                raise AppError(
+                    "desktop_plugin.permission_evidence_invalid",
+                    "权限授权证据与平台版本记录不一致",
+                    status_code=422,
+                )
+        if payload.migration_evidence is not None:
+            evidence = payload.migration_evidence
+            if (
+                payload.kind != "upgraded"
+                or payload.result == "success"
+                and evidence.status not in {"completed", "not_required"}
+                or payload.result == "failure"
+                and evidence.status != "failed"
+                or evidence.completed_at is None
+                or version is None
+                or evidence.to_version != version.semver
+                or evidence.from_version == evidence.to_version
+                or version.manifest_json is not None
+                and isinstance(version.manifest_json.get("migration"), dict)
+                and version.manifest_json["migration"].get("required") is True
+                and evidence.from_version
+                not in version.manifest_json["migration"].get("from_versions", [])
+                or version.manifest_json is not None
+                and isinstance(version.manifest_json.get("migration"), dict)
+                and version.manifest_json["migration"].get("required") is True
+                and evidence.status == "completed"
+                and not evidence.steps
+                or _aware(evidence.started_at) > utc_now() + timedelta(minutes=5)
+                or evidence.completed_at is not None
+                and _aware(evidence.completed_at) < _aware(evidence.started_at)
+            ):
+                raise AppError(
+                    "desktop_plugin.migration_evidence_invalid",
+                    "迁移证据与平台版本记录不一致",
+                    status_code=422,
+                )
     db.add(
         DesktopPluginInstallEvent(
             event_id=payload.event_id,
@@ -1697,11 +2222,79 @@ def record_install_event(
             kind=DesktopPluginInstallEventKind(payload.kind),
             result=payload.result,
             client_version=payload.client_version,
+            permission_evidence_json=(
+                payload.permission_evidence.model_dump(mode="json")
+                if payload.permission_evidence is not None
+                else None
+            ),
+            migration_evidence_json=(
+                payload.migration_evidence.model_dump(mode="json")
+                if payload.migration_evidence is not None
+                else None
+            ),
+            installation_id=installation_id,
+            evidence_payload_hash=evidence_payload_hash,
+            evidence_signature=payload.evidence_signature,
             user_id=user_id,
         )
     )
     db.commit()
     return PluginInstallEventResponse(accepted=True, event_id=payload.event_id)
+
+
+def list_install_evidence(
+    db: Session, *, page: int, page_size: int
+) -> PluginInstallEvidenceListResponse:
+    statement = select(DesktopPluginInstallEvent).where(
+        or_(
+            DesktopPluginInstallEvent.permission_evidence_json.is_not(None),
+            DesktopPluginInstallEvent.migration_evidence_json.is_not(None),
+        )
+    )
+    rows = list(
+        db.scalars(
+            statement.order_by(DesktopPluginInstallEvent.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    total = (
+        db.scalar(
+            select(func.count()).select_from(statement.order_by(None).limit(None).offset(None).subquery())
+        )
+        or 0
+    )
+    return PluginInstallEvidenceListResponse(
+        items=[
+            PluginInstallEvidenceItem(
+                event_id=row.event_id,
+                plugin_slug=row.plugin_slug,
+                semver=row.semver,
+                architecture=row.architecture,
+                kind=row.kind.value,
+                result=row.result,
+                client_version=row.client_version,
+                user_id=row.user_id,
+                installation_id=row.installation_id,
+                evidence_payload_hash=row.evidence_payload_hash,
+                created_at=row.created_at,
+                permission_evidence=(
+                    PluginPermissionEvidence.model_validate(row.permission_evidence_json)
+                    if row.permission_evidence_json is not None
+                    else None
+                ),
+                migration_evidence=(
+                    PluginMigrationEvidence.model_validate(row.migration_evidence_json)
+                    if row.migration_evidence_json is not None
+                    else None
+                ),
+            )
+            for row in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 def submit_version_for_review(
@@ -1921,6 +2514,94 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
         ],
         review_runs=list_review_runs(db, version_id=version.id, developer_visible_only=False),
         remediation_deadline_at=version.remediation_deadline_at,
+        publication_channels=list(
+            db.scalars(
+                select(DesktopPluginPublication.channel).where(
+                    DesktopPluginPublication.version_id == version.id,
+                    DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+                )
+            ).all()
+        ),
+    )
+
+
+def create_canary_download_ticket(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+    payload: PluginCanaryDownloadRequest,
+    principal: Principal,
+    download_url_builder,
+) -> DownloadTicketResponse:
+    row = db.execute(
+        select(DesktopPluginArtifact, DesktopPluginVersion, DesktopPluginPublication)
+        .join(
+            DesktopPluginVersion,
+            DesktopPluginVersion.id == DesktopPluginArtifact.plugin_version_id,
+        )
+        .join(
+            DesktopPluginPublication,
+            DesktopPluginPublication.version_id == DesktopPluginVersion.id,
+        )
+        .where(
+            DesktopPluginVersion.id == version_id,
+            DesktopPluginVersion.status == DesktopPluginVersionStatus.PUBLISHED,
+            DesktopPluginVersion.platform_signature_base64.is_not(None),
+            DesktopPluginPublication.channel == "canary",
+            DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+            DesktopPluginArtifact.architecture == payload.architecture,
+            DesktopPluginArtifact.status == DesktopPluginArtifactStatus.PUBLIC,
+            DesktopPluginArtifact.zone == DesktopPluginArtifactZone.PUBLIC,
+            DesktopPluginArtifact.public_storage_key.is_not(None),
+        )
+    ).one_or_none()
+    if row is None:
+        raise AppError(
+            "desktop_plugin.canary_artifact_missing",
+            "可下载的 canary 插件制品不存在",
+            status_code=404,
+        )
+    artifact, version, _ = row
+    installation = _active_installation(
+        db,
+        str(payload.installation_id),
+        principal.user.id,
+        for_update=False,
+    )
+    _verify_signature(
+        installation.public_key_der,
+        build_canary_ticket_payload(version_id, payload),
+        payload.signature,
+    )
+    if _is_revoked(
+        db,
+        plugin_id=version.plugin_id,
+        version_id=version.id,
+        signing_key_id=version.signing_key_id,
+    ):
+        raise AppError(
+            "desktop_plugin.canary_artifact_missing",
+            "可下载的 canary 插件制品不存在",
+            status_code=404,
+        )
+    raw_token = "plugin_download_" + secrets.token_urlsafe(32)
+    ticket = DesktopPluginDownloadTicket(
+        artifact_id=artifact.id,
+        token_hash=hash_opaque_token(raw_token),
+        channel="canary",
+        user_id=principal.user.id,
+        installation_id=installation.id,
+        expires_at=utc_now()
+        + timedelta(seconds=settings.desktop_plugin_download_ticket_ttl_seconds),
+    )
+    db.add(ticket)
+    db.commit()
+    return DownloadTicketResponse(
+        download_url=download_url_builder(raw_token),
+        expires_at=ticket.expires_at,
+        artifact_sha256=artifact.sha256,
+        artifact_size_bytes=artifact.size_bytes,
     )
 
 
@@ -1944,6 +2625,7 @@ def get_review_source(
         if artifact is not None
         else None
     )
+
     if artifact is None or storage_key is None:
         raise AppError("desktop_plugin.source_not_found", "插件源码制品不存在", status_code=404)
     allowed = {
@@ -1987,6 +2669,19 @@ def get_review_source(
             if len(files) == 32:
                 break
     return {"version_id": version.id, "files": files}
+
+
+def _has_stable_publication(db: Session, version_id: str) -> bool:
+    return (
+        db.scalar(
+            select(DesktopPluginPublication.id).where(
+                DesktopPluginPublication.version_id == version_id,
+                DesktopPluginPublication.channel == "stable",
+                DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+            )
+        )
+        is not None
+    )
 
 
 def _admin_version(
@@ -2179,10 +2874,56 @@ def publish_version(
         raise AppError(
             "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
         )
-    if version.status != DesktopPluginVersionStatus.APPROVED:
+    if version.status not in {
+        DesktopPluginVersionStatus.APPROVED,
+        DesktopPluginVersionStatus.PUBLISHED,
+    }:
         raise AppError(
             "desktop_plugin.version_not_publishable", "只有批准版本才能发布", status_code=409
         )
+    if db.scalar(
+        select(DesktopPluginPublication.id).where(
+            DesktopPluginPublication.version_id == version.id,
+            DesktopPluginPublication.channel == payload.channel,
+        )
+    ) is not None:
+        raise AppError(
+            "desktop_plugin.publication_conflict",
+            "该发布通道已经发布过此版本",
+            status_code=409,
+        )
+    if version.status == DesktopPluginVersionStatus.PUBLISHED:
+        if version.published_at is None:
+            raise AppError(
+                "desktop_plugin.publication_invalid",
+                "已发布版本缺少发布时间",
+                status_code=409,
+            )
+        publication = DesktopPluginPublication(
+            version_id=version.id,
+            channel=payload.channel,
+            published_by_user_id=principal.user.id,
+            published_at=utc_now(),
+        )
+        db.add(publication)
+        _review_event(
+            db,
+            version=version,
+            kind=DesktopPluginReviewEventKind.PUBLISHED,
+            actor_id=principal.user.id,
+            note=f"发布通道：{payload.channel}",
+        )
+        _write_audit(
+            db,
+            action="desktop_plugin.version.channel_published",
+            target_type="desktop_plugin_version",
+            target_id=version.id,
+            actor_id=principal.user.id,
+            context=context,
+            details={"channel": payload.channel},
+        )
+        db.commit()
+        return get_review_detail(db, version_id=version.id)
     artifacts = list(
         db.scalars(
             select(DesktopPluginArtifact)
@@ -2395,6 +3136,135 @@ def revoke_version(
     )
     db.commit()
     return get_review_detail(db, version_id=version.id)
+
+
+def rollback_version(
+    db: Session,
+    *,
+    version_id: str,
+    payload: PluginVersionRollbackRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, current = _admin_version(db, version_id=version_id, lock=True)
+    if current.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if current.status != DesktopPluginVersionStatus.PUBLISHED:
+        raise AppError(
+            "desktop_plugin.version_not_rollbackable", "只有已发布版本才能回滚", status_code=409
+        )
+    current_publication = db.scalar(
+        select(DesktopPluginPublication)
+        .where(
+            DesktopPluginPublication.version_id == current.id,
+            DesktopPluginPublication.channel == "stable",
+            DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+        )
+        .with_for_update()
+    )
+    if current_publication is None:
+        raise AppError(
+            "desktop_plugin.stable_publication_missing",
+            "当前版本没有有效的 stable 发布记录",
+            status_code=409,
+        )
+    previous = db.scalar(
+        select(DesktopPluginVersion)
+        .join(
+            DesktopPluginPublication,
+            DesktopPluginPublication.version_id == DesktopPluginVersion.id,
+        )
+        .where(
+            DesktopPluginVersion.plugin_id == plugin.id,
+            DesktopPluginVersion.id != current.id,
+            DesktopPluginVersion.status == DesktopPluginVersionStatus.PUBLISHED,
+            DesktopPluginPublication.channel == "stable",
+            DesktopPluginPublication.status == DesktopPluginPublicationStatus.PUBLISHED,
+            DesktopPluginPublication.published_at < current_publication.published_at,
+        )
+        .order_by(DesktopPluginPublication.published_at.desc())
+        .with_for_update()
+    )
+    if previous is None:
+        raise AppError(
+            "desktop_plugin.previous_stable_missing",
+            "没有可回滚的上一稳定版本",
+            status_code=409,
+        )
+    previous_artifacts = list(
+        db.scalars(
+            select(DesktopPluginArtifact).where(
+                DesktopPluginArtifact.plugin_version_id == previous.id,
+                DesktopPluginArtifact.status == DesktopPluginArtifactStatus.PUBLIC,
+                DesktopPluginArtifact.zone == DesktopPluginArtifactZone.PUBLIC,
+                DesktopPluginArtifact.public_storage_key.is_not(None),
+            )
+        ).all()
+    )
+    if not previous_artifacts or _is_revoked(
+        db,
+        plugin_id=plugin.id,
+        version_id=previous.id,
+        signing_key_id=previous.signing_key_id,
+    ):
+        raise AppError(
+            "desktop_plugin.previous_stable_unavailable",
+            "上一稳定版本制品不可用或已撤销",
+            status_code=409,
+        )
+    previous_publication = db.scalar(
+        select(DesktopPluginPublication)
+        .where(
+            DesktopPluginPublication.version_id == previous.id,
+            DesktopPluginPublication.channel == "stable",
+        )
+        .with_for_update()
+    )
+    now = utc_now()
+    current_publication.status = DesktopPluginPublicationStatus.YANKED
+    current_publication.yanked_at = now
+    current_publication.yanked_by_user_id = principal.user.id
+    if previous_publication is None:
+        previous_publication = DesktopPluginPublication(
+            version_id=previous.id,
+            channel="stable",
+            published_by_user_id=principal.user.id,
+            published_at=now,
+        )
+        db.add(previous_publication)
+    else:
+        previous_publication.status = DesktopPluginPublicationStatus.PUBLISHED
+        previous_publication.yanked_at = None
+        previous_publication.yanked_by_user_id = None
+    current.version += 1
+    previous.version += 1
+    _review_event(
+        db,
+        version=current,
+        kind=DesktopPluginReviewEventKind.PUBLISHED,
+        actor_id=principal.user.id,
+        note=f"stable 回滚到 {previous.semver}：{payload.reason}",
+    )
+    _review_event(
+        db,
+        version=previous,
+        kind=DesktopPluginReviewEventKind.PUBLISHED,
+        actor_id=principal.user.id,
+        note=f"stable 回滚恢复：{payload.reason}",
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.rolled_back",
+        target_type="desktop_plugin_version",
+        target_id=current.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"from_semver": current.semver, "to_semver": previous.semver},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=previous.id)
 
 
 def delete_version(

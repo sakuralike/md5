@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -53,6 +54,7 @@ PLUGIN_CAPABILITIES = frozenset(
 )
 _SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
 _SEMVER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_MIGRATION_STEP_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _HOST_VERSION_PATTERN = re.compile(
     r"^(?:(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|(0|[1-9][0-9]*)\.x)$"
 )
@@ -295,8 +297,8 @@ class PluginVersionPublishRequest(BaseModel):
     @classmethod
     def normalize_channel(cls, value: str) -> str:
         normalized = _strip(value).lower()
-        if normalized != "stable":
-            raise ValueError("当前仅支持 stable 发布通道")
+        if normalized not in {"stable", "canary"}:
+            raise ValueError("发布通道必须是 stable 或 canary")
         return normalized
 
 
@@ -309,6 +311,22 @@ class PluginVersionYankRequest(BaseModel):
     @classmethod
     def normalize_reason(cls, value: str) -> str:
         return _strip(value)
+
+
+class PluginVersionRollbackRequest(BaseModel):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        return _strip(value)
+
+
+class PluginCanaryDownloadRequest(BaseModel):
+    architecture: PluginArchitecture = "windows-x64"
+    installation_id: UUID
+    signature: str = Field(min_length=64, max_length=2048)
 
 
 class PluginVersionRevokeRequest(BaseModel):
@@ -672,6 +690,7 @@ class PluginReviewDetailResponse(PluginReviewQueueItem):
     events: list[PluginReviewEventResponse]
     review_runs: list[PluginStaticReviewRunResponse]
     remediation_deadline_at: datetime | None = None
+    publication_channels: list[str] = Field(default_factory=list)
 
 
 class PluginReportCreateRequest(BaseModel):
@@ -846,6 +865,7 @@ class PublicPluginVersionResponse(BaseModel):
     host_max: str
     approved_capabilities: list[str]
     risk_tier: str
+    release_notes: str
     review_policy_version: str
     platform_key_id: str
     platform_public_key_base64: str
@@ -927,16 +947,139 @@ class PluginInstallEventRequest(BaseModel):
     ]
     result: Literal["success", "failure"] = "success"
     client_version: str | None = Field(default=None, max_length=32)
+    permission_evidence: PluginPermissionEvidence | None = None
+    migration_evidence: PluginMigrationEvidence | None = None
+    installation_id: UUID | None = None
+    evidence_signature: str | None = Field(default=None, min_length=64, max_length=2048)
 
     @field_validator("event_id", "plugin_slug", "semver")
     @classmethod
     def normalize_event_values(cls, value: str) -> str:
         return _strip(value)
 
+    @model_validator(mode="after")
+    def require_signed_evidence(self) -> PluginInstallEventRequest:
+        has_evidence = self.permission_evidence is not None or self.migration_evidence is not None
+        if has_evidence != (
+            self.installation_id is not None and self.evidence_signature is not None
+        ):
+            raise ValueError("升级证据必须同时提供安装实例和设备签名")
+        return self
+
+
+class PluginPermissionEvidence(BaseModel):
+    requested_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    approved_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    granted_capabilities: list[str] = Field(default_factory=list, max_length=64)
+    publisher_key_fingerprint: str = Field(min_length=64, max_length=64)
+    risk_tier: Literal["low", "standard", "medium", "high", "critical"]
+    consented_at: datetime
+
+    @field_validator(
+        "requested_capabilities", "approved_capabilities", "granted_capabilities"
+    )
+    @classmethod
+    def normalize_capability_evidence(cls, values: list[str]) -> list[str]:
+        return sorted(_normalize_capabilities(values))
+
+    @field_validator("publisher_key_fingerprint")
+    @classmethod
+    def normalize_fingerprint(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) != 64 or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("签名指纹必须是 64 位十六进制摘要")
+        return normalized
+
+    @field_validator("consented_at")
+    @classmethod
+    def require_consent_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("权限确认时间必须包含时区")
+        return value
+
+
+class PluginMigrationStepEvidence(BaseModel):
+    step_id: str = Field(min_length=1, max_length=128)
+    status: Literal["completed", "skipped", "failed"]
+    attempt_count: int = Field(ge=1, le=10)
+
+    @field_validator("step_id")
+    @classmethod
+    def normalize_step_id(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _MIGRATION_STEP_PATTERN.fullmatch(normalized):
+            raise ValueError("迁移步骤 ID 无效")
+        return normalized
+
+
+class PluginMigrationEvidence(BaseModel):
+    from_version: str = Field(min_length=5, max_length=32)
+    to_version: str = Field(min_length=5, max_length=32)
+    status: Literal["completed", "not_required", "failed"]
+    started_at: datetime
+    completed_at: datetime | None = None
+    steps: list[PluginMigrationStepEvidence] = Field(default_factory=list, max_length=64)
+
+    @field_validator("from_version", "to_version")
+    @classmethod
+    def normalize_migration_versions(cls, value: str) -> str:
+        normalized = _strip(value)
+        if not _SEMVER_PATTERN.fullmatch(normalized):
+            raise ValueError("迁移证据版本必须是严格 SemVer x.y.z")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_migration_times(self) -> PluginMigrationEvidence:
+        if self.started_at.tzinfo is None or (
+            self.completed_at is not None and self.completed_at.tzinfo is None
+        ):
+            raise ValueError("迁移证据时间必须包含时区")
+        if self.from_version == self.to_version:
+            raise ValueError("迁移证据来源版本和目标版本不能相同")
+        if self.completed_at is not None and self.completed_at < self.started_at:
+            raise ValueError("迁移证据完成时间不能早于开始时间")
+        if len({step.step_id for step in self.steps}) != len(self.steps):
+            raise ValueError("迁移步骤 ID 不能重复")
+        if self.status == "not_required" and self.steps:
+            raise ValueError("无需迁移时不能包含迁移步骤")
+        if self.status == "completed" and any(step.status == "failed" for step in self.steps):
+            raise ValueError("迁移完成时不能包含失败步骤")
+        if self.status == "failed" and not any(step.status == "failed" for step in self.steps):
+            raise ValueError("迁移失败时必须包含失败步骤")
+        return self
+
+
+PluginInstallEventRequest.model_rebuild()
+
 
 class PluginInstallEventResponse(BaseModel):
     accepted: bool
     event_id: str
+
+
+class PluginInstallEvidenceItem(BaseModel):
+    event_id: str
+    plugin_slug: str
+    semver: str
+    architecture: PluginArchitecture
+    kind: str
+    result: str
+    client_version: str | None
+    user_id: str | None
+    installation_id: str | None
+    evidence_payload_hash: str | None
+    created_at: datetime
+    permission_evidence: PluginPermissionEvidence | None
+    migration_evidence: PluginMigrationEvidence | None
+
+
+class PluginInstallEvidenceListResponse(BaseModel):
+    items: list[PluginInstallEvidenceItem]
+    page: int
+    page_size: int
+    total: int
 
 
 class PluginBrokerAuthorizationRequest(BaseModel):

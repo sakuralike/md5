@@ -18,6 +18,15 @@ public sealed record InstalledPluginVersion(
     PluginManifest Manifest,
     DateTimeOffset InstalledAt);
 
+public sealed record PluginPermissionConsent(
+    string Version,
+    IReadOnlyList<string> RequestedCapabilities,
+    IReadOnlyList<string> ApprovedCapabilities,
+    IReadOnlyList<string> GrantedCapabilities,
+    string PublisherKeyFingerprint,
+    string RiskTier,
+    DateTimeOffset ConsentedAt);
+
 public sealed record InstalledPlugin(
     string PluginId,
     string DisplayName,
@@ -40,7 +49,9 @@ public sealed record InstalledPlugin(
     string? PlatformPublicKeyBase64 = null,
     string? PlatformSignatureBase64 = null,
     string? ReviewPolicyVersion = null,
-    string RiskTier = "standard")
+    string RiskTier = "standard",
+    IReadOnlyDictionary<string, PluginPermissionConsent>? PermissionConsents = null,
+    IReadOnlyDictionary<string, PluginMigrationRecord>? MigrationRecords = null)
 {
     [JsonIgnore]
     public string ReviewLabel => Source == PluginSource.MarketReviewed
@@ -50,6 +61,20 @@ public sealed record InstalledPlugin(
     [JsonIgnore]
     public bool CanRollback => RollbackVersion is not null && Versions.ContainsKey(RollbackVersion);
 }
+
+public sealed record PluginMigrationRecord(
+    string FromVersion,
+    string ToVersion,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    string? Error,
+    IReadOnlyList<PluginMigrationStepRecord>? Steps = null);
+
+public sealed record PluginMigrationStepRecord(
+    string StepId,
+    string Status,
+    int AttemptCount);
 
 internal sealed record PluginRegistryDocument(
     int SchemaVersion,

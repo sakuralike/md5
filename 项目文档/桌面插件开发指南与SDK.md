@@ -12,7 +12,7 @@ plugins/my-plugin/
   sbom.cdx.json
 ```
 
-清单必须声明 `schema=pd.plugin/v1`、反向域名式 `plugin_id`、严格 SemVer、入口程序、命令、权限和资源限制。命令 Schema 只能使用 `object`、`string`、`integer`、`number`、`boolean`；文件字段使用 `format=file`，皮肤背景使用 `format=theme-background`。
+清单必须声明 `schema=pd.plugin/v1`、反向域名式 `plugin_id`、严格 SemVer、入口程序、命令、权限和资源限制。命令 Schema 只能使用根 `object` 和 `string`、`integer`、`number`、`boolean` 基础字段，不支持数组、嵌套对象、`oneOf`、`allOf`、`anyOf` 或 `$ref`；文件字段使用 `format=file`，皮肤背景使用 `format=theme-background`。升级可放宽约束或增加可选字段；格式和默认值必须保持不变，不得增加必填字段或收紧枚举、正则、长度、数值边界、`multipleOf` 与 `additionalProperties`。
 
 ## 生命周期与权限
 
@@ -68,9 +68,11 @@ internal sealed class SkinPlugin : PdppPlugin
 
 SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHostClient.CallAsync`。Broker 错误会以 `PdppHostException` 抛出并保留错误码。文件类插件可使用 `PluginSelectedFile.FromJson`、`ReadFileAsync`、`ReadFileToEndAsync` 和 `DigestFileAsync`；状态型插件可使用 `GetStorageAsync`、`SetStorageAsync`、`RemoveStorageAsync`；需要平台数据时使用 `ReadProfileAsync`、`ReadHashAsync` 和 `SubmitVerificationAsync`。
 
+迁移插件可覆盖 SDK 的 `MigrateAsync`，返回 `PdppMigrationResult`；每个 `PdppMigrationStep` 必须使用稳定的 `StepId`，返回 `completed`、`skipped` 或 `failed`，并填写本次步骤的 `AttemptCount`。宿主会校验步骤唯一性、状态和尝试次数，服务端设备签名回执会保存同一组脱敏步骤证据。
+
 ### 官方插件包体检工具
 
-`plugins/official-plugin-inspector` 是首个使用文件 Broker 扩展的官方插件。它提供 `inspect` 命令，要求用户明确选择一个 `.pdpkg` 文件，返回结构化 JSON 报告：包大小和 SHA-256、ZIP 文件项数量与展开大小、路径安全、Manifest 字段/版本/入口/命令 Schema/权限/资源限制、CycloneDX 1.5 SBOM、开发者 Ed25519 签名、源码 UTF-8/数量/大小，以及 `passed`、`warning` 或 `failed` 状态。插件最多读取 128 MiB，源码最多检查 32 个文件且单文件最多 256 KiB；不会上传包内容、用户路径或密钥。
+`plugins/official-plugin-inspector` 是首个使用文件 Broker 扩展的官方插件。它提供 `inspect` 命令，要求用户明确选择一个 `.pdpkg` 文件，返回结构化 JSON 报告：包大小和 SHA-256、ZIP 文件项数量与展开大小、路径安全、Manifest 字段/版本/入口/命令 Schema/权限/资源限制、CycloneDX 1.5 SBOM、开发者 Ed25519 签名、源码 UTF-8/数量/大小，以及 `passed`、`warning` 或 `failed` 状态。插件最多读取 128 MiB，源码最多检查 32 个文件且单文件最多 256 KiB；不会上传包内容、用户路径或密钥。升级插件可通过 SDK 返回迁移步骤 ID、状态和尝试次数，宿主会在切换版本前校验并记录这些结果。
 
 使用与其他官方插件相同的环境变量构建：
 
@@ -121,7 +123,9 @@ pwsh ./plugins/official-skin/build-package.ps1
 
 ## 本地调试与上架
 
-先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。
+先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。桌面端只为平台审核来源的已安装插件检查 stable 更新，本地未审核包不会自动匹配线上同名项目。已登录桌面端会用注册安装实例的 ECDSA P-256 密钥签署脱敏权限/迁移回执；回执不包含插件私有数据、文件路径、错误原文、令牌或命令输出。
+
+内部 Canary 通道只允许管理员账号使用。桌面端先用已注册安装实例签署版本票据请求，服务器返回一次性短期下载票据；实际下载时必须同时发送管理员 Bearer Token、安装实例 ID 和针对票据的设备签名。普通 stable 下载不携带 Canary 头，也不会看到 Canary 目录。
 
 管理员审核详情会显示插件包内 `source/` 下的文本源码（单文件最多 256 KiB，最多 32 个文件）。没有可审源码的版本不能批准；源码仅供管理员只读查看，不能替代静态审核、签名校验和人工安全判断。
 

@@ -15,7 +15,8 @@ public sealed record PluginManifest(
     [property: JsonPropertyName("runtime")] PluginRuntimeManifest Runtime,
     [property: JsonPropertyName("commands")] IReadOnlyList<PluginCommandManifest> Commands,
     [property: JsonPropertyName("capabilities")] PluginCapabilitiesManifest Capabilities,
-    [property: JsonPropertyName("limits")] PluginLimitsManifest Limits);
+    [property: JsonPropertyName("limits")] PluginLimitsManifest Limits,
+    [property: JsonPropertyName("migration")] PluginMigrationManifest? Migration = null);
 
 public sealed record PluginProtocolRange(
     [property: JsonPropertyName("min")] int Min,
@@ -43,6 +44,11 @@ public sealed record PluginLimitsManifest(
     [property: JsonPropertyName("cpu_percent")] int CpuPercent,
     [property: JsonPropertyName("command_timeout_seconds")] int CommandTimeoutSeconds,
     [property: JsonPropertyName("child_processes")] int ChildProcesses);
+
+public sealed record PluginMigrationManifest(
+    [property: JsonPropertyName("required")] bool Required,
+    [property: JsonPropertyName("from_versions")] IReadOnlyList<string> FromVersions,
+    [property: JsonPropertyName("strategy")] string Strategy);
 
 public sealed record PluginPackageFile(
     string Path,

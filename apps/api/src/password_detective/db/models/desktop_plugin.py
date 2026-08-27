@@ -365,6 +365,16 @@ class DesktopPluginDownloadTicket(Base):
         String(36), ForeignKey("desktop_plugin_artifacts.id", ondelete="CASCADE"), index=True
     )
     token_hash: Mapped[str] = mapped_column(String(64))
+    channel: Mapped[str] = mapped_column(String(16), default="stable")
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    installation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("client_installations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -666,6 +676,16 @@ class DesktopPluginInstallEvent(Base):
     )
     result: Mapped[str] = mapped_column(String(32), default="success")
     client_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    permission_evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    migration_evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    installation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("client_installations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    evidence_payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )

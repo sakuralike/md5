@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
+import re
 import stat
 import zipfile
 from dataclasses import dataclass
@@ -17,11 +19,31 @@ from password_detective.modules.desktop_plugins.schemas import PLUGIN_CAPABILITI
 
 _MANIFEST_PATH = "manifest.json"
 _SIGNATURE_PATH = "signature.ed25519"
+_PROVENANCE_PATH = "provenance.json"
 _MAX_ENTRIES = 2_048
 _MAX_MANIFEST_BYTES = 128 * 1024
 _MAX_SIGNATURE_BYTES = 256
 _MAX_SINGLE_FILE_BYTES = 256 * 1024 * 1024
 _MAX_COMPRESSION_RATIO = 100
+_SEMVER_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
+_COMMAND_SCHEMA_ROOT_FIELDS = {"type", "properties", "required", "additionalProperties"}
+_COMMAND_SCHEMA_PROPERTY_FIELDS = {
+    "type",
+    "title",
+    "description",
+    "enum",
+    "format",
+    "default",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+}
+_COMMAND_SCHEMA_TYPES = {"string", "integer", "number", "boolean"}
 
 
 @dataclass(frozen=True)
@@ -144,7 +166,8 @@ def _validate_manifest(
         "capabilities",
         "limits",
     }
-    if set(manifest) != required_fields:
+    allowed_fields = required_fields | {"migration"}
+    if not required_fields.issubset(manifest) or set(manifest) - allowed_fields:
         raise _invalid("插件清单字段不完整或包含未知字段")
     if (
         manifest["schema"] != "pd.plugin/v1"
@@ -193,6 +216,32 @@ def _validate_manifest(
     if "ui:command" not in required:
         raise _invalid("命令型插件必须把 ui:command 声明为必需权限")
 
+    migration = manifest.get("migration")
+    if migration is not None:
+        if not isinstance(migration, dict) or set(migration) != {
+            "required",
+            "from_versions",
+            "strategy",
+        }:
+            raise _invalid("插件迁移声明字段不完整或包含未知字段")
+        from_versions = migration["from_versions"]
+        if (
+            not isinstance(migration["required"], bool)
+            or migration["strategy"] != "idempotent"
+            or not isinstance(from_versions, list)
+            or len(from_versions) > 128
+            or any(
+                not isinstance(version, str) or _SEMVER_PATTERN.fullmatch(version) is None
+                for version in from_versions
+            )
+            or len(from_versions) != len(
+                {version for version in from_versions if isinstance(version, str)}
+            )
+            or migration["required"]
+            and not from_versions
+        ):
+            raise _invalid("插件迁移声明无效，必须使用幂等策略和有效来源版本")
+
     commands = manifest["commands"]
     if not isinstance(commands, list) or not 1 <= len(commands) <= 64:
         raise _invalid("插件命令数量无效")
@@ -226,6 +275,7 @@ def verify_plugin_package(
     host_min: str,
     host_max: str,
     requested_capabilities: list[str],
+    source_review_mode: str,
     max_expanded_bytes: int,
 ) -> VerifiedPluginPackage:
     try:
@@ -279,11 +329,21 @@ def verify_plugin_package(
                 host_max=host_max,
                 requested_capabilities=requested_capabilities,
             )
+            _validate_provenance(
+                archive,
+                entries=entries,
+                files=files,
+                source_review_mode=source_review_mode,
+            )
             for command in manifest["commands"]:
                 schema_info = entries[command["input_schema"]]
-                _read_json(
+                command_schema = _read_json(
                     _read_bounded(archive, schema_info, _MAX_MANIFEST_BYTES),
                     "命令输入 Schema",
+                )
+                _validate_command_input_schema(
+                    command_schema,
+                    requested_capabilities=requested_capabilities,
                 )
             try:
                 signature_base64 = _read_bounded(
@@ -320,3 +380,231 @@ def verify_plugin_package(
             )
     except zipfile.BadZipFile as exc:
         raise _invalid("插件包不是有效的受限 ZIP 文件") from exc
+
+
+def _validate_provenance(
+    archive: zipfile.ZipFile,
+    *,
+    entries: dict[str, zipfile.ZipInfo],
+    files: list[tuple[str, int, str]],
+    source_review_mode: str,
+) -> None:
+    provenance_info = entries.get(_PROVENANCE_PATH)
+    required = source_review_mode in {"source", "reproducible"}
+    if provenance_info is None or provenance_info.is_dir():
+        if required:
+            raise _invalid("源码审查模式必须提供签名构建溯源 provenance.json")
+        return
+    provenance = _read_json(
+        _read_bounded(archive, provenance_info, _MAX_MANIFEST_BYTES),
+        "构建溯源",
+    )
+    if set(provenance) != {"schema", "source_commit", "source_files", "sbom", "binaries"}:
+        raise _invalid("构建溯源字段不完整或包含未知字段")
+    commit = provenance.get("source_commit")
+    if (
+        provenance.get("schema") != "pd.plugin.provenance/v1"
+        or not isinstance(commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit) is None
+        or required
+        and set(commit) == {"0"}
+    ):
+        raise _invalid("构建溯源 Schema 或源码提交无效")
+    actual = {
+        path: {"path": path, "size_bytes": size, "sha256": digest}
+        for path, size, digest in files
+        if path != _SIGNATURE_PATH
+    }
+    expected_source = _provenance_records(provenance.get("source_files"), "源码")
+    expected_binaries = _provenance_records(provenance.get("binaries"), "二进制")
+    expected_sbom = _provenance_record(provenance.get("sbom"), "SBOM")
+    actual_source = {path: value for path, value in actual.items() if path.startswith("source/")}
+    actual_binaries = {path: value for path, value in actual.items() if path.startswith("bin/")}
+    if (
+        expected_source != actual_source
+        or expected_binaries != actual_binaries
+        or expected_sbom != actual.get("sbom.cdx.json")
+        or required
+        and not actual_source
+    ):
+        raise _invalid("构建溯源与源码、SBOM 或二进制摘要不一致")
+
+
+def _provenance_records(value: Any, label: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        raise _invalid(f"构建溯源 {label} 必须是数组")
+    records = [_provenance_record(item, label) for item in value]
+    if len({record["path"] for record in records}) != len(records):
+        raise _invalid(f"构建溯源 {label} 包含重复路径")
+    return {record["path"]: record for record in records}
+
+
+def _provenance_record(value: Any, label: str) -> dict[str, Any]:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"path", "size_bytes", "sha256"}
+        or not isinstance(value.get("path"), str)
+        or not isinstance(value.get("size_bytes"), int)
+        or value["size_bytes"] < 0
+        or not isinstance(value.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", value["sha256"]) is None
+    ):
+        raise _invalid(f"构建溯源 {label} 记录无效")
+    return value
+
+
+def _is_schema_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and (not isinstance(value, float) or math.isfinite(value))
+    )
+
+
+def _matches_schema_type(value: Any, schema_type: str) -> bool:
+    return (
+        schema_type == "string"
+        and isinstance(value, str)
+        or schema_type == "integer"
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        or schema_type == "number"
+        and _is_schema_number(value)
+        or schema_type == "boolean"
+        and isinstance(value, bool)
+    )
+
+
+def _validate_command_property_schema(
+    name: str,
+    schema: dict[str, Any],
+    *,
+    requested_capabilities: set[str],
+) -> None:
+    if not 1 <= len(name) <= 128 or set(schema) - _COMMAND_SCHEMA_PROPERTY_FIELDS:
+        raise _invalid("插件命令输入 Schema 包含不支持的字段或关键字")
+    schema_type = schema.get("type")
+    if schema_type not in _COMMAND_SCHEMA_TYPES:
+        raise _invalid("插件命令输入 Schema 只支持基础字段类型")
+
+    title = schema.get("title")
+    if title is not None and (
+        not isinstance(title, str) or not title.strip() or len(title) > 100
+    ):
+        raise _invalid("插件命令输入 Schema 字段标题无效")
+    description = schema.get("description")
+    if description is not None and (
+        not isinstance(description, str) or len(description) > 500
+    ):
+        raise _invalid("插件命令输入 Schema 字段说明无效")
+
+    enum_values = schema.get("enum")
+    if enum_values is not None and (
+            schema_type != "string"
+            or not isinstance(enum_values, list)
+            or not 1 <= len(enum_values) <= 100
+            or any(not isinstance(value, str) for value in enum_values)
+            or len({json.dumps(value, sort_keys=True) for value in enum_values})
+            != len(enum_values)
+    ):
+        raise _invalid("插件命令枚举输入无效")
+
+    format_value = schema.get("format")
+    if format_value is not None:
+        if schema_type != "string" or format_value not in {"file", "theme-background"}:
+            raise _invalid("v1 命令输入格式无效")
+        required_capability = (
+            "ui:theme" if format_value == "theme-background" else "file:read:selected"
+        )
+        if required_capability not in requested_capabilities:
+            raise _invalid(f"使用 {format_value} 输入的插件必须申请 {required_capability} 权限")
+
+    default = schema.get("default", _MISSING)
+    if default is not _MISSING and not _matches_schema_type(default, schema_type):
+        raise _invalid("插件命令输入 Schema 默认值类型无效")
+    if enum_values is not None and default is not _MISSING and default not in enum_values:
+        raise _invalid("插件命令输入 Schema 默认值不在枚举范围内")
+
+    string_constraints = {"minLength", "maxLength", "pattern"}
+    numeric_constraints = {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+    }
+    if schema_type != "string" and set(schema) & string_constraints:
+        raise _invalid("字符串约束只能用于 string 字段")
+    if schema_type not in {"integer", "number"} and set(schema) & numeric_constraints:
+        raise _invalid("数值约束只能用于 integer 或 number 字段")
+
+    minimum_length = schema.get("minLength", 0)
+    maximum_length = schema.get("maxLength")
+    if (
+        not isinstance(minimum_length, int)
+        or isinstance(minimum_length, bool)
+        or minimum_length < 0
+        or maximum_length is not None
+        and (
+            not isinstance(maximum_length, int)
+            or isinstance(maximum_length, bool)
+            or maximum_length < minimum_length
+        )
+    ):
+        raise _invalid("插件命令输入 Schema 字符串长度约束无效")
+    pattern = schema.get("pattern")
+    if pattern is not None and (not isinstance(pattern, str) or len(pattern) > 512):
+        raise _invalid("插件命令输入 Schema 正则约束无效")
+
+    if (
+        "minimum" in schema
+        and "exclusiveMinimum" in schema
+        or "maximum" in schema
+        and "exclusiveMaximum" in schema
+    ):
+        raise _invalid("插件命令输入 Schema 数值边界不能重复声明")
+    numeric_values = [schema[key] for key in numeric_constraints if key in schema]
+    if any(not _is_schema_number(value) for value in numeric_values):
+        raise _invalid("插件命令输入 Schema 数值约束无效")
+    if "multipleOf" in schema and schema["multipleOf"] <= 0:
+        raise _invalid("插件命令输入 Schema multipleOf 必须大于零")
+    lower = schema.get("exclusiveMinimum", schema.get("minimum"))
+    upper = schema.get("exclusiveMaximum", schema.get("maximum"))
+    if lower is not None and upper is not None and (
+        lower > upper
+        or lower == upper
+        and ("exclusiveMinimum" in schema or "exclusiveMaximum" in schema)
+    ):
+        raise _invalid("插件命令输入 Schema 数值范围无效")
+
+
+_MISSING = object()
+
+
+def _validate_command_input_schema(
+    schema: dict[str, Any], *, requested_capabilities: list[str]
+) -> None:
+    if set(schema) - _COMMAND_SCHEMA_ROOT_FIELDS or schema.get("type") != "object":
+        raise _invalid("插件命令输入 Schema 仅支持根 object 和基础字段")
+    properties = schema.get("properties")
+    if not isinstance(properties, dict) or len(properties) > 32:
+        raise _invalid("插件命令输入 Schema properties 无效")
+    required = schema.get("required", [])
+    if (
+        not isinstance(required, list)
+        or any(not isinstance(name, str) or name not in properties for name in required)
+        or len(required) != len(set(required))
+    ):
+        raise _invalid("插件命令输入 Schema required 字段无效")
+    additional = schema.get("additionalProperties", True)
+    if not isinstance(additional, bool):
+        raise _invalid("插件命令输入 Schema additionalProperties 必须是布尔值")
+    requested = set(requested_capabilities)
+    for name, property_schema in properties.items():
+        if not isinstance(property_schema, dict):
+            raise _invalid("插件命令输入 Schema 字段定义无效")
+        _validate_command_property_schema(
+            name,
+            property_schema,
+            requested_capabilities=requested,
+        )

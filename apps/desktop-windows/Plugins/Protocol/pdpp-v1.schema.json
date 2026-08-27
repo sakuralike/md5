@@ -19,6 +19,7 @@
           "enum": [
             "initialize",
             "health/check",
+            "lifecycle/migrate",
             "command/execute",
             "shutdown",
             "host/file/read",
@@ -43,6 +44,10 @@
         {
           "if": { "properties": { "method": { "const": "health/check" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "lifecycle/migrate" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/migrateParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "command/execute" } } },
@@ -175,6 +180,38 @@
         "candidate_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "outcome": { "enum": ["success", "failure"] },
         "archive_format": { "enum": ["zip", "7z"] }
+      }
+    },
+    "migrateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_version", "to_version"],
+      "properties": {
+        "from_version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+        "to_version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" }
+      }
+    },
+    "migrateStepResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "status", "attempt_count"],
+      "properties": {
+        "step_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$", "maxLength": 128 },
+        "status": { "enum": ["completed", "skipped", "failed"] },
+        "attempt_count": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
+    },
+    "migrateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["migrated", "not_required", "failed"] },
+        "steps": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/migrateStepResult" }
+        }
       }
     },
     "fileDigestParams": {

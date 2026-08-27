@@ -21,10 +21,15 @@ public sealed class PdppProtocolTests
             .GetBoolean());
         Assert.Contains(PdppProtocol.InitializeMethod, text);
         Assert.Contains(PdppProtocol.HealthCheckMethod, text);
+        Assert.Contains(PdppProtocol.MigrateMethod, text);
         Assert.Contains(PdppProtocol.ExecuteCommandMethod, text);
         Assert.Contains(PdppProtocol.ShutdownMethod, text);
         Assert.Contains(PdppProtocol.HostFileDigestMethod, text);
         Assert.Contains(PdppProtocol.HostStorageRemoveMethod, text);
+        var migrateStep = document.RootElement.GetProperty("$defs").GetProperty("migrateStepResult");
+        Assert.False(migrateStep.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(10, migrateStep.GetProperty("properties")
+            .GetProperty("attempt_count").GetProperty("maximum").GetInt32());
     }
 
     [Fact]

@@ -16,6 +16,8 @@ public interface IPluginDialogService
         MarketPluginDetail detail,
         MarketPluginVersion version,
         PluginPermissionDecision permission,
+        string? currentVersion,
+        string? currentRiskTier,
         IReadOnlyList<string> addedCapabilities,
         bool signingKeyChanged,
         bool majorVersionChanged);
@@ -86,6 +88,8 @@ public sealed class PluginDialogService : IPluginDialogService
         MarketPluginDetail detail,
         MarketPluginVersion version,
         PluginPermissionDecision permission,
+        string? currentVersion,
+        string? currentRiskTier,
         IReadOnlyList<string> addedCapabilities,
         bool signingKeyChanged,
         bool majorVersionChanged)
@@ -95,15 +99,19 @@ public sealed class PluginDialogService : IPluginDialogService
         var flags = new List<string>();
         if (signingKeyChanged) flags.Add("开发者签名密钥已变化");
         if (majorVersionChanged) flags.Add("主版本已升级");
+        if (IsRiskTierIncreased(currentRiskTier, version.RiskTier)) flags.Add("风险等级已升高");
         var changeText = flags.Count == 0 ? "无" : string.Join("；", flags);
+        var installedVersionText = string.IsNullOrWhiteSpace(currentVersion) ? "未安装" : currentVersion;
         var message = $"此插件来自官方在线市场，平台审核策略：{version.ReviewPolicyVersion}。\n\n"
                       + $"插件：{detail.Name} {version.Semver}\n"
+                      + $"当前版本：{installedVersionText}\n"
                       + $"开发者：{detail.DeveloperName}\n"
                       + $"风险级别：{version.RiskTier}\n"
                       + $"最近审核：{version.PublishedAt:yyyy-MM-dd HH:mm:ss} UTC\n"
                       + $"将授予权限：{granted}\n"
                       + $"新增权限：{added}\n"
-                      + $"需要重新确认的更新变化：{changeText}\n\n"
+                      + $"需要重新确认的更新变化：{changeText}\n"
+                      + $"发布说明：{(string.IsNullOrWhiteSpace(version.ReleaseNotes) ? "无" : version.ReleaseNotes)}\n\n"
                       + "是否继续安装或升级？";
         return System.Windows.MessageBox.Show(
                    message,
@@ -116,10 +124,29 @@ public sealed class PluginDialogService : IPluginDialogService
 
     public bool ConfirmUninstall(InstalledPlugin plugin) =>
         System.Windows.MessageBox.Show(
-            $"卸载未审核插件“{plugin.DisplayName}”及其私有数据？",
+            $"卸载插件“{plugin.DisplayName}”？插件私有数据将保留。",
             "卸载插件",
             System.Windows.MessageBoxButton.YesNo,
             System.Windows.MessageBoxImage.Warning,
             System.Windows.MessageBoxResult.No)
         == System.Windows.MessageBoxResult.Yes;
+
+    private static bool IsRiskTierIncreased(string? currentRiskTier, string targetRiskTier)
+    {
+        if (string.IsNullOrWhiteSpace(currentRiskTier))
+        {
+            return false;
+        }
+
+        return RiskRank(targetRiskTier) > RiskRank(currentRiskTier);
+    }
+
+    private static int RiskRank(string value) => value.ToLowerInvariant() switch
+    {
+        "low" => 1,
+        "medium" => 2,
+        "high" => 3,
+        "critical" => 4,
+        _ => 0,
+    };
 }

@@ -48,17 +48,31 @@ export async function registerPluginSigningKey(
   );
 }
 
+export async function listPluginSigningKeys(token: string): Promise<SigningKeyRecord[]> {
+  const response = await apiRequest<{ items: SigningKeyRecord[] }>(
+    "/developer/plugins/signing-keys",
+    {},
+    token,
+  );
+  return response.items;
+}
+
 export function createPluginVersion(
   token: string,
   pluginId: string,
-  payload: { semver: string; signing_key_id: string; requested_capabilities: DesktopPluginCapability[] },
+  payload: {
+    semver: string;
+    signing_key_id: string;
+    requested_capabilities: DesktopPluginCapability[];
+    release_notes: string;
+  },
 ) {
   return apiRequest<DesktopPluginVersion>(
     `/developer/plugins/${encodeURIComponent(pluginId)}/versions`,
     {
       method: "POST",
       headers: { "Idempotency-Key": key("plugin-version") },
-      body: JSON.stringify({ ...payload, release_notes: "开发者中心上传", source_review_mode: "binary_only" }),
+      body: JSON.stringify({ ...payload, source_review_mode: "source" }),
     },
     token,
   );

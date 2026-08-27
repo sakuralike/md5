@@ -26,7 +26,7 @@ vi.mock("../services/pluginReviews", () => ({
     install_events_last_24_hours: 0,
   }),
   getPluginReview: vi.fn(), approvePluginVersion: vi.fn(), rejectPluginVersion: vi.fn(),
-  publishPluginVersion: vi.fn(), yankPluginVersion: vi.fn(), revokePluginVersion: vi.fn(),
+  publishPluginVersion: vi.fn(), issueCanaryPluginDownload: vi.fn(), rollbackPluginVersion: vi.fn(), yankPluginVersion: vi.fn(), revokePluginVersion: vi.fn(),
   resolvePluginReport: vi.fn(), rerunPluginStaticReview: vi.fn(),
 }));
 

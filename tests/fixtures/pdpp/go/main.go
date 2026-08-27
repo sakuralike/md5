@@ -47,6 +47,8 @@ func main() {
 			})
 		case "health/check":
 			writeResult(encoder, message.ID, map[string]any{"status": "healthy"})
+		case "lifecycle/migrate":
+			writeResult(encoder, message.ID, map[string]any{"status": "not_required", "steps": []any{}})
 		case "command/execute":
 			var params commandParams
 			if err := json.Unmarshal(message.Params, &params); err != nil || params.Command != "echo" {

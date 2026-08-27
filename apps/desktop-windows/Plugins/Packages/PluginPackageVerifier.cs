@@ -12,6 +12,7 @@ namespace PasswordDetective.Desktop.Plugins.Packages;
 public sealed class PluginPackageVerifier
 {
     public const string ManifestPath = "manifest.json";
+    public const string ProvenancePath = "provenance.json";
     public const string ManifestSchema = "pd.plugin/v1";
     public const int ProtocolVersion = 1;
     public const string HostVersion = "0.1.0";
@@ -27,6 +28,27 @@ public sealed class PluginPackageVerifier
     private static readonly Regex VersionPattern = new(
         "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly IReadOnlySet<string> CommandSchemaRootFields = new HashSet<string>(
+        ["type", "properties", "required", "additionalProperties"],
+        StringComparer.Ordinal);
+    private static readonly IReadOnlySet<string> CommandSchemaPropertyFields = new HashSet<string>(
+        [
+            "type",
+            "title",
+            "description",
+            "enum",
+            "format",
+            "default",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ],
+        StringComparer.Ordinal);
     private static readonly JsonSerializerOptions ManifestOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,
@@ -171,6 +193,7 @@ public sealed class PluginPackageVerifier
         {
             throw new PluginPackageException("插件开发者 Ed25519 签名无效。");
         }
+        ValidateProvenance(entries, files);
 
         var architecture = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
             ? "windows-arm64"
@@ -300,13 +323,131 @@ public sealed class PluginPackageVerifier
         {
             throw new PluginPackageException("插件资源限制超出宿主允许范围。");
         }
+
+        if (manifest.Migration is { } migration)
+        {
+            if (migration.FromVersions is null
+                || migration.FromVersions.Count > 128
+                || migration.FromVersions.Distinct(StringComparer.Ordinal).Count()
+                != migration.FromVersions.Count
+                || migration.FromVersions.Any(version => !VersionPattern.IsMatch(version))
+                || !string.Equals(migration.Strategy, "idempotent", StringComparison.Ordinal)
+                || migration.Required && migration.FromVersions.Count == 0)
+            {
+                throw new PluginPackageException("插件迁移声明无效，必须使用幂等策略和有效来源版本。");
+            }
+        }
     }
+
+    private static void ValidateProvenance(
+        IReadOnlyDictionary<string, ZipArchiveEntry> entries,
+        IReadOnlyList<PluginPackageFile> files)
+    {
+        if (!entries.TryGetValue(ProvenancePath, out var entry) || IsDirectory(entry))
+        {
+            return;
+        }
+        if (entry.Length > MaximumManifestBytes)
+        {
+            throw new PluginPackageException("插件构建溯源超过大小限制。");
+        }
+        using var stream = entry.Open();
+        using var document = JsonDocument.Parse(stream, new JsonDocumentOptions
+        {
+            AllowTrailingCommas = false,
+            CommentHandling = JsonCommentHandling.Disallow,
+            MaxDepth = 32,
+        });
+        var root = document.RootElement;
+        var fields = root.ValueKind == JsonValueKind.Object
+            ? root.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal)
+            : [];
+        if (!fields.SetEquals(["schema", "source_commit", "source_files", "sbom", "binaries"])
+            || root.GetProperty("schema").GetString() != "pd.plugin.provenance/v1"
+            || !IsCommit(root.GetProperty("source_commit")))
+        {
+            throw new PluginPackageException("插件构建溯源 Schema 或源码提交无效。");
+        }
+        var actual = files
+            .Where(file => file.Path != PluginPackageSignature.SignaturePath)
+            .ToDictionary(file => file.Path, StringComparer.Ordinal);
+        var source = ReadProvenanceRecords(root.GetProperty("source_files"), "源码");
+        var binaries = ReadProvenanceRecords(root.GetProperty("binaries"), "二进制");
+        var sbom = ReadProvenanceRecord(root.GetProperty("sbom"), "SBOM");
+        var actualSource = actual.Values
+            .Where(file => file.Path.StartsWith("source/", StringComparison.Ordinal))
+            .ToDictionary(file => file.Path, StringComparer.Ordinal);
+        var actualBinaries = actual.Values
+            .Where(file => file.Path.StartsWith("bin/", StringComparison.Ordinal))
+            .ToDictionary(file => file.Path, StringComparer.Ordinal);
+        if (!RecordsMatch(source, actualSource)
+            || !RecordsMatch(binaries, actualBinaries)
+            || !actual.TryGetValue("sbom.cdx.json", out var actualSbom)
+            || !RecordMatches(sbom, actualSbom))
+        {
+            throw new PluginPackageException("插件构建溯源与源码、SBOM 或二进制摘要不一致。");
+        }
+    }
+
+    private static Dictionary<string, PluginPackageFile> ReadProvenanceRecords(
+        JsonElement value,
+        string label)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new PluginPackageException($"插件构建溯源 {label} 必须是数组。");
+        }
+        var records = value.EnumerateArray()
+            .Select(item => ReadProvenanceRecord(item, label))
+            .ToArray();
+        if (records.Select(record => record.Path).Distinct(StringComparer.Ordinal).Count()
+            != records.Length)
+        {
+            throw new PluginPackageException($"插件构建溯源 {label} 包含重复路径。");
+        }
+        return records.ToDictionary(record => record.Path, StringComparer.Ordinal);
+    }
+
+    private static PluginPackageFile ReadProvenanceRecord(JsonElement value, string label)
+    {
+        var fields = value.ValueKind == JsonValueKind.Object
+            ? value.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal)
+            : [];
+        if (!fields.SetEquals(["path", "size_bytes", "sha256"])
+            || value.GetProperty("path").GetString() is not { } path
+            || !value.GetProperty("size_bytes").TryGetInt64(out var size)
+            || size < 0
+            || value.GetProperty("sha256").GetString() is not { Length: 64 } sha256
+            || sha256.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new PluginPackageException($"插件构建溯源 {label} 记录无效。");
+        }
+        return new PluginPackageFile(path, size, sha256.ToLowerInvariant());
+    }
+
+    private static bool IsCommit(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String
+        && value.GetString() is { Length: 40 or 64 } commit
+        && commit.All(Uri.IsHexDigit);
+
+    private static bool RecordsMatch(
+        IReadOnlyDictionary<string, PluginPackageFile> expected,
+        IReadOnlyDictionary<string, PluginPackageFile> actual) =>
+        expected.Count == actual.Count
+        && expected.All(pair => actual.TryGetValue(pair.Key, out var file)
+                                && RecordMatches(pair.Value, file));
+
+    private static bool RecordMatches(PluginPackageFile expected, PluginPackageFile actual) =>
+        expected.Path == actual.Path
+        && expected.Length == actual.Length
+        && string.Equals(expected.Sha256, actual.Sha256, StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateCommandInputSchema(
         JsonElement schema,
         PluginManifest manifest)
     {
         if (schema.ValueKind != JsonValueKind.Object
+            || schema.EnumerateObject().Any(property => !CommandSchemaRootFields.Contains(property.Name))
             || !schema.TryGetProperty("type", out var rootType)
             || rootType.ValueKind != JsonValueKind.String
             || rootType.GetString() != "object"
@@ -323,9 +464,16 @@ public sealed class PluginPackageVerifier
         if (schema.TryGetProperty("required", out var required)
             && (required.ValueKind != JsonValueKind.Array
                 || required.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String
-                                                         || !propertyNames.Contains(item.GetString()!))))
+                                                         || !propertyNames.Contains(item.GetString()!))
+                || required.EnumerateArray().Select(item => item.GetString())
+                    .Distinct(StringComparer.Ordinal).Count() != required.GetArrayLength()))
         {
             throw new PluginPackageException("插件命令输入 Schema 的 required 字段无效。");
+        }
+        if (schema.TryGetProperty("additionalProperties", out var additionalProperties)
+            && additionalProperties.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 的 additionalProperties 必须是布尔值。");
         }
 
         var requestedCapabilities = manifest.Capabilities.Required
@@ -335,6 +483,8 @@ public sealed class PluginPackageVerifier
         {
             if (property.Name.Length is < 1 or > 128
                 || property.Value.ValueKind != JsonValueKind.Object
+                || property.Value.EnumerateObject().Any(
+                    item => !CommandSchemaPropertyFields.Contains(item.Name))
                 || !property.Value.TryGetProperty("type", out var type)
                 || type.ValueKind != JsonValueKind.String
                 || type.GetString() is not ("string" or "integer" or "number" or "boolean"))
@@ -349,35 +499,137 @@ public sealed class PluginPackageVerifier
             {
                 throw new PluginPackageException("插件命令输入 Schema 字段标题无效。");
             }
+            if (property.Value.TryGetProperty("description", out var description)
+                && (description.ValueKind != JsonValueKind.String
+                    || description.GetString()!.Length > 500))
+            {
+                throw new PluginPackageException("插件命令输入 Schema 字段说明无效。");
+            }
 
             if (property.Value.TryGetProperty("enum", out var enumValues)
                 && (type.GetString() != "string"
                     || enumValues.ValueKind != JsonValueKind.Array
                     || enumValues.GetArrayLength() is < 1 or > 100
-                    || enumValues.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String)))
+                    || enumValues.EnumerateArray().Any(
+                        item => item.ValueKind != JsonValueKind.String)
+                    || enumValues.EnumerateArray().Select(item => item.GetRawText())
+                        .Distinct(StringComparer.Ordinal).Count() != enumValues.GetArrayLength()))
             {
                 throw new PluginPackageException("插件命令枚举输入无效。");
             }
 
-            if (!property.Value.TryGetProperty("format", out var format))
+            if (property.Value.TryGetProperty("format", out var format))
             {
-                continue;
+                if (format.ValueKind != JsonValueKind.String
+                    || format.GetString() is not ("file" or "theme-background")
+                    || type.GetString() != "string")
+                {
+                    throw new PluginPackageException(
+                        "v1 命令输入只支持 file 或 theme-background 格式，不授予目录枚举能力。");
+                }
+
+                var requiredCapability = format.GetString() == "theme-background"
+                    ? "ui:theme"
+                    : "file:read:selected";
+                if (!requestedCapabilities.Contains(requiredCapability))
+                {
+                    throw new PluginPackageException($"使用 {format.GetString()} 输入的插件必须申请 {requiredCapability} 权限。");
+                }
             }
 
-            if (format.ValueKind != JsonValueKind.String
-                || format.GetString() is not ("file" or "theme-background")
-                || type.GetString() != "string")
+            if (property.Value.TryGetProperty("default", out var defaultValue)
+                && (!MatchesSchemaType(defaultValue, type.GetString()!)
+                    || property.Value.TryGetProperty("enum", out enumValues)
+                    && !enumValues.EnumerateArray().Any(
+                        item => item.GetRawText() == defaultValue.GetRawText())))
             {
-                throw new PluginPackageException("v1 命令输入只支持 file 文件格式，不授予目录枚举能力。");
+                throw new PluginPackageException("插件命令输入 Schema 默认值无效。");
             }
 
-            var requiredCapability = format.GetString() == "theme-background"
-                ? "ui:theme"
-                : "file:read:selected";
-            if (!requestedCapabilities.Contains(requiredCapability))
+            ValidateCommandPropertyConstraints(property.Value, type.GetString()!);
+        }
+    }
+
+    private static bool MatchesSchemaType(JsonElement value, string type) => type switch
+    {
+        "string" => value.ValueKind == JsonValueKind.String,
+        "integer" => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out _),
+        "number" => value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out _),
+        "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+        _ => false,
+    };
+
+    private static void ValidateCommandPropertyConstraints(JsonElement schema, string type)
+    {
+        var stringConstraintNames = new[] { "minLength", "maxLength", "pattern" };
+        var numericConstraintNames = new[]
+        {
+            "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+        };
+        if (type != "string" && stringConstraintNames.Any(name => schema.TryGetProperty(name, out _))
+            || type is not ("integer" or "number")
+            && numericConstraintNames.Any(name => schema.TryGetProperty(name, out _)))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 约束与字段类型不匹配。");
+        }
+
+        var minimumLength = 0;
+        if (schema.TryGetProperty("minLength", out var minimumLengthElement)
+            && (!minimumLengthElement.TryGetInt32(out minimumLength) || minimumLength < 0))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 最小长度无效。");
+        }
+        if (schema.TryGetProperty("maxLength", out var maximumLengthElement)
+            && (!maximumLengthElement.TryGetInt32(out var maximumLength)
+                || maximumLength < minimumLength))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 最大长度无效。");
+        }
+        if (schema.TryGetProperty("pattern", out var pattern))
+        {
+            if (pattern.ValueKind != JsonValueKind.String || pattern.GetString()!.Length > 512)
             {
-                throw new PluginPackageException($"使用 {format.GetString()} 输入的插件必须申请 {requiredCapability} 权限。");
+                throw new PluginPackageException("插件命令输入 Schema 正则约束无效。");
             }
+        }
+
+        if (schema.TryGetProperty("minimum", out _)
+            && schema.TryGetProperty("exclusiveMinimum", out _)
+            || schema.TryGetProperty("maximum", out _)
+            && schema.TryGetProperty("exclusiveMaximum", out _))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 数值边界不能重复声明。");
+        }
+        foreach (var name in numericConstraintNames)
+        {
+            if (schema.TryGetProperty(name, out var value)
+                && (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out _)))
+            {
+                throw new PluginPackageException("插件命令输入 Schema 数值约束无效。");
+            }
+        }
+        if (schema.TryGetProperty("multipleOf", out var multipleOf)
+            && multipleOf.GetDouble() <= 0)
+        {
+            throw new PluginPackageException("插件命令输入 Schema multipleOf 必须大于零。");
+        }
+        var lower = schema.TryGetProperty("exclusiveMinimum", out var exclusiveMinimum)
+            ? exclusiveMinimum.GetDouble()
+            : schema.TryGetProperty("minimum", out var minimum)
+                ? minimum.GetDouble()
+                : (double?)null;
+        var upper = schema.TryGetProperty("exclusiveMaximum", out var exclusiveMaximum)
+            ? exclusiveMaximum.GetDouble()
+            : schema.TryGetProperty("maximum", out var maximum)
+                ? maximum.GetDouble()
+                : (double?)null;
+        if (lower.HasValue && upper.HasValue
+            && (lower > upper
+                || lower == upper
+                && (schema.TryGetProperty("exclusiveMinimum", out _)
+                    || schema.TryGetProperty("exclusiveMaximum", out _))))
+        {
+            throw new PluginPackageException("插件命令输入 Schema 数值范围无效。");
         }
     }
 

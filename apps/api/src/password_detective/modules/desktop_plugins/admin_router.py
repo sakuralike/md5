@@ -20,7 +20,11 @@ from password_detective.core.idempotency import (
 from password_detective.db.audit import write_audit_log
 from password_detective.db.dependencies import get_db
 from password_detective.modules.auth.context import get_client_context
-from password_detective.modules.auth.dependencies import Principal, require_admin_mfa
+from password_detective.modules.auth.dependencies import (
+    Principal,
+    require_admin_mfa,
+    require_admin_only_mfa,
+)
 from password_detective.modules.desktop_plugins.llm_review import review_plugin
 from password_detective.modules.desktop_plugins.review_policy import (
     get_current_review_policy,
@@ -33,6 +37,9 @@ from password_detective.modules.desktop_plugins.review_policy import (
 )
 from password_detective.modules.desktop_plugins.runner_service import get_review_metrics
 from password_detective.modules.desktop_plugins.schemas import (
+    DownloadTicketResponse,
+    PluginCanaryDownloadRequest,
+    PluginInstallEvidenceListResponse,
     PluginReportListResponse,
     PluginReportResponse,
     PluginReportReviewRequest,
@@ -51,14 +58,17 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionPublishRequest,
     PluginVersionRejectRequest,
     PluginVersionRevokeRequest,
+    PluginVersionRollbackRequest,
     PluginVersionYankRequest,
 )
 from password_detective.modules.desktop_plugins.service import (
     _admin_version,
     approve_version,
+    create_canary_download_ticket,
     delete_version,
     get_review_detail,
     get_review_source,
+    list_install_evidence,
     list_reports,
     list_review_queue,
     publish_version,
@@ -66,6 +76,7 @@ from password_detective.modules.desktop_plugins.service import (
     rerun_static_review,
     review_report,
     revoke_version,
+    rollback_version,
     yank_version,
 )
 from password_detective.modules.desktop_plugins.static_review import StaticReviewResult
@@ -110,6 +121,16 @@ def review_queue(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PluginReviewQueueResponse:
     return list_review_queue(db, page=page, page_size=page_size, status_filter=status_filter)
+
+
+@router.get("/install-evidence", response_model=PluginInstallEvidenceListResponse)
+def install_evidence(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[Principal, Depends(require_admin_mfa)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PluginInstallEvidenceListResponse:
+    return list_install_evidence(db, page=page, page_size=page_size)
 
 
 @router.get("/versions/{version_id}", response_model=PluginReviewDetailResponse)
@@ -386,6 +407,64 @@ def revoke_plugin_version(
     except Exception:
         _abort(db, lease)
         raise
+
+
+@router.post("/versions/{version_id}/rollback", response_model=PluginReviewDetailResponse)
+def rollback_plugin_version(
+    version_id: str,
+    payload: PluginVersionRollbackRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewDetailResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin.version.rollback",
+        idempotency_key,
+        {"version_id": version_id, **payload.model_dump()},
+    )
+    if lease.cached_response is not None:
+        return PluginReviewDetailResponse.model_validate(lease.cached_response)
+    try:
+        response = rollback_version(
+            db,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post(
+    "/versions/{version_id}/canary-download-ticket",
+    response_model=DownloadTicketResponse,
+)
+def issue_canary_download_ticket(
+    version_id: str,
+    payload: PluginCanaryDownloadRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(require_admin_only_mfa)],
+) -> DownloadTicketResponse:
+    return create_canary_download_ticket(
+        db,
+        settings,
+        version_id=version_id,
+        payload=payload,
+        principal=principal,
+        download_url_builder=lambda token: (
+            f"{settings.public_origin}"
+            f"{request.url_for('download_desktop_plugin_artifact', token=token).path}"
+        ),
+    )
 
 
 @router.delete("/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)

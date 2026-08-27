@@ -229,6 +229,76 @@ public sealed class PluginRegistry
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray(),
+            PermissionConsents = NormalizePermissionConsents(plugin.PermissionConsents),
+            MigrationRecords = NormalizeMigrationRecords(plugin.MigrationRecords),
         };
+    }
+
+    private static IReadOnlyDictionary<string, PluginPermissionConsent> NormalizePermissionConsents(
+        IReadOnlyDictionary<string, PluginPermissionConsent>? consents)
+    {
+        if (consents is null)
+        {
+            return new Dictionary<string, PluginPermissionConsent>(StringComparer.Ordinal);
+        }
+
+        if (consents.Any(pair => pair.Value is null
+                                 || !string.Equals(pair.Key, pair.Value.Version, StringComparison.Ordinal)
+                                 || pair.Value.RequestedCapabilities is null
+                                 || pair.Value.ApprovedCapabilities is null
+                                 || pair.Value.GrantedCapabilities is null
+                                 || !pair.Value.GrantedCapabilities.All(
+                                     capability => pair.Value.ApprovedCapabilities.Contains(
+                                         capability,
+                                         StringComparer.Ordinal))))
+        {
+            throw new PluginRegistryException("插件权限授权快照无效。");
+        }
+
+        return consents.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value with
+            {
+                RequestedCapabilities = pair.Value.RequestedCapabilities
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray(),
+                ApprovedCapabilities = pair.Value.ApprovedCapabilities
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray(),
+                GrantedCapabilities = pair.Value.GrantedCapabilities
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray(),
+            },
+            StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyDictionary<string, PluginMigrationRecord> NormalizeMigrationRecords(
+        IReadOnlyDictionary<string, PluginMigrationRecord>? records)
+    {
+        if (records is null)
+        {
+            return new Dictionary<string, PluginMigrationRecord>(StringComparer.Ordinal);
+        }
+
+        if (records.Any(pair => pair.Value is null
+                                || !string.Equals(pair.Key, pair.Value.ToVersion, StringComparison.Ordinal)
+                                || pair.Value.Status is not ("running" or "completed" or "not_required" or "failed")
+                                || (pair.Value.Steps ?? []).Count > 64
+                                || (pair.Value.Steps ?? []).Select(step => step.StepId)
+                                    .Distinct(StringComparer.Ordinal).Count() != (pair.Value.Steps ?? []).Count
+                                || (pair.Value.Steps ?? []).Any(step => string.IsNullOrWhiteSpace(step.StepId)
+                                                                       || step.Status is not ("completed" or "skipped" or "failed")
+                                                                       || step.AttemptCount is < 1 or > 10)))
+        {
+            throw new PluginRegistryException("插件迁移账本记录无效。");
+        }
+
+        return records.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value with { Steps = (pair.Value.Steps ?? []).ToArray() },
+            StringComparer.Ordinal);
     }
 }

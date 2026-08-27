@@ -24,6 +24,7 @@ public sealed record MarketPluginVersion(
     [property: JsonPropertyName("signing_key_fingerprint")] string SigningKeyFingerprint,
     [property: JsonPropertyName("approved_capabilities")] IReadOnlyList<string> ApprovedCapabilities,
     [property: JsonPropertyName("risk_tier")] string RiskTier,
+    [property: JsonPropertyName("release_notes")] string ReleaseNotes,
     [property: JsonPropertyName("review_policy_version")] string ReviewPolicyVersion,
     [property: JsonPropertyName("platform_key_id")] string PlatformKeyId,
     [property: JsonPropertyName("platform_public_key_base64")] string PlatformPublicKeyBase64,
@@ -55,6 +56,21 @@ public sealed record MarketPluginCatalogItem(
     [property: JsonPropertyName("published_at")] DateTimeOffset PublishedAt,
     [property: JsonPropertyName("architectures")] IReadOnlyList<string> Architectures);
 
+public sealed record PluginUpdateCandidate(
+    MarketPluginCatalogItem CatalogItem,
+    string CurrentVersion,
+    string State = "available",
+    string? LastError = null)
+{
+    public string PluginSlug => CatalogItem.Slug;
+    public string Name => CatalogItem.Name;
+    public string TargetVersion => CatalogItem.LatestVersion;
+    public string RiskTier => CatalogItem.RiskTier;
+    public DateTimeOffset PublishedAt => CatalogItem.PublishedAt;
+    public string VersionSummary => $"{CurrentVersion} -> {TargetVersion}";
+    public string StateLabel => State == "failed" ? "升级失败，可重试" : "可升级";
+}
+
 public sealed record MarketPluginCatalogResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<MarketPluginCatalogItem> Items,
     [property: JsonPropertyName("page")] int Page,
@@ -85,6 +101,41 @@ public sealed record MarketPluginRevocationList(
     [property: JsonPropertyName("generated_at")] DateTimeOffset GeneratedAt,
     [property: JsonPropertyName("policy_version")] string PolicyVersion,
     [property: JsonPropertyName("items")] IReadOnlyList<MarketPluginRevocation> Items);
+
+public static class PluginSemver
+{
+    public static MarketPluginVersion? LatestOrDefault(IEnumerable<MarketPluginVersion> versions) =>
+        versions.OrderByDescending(
+                version => Parse(version.Semver),
+                Comparer<(int Major, int Minor, int Patch)>.Create(Compare))
+            .FirstOrDefault();
+
+    public static int Compare(
+        (int Major, int Minor, int Patch) left,
+        (int Major, int Minor, int Patch) right)
+    {
+        var major = left.Major.CompareTo(right.Major);
+        if (major != 0) return major;
+        var minor = left.Minor.CompareTo(right.Minor);
+        return minor != 0 ? minor : left.Patch.CompareTo(right.Patch);
+    }
+
+    public static (int Major, int Minor, int Patch) Parse(string value)
+    {
+        var parts = value.Split('.');
+        if (parts.Length != 3
+            || parts.Any(part => part.Length == 0 || part.Length > 1 && part[0] == '0')
+            || !int.TryParse(parts[0], out var major)
+            || !int.TryParse(parts[1], out var minor)
+            || !int.TryParse(parts[2], out var patch)
+            || major < 0 || minor < 0 || patch < 0)
+        {
+            throw new PluginPackageException("在线插件版本不是有效的 SemVer。");
+        }
+
+        return (major, minor, patch);
+    }
+}
 
 public static class PlatformSignatureVerifier
 {

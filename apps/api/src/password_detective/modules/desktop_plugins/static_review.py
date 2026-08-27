@@ -422,6 +422,7 @@ def inspect_version_artifacts(
                 host_min=version.host_min,
                 host_max=version.host_max,
                 requested_capabilities=list(version.requested_capabilities),
+                source_review_mode=version.source_review_mode,
                 max_expanded_bytes=max_expanded_bytes,
             )
         except AppError as exc:

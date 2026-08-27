@@ -31,6 +31,9 @@ while (await Console.In.ReadLineAsync() is { } line)
         case "health/check":
             await WriteResultAsync(id, new { status = "healthy" });
             break;
+        case "lifecycle/migrate":
+            await WriteResultAsync(id, new { status = "not_required", steps = Array.Empty<object>() });
+            break;
         case "command/execute":
             await ExecuteCommandAsync(id, parameters);
             break;

@@ -52,6 +52,10 @@ foreach (var entry in matrix)
             PdppProtocol.HealthCheckMethod,
             new { },
             TimeSpan.FromSeconds(10));
+        var migration = await host.InvokeAsync<PdppMigrateParams, PdppMigrateResult>(
+            PdppProtocol.MigrateMethod,
+            new PdppMigrateParams("0.9.0", "1.0.0"),
+            TimeSpan.FromSeconds(10));
         var input = $"synthetic-pdpp-{entry.Language}";
         var echo = await host.InvokeAsync<PdppCommandParams, EchoResult>(
             PdppProtocol.ExecuteCommandMethod,
@@ -62,6 +66,8 @@ foreach (var entry in matrix)
             || initialized.PluginId != entry.PluginId
             || initialized.ProtocolVersion != PdppProtocol.ProtocolVersion
             || health.Status != "healthy"
+            || migration.Status is not ("migrated" or "not_required")
+            || migration.Status == "not_required" && (migration.Steps?.Count ?? 0) != 0
             || echo.Output != input
             || echo.Language != entry.Language)
         {

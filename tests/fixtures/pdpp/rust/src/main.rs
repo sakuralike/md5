@@ -35,6 +35,11 @@ fn main() {
                 "id": request.id,
                 "result": { "status": "healthy" }
             }),
+            "lifecycle/migrate" => json!({
+                "jsonrpc": "2.0",
+                "id": request.id,
+                "result": { "status": "not_required", "steps": [] }
+            }),
             "command/execute" if request.params["command"] == "echo" => json!({
                 "jsonrpc": "2.0",
                 "id": request.id,
