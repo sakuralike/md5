@@ -95,7 +95,8 @@ public partial class MainWindow : Window
             runtime,
             _pluginSafeMode,
             new PluginDialogService(),
-            _viewModel.ServerBaseUrl);
+            _viewModel.ServerBaseUrl,
+            logs);
         _pluginMarketplaceWindow = new PluginMarketplaceWindow(viewModel)
         {
             Owner = this,

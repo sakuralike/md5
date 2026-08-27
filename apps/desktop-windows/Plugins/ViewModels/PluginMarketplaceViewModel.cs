@@ -30,6 +30,7 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
     private readonly PluginRegistry _registry;
     private readonly PluginRuntimeService _runtime;
     private readonly PluginSafeMode _safeMode;
+    private readonly PluginLogStore _logs;
     private readonly IPluginDialogService _dialogs;
     private readonly PasswordDetective.Desktop.Services.DesktopApiClient _marketApi;
     private readonly PluginRevocationCache _revocationCache;
@@ -62,7 +63,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         PluginRuntimeService runtime,
         PluginSafeMode safeMode,
         IPluginDialogService dialogs,
-        string? serverBaseUrl = null)
+        string? serverBaseUrl = null,
+        PluginLogStore? logs = null)
     {
         _paths = paths;
         _installer = installer;
@@ -70,6 +72,7 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         _registry = registry;
         _runtime = runtime;
         _safeMode = safeMode;
+        _logs = logs ?? new PluginLogStore(paths);
         _dialogs = dialogs;
         _marketApi = new PasswordDetective.Desktop.Services.DesktopApiClient();
         _revocationCache = new PluginRevocationCache(paths);
@@ -335,42 +338,48 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (_revocationSnapshot is null || _revocationSnapshot.IsExpired(DateTimeOffset.UtcNow))
-        {
-            throw new PluginPackageException("平台撤销列表缓存已过期，请联网刷新后再安装。");
-        }
-
-        var existingMarket = await _registry.GetAsync(detail.Slug);
-        var marketEventKind = existingMarket is not null
-            && !string.Equals(existingMarket.CurrentVersion, version.Semver, StringComparison.Ordinal)
-            ? "upgraded"
-            : "installed";
-        PlatformSignatureVerifier.Verify(version);
-        if (_revokedMarketPlugins.Contains(detail.Slug)
-            || _revokedMarketVersions.Contains($"{detail.Slug}@{version.Semver}")
-            || _revokedMarketSigningKeys.Contains(version.SigningKeyFingerprint))
-        {
-            throw new PluginPackageException("该平台插件版本已撤销，不能安装。");
-        }
-        var artifact = version.Artifacts.FirstOrDefault(item => item.Architecture == "windows-x64")
-            ?? throw new InvalidOperationException("在线插件不包含当前架构制品。");
-        var ticket = await _marketApi.IssuePluginDownloadTicketAsync(
-            _serverBaseUrl,
-            detail.Slug,
-            version.Semver,
-            artifact.Architecture);
         var temporaryPath = Path.Combine(
             _paths.StagingDirectory,
             $"market-{detail.Slug}-{version.Semver}-{Guid.NewGuid():N}.pdpkg");
+        var failureStage = "preflight";
+        var architecture = "windows-x64";
         BeginOperation("正在下载、验签并隔离安装平台插件…");
         try
         {
+            if (_revocationSnapshot is null || _revocationSnapshot.IsExpired(DateTimeOffset.UtcNow))
+            {
+                throw new PluginPackageException("平台撤销列表缓存已过期，请联网刷新后再安装。");
+            }
+
+            var existingMarket = await _registry.GetAsync(detail.Slug);
+            var marketEventKind = existingMarket is not null
+                && !string.Equals(existingMarket.CurrentVersion, version.Semver, StringComparison.Ordinal)
+                ? "upgraded"
+                : "installed";
+            PlatformSignatureVerifier.Verify(version);
+            if (_revokedMarketPlugins.Contains(detail.Slug)
+                || _revokedMarketVersions.Contains($"{detail.Slug}@{version.Semver}")
+                || _revokedMarketSigningKeys.Contains(version.SigningKeyFingerprint))
+            {
+                throw new PluginPackageException("该平台插件版本已撤销，不能安装。");
+            }
+            var artifact = version.Artifacts.FirstOrDefault(item => item.Architecture == architecture)
+                ?? throw new InvalidOperationException("在线插件不包含当前架构制品。");
+            architecture = artifact.Architecture;
+            failureStage = "download_ticket";
+            var ticket = await _marketApi.IssuePluginDownloadTicketAsync(
+                _serverBaseUrl,
+                detail.Slug,
+                version.Semver,
+                architecture);
             _paths.EnsureDirectories();
+            failureStage = "artifact_download";
             await _marketApi.DownloadPluginArtifactAsync(
                 ticket.DownloadUrl,
                 temporaryPath,
                 ticket.ArtifactSha256,
                 ticket.ArtifactSizeBytes);
+            failureStage = "package_inspection";
             var inspection = await _installer.InspectAsync(temporaryPath);
             var permission = _permissionPolicy.EvaluateMarket(
                 inspection.Manifest,
@@ -416,6 +425,7 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                 Status = "已取消安装平台插件。";
                 return;
             }
+            failureStage = "package_install";
             var result = await _installer.InstallMarketAsync(
                 temporaryPath,
                 version,
@@ -439,10 +449,24 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            try
+            {
+                var errorCode = exception is PasswordDetective.Desktop.Services.DesktopApiException apiException
+                    ? $"{apiException.Code}/{apiException.StatusCode}"
+                    : $"{exception.GetType().Name}/{exception.HResult}";
+                await _logs.AppendAsync(
+                    detail.Slug,
+                    "error",
+                    $"market_install_failed version={version.Semver} stage={failureStage} "
+                    + $"code={errorCode} message={exception.Message}");
+            }
+            catch (Exception)
+            {
+            }
             await RecordInstallEventBestEffortAsync(
                 detail.Slug,
                 version.Semver,
-                artifact.Architecture,
+                architecture,
                 "download_failed",
                 "failure",
                 PluginSource.MarketReviewed);

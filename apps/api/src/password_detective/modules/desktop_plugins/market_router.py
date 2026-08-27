@@ -191,8 +191,9 @@ def issue_plugin_download_ticket(
         slug=plugin_slug,
         semver=payload.semver,
         architecture=payload.architecture,
-        download_url_builder=lambda token: str(
-            request.url_for("download_desktop_plugin_artifact", token=token)
+        download_url_builder=lambda token: (
+            f"{settings.public_origin}"
+            f"{request.url_for('download_desktop_plugin_artifact', token=token).path}"
         ),
     )
 

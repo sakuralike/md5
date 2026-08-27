@@ -434,6 +434,9 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
         json={"architecture": "windows-x64", "semver": "1.0.0"},
     )
     assert ticket.status_code == 200, ticket.text
+    assert ticket.json()["download_url"].startswith(
+        "http://localhost:5173/api/v1/desktop/plugins/downloads/"
+    )
     downloaded = client.get(ticket.json()["download_url"])
     assert downloaded.status_code == 200
     assert downloaded.content == package
