@@ -5,6 +5,7 @@ import type {
   DesktopReleaseListResponse,
   DesktopArchitecture,
 } from "@password-detective/api-contract";
+import { createSHA256 } from "hash-wasm";
 import { apiRequest } from "./api";
 
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:-[0-9A-Za-z.-]+)?$/;
@@ -66,8 +67,20 @@ export interface ArtifactDescriptor {
 }
 
 export async function calculateArtifactSha256(artifact: Blob): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", await artifact.arrayBuffer());
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const bytes = await artifact.arrayBuffer();
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle?.digest) {
+    try {
+      const digest = await subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    } catch {
+      // Fall through to the pure WebAssembly implementation for non-secure contexts.
+    }
+  }
+  const hasher = await createSHA256();
+  hasher.init();
+  hasher.update(new Uint8Array(bytes));
+  return hasher.digest("hex");
 }
 
 export function buildDesktopReleasePayload(

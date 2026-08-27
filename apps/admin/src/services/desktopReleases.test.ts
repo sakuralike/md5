@@ -81,6 +81,13 @@ describe("desktop release administration", () => {
     );
   });
 
+  it("falls back when crypto.subtle is unavailable", async () => {
+    vi.stubGlobal("crypto", {});
+    await expect(calculateArtifactSha256(new Blob(["synthetic artifact"]))).resolves.toBe(
+      "169e73adeeb9ee2cbf78b5878c95ebef88d580774a6005a367c8e35458658027",
+    );
+  });
+
   it("rejects unsafe or inconsistent release metadata", () => {
     expect(() =>
       buildDesktopReleasePayload(
