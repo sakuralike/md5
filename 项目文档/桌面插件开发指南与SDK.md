@@ -18,6 +18,22 @@ plugins/my-plugin/
 
 宿主发送 `initialize`、`health/check`，运行时发送 `command/execute`，关闭时发送 `shutdown`。每条消息都是单行 JSON-RPC 2.0，插件必须返回相同 `id`。`ui:command` 展示命令表单；`ui:theme` 调用主题 Broker；`file:read:selected` 只允许读取用户明确授权的文件；`storage:private` 提供插件私有存储。权限按清单申请、平台批准和用户授予的交集生效。
 
+宿主 Broker v1 接口：
+
+| 方法 | 所需权限 | 用途 |
+| --- | --- | --- |
+| `host/file/read` | `file:read:selected` | 按不透明 `file_ref` 分块读取用户明确选择的文件，单块最多 512 KiB |
+| `host/file/digest` | `file:read:selected` | 对已授权文件计算 `md5`、`sha1`、`sha256` 或 `sha512` |
+| `host/storage/get` | `storage:private` | 读取插件私有 JSON 值 |
+| `host/storage/set` | `storage:private` | 原子写入插件私有 JSON 值 |
+| `host/storage/remove` | `storage:private` | 删除插件私有 JSON 值 |
+| `host/api/profile/read` | `api:profile:read` | 通过宿主代理读取当前账号聚合资料 |
+| `host/api/hash/read` | `api:hash:read` | 通过宿主代理查询授权哈希摘要 |
+| `host/api/verification/submit` | `api:verification:submit` | 通过宿主代理提交一次性验证回执 |
+| `host/ui/theme/apply` | `ui:theme` | 应用宿主支持的受控主题 |
+
+Broker 不提供目录枚举、任意文件写入、凭据读取、后台常驻、子进程派生或任意网络请求。文件引用只在当前命令会话内有效，插件不得把原始文件路径或授权令牌写入输出。
+
 ## 主题 Broker
 
 调用 `host/ui/theme/apply` 时提交：
@@ -47,7 +63,21 @@ internal sealed class SkinPlugin : PdppPlugin
 }
 ```
 
-SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHostClient.CallAsync`。Broker 错误会以 `PdppHostException` 抛出并保留错误码。
+SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHostClient.CallAsync`。Broker 错误会以 `PdppHostException` 抛出并保留错误码。文件类插件可使用 `PluginSelectedFile.FromJson`、`ReadFileAsync`、`ReadFileToEndAsync` 和 `DigestFileAsync`；状态型插件可使用 `GetStorageAsync`、`SetStorageAsync`、`RemoveStorageAsync`；需要平台数据时使用 `ReadProfileAsync`、`ReadHashAsync` 和 `SubmitVerificationAsync`。
+
+### 官方插件包体检工具
+
+`plugins/official-plugin-inspector` 是首个使用文件 Broker 扩展的官方插件。它提供 `inspect` 命令，要求用户明确选择一个 `.pdpkg` 文件，返回结构化 JSON 报告：包大小和 SHA-256、ZIP 文件项数量与展开大小、路径安全、Manifest 字段/版本/入口/命令 Schema/权限/资源限制、CycloneDX 1.5 SBOM、开发者 Ed25519 签名、源码 UTF-8/数量/大小，以及 `passed`、`warning` 或 `failed` 状态。插件最多读取 128 MiB，源码最多检查 32 个文件且单文件最多 256 KiB；不会上传包内容、用户路径或密钥。
+
+使用与其他官方插件相同的环境变量构建：
+
+```powershell
+$env:PDPP_PUBLISHER_KEY_ID = "official-plugin-inspector-key"
+$env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64 = "<secure-build-secret>"
+pwsh ./plugins/official-plugin-inspector/build-package.ps1
+```
+
+打包器会按 Manifest 中声明的全部命令复制 `schemas/`，递归复制 `assets/`，并把插件源文件放入 `source/`；这样多命令和多文件官方插件可以复用同一构建流程。
 
 ## 签名、SBOM 与打包
 

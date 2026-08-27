@@ -23,6 +23,8 @@ public sealed class PdppProtocolTests
         Assert.Contains(PdppProtocol.HealthCheckMethod, text);
         Assert.Contains(PdppProtocol.ExecuteCommandMethod, text);
         Assert.Contains(PdppProtocol.ShutdownMethod, text);
+        Assert.Contains(PdppProtocol.HostFileDigestMethod, text);
+        Assert.Contains(PdppProtocol.HostStorageRemoveMethod, text);
     }
 
     [Fact]
@@ -61,6 +63,7 @@ public sealed class PdppProtocolTests
             using var broker = new PluginFileBroker(maximumChunkBytes: 64 * 1024, maximumFileBytes: 4 * 1024 * 1024);
 
             var grant = broker.GrantRead(path);
+            var digest = await broker.DigestAsync(grant.GrantId, "sha256");
             var actual = new byte[expected.Length];
             var offset = 0;
             while (offset < actual.Length)
@@ -73,6 +76,9 @@ public sealed class PdppProtocolTests
             Assert.Equal("synthetic.bin", grant.FileName);
             Assert.DoesNotContain(directory, grant.FileName, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(expected, actual);
+            Assert.Equal(
+                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(expected)),
+                digest);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
                 async () => await broker.ReadAsync(grant.GrantId, 0, 64 * 1024 + 1));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(
@@ -80,6 +86,8 @@ public sealed class PdppProtocolTests
             Assert.True(broker.Revoke(grant.GrantId));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(
                 async () => await broker.ReadAsync(grant.GrantId, 0, 4096));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(
+                async () => await broker.DigestAsync(grant.GrantId, "sha256"));
         }
         finally
         {

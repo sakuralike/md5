@@ -1,5 +1,6 @@
 using Microsoft.Win32.SafeHandles;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace PasswordDetective.Desktop.Plugins;
 
@@ -104,6 +105,53 @@ public sealed class PluginFileBroker : IDisposable
             offset,
             cancellationToken);
         return read == buffer.Length ? buffer : buffer[..read];
+    }
+
+    public async ValueTask<string> DigestAsync(
+        Guid grantId,
+        string algorithm,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var hashAlgorithm = algorithm.ToLowerInvariant() switch
+        {
+            "md5" => HashAlgorithmName.MD5,
+            "sha1" => HashAlgorithmName.SHA1,
+            "sha256" => HashAlgorithmName.SHA256,
+            "sha512" => HashAlgorithmName.SHA512,
+            _ => throw new ArgumentException("The file digest algorithm is not supported.", nameof(algorithm)),
+        };
+
+        GrantedFile granted;
+        lock (_sync)
+        {
+            if (!_grants.TryGetValue(grantId, out granted!))
+            {
+                throw new UnauthorizedAccessException("The plugin file grant is missing or revoked.");
+            }
+        }
+
+        using var hash = IncrementalHash.CreateHash(hashAlgorithm);
+        var buffer = GC.AllocateUninitializedArray<byte>(_maximumChunkBytes);
+        long offset = 0;
+        while (offset < granted.AuthorizedLength)
+        {
+            var requested = (int)Math.Min(buffer.Length, granted.AuthorizedLength - offset);
+            var read = await RandomAccess.ReadAsync(
+                granted.Handle,
+                buffer.AsMemory(0, requested),
+                offset,
+                cancellationToken);
+            if (read == 0)
+            {
+                throw new IOException("The authorized file ended before its granted length.");
+            }
+
+            hash.AppendData(buffer, 0, read);
+            offset += read;
+        }
+
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 
     public bool Revoke(Guid grantId)

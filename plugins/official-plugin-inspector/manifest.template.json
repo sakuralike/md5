@@ -1,0 +1,20 @@
+{
+  "schema": "pd.plugin/v1",
+  "plugin_id": "com.passworddetective.official-plugin-inspector",
+  "version": "1.0.0",
+  "display_name": "官方插件包体检工具",
+  "description": "检查 PDPKG 的结构、路径、Manifest、SBOM、源码、开发者签名、权限与资源限制。",
+  "publisher_key_id": "$PUBLISHER_KEY_ID",
+  "publisher_public_key": "$PUBLISHER_PUBLIC_KEY",
+  "protocol": { "min": 1, "max": 1 },
+  "host": { "min_version": "0.1.0", "max_version": "0.x" },
+  "runtime": {
+    "kind": "process",
+    "entrypoints": { "windows-x64": "bin/windows-x64/plugin.exe" }
+  },
+  "commands": [
+    { "id": "inspect", "title": "检查插件包", "input_schema": "schemas/inspect.schema.json" }
+  ],
+  "capabilities": { "required": ["ui:command", "file:read:selected"], "optional": [] },
+  "limits": { "memory_mb": 256, "cpu_percent": 25, "command_timeout_seconds": 120, "child_processes": 0 }
+}

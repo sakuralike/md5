@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["package"],
+  "properties": {
+    "package": {
+      "type": "string",
+      "title": "PDPKG 插件包",
+      "format": "file"
+    }
+  }
+}

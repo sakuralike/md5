@@ -1,0 +1,19 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "components": [
+    {
+      "type": "application",
+      "name": "password-detective-official-plugin-inspector",
+      "version": "1.0.0",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "BouncyCastle.Cryptography",
+      "version": "2.7.0",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    }
+  ]
+}

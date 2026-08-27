@@ -22,8 +22,10 @@
             "command/execute",
             "shutdown",
             "host/file/read",
+            "host/file/digest",
             "host/storage/get",
             "host/storage/set",
+            "host/storage/remove",
             "host/api/profile/read",
             "host/api/hash/read",
             "host/api/verification/submit",
@@ -54,12 +56,20 @@
           "then": { "properties": { "params": { "$ref": "#/$defs/fileReadParams" } } }
         },
         {
+          "if": { "properties": { "method": { "const": "host/file/digest" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/fileDigestParams" } } }
+        },
+        {
           "if": { "properties": { "method": { "const": "host/storage/get" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/storageGetParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "host/storage/set" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/storageSetParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/storage/remove" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/storageGetParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "host/api/profile/read" } } },
@@ -160,6 +170,15 @@
         "candidate_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "outcome": { "enum": ["success", "failure"] },
         "archive_format": { "enum": ["zip", "7z"] }
+      }
+    },
+    "fileDigestParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_ref", "algorithm"],
+      "properties": {
+        "file_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "algorithm": { "enum": ["md5", "sha1", "sha256", "sha512"] }
       }
     },
     "themeApplyParams": {

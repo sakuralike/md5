@@ -220,6 +220,66 @@ public sealed class PluginInstallationTests : IDisposable
     }
 
     [Fact]
+    public async Task OfficialInspectorReadsSelectedPackageThroughBrokerInsideAppContainer()
+    {
+        var targetPackage = _factory.Create(
+            _directory,
+            pluginId: "com.synthetic.inspection-target",
+            additionalFiles: new Dictionary<string, byte[]>
+            {
+                ["sbom.cdx.json"] = Encoding.UTF8.GetBytes(
+                    """{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}"""),
+                ["source/Program.cs"] = Encoding.UTF8.GetBytes(
+                    "internal static class SyntheticInspectionTarget { }")
+            });
+        var pluginOutput = FindOfficialInspectorOutput();
+        var runtimeFiles = Directory.EnumerateFiles(pluginOutput)
+            .Where(path => Path.GetExtension(path) is not ".pdb")
+            .ToDictionary(
+                path => Path.GetFileName(path) == "password-detective-official-plugin-inspector.exe"
+                    ? "bin/windows-x64/plugin.exe"
+                    : $"bin/windows-x64/{Path.GetFileName(path)}",
+                File.ReadAllBytes,
+                StringComparer.Ordinal);
+        var inspectorPackage = _factory.Create(
+            _directory,
+            pluginId: "com.passworddetective.official-plugin-inspector",
+            requiredCapabilities: ["ui:command", "file:read:selected"],
+            optionalCapabilities: [],
+            commandId: "inspect",
+            commandTitle: "检查插件包",
+            commandSchemaPath: "schemas/inspect.schema.json",
+            commandSchema: Encoding.UTF8.GetBytes(
+                """{"type":"object","required":["package"],"properties":{"package":{"type":"string","title":"PDPKG 插件包","format":"file"}}}"""),
+            runtimeFiles: runtimeFiles);
+        var paths = new PluginStoragePaths(Path.Combine(_directory, "official-inspector-plugins"));
+        var registry = new PluginRegistry(paths);
+        var logs = new PluginLogStore(paths);
+        var execution = new PluginExecutionService(paths, logs);
+        var installer = CreateInstaller(paths, registry, execution);
+        var installed = await installer.InstallLocalAsync(
+            inspectorPackage,
+            ["ui:command", "file:read:selected"]);
+        var runtime = new PluginRuntimeService(
+            registry,
+            execution,
+            new PluginSafeMode(paths),
+            logs);
+
+        var result = await runtime.ExecuteAsync(
+            installed.Plugin.PluginId,
+            "inspect",
+            JsonSerializer.SerializeToElement(new { package = targetPackage }));
+
+        Assert.Equal("passed", result.GetProperty("status").GetString());
+        Assert.Equal(
+            "com.synthetic.inspection-target",
+            result.GetProperty("plugin_id").GetString());
+        Assert.True(result.GetProperty("summary").GetProperty("signature_valid").GetBoolean());
+        Assert.False(result.GetRawText().Contains(targetPackage, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task DynamicReviewExecutorUsesFreshAppContainerAndLeavesDestructionProof()
     {
         var pluginOutput = FindSyntheticPluginOutput();
@@ -293,6 +353,29 @@ public sealed class PluginInstallationTests : IDisposable
             "csharp",
             "bin",
             "Release",
+            "net10.0");
+    }
+
+    private static string FindOfficialInspectorOutput()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null
+               && !Directory.Exists(Path.Combine(root.FullName, "plugins", "official-plugin-inspector")))
+        {
+            root = root.Parent;
+        }
+
+        if (root is null)
+        {
+            throw new DirectoryNotFoundException("Repository root was not found.");
+        }
+
+        return Path.Combine(
+            root.FullName,
+            "plugins",
+            "official-plugin-inspector",
+            "bin",
+            "Debug",
             "net10.0");
     }
 

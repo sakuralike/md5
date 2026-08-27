@@ -249,6 +249,17 @@ public sealed class PluginProcessHostTests : IDisposable
         var fileDescriptor = input.GetProperty("file");
         Assert.False(fileDescriptor.TryGetProperty("path", out _));
         Assert.False(input.GetRawText().Contains(privateFile, StringComparison.OrdinalIgnoreCase));
+        var digest = await broker.HandleAsync(
+            PdppProtocol.HostFileDigestMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                file_ref = fileDescriptor.GetProperty("file_ref").GetString(),
+                algorithm = "sha256",
+            }));
+        Assert.Equal(
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes("synthetic broker content"))),
+            digest.GetProperty("digest").GetString());
 
         var options = new PluginProcessStartOptions
         {
@@ -300,6 +311,14 @@ public sealed class PluginProcessHostTests : IDisposable
         Assert.True(stored.GetProperty("stored").GetBoolean());
         Assert.True(loaded.GetProperty("found").GetBoolean());
         Assert.True(loaded.GetProperty("value").GetProperty("enabled").GetBoolean());
+        var removed = await allowed.HandleAsync(
+            PdppProtocol.HostStorageRemoveMethod,
+            JsonSerializer.SerializeToElement(new { key = "settings.current" }));
+        var missing = await allowed.HandleAsync(
+            "host/storage/get",
+            JsonSerializer.SerializeToElement(new { key = "settings.current" }));
+        Assert.True(removed.GetProperty("removed").GetBoolean());
+        Assert.False(missing.GetProperty("found").GetBoolean());
         var exception = await Assert.ThrowsAsync<PdppHostRequestException>(
             () => denied.HandleAsync(
                 "host/storage/get",

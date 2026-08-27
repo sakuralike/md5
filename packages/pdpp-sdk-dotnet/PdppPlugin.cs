@@ -42,6 +42,109 @@ public sealed class PdppHostClient
         return await CallAsync("host/ui/theme/apply", payload, cancellationToken);
     }
 
+    public async Task<PluginFileReadResult> ReadFileAsync(
+        string fileReference,
+        long offset,
+        int count,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync(
+            "host/file/read",
+            new { file_ref = fileReference, offset, count },
+            cancellationToken);
+        return result.Deserialize<PluginFileReadResult>(PdppJson.Options)
+            ?? throw new InvalidOperationException("宿主返回了无效的文件读取结果。");
+    }
+
+    public async Task<PluginFileDigestResult> DigestFileAsync(
+        string fileReference,
+        string algorithm,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync(
+            "host/file/digest",
+            new { file_ref = fileReference, algorithm },
+            cancellationToken);
+        return result.Deserialize<PluginFileDigestResult>(PdppJson.Options)
+            ?? throw new InvalidOperationException("宿主返回了无效的文件摘要结果。");
+    }
+
+    public async Task<byte[]> ReadFileToEndAsync(
+        PluginSelectedFile file,
+        long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (file.Length is < 0 || file.Length > maximumBytes || file.Length > int.MaxValue)
+        {
+            throw new InvalidOperationException("所选文件超过插件允许的读取大小。");
+        }
+
+        var output = GC.AllocateUninitializedArray<byte>((int)file.Length);
+        long offset = 0;
+        while (offset < file.Length)
+        {
+            var chunk = await ReadFileAsync(
+                file.FileRef,
+                offset,
+                (int)Math.Min(512 * 1024, file.Length - offset),
+                cancellationToken);
+            var bytes = Convert.FromBase64String(chunk.DataBase64);
+            if (bytes.Length != chunk.BytesRead || bytes.Length == 0)
+            {
+                throw new InvalidOperationException("宿主返回的文件分块无效。");
+            }
+
+            bytes.CopyTo(output, (int)offset);
+            offset += bytes.Length;
+        }
+
+        return output;
+    }
+
+    public async Task<JsonElement?> GetStorageAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync("host/storage/get", new { key }, cancellationToken);
+        return result.GetProperty("found").GetBoolean()
+            ? result.GetProperty("value").Clone()
+            : null;
+    }
+
+    public async Task SetStorageAsync(
+        string key,
+        object value,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync("host/storage/set", new { key, value }, cancellationToken);
+        if (!result.GetProperty("stored").GetBoolean())
+        {
+            throw new InvalidOperationException("宿主未保存插件私有数据。");
+        }
+    }
+
+    public async Task<bool> RemoveStorageAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync("host/storage/remove", new { key }, cancellationToken);
+        return result.GetProperty("removed").GetBoolean();
+    }
+
+    public Task<JsonElement> ReadProfileAsync(CancellationToken cancellationToken = default) =>
+        CallAsync("host/api/profile/read", new { }, cancellationToken);
+
+    public Task<JsonElement> ReadHashAsync(
+        string algorithm,
+        string digest,
+        CancellationToken cancellationToken = default) =>
+        CallAsync("host/api/hash/read", new { algorithm, digest }, cancellationToken);
+
+    public Task<JsonElement> SubmitVerificationAsync(
+        PluginVerificationSubmission submission,
+        CancellationToken cancellationToken = default) =>
+        CallAsync("host/api/verification/submit", submission, cancellationToken);
+
     public async Task<JsonElement> CallAsync(
         string method,
         object parameters,
@@ -74,6 +177,43 @@ public sealed class PdppHostClient
         await _output.FlushAsync(cancellationToken);
     }
 }
+
+public sealed record PluginFileReadResult(
+    string DataBase64,
+    int BytesRead,
+    bool Eof);
+
+public sealed record PluginFileDigestResult(
+    string Algorithm,
+    string Digest);
+
+public sealed record PluginSelectedFile(
+    string FileRef,
+    string FileName,
+    long Length)
+{
+    public static PluginSelectedFile FromJson(JsonElement element)
+    {
+        var file = element.Deserialize<PluginSelectedFile>(PdppJson.Options);
+        if (file is null
+            || file.FileRef.Length != 32
+            || file.FileRef.Any(character => !Uri.IsHexDigit(character))
+            || string.IsNullOrWhiteSpace(file.FileName)
+            || file.Length < 0)
+        {
+            throw new InvalidOperationException("宿主提供的所选文件描述无效。");
+        }
+        return file;
+    }
+}
+
+public sealed record PluginVerificationSubmission(
+    string CandidateId,
+    string FingerprintAlgorithm,
+    string FingerprintDigest,
+    string CandidateDigest,
+    string Outcome,
+    string ArchiveFormat);
 
 public abstract class PdppPlugin
 {
@@ -167,5 +307,9 @@ public abstract class PdppPlugin
 
 internal static class PdppJson
 {
-    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web);
+    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
 }

@@ -55,12 +55,6 @@ var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
 {
     [PluginPackageVerifier.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),
     ["bin/windows-x64/plugin.exe"] = await File.ReadAllBytesAsync(executablePath),
-    [args.Length == 6 ? "schemas/apply.schema.json" : "schemas/echo.schema.json"] = args.Length == 6
-        ? await File.ReadAllBytesAsync(args[3])
-        : Encoding.UTF8.GetBytes(
-        """
-        {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
-        """),
     ["sbom.cdx.json"] = args.Length == 6
         ? await File.ReadAllBytesAsync(args[4])
         : Encoding.UTF8.GetBytes(
@@ -70,21 +64,57 @@ var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
 };
 if (args.Length == 6)
 {
-    var bundledBackground = Path.Combine(Path.GetDirectoryName(args[2])!, "assets", "default-background.jpg");
-    if (File.Exists(bundledBackground))
+    var pluginDirectory = Path.GetDirectoryName(args[2])!;
+    var schemaRoot = Path.GetDirectoryName(Path.GetFullPath(args[3]))!;
+    foreach (var command in manifest.Commands)
     {
-        files["assets/default-background.jpg"] = await File.ReadAllBytesAsync(bundledBackground);
+        if (!command.InputSchema.StartsWith("schemas/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Command schema path must be inside schemas/.");
+        }
+        var relativeSchema = command.InputSchema["schemas/".Length..]
+            .Replace('/', Path.DirectorySeparatorChar);
+        var schemaPath = Path.GetFullPath(Path.Combine(schemaRoot, relativeSchema));
+        var containedRoot = Path.GetFullPath(schemaRoot).TrimEnd(Path.DirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        if (!schemaPath.StartsWith(containedRoot, StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(schemaPath))
+        {
+            throw new InvalidOperationException($"Command schema was not found: {command.InputSchema}");
+        }
+        files[command.InputSchema] = await File.ReadAllBytesAsync(schemaPath);
     }
 
-    var pluginDirectory = Path.GetDirectoryName(args[2])!;
-    foreach (var sourceName in new[] { "Program.cs", "PasswordDetective.OfficialSkin.csproj" })
+    var assetDirectory = Path.Combine(pluginDirectory, "assets");
+    if (Directory.Exists(assetDirectory))
     {
-        var sourcePath = Path.Combine(pluginDirectory, sourceName);
-        if (File.Exists(sourcePath))
+        foreach (var assetPath in Directory.EnumerateFiles(assetDirectory, "*", SearchOption.AllDirectories)
+                     .Order(StringComparer.OrdinalIgnoreCase))
         {
-            files[$"source/{sourceName}"] = await File.ReadAllBytesAsync(sourcePath);
+            var relative = Path.GetRelativePath(assetDirectory, assetPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            files[$"assets/{relative}"] = await File.ReadAllBytesAsync(assetPath);
         }
     }
+
+    foreach (var sourcePath in Directory.EnumerateFiles(pluginDirectory, "*", SearchOption.AllDirectories)
+                 .Where(path => Path.GetExtension(path) is ".cs" or ".csproj")
+                 .Where(path => !Path.GetRelativePath(pluginDirectory, path)
+                     .Split(Path.DirectorySeparatorChar)
+                     .Any(segment => segment is "bin" or "obj"))
+                 .Order(StringComparer.OrdinalIgnoreCase))
+    {
+        var relative = Path.GetRelativePath(pluginDirectory, sourcePath)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        files[$"source/{relative}"] = await File.ReadAllBytesAsync(sourcePath);
+    }
+}
+else
+{
+    files["schemas/echo.schema.json"] = Encoding.UTF8.GetBytes(
+        """
+        {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
+        """);
 }
 var packageFiles = files.Select(pair => new PluginPackageFile(
         pair.Key,

@@ -141,8 +141,10 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         CancellationToken cancellationToken = default) => method switch
         {
             "host/file/read" => ReadFileAsync(parameters, cancellationToken),
+            "host/file/digest" => DigestFileAsync(parameters, cancellationToken),
             "host/storage/get" => GetStorageAsync(parameters, cancellationToken),
             "host/storage/set" => SetStorageAsync(parameters, cancellationToken),
+            "host/storage/remove" => RemoveStorageAsync(parameters, cancellationToken),
             PdppProtocol.HostApiProfileReadMethod => CallApiAsync("api:profile:read", parameters, cancellationToken),
             PdppProtocol.HostApiHashReadMethod => CallApiAsync("api:hash:read", parameters, cancellationToken),
             PdppProtocol.HostApiVerificationSubmitMethod => CallApiAsync("api:verification:submit", parameters, cancellationToken),
@@ -195,6 +197,35 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         }
     }
 
+    private async Task<JsonElement> DigestFileAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("file:read:selected");
+        if (!TryReadFileReference(parameters, out var grantId)
+            || !parameters.TryGetProperty("algorithm", out var algorithmElement)
+            || algorithmElement.ValueKind != JsonValueKind.String
+            || algorithmElement.GetString() is not ("md5" or "sha1" or "sha256" or "sha512"))
+        {
+            throw new PdppHostRequestException(-32602, "File digest parameters are invalid.");
+        }
+
+        try
+        {
+            var algorithm = algorithmElement.GetString()!;
+            var digest = await _files.DigestAsync(grantId, algorithm, cancellationToken);
+            return JsonSerializer.SerializeToElement(new
+            {
+                algorithm,
+                digest,
+            });
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or ArgumentException or IOException)
+        {
+            throw new PdppHostRequestException(-32602, "File grant is missing, revoked, or unreadable.");
+        }
+    }
+
     private async Task<JsonElement> GetStorageAsync(
         JsonElement parameters,
         CancellationToken cancellationToken)
@@ -237,6 +268,26 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         catch (InvalidOperationException)
         {
             throw new PdppHostRequestException(-32002, "Storage quota or value limit was exceeded.");
+        }
+    }
+
+    private Task<JsonElement> RemoveStorageAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("storage:private");
+        var key = ReadStorageKey(parameters);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                removed = _storage.Remove(_pluginId, key),
+            }));
+        }
+        catch (ArgumentException)
+        {
+            throw new PdppHostRequestException(-32602, "Storage key is invalid.");
         }
     }
 
@@ -290,6 +341,15 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         }
 
         return key.GetString()!;
+    }
+
+    private static bool TryReadFileReference(JsonElement parameters, out Guid grantId)
+    {
+        grantId = default;
+        return parameters.ValueKind == JsonValueKind.Object
+            && parameters.TryGetProperty("file_ref", out var reference)
+            && reference.ValueKind == JsonValueKind.String
+            && Guid.TryParseExact(reference.GetString(), "N", out grantId);
     }
 
     private static string ResolveContainedPath(string root, string relativePath)

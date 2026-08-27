@@ -20,6 +20,10 @@ internal sealed class PluginPackageTestFactory
         string pluginId = "com.synthetic.local-plugin",
         IReadOnlyList<string>? requiredCapabilities = null,
         IReadOnlyList<string>? optionalCapabilities = null,
+        string commandId = "echo",
+        string commandTitle = "回显输入",
+        string commandSchemaPath = "schemas/echo.schema.json",
+        byte[]? commandSchema = null,
         IReadOnlyDictionary<string, byte[]>? runtimeFiles = null,
         IReadOnlyDictionary<string, byte[]>? additionalFiles = null,
         Action<ZipArchive>? mutateArchive = null)
@@ -44,7 +48,7 @@ internal sealed class PluginPackageTestFactory
                     ["windows-x64"] = "bin/windows-x64/plugin.exe",
                     ["windows-arm64"] = "bin/windows-arm64/plugin.exe",
                 }),
-            [new PluginCommandManifest("echo", "回显输入", "schemas/echo.schema.json")],
+            [new PluginCommandManifest(commandId, commandTitle, commandSchemaPath)],
             new PluginCapabilitiesManifest(
                 requiredCapabilities ?? ["ui:command"],
                 optionalCapabilities ?? ["storage:private"]),
@@ -54,7 +58,7 @@ internal sealed class PluginPackageTestFactory
             [PluginPackageVerifier.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),
             ["bin/windows-x64/plugin.exe"] = Encoding.UTF8.GetBytes("MZ-synthetic-x64-plugin"),
             ["bin/windows-arm64/plugin.exe"] = Encoding.UTF8.GetBytes("MZ-synthetic-arm64-plugin"),
-            ["schemas/echo.schema.json"] = Encoding.UTF8.GetBytes(
+            [commandSchemaPath] = commandSchema ?? Encoding.UTF8.GetBytes(
                 """
                 {"type":"object","required":["message"],"properties":{"message":{"type":"string","title":"消息"},"repeat":{"type":"integer","title":"次数"},"uppercase":{"type":"boolean","title":"大写"},"mode":{"type":"string","title":"模式","enum":["plain","safe"]}}}
                 """),
