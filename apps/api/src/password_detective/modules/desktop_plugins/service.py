@@ -1315,7 +1315,7 @@ def _public_version_response(
             if version.published_at is not None and version.platform_signature_base64 is not None
             else None
         ),
-        published_at=version.published_at,
+        published_at=_aware(version.published_at),
         artifacts=[
             PublicPluginArtifactResponse(
                 architecture=artifact.architecture,
@@ -1388,7 +1388,7 @@ def list_public_catalog(
                 latest_version=latest.semver,
                 risk_tier=latest.risk_tier,
                 review_policy_version=latest.review_policy_version or "",
-                published_at=latest.published_at,
+                published_at=_aware(latest.published_at),
                 architectures=[artifact.architecture for artifact in public.artifacts],
             )
         )
@@ -1607,7 +1607,7 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
                 signing_key_fingerprint=key.fingerprint if key else None,
                 reason_code=record.reason_code,
                 affects_historical_versions=record.affects_historical_versions,
-                effective_at=record.effective_at,
+                effective_at=_aware(record.effective_at),
                 batch_id=record.batch_id,
                 platform_key_id=record.platform_key_id,
                 platform_public_key_base64=record.platform_public_key_base64,
@@ -1625,7 +1625,8 @@ def list_revocations(db: Session) -> PluginRevocationListResponse:
         )
     return PluginRevocationListResponse(
         generated_at=max(
-            (record.created_at for record in records), default=datetime(1970, 1, 1, tzinfo=UTC)
+            (_aware(record.created_at) for record in records),
+            default=datetime(1970, 1, 1, tzinfo=UTC),
         ),
         policy_version=_REVOCATION_POLICY_VERSION,
         items=items,

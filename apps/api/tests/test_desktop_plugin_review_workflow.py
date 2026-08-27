@@ -230,6 +230,14 @@ def test_manual_review_publish_yank_revoke_and_report_workflow(client) -> None:
     catalog = client.get("/api/v1/desktop/plugins/catalog")
     assert catalog.status_code == 200
     assert catalog.json()["items"][0]["slug"] == "com.synthetic.review-workflow"
+    public_detail = client.get(
+        "/api/v1/desktop/plugins/com.synthetic.review-workflow"
+    ).json()
+    public_version = public_detail["versions"][0]
+    assert public_version["published_at"].endswith("Z")
+    assert public_version["published_at"] == public_version["platform_signature_payload"][
+        "published_at"
+    ]
 
     report_payload = {
         "version_id": version_id,
