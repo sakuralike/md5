@@ -207,6 +207,9 @@ def test_smtp_settings_enforce_sender_credentials_and_encryption():
     settings = Settings(
         **base,
         app_env="production",
+        desktop_plugin_signing_backend="openbao_transit",
+        desktop_plugin_signing_url="http://openbao.synthetic.example.com:8200",
+        desktop_plugin_signing_token="synthetic-openbao-token",
         notification_smtp_username="synthetic-user",
         notification_smtp_password="synthetic-app-password",
         app_secret_key="synthetic-production-secret-key-at-least-32-characters",

@@ -57,7 +57,9 @@ internal sealed class WindowsSandboxedProcess : IAsyncDisposable
     public Stream StandardOutput { get; }
     public Stream StandardError { get; }
 
-    public static WindowsSandboxedProcess Start(PluginProcessStartOptions options)
+    public static WindowsSandboxedProcess Start(
+        PluginProcessStartOptions options,
+        IWindowsPluginIsolationPolicy? isolationPolicy = null)
     {
         options.Validate();
         if (!OperatingSystem.IsWindows())
@@ -87,37 +89,36 @@ internal sealed class WindowsSandboxedProcess : IAsyncDisposable
                 options.MemoryLimitBytes,
                 options.ActiveProcessLimit,
                 options.CpuRatePercent);
-            if (options.UseAppContainer)
+            profile = AppContainerProfile.Acquire(
+                options.AppContainerProfileName,
+                options.DeleteAppContainerProfileOnDispose);
+            profile.GrantDirectory(
+                Path.GetDirectoryName(options.ExecutablePath)!,
+                FileSystemRights.ReadAndExecute | FileSystemRights.Read | FileSystemRights.Synchronize);
+            profile.GrantDirectory(
+                options.WorkingDirectory,
+                FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
+            foreach (var directory in options.ReadOnlyDirectories)
             {
-                profile = AppContainerProfile.Acquire(
-                    options.AppContainerProfileName,
-                    options.DeleteAppContainerProfileOnDispose);
                 profile.GrantDirectory(
-                    Path.GetDirectoryName(options.ExecutablePath)!,
+                    directory,
                     FileSystemRights.ReadAndExecute | FileSystemRights.Read | FileSystemRights.Synchronize);
-                profile.GrantDirectory(
-                    options.WorkingDirectory,
-                    FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
-                foreach (var directory in options.ReadOnlyDirectories)
-                {
-                    profile.GrantDirectory(
-                        directory,
-                        FileSystemRights.ReadAndExecute | FileSystemRights.Read | FileSystemRights.Synchronize);
-                }
-
-                foreach (var directory in options.WritableDirectories)
-                {
-                    profile.GrantDirectory(
-                        directory,
-                        FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
-                }
             }
+
+            foreach (var directory in options.WritableDirectories)
+            {
+                profile.GrantDirectory(
+                    directory,
+                    FileSystemRights.Modify | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize);
+            }
+
+            (isolationPolicy ?? RequiredWindowsPluginIsolationPolicy.Instance).Verify(options.PluginId, profile);
 
             using var attributes = new ProcessAttributeList(
                 childStandardInput,
                 childStandardOutput,
                 childStandardError,
-                profile?.SidPointer);
+                profile.SidPointer);
             var startupInfo = new NativeMethods.StartupInfoEx
             {
                 StartupInfo = new NativeMethods.StartupInfo
@@ -175,6 +176,10 @@ internal sealed class WindowsSandboxedProcess : IAsyncDisposable
             threadHandle = IntPtr.Zero;
             retainedProcessHandle = new SafeKernelObjectHandle(processHandle);
             processHandle = IntPtr.Zero;
+            if (!NativeMethods.IsAppContainerProcess(retainedProcessHandle))
+            {
+                throw new InvalidOperationException("Plugin process did not enter the required AppContainer sandbox.");
+            }
 
             var input = new FileStream(
                 parentStandardInput,
@@ -351,6 +356,7 @@ internal sealed class PluginJobObject : IDisposable
             BasicLimitInformation = new NativeMethods.JobObjectBasicLimitInformation
             {
                 LimitFlags = NativeMethods.JobObjectLimitKillOnJobClose
+                    | NativeMethods.JobObjectLimitDieOnUnhandledException
                     | NativeMethods.JobObjectLimitActiveProcess
                     | NativeMethods.JobObjectLimitProcessMemory
                     | NativeMethods.JobObjectLimitJobMemory,
@@ -532,9 +538,9 @@ internal sealed class ProcessAttributeList : IDisposable
         SafeFileHandle standardInput,
         SafeFileHandle standardOutput,
         SafeFileHandle standardError,
-        IntPtr? appContainerSid)
+        IntPtr appContainerSid)
     {
-        var count = appContainerSid.HasValue ? 2 : 1;
+        const int count = 2;
         nuint size = 0;
         _ = NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, count, 0, ref size);
         if (size == 0)
@@ -566,20 +572,17 @@ internal sealed class ProcessAttributeList : IDisposable
                 _handleList,
                 checked((nuint)(IntPtr.Size * handles.Length)));
 
-            if (appContainerSid.HasValue)
+            var capabilities = new NativeMethods.SecurityCapabilities
             {
-                var capabilities = new NativeMethods.SecurityCapabilities
-                {
-                    AppContainerSid = appContainerSid.Value,
-                };
-                _securityCapabilities = Marshal.AllocHGlobal(
-                    Marshal.SizeOf<NativeMethods.SecurityCapabilities>());
-                Marshal.StructureToPtr(capabilities, _securityCapabilities, fDeleteOld: false);
-                Update(
-                    NativeMethods.ProcThreadAttributeSecurityCapabilities,
-                    _securityCapabilities,
-                    checked((nuint)Marshal.SizeOf<NativeMethods.SecurityCapabilities>()));
-            }
+                AppContainerSid = appContainerSid,
+            };
+            _securityCapabilities = Marshal.AllocHGlobal(
+                Marshal.SizeOf<NativeMethods.SecurityCapabilities>());
+            Marshal.StructureToPtr(capabilities, _securityCapabilities, fDeleteOld: false);
+            Update(
+                NativeMethods.ProcThreadAttributeSecurityCapabilities,
+                _securityCapabilities,
+                checked((nuint)Marshal.SizeOf<NativeMethods.SecurityCapabilities>()));
         }
         catch
         {
@@ -766,6 +769,7 @@ internal static class NativeMethods
     internal const uint JobObjectLimitActiveProcess = 0x00000008;
     internal const uint JobObjectLimitProcessMemory = 0x00000100;
     internal const uint JobObjectLimitJobMemory = 0x00000200;
+    internal const uint JobObjectLimitDieOnUnhandledException = 0x00000400;
     internal const uint JobObjectLimitKillOnJobClose = 0x00002000;
     internal const uint JobObjectCpuRateControlEnable = 0x00000001;
     internal const uint JobObjectCpuRateControlHardCap = 0x00000004;

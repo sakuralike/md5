@@ -11,6 +11,7 @@ using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Runtime;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.Theme;
+using PasswordDetective.Desktop.Plugins.Windows;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -28,6 +29,8 @@ public sealed class PluginProcessHostTests : IDisposable
     {
         await using var host = await StartHostAsync(memoryLimitBytes: 256L * 1024 * 1024);
 
+        Assert.True(host.IsAppContainer);
+
         var initialized = await host.InitializeAsync("0.1.0", ["command.echo"], TimeSpan.FromSeconds(5));
         var health = await host.InvokeAsync<object, PdppHealthResult>(
             PdppProtocol.HealthCheckMethod,
@@ -40,6 +43,23 @@ public sealed class PluginProcessHostTests : IDisposable
         Assert.Equal("healthy", health.Status);
         Assert.Equal("synthetic-message", echo.Output);
         Assert.Equal("csharp", echo.Language);
+    }
+
+    [Fact]
+    public async Task HostRejectsPluginWhenExplicitIsolationPoliciesAreMissing()
+    {
+        var options = new PluginProcessStartOptions
+        {
+            PluginId = $"synthetic.explicit-isolation{Guid.NewGuid():N}",
+            ExecutablePath = FindSyntheticPlugin(),
+            WorkingDirectory = _workingDirectory,
+            MemoryLimitBytes = 256L * 1024 * 1024,
+            ActiveProcessLimit = 1,
+            DeleteAppContainerProfileOnDispose = true,
+        };
+
+        await Assert.ThrowsAsync<PluginExplicitIsolationException>(
+            () => PluginProcessHost.StartAsync(options));
     }
 
     [Fact]
@@ -140,7 +160,9 @@ public sealed class PluginProcessHostTests : IDisposable
                 ActiveProcessLimit = 1,
                 DeleteAppContainerProfileOnDispose = true,
             };
-            await using var host = await PluginProcessHost.StartAsync(options);
+            await using var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
+                options,
+                NoOpWindowsPluginIsolationPolicy.Instance);
             await host.InitializeAsync("0.1.0", [], TimeSpan.FromSeconds(5));
 
             var result = await ExecuteAsync<SyntheticProbeResult>(host, "probe", new
@@ -149,10 +171,12 @@ public sealed class PluginProcessHostTests : IDisposable
                 host = IPAddress.Loopback.ToString(),
                 port,
             });
+            var registry = await ExecuteAsync<SyntheticRegistryResult>(host, "registry-write", null);
 
             Assert.True(host.IsAppContainer);
             Assert.False(result.FileRead);
             Assert.False(result.NetworkConnected);
+            Assert.False(registry.RegistryWrite);
         }
         finally
         {
@@ -268,8 +292,12 @@ public sealed class PluginProcessHostTests : IDisposable
             WorkingDirectory = _workingDirectory,
             MemoryLimitBytes = 256L * 1024 * 1024,
             ActiveProcessLimit = 1,
-        }.WithoutAppContainerForTests();
-        await using var host = await PluginProcessHost.StartAsync(options, default, broker);
+        };
+        await using var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
+            options,
+            NoOpWindowsPluginIsolationPolicy.Instance,
+            default,
+            broker);
         await host.InitializeAsync("0.1.0", ["file:read:selected"], TimeSpan.FromSeconds(5));
 
         var result = await ExecuteAsync<SyntheticFileReadResult>(
@@ -449,8 +477,10 @@ public sealed class PluginProcessHostTests : IDisposable
             MemoryLimitBytes = memoryLimitBytes,
             ActiveProcessLimit = 4,
             MaximumMessageBytes = maximumMessageBytes,
-        }.WithoutAppContainerForTests();
-        return PluginProcessHost.StartAsync(options);
+        };
+        return PluginProcessHost.StartWithIsolationPolicyAsync(
+            options,
+            NoOpWindowsPluginIsolationPolicy.Instance);
     }
 
     private static void CreatePrivateDirectory(string path)
@@ -551,6 +581,7 @@ public sealed class PluginProcessHostTests : IDisposable
     private sealed record SyntheticProbeResult(bool FileRead, bool NetworkConnected, string Language);
     private sealed record SyntheticEnvironmentResult(bool Present, string Language);
     private sealed record SyntheticFileReadResult(string Content, string Language);
+    private sealed record SyntheticRegistryResult(bool RegistryWrite, string Language);
 
     private sealed class RecordingPluginApiBroker : IPluginApiBroker
     {

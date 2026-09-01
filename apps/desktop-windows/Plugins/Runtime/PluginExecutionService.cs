@@ -6,6 +6,7 @@ using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.Theme;
+using PasswordDetective.Desktop.Plugins.Windows;
 
 namespace PasswordDetective.Desktop.Plugins.Runtime;
 
@@ -68,18 +69,35 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly PluginPrivateStorage _privateStorage;
     private readonly IPluginApiBroker? _apiBroker;
     private readonly IPluginThemeService? _themeService;
+    private readonly IWindowsPluginIsolationPolicy _isolationPolicy;
 
     public PluginExecutionService(
         PluginStoragePaths paths,
         PluginLogStore logs,
         IPluginApiBroker? apiBroker = null,
         IPluginThemeService? themeService = null)
+        : this(
+            paths,
+            logs,
+            apiBroker,
+            themeService,
+            RequiredWindowsPluginIsolationPolicy.Instance)
+    {
+    }
+
+    internal PluginExecutionService(
+        PluginStoragePaths paths,
+        PluginLogStore logs,
+        IPluginApiBroker? apiBroker,
+        IPluginThemeService? themeService,
+        IWindowsPluginIsolationPolicy isolationPolicy)
     {
         _paths = paths;
         _logs = logs;
         _privateStorage = new PluginPrivateStorage(paths);
         _apiBroker = apiBroker;
         _themeService = themeService;
+        _isolationPolicy = isolationPolicy;
     }
 
     public async Task ValidateAsync(
@@ -303,8 +321,9 @@ public sealed class PluginExecutionService : IPluginExecutionService
         };
         try
         {
-            var host = await PluginProcessHost.StartAsync(
+            var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
                 options,
+                _isolationPolicy,
                 cancellationToken,
                 hostRequestHandler);
             return new PluginRunSession(host, runDirectory);

@@ -9,6 +9,7 @@ using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Runtime;
 using PasswordDetective.Desktop.Plugins.Safety;
 using PasswordDetective.Desktop.Plugins.Storage;
+using PasswordDetective.Desktop.Plugins.Windows;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -268,7 +269,12 @@ public sealed class PluginInstallationTests : IDisposable
         var paths = new PluginStoragePaths(Path.Combine(_directory, "real-plugins"));
         var registry = new PluginRegistry(paths);
         var logs = new PluginLogStore(paths);
-        var execution = new PluginExecutionService(paths, logs);
+        var execution = new PluginExecutionService(
+            paths,
+            logs,
+            apiBroker: null,
+            themeService: null,
+            NoOpWindowsPluginIsolationPolicy.Instance);
         var installer = CreateInstaller(paths, registry, execution);
         var installed = await installer.InstallLocalAsync(
             package,
@@ -328,7 +334,12 @@ public sealed class PluginInstallationTests : IDisposable
         var paths = new PluginStoragePaths(Path.Combine(_directory, "official-inspector-plugins"));
         var registry = new PluginRegistry(paths);
         var logs = new PluginLogStore(paths);
-        var execution = new PluginExecutionService(paths, logs);
+        var execution = new PluginExecutionService(
+            paths,
+            logs,
+            apiBroker: null,
+            themeService: null,
+            NoOpWindowsPluginIsolationPolicy.Instance);
         var installer = CreateInstaller(paths, registry, execution);
         var installed = await installer.InstallLocalAsync(
             inspectorPackage,
@@ -353,7 +364,7 @@ public sealed class PluginInstallationTests : IDisposable
     }
 
     [Fact]
-    public async Task DynamicReviewExecutorUsesFreshAppContainerAndLeavesDestructionProof()
+    public async Task DynamicReviewExecutorForcesAllHiddenCanariesInFreshAppContainers()
     {
         var pluginOutput = FindSyntheticPluginOutput();
         var runtimeFiles = Directory.EnumerateFiles(pluginOutput)
@@ -368,8 +379,12 @@ public sealed class PluginInstallationTests : IDisposable
             _directory,
             pluginId: "com.synthetic.dynamic-review",
             runtimeFiles: runtimeFiles);
+        var inspection = await new PluginPackageVerifier().VerifyAsync(package);
+        Assert.Equal(["echo"], inspection.Manifest.Commands.Select(command => command.Id));
         var workspace = Path.Combine(_directory, "dynamic-review-workspace");
-        var executor = new DynamicReviewExecutor();
+        var executor = new DynamicReviewExecutor(
+            new PluginPackageVerifier(),
+            NoOpWindowsPluginIsolationPolicy.Instance);
 
         var result = await executor.ExecuteAsync(
             package,
@@ -377,12 +392,23 @@ public sealed class PluginInstallationTests : IDisposable
             workspace,
             freshEnvironment: true);
 
-        Assert.Equal("passed", result.Outcome);
+        Assert.Equal("blocked", result.Outcome);
         Assert.True(result.EvidenceComplete);
         Assert.True(result.FreshEnvironment);
         Assert.Equal(64, result.DestructionProofSha256.Length);
         Assert.True(result.Summary.TryGetValue("appcontainer", out var appContainer));
         Assert.True(Assert.IsType<bool>(appContainer));
+        Assert.True(Assert.IsType<bool>(result.Summary["canary_probe_invoked"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["canary_environment_invoked"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["canary_spawn_child_invoked"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["canary_hang_invoked"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["canary_oversized_output_invoked"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["timeout_enforced"]));
+        Assert.True(Assert.IsType<bool>(result.Summary["message_limit_enforced"]));
+        Assert.Contains(result.Findings, finding => finding.RuleId == "PD-DYNAMIC-013" && finding.Blocked);
+        Assert.False(Assert.IsType<bool>(result.Summary["canary_file_read"]));
+        Assert.False(Assert.IsType<bool>(result.Summary["canary_network_connected"]));
+        Assert.False(Assert.IsType<bool>(result.Summary["canary_secret_visible"]));
         Assert.False(Directory.Exists(Path.Combine(workspace, "synthetic-task-001")));
     }
 

@@ -288,6 +288,30 @@ class Settings(BaseSettings):
                 raise ValueError("非本地环境的 SMTP 通知后端必须启用 STARTTLS 或 SSL")
         return self
 
+    @model_validator(mode="after")
+    def validate_production_plugin_signer(self) -> Settings:
+        if self.app_env != "production":
+            return self
+        self.validate_direct_message_keys()
+        if self.desktop_plugin_signing_backend != "openbao_transit":
+            raise ValueError("生产环境插件平台签章必须使用 OpenBao Transit")
+
+        signer_url = urlsplit(self.desktop_plugin_signing_url.strip())
+        if (
+            signer_url.scheme not in {"http", "https"}
+            or not signer_url.netloc
+            or signer_url.query
+            or signer_url.fragment
+            or signer_url.username
+            or signer_url.password
+        ):
+            raise ValueError("生产环境 OpenBao Transit 必须配置有效的签章服务 URL")
+        if not self.desktop_plugin_signing_token.get_secret_value().strip():
+            raise ValueError("生产环境 OpenBao Transit 必须配置签章令牌")
+        if not self.desktop_plugin_signing_key.strip():
+            raise ValueError("生产环境 OpenBao Transit 必须配置签章密钥名称")
+        return self
+
     @property
     def candidate_secret_key_map(self) -> dict[str, str]:
         raw = self.candidate_secret_keyring.get_secret_value().strip()

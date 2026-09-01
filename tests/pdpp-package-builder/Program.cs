@@ -243,7 +243,9 @@ static async Task ValidateAppContainerAsync(
             ReadOnlyDirectories = [root],
             DeleteAppContainerProfileOnDispose = true,
         };
-        await using var host = await PluginProcessHost.StartAsync(options);
+        await using var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
+            options,
+            NoOpWindowsPluginIsolationPolicy.Instance);
         var initialized = await host.InitializeAsync(
             PluginPackageVerifier.HostVersion,
             inspection.Manifest.Capabilities.Required,

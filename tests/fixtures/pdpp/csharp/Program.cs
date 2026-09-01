@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -130,10 +131,32 @@ static async Task ExecuteCommandAsync(string id, JsonElement parameters)
                 language = "csharp",
             });
             return;
+        case "registry-write":
+            var registryWrite = false;
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var key = Registry.CurrentUser.CreateSubKey(
+                        @"Software\PasswordDetective\PluginCanary");
+                    key.SetValue("probe", "dynamic-review", RegistryValueKind.String);
+                    registryWrite = true;
+                }
+                catch
+                {
+                }
+            }
+
+            await WriteResultAsync(id, new
+            {
+                registry_write = registryWrite,
+                language = "csharp",
+            });
+            return;
         case "oversized-output":
             await WriteResultAsync(id, new
             {
-                output = new string('x', 16 * 1024),
+                output = new string('x', 2 * 1024 * 1024),
                 language = "csharp",
             });
             return;

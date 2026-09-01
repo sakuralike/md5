@@ -165,6 +165,7 @@ try {
     Invoke-Checked dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
     Invoke-Checked dotnet test ./apps/desktop-windows.tests/PasswordDetective.Desktop.Tests.csproj --configuration Release
     if ($IncludePluginConformance) {
+        Invoke-Checked pwsh ./scripts/test-pdpp-sandbox-core.ps1
         Invoke-Checked pwsh ./scripts/test-pdpp-conformance.ps1
         Invoke-Checked pwsh ./scripts/build-synthetic-pdpkg.ps1
     }

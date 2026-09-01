@@ -24,7 +24,6 @@ public sealed class PluginProcessStartOptions
     public int CpuRatePercent { get; init; } = 25;
     public int MaximumMessageBytes { get; init; } = Protocol.PdppProtocol.DefaultMaximumMessageBytes;
     public int MaximumStandardErrorBytes { get; init; } = 16 * 1024;
-    internal bool UseAppContainer { get; init; } = true;
     internal bool DeleteAppContainerProfileOnDispose { get; init; }
 
     internal string AppContainerProfileName
@@ -100,20 +99,4 @@ public sealed class PluginProcessStartOptions
         }
     }
 
-    internal PluginProcessStartOptions WithoutAppContainerForTests() => new()
-    {
-        PluginId = PluginId,
-        ExecutablePath = ExecutablePath,
-        WorkingDirectory = WorkingDirectory,
-        Arguments = Arguments,
-        Environment = Environment,
-        ReadOnlyDirectories = ReadOnlyDirectories,
-        WritableDirectories = WritableDirectories,
-        MemoryLimitBytes = MemoryLimitBytes,
-        ActiveProcessLimit = ActiveProcessLimit,
-        CpuRatePercent = CpuRatePercent,
-        MaximumMessageBytes = MaximumMessageBytes,
-        MaximumStandardErrorBytes = MaximumStandardErrorBytes,
-        UseAppContainer = false,
-    };
 }

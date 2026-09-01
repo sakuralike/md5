@@ -59,9 +59,24 @@ public sealed class PluginProcessHost : IAsyncDisposable
         PluginProcessStartOptions options,
         CancellationToken cancellationToken = default,
         IPdppHostRequestHandler? hostRequestHandler = null)
+        => StartCoreAsync(options, cancellationToken, hostRequestHandler, isolationPolicy: null);
+
+    internal static Task<PluginProcessHost> StartWithIsolationPolicyAsync(
+        PluginProcessStartOptions options,
+        IWindowsPluginIsolationPolicy isolationPolicy,
+        CancellationToken cancellationToken = default,
+        IPdppHostRequestHandler? hostRequestHandler = null)
+        => StartCoreAsync(options, cancellationToken, hostRequestHandler, isolationPolicy);
+
+    private static Task<PluginProcessHost> StartCoreAsync(
+        PluginProcessStartOptions options,
+        CancellationToken cancellationToken,
+        IPdppHostRequestHandler? hostRequestHandler,
+        IWindowsPluginIsolationPolicy? isolationPolicy)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var process = WindowsSandboxedProcess.Start(options);
+        var process = new WindowsSandboxedProcessFactory(
+            isolationPolicy ?? RequiredWindowsPluginIsolationPolicy.Instance).Start(options);
         return Task.FromResult(new PluginProcessHost(process, options, hostRequestHandler));
     }
 

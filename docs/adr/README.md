@@ -21,6 +21,11 @@
 | [ADR-0017](./0017-provider-neutral-smtp-email-delivery.md) | 提供商无关的 SMTP 邮件投递 | 已接受 |
 | [ADR-0018](./0018-community-social-platform-boundaries.md) | 社区社交平台边界、事件一致性与私信安全 | 已接受，分阶段实施 |
 | [ADR-0019](./0019-web-pending-pool-and-trusted-desktop-promotion.md) | Web 待验证池与可信桌面成功直入 | 已接受 |
+| [ADR-0020](./0020-plugin-process-isolation-model.md) | 插件进程隔离模型与唯一通路 | 已接受 |
+| [ADR-0021](./0021-appcontainer-jobobject-boundary.md) | AppContainer、Job Object 与显式 OS 隔离边界 | 已接受 |
+| [ADR-0022](./0022-parameterized-capability-model.md) | 参数化能力模型与 Tier 授权 | 已接受，分阶段实施 |
+| [ADR-0023](./0023-plugin-signing-and-revocation.md) | 插件平台签章、OpenBao Transit 与撤销策略 | 已接受 |
+| [ADR-0024](./0024-host-self-protection.md) | 宿主自我降权与双进程边界 | 已接受，P2 实施 |
 
 
 新增或改变跨模块约束时，应创建新 ADR，不直接改写已接受决策的历史结论。

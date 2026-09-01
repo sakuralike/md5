@@ -527,6 +527,25 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 合规与数据治理 | 未实施 | 隐私政策、条款、授权记录、投诉删除和数据保留配置待实施 |
 | 发布与运维 | 基础设施骨架 | Docker/CI 基线已有；预生产、监控告警、运行手册、RC、灰度、回滚和联合签字待实施 |
 
+## 2026-09-02 三端架构重构 P1：治理补齐
+
+| 范围 | 状态 | 说明 |
+|---|---|---|
+| 插件架构 ADR | 已完成 | 新增 ADR-0020～0024，固化独立进程/唯一通路、AppContainer 与 Job Object、参数化能力、平台签章撤销、宿主自我降权边界 |
+| 插件威胁模型 | 已完成 | 重写 `docs/threat-model/initial-threat-model.md`，新增三端信任边界、8 类资产和 PT-01～PT-20 共 20 条插件威胁及验证方式 |
+| 风险治理登记 | 已完成（待批准项） | `security/risk-acceptances.json` 保持正式 `acceptances` 为空；新增两个有负责人、缓解措施、工单和到期日的治理登记，状态为 `pending_approval` |
+| P1 与后续边界 | 已明确 | 双进程宿主、Rust IPC 内核、Capability v2、声明式 `ui:panel` 和 Runner 独立 VM 不计入本轮完成 |
+
+## 2026-09-02 三端架构重构 P2：Rust IPC 合同第一切片
+
+| 范围 | 状态 | 说明 |
+|---|---|---|
+| `Pdpp.Sandbox.Core` Rust 骨架 | 已完成（合同层） | `packages/pdpp-sandbox-core` 提供 Windows IPC 可执行骨架、JSON-RPC 方法白名单、1 MiB/深度 32 限制、AppContainer 生命周期、文件句柄 Broker、`attest.host`、`env.sanitize` 和强制 canary 探针 |
+| 原生安全指令 | 部分完成，未切换生产 | `sandbox.create`/`sandbox.destroy`/`fs.grant_read`/`fs.read_chunk`/`process.spawn`/`process.terminate`/`canary.run` 已实现并测试；WFP 安装使用 Rust WFP API（管理员不足时回退隔离脚本），注册表 ACL 由 Rust Win32 安全 API 读取校验，安装仍由管理员脚本负责 |
+| Host.UI / Host.Sandbox 边界 | 已完成（接口层） | 新增 `HostSandboxProcess`、`SandboxCoreClient` 和有界 `HostSandboxPipe`；现有 C# AppContainer 保留为未部署 Rust 制品时的兼容回退 |
+| C# 替换 seam | 已完成 | 新增 `ISandboxedProcessFactory`/`WindowsSandboxedProcessFactory`，现有实现作为可替换基准 |
+| 合同验证 | 已完成 | Rust 12 项单测、格式、锁定 Release 构建、Schema 方法集合校验、桌面构建与 PDPP conformance 通过 |
+
 ## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
 
 | 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |

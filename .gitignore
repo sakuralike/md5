@@ -43,3 +43,4 @@ Thumbs.db
 logs/
 artifacts/
 tests/fixtures/pdpp/rust/target/
+packages/pdpp-sandbox-core/target/

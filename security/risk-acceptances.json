@@ -1,4 +1,36 @@
 {
   "schema_version": 1,
-  "acceptances": []
+  "acceptances": [],
+  "governance_register": {
+    "status": "pending_approval",
+    "description": "插件安全治理风险登记。该登记不替代镜像/Secret 发布门禁，也不表示生产豁免已获批准。",
+    "entries": [
+      {
+        "id": "PRA-2026-001",
+        "scope": "plugin-review-runner-isolation",
+        "finding": "独立 Windows VM、隔离网络和真实 mTLS 证据尚未完成",
+        "severity": "HIGH",
+        "owner": "plugin-security-owner@example.invalid",
+        "approved_by": null,
+        "status": "pending_approval",
+        "reason": "在独立 Runner 证据完成前，禁止将动态审核结果作为生产发布充分条件。",
+        "mitigation": "继续使用静态审核、桌面 AppContainer、强制 canary、失败关闭和人工审核；完成隔离 VM、mTLS 和网络出口验收后关闭。",
+        "ticket": "PLUGIN-SEC-2026-001",
+        "expires_on": "2026-09-30"
+      },
+      {
+        "id": "PRA-2026-002",
+        "scope": "host-self-protection",
+        "finding": "Host.UI 与 Host.Sandbox 双进程及低完整性 IPC 尚未交付",
+        "severity": "HIGH",
+        "owner": "desktop-security-owner@example.invalid",
+        "approved_by": null,
+        "status": "pending_approval",
+        "reason": "当前单进程宿主仍是受信计算基，双进程拆分属于 P2 结构重构，不应伪装成已完成能力。",
+        "mitigation": "保持插件 AppContainer、Job Object、显式网络/注册表策略、协议限制和安全模式；P2 先完成契约测试再切换。",
+        "ticket": "PLUGIN-SEC-2026-002",
+        "expires_on": "2026-10-15"
+      }
+    ]
+  }
 }

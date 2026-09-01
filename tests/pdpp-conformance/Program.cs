@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PasswordDetective.Desktop.Plugins;
 using PasswordDetective.Desktop.Plugins.Protocol;
+using PasswordDetective.Desktop.Plugins.Windows;
 
 if (args.Length != 1 || !File.Exists(args[0]))
 {
@@ -43,7 +44,9 @@ foreach (var entry in matrix)
             ActiveProcessLimit = 2,
             DeleteAppContainerProfileOnDispose = true,
         };
-        await using var host = await PluginProcessHost.StartAsync(options);
+        await using var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
+            options,
+            NoOpWindowsPluginIsolationPolicy.Instance);
         var initialized = await host.InitializeAsync(
             "0.1.0",
             ["command.echo"],

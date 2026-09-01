@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://password-detective.invalid/pdpp/sandbox-core-v1.schema.json",
+  "title": "Pdpp Sandbox Core IPC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jsonrpc", "id", "method", "params"],
+  "properties": {
+    "jsonrpc": { "const": "2.0" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "method": {
+      "type": "string",
+      "enum": [
+        "sandbox.create",
+        "sandbox.destroy",
+        "process.spawn",
+        "process.terminate",
+        "fs.grant_read",
+        "fs.read_chunk",
+        "fs.grant_write",
+        "env.sanitize",
+        "net.block_outbound",
+        "reg.deny_write",
+        "canary.run",
+        "attest.host",
+        "shutdown"
+      ]
+    },
+    "params": { "type": "object" }
+  }
+}

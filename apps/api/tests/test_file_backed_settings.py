@@ -13,6 +13,21 @@ def _write(path: Path, value: str) -> Path:
     return path
 
 
+def _production_settings(*, include_app_secret: bool = True, **overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "app_env": "production",
+        "browser_cookie_secure": True,
+        "desktop_plugin_signing_backend": "openbao_transit",
+        "desktop_plugin_signing_url": "http://openbao:8200",
+        "desktop_plugin_signing_token": "synthetic-openbao-token",
+        "desktop_plugin_signing_key": "password-detective-plugin-platform",
+    }
+    if include_app_secret:
+        values["app_secret_key"] = "a" * 48
+    values.update(overrides)
+    return Settings(**values)
+
+
 def test_settings_load_supported_values_from_secret_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -24,7 +39,7 @@ def test_settings_load_supported_values_from_secret_files(
     monkeypatch.setenv("CANDIDATE_SECRET_KEYRING_FILE", str(keyring))
     monkeypatch.setenv("CANDIDATE_SECRET_DEDUP_KEY_FILE", str(dedup))
 
-    settings = Settings(app_env="production", browser_cookie_secure=True)
+    settings = _production_settings(include_app_secret=False)
 
     assert settings.app_secret_key == "a" * 48
     assert settings.candidate_secret_key_map == {"v1": "b" * 48}
@@ -71,6 +86,32 @@ def test_direct_message_keyring_loads_from_secret_file(
     keyring = _write(tmp_path / "direct_message_keyring", '{"v1":"' + "d" * 48 + '"}\n')
     monkeypatch.setenv("DIRECT_MESSAGE_KEYRING_FILE", str(keyring))
 
-    settings = Settings(app_env="production", browser_cookie_secure=True)
+    settings = _production_settings()
 
     assert settings.direct_message_key_map == {"v1": "d" * 48}
+
+
+def test_production_rejects_derived_plugin_signatures() -> None:
+    with pytest.raises(ValidationError, match="OpenBao Transit"):
+        _production_settings(desktop_plugin_signing_backend="derived")
+
+
+def test_production_requires_openbao_transit_token() -> None:
+    with pytest.raises(ValidationError, match="OpenBao Transit"):
+        _production_settings(desktop_plugin_signing_token="")
+
+
+def test_production_requires_openbao_transit_url() -> None:
+    with pytest.raises(ValidationError, match="OpenBao Transit"):
+        _production_settings(desktop_plugin_signing_url="")
+
+
+def test_production_requires_openbao_transit_key_name() -> None:
+    with pytest.raises(ValidationError, match="OpenBao Transit"):
+        _production_settings(desktop_plugin_signing_key="")
+
+
+def test_production_accepts_complete_openbao_transit_configuration() -> None:
+    settings = _production_settings()
+
+    assert settings.desktop_plugin_signing_backend == "openbao_transit"

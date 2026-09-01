@@ -9,4 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\desktop-windows\PasswordDetective.Desktop.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\scripts\desktop-plugin-isolation.ps1" Link="desktop-plugin-isolation.ps1" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
