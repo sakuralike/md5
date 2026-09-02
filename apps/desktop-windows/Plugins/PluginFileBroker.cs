@@ -91,6 +91,12 @@ public sealed class PluginFileBroker : IDisposable
             }
         }
 
+        if (granted.Handle is null)
+        {
+            throw new UnauthorizedAccessException("The plugin file grant is write-only.");
+        }
+        var readHandle = granted.Handle;
+
         var length = granted.AuthorizedLength;
         if (offset >= length)
         {
@@ -100,11 +106,74 @@ public sealed class PluginFileBroker : IDisposable
         var requested = (int)Math.Min(count, length - offset);
         var buffer = GC.AllocateUninitializedArray<byte>(requested);
         var read = await RandomAccess.ReadAsync(
-            granted.Handle,
+            readHandle,
             buffer,
             offset,
             cancellationToken);
         return read == buffer.Length ? buffer : buffer[..read];
+    }
+
+    public PluginFileGrant GrantWrite(string authorizedPath)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var fullPath = Path.GetFullPath(authorizedPath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            throw new DirectoryNotFoundException("The authorized file directory does not exist.");
+        }
+
+        var length = File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0;
+        if (length > _maximumFileBytes)
+        {
+            throw new InvalidOperationException("The authorized file exceeds the broker size limit.");
+        }
+
+        var grant = new PluginFileGrant(Guid.NewGuid(), Path.GetFileName(fullPath), length);
+        lock (_sync)
+        {
+            _grants.Add(grant.GrantId, new GrantedFile(null, null, length, fullPath));
+        }
+
+        return grant;
+    }
+
+    public async ValueTask<int> WriteAsync(
+        Guid grantId,
+        long offset,
+        ReadOnlyMemory<byte> content,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (offset < 0 || content.Length == 0 || content.Length > _maximumChunkBytes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(content));
+        }
+
+        GrantedFile granted;
+        lock (_sync)
+        {
+            if (!_grants.TryGetValue(grantId, out granted!) || granted.Path is null)
+            {
+                throw new UnauthorizedAccessException("The plugin write grant is missing or read-only.");
+            }
+        }
+
+        if (offset > _maximumFileBytes - content.Length)
+        {
+            throw new InvalidOperationException("The authorized file exceeds the broker size limit.");
+        }
+
+        await using var stream = new FileStream(
+            granted.Path,
+            FileMode.OpenOrCreate,
+            FileAccess.Write,
+            FileShare.Read,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        stream.Position = offset;
+        await stream.WriteAsync(content, cancellationToken);
+        return content.Length;
     }
 
     public async ValueTask<string> DigestAsync(
@@ -131,6 +200,12 @@ public sealed class PluginFileBroker : IDisposable
             }
         }
 
+        if (granted.Handle is null)
+        {
+            throw new UnauthorizedAccessException("The plugin file grant is write-only.");
+        }
+        var digestHandle = granted.Handle;
+
         using var hash = IncrementalHash.CreateHash(hashAlgorithm);
         var buffer = GC.AllocateUninitializedArray<byte>(_maximumChunkBytes);
         long offset = 0;
@@ -138,7 +213,7 @@ public sealed class PluginFileBroker : IDisposable
         {
             var requested = (int)Math.Min(buffer.Length, granted.AuthorizedLength - offset);
             var read = await RandomAccess.ReadAsync(
-                granted.Handle,
+                digestHandle,
                 buffer.AsMemory(0, requested),
                 offset,
                 cancellationToken);
@@ -191,10 +266,11 @@ public sealed class PluginFileBroker : IDisposable
     }
 
     private sealed record GrantedFile(
-        SafeFileHandle Handle,
-        FileStream Stream,
-        long AuthorizedLength) : IDisposable
+        SafeFileHandle? Handle,
+        FileStream? Stream,
+        long AuthorizedLength,
+        string? Path = null) : IDisposable
     {
-        public void Dispose() => Stream.Dispose();
+        public void Dispose() => Stream?.Dispose();
     }
 }

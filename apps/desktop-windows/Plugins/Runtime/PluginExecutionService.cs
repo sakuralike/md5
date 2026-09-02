@@ -72,6 +72,7 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly IPluginThemeService? _themeService;
     private readonly IPluginPanelHost? _panelHost;
     private readonly IPluginNotificationHost? _notificationHost;
+    private readonly IPluginClipboardHost? _clipboardHost;
     private readonly IWindowsPluginIsolationPolicy _isolationPolicy;
 
     public PluginExecutionService(
@@ -80,7 +81,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
         IPluginApiBroker? apiBroker = null,
         IPluginThemeService? themeService = null,
         IPluginPanelHost? panelHost = null,
-        IPluginNotificationHost? notificationHost = null)
+        IPluginNotificationHost? notificationHost = null,
+        IPluginClipboardHost? clipboardHost = null)
         : this(
             paths,
             logs,
@@ -88,7 +90,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             themeService,
             RequiredWindowsPluginIsolationPolicy.Instance,
             panelHost,
-            notificationHost)
+            notificationHost,
+            clipboardHost)
     {
     }
 
@@ -99,7 +102,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
         IPluginThemeService? themeService,
         IWindowsPluginIsolationPolicy isolationPolicy,
         IPluginPanelHost? panelHost = null,
-        IPluginNotificationHost? notificationHost = null)
+        IPluginNotificationHost? notificationHost = null,
+        IPluginClipboardHost? clipboardHost = null)
     {
         _paths = paths;
         _logs = logs;
@@ -108,6 +112,7 @@ public sealed class PluginExecutionService : IPluginExecutionService
         _themeService = themeService;
         _panelHost = panelHost;
         _notificationHost = notificationHost;
+        _clipboardHost = clipboardHost;
         _isolationPolicy = isolationPolicy;
     }
 
@@ -167,7 +172,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             _themeService,
             installedDirectory,
             _panelHost,
-            _notificationHost);
+            _notificationHost,
+            _clipboardHost);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

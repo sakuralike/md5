@@ -86,6 +86,40 @@ public sealed class PdppHostClient
             new { title, message, severity, duration_seconds = durationSeconds },
             cancellationToken);
 
+    public Task<JsonElement> ReadClipboardAsync(CancellationToken cancellationToken = default) =>
+        CallAsync("host/clipboard/read", new { }, cancellationToken);
+
+    public Task<JsonElement> WriteClipboardAsync(
+        string text,
+        CancellationToken cancellationToken = default) =>
+        CallAsync("host/clipboard/write", new { text }, cancellationToken);
+
+    public async Task<int> WriteFileAsync(
+        string fileReference,
+        long offset,
+        ReadOnlyMemory<byte> content,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync(
+            "host/file/write",
+            new { file_ref = fileReference, offset, data_base64 = Convert.ToBase64String(content.Span) },
+            cancellationToken);
+        return result.GetProperty("written").GetInt32();
+    }
+
+    public async Task<string> ComputeHashAsync(
+        string algorithm,
+        ReadOnlyMemory<byte> content,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync(
+            "host/compute/hash",
+            new { algorithm, data_base64 = Convert.ToBase64String(content.Span) },
+            cancellationToken);
+        return result.GetProperty("digest").GetString()
+            ?? throw new InvalidOperationException("宿主返回了无效的摘要结果。");
+    }
+
     public async Task<PluginFileReadResult> ReadFileAsync(
         string fileReference,
         long offset,

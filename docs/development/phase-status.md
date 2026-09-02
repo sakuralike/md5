@@ -563,6 +563,20 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 | SDK | 已完成（P3 第一轮） | .NET SDK 新增 `ShowPanelAsync` 和 `PdppPanelControl` |
 | 验收 | 已完成（P3 第一轮） | 面板校验/渲染专项、Capability v2、响应 Schema、Rust 管道、Desktop 全量测试通过 |
 
+## 2026-09-02 三端架构重构 P3：宿主能力与多语言 SDK 第二轮
+
+| 范围 | 状态 | 说明 |
+|---|---|---|
+| `file:write:scoped` | 已完成（P3 第二轮） | 宿主仅对用户选择的路径创建不透明 `file_ref` 写入授权，单块最多 512 KiB、文件最多 1 GiB；插件不获得文件句柄或原始路径 |
+| `clipboard:read/write` | 已完成（P3 第二轮） | WPF 宿主 UI 线程中转纯文本，单次最多 64 KiB；权限缺失或宿主不可用时失败关闭 |
+| `compute:hash` | 已完成（P3 第二轮） | 宿主支持 MD5/SHA-1/SHA-256/SHA-512，输入最多 4 MiB，协议与运行时均校验边界 |
+| 协议与权限 | 已完成（P3 第二轮） | PDPP 方法白名单、参数 Schema、权限白名单和 `file-write` 命令输入格式已同步 |
+| SDK | 已完成（P3 第二轮） | .NET、Go、Rust、Python SDK 均提供文件写入、剪贴板和摘要调用；新增请求封装测试 |
+| `pdpp-lint` | 已完成（P3 第二轮） | 新增本地 `.pdpkg` 结构、路径、Manifest、Provenance 和必需文件检查，输出 JSON 与包 SHA-256；规则仍是轻量前置检查，不替代服务端完整审核 |
+| 验收 | 已完成（P3 第二轮） | 宿主新增能力专项、四语言 SDK 测试、协议 JSON 校验和 `git diff --check` 通过；桌面全量、Rust 内核/合规、Runner Release 与 Staging 复验在本轮发布门禁中执行 |
+
+本轮未完成独立 Runner VM、真实 mTLS 证书链、隔离网络和目标环境 UAT；这些仍属于 P3 的后续目标环境验收，不计入本轮完成。
+
 ## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
 
 | 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |

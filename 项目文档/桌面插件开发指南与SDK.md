@@ -24,6 +24,10 @@ plugins/my-plugin/
 | --- | --- | --- |
 | `host/file/read` | `file:read:selected` | 按不透明 `file_ref` 分块读取用户明确选择的文件，单块最多 512 KiB |
 | `host/file/digest` | `file:read:selected` | 对已授权文件计算 `md5`、`sha1`、`sha256` 或 `sha512` |
+| `host/file/write` | `file:write:scoped` | 按不透明 `file_ref` 写入用户明确选择的位置，单块最多 512 KiB；插件不持有文件句柄 |
+| `host/clipboard/read` | `clipboard:read` | 读取宿主剪贴板纯文本，最多 64 KiB |
+| `host/clipboard/write` | `clipboard:write` | 写入宿主剪贴板纯文本，最多 64 KiB |
+| `host/compute/hash` | `compute:hash` | 对最多 4 MiB 的内存数据计算 `md5`、`sha1`、`sha256` 或 `sha512` |
 | `host/storage/get` | `storage:private` | 读取插件私有 JSON 值 |
 | `host/storage/set` | `storage:private` | 原子写入插件私有 JSON 值 |
 | `host/storage/remove` | `storage:private` | 删除插件私有 JSON 值 |
@@ -67,6 +71,16 @@ internal sealed class SkinPlugin : PdppPlugin
 需要自有 WPF 窗口时，另外引用 `packages/pdpp-sdk-dotnet-wpf/PasswordDetective.Pdpp.Wpf.Sdk.csproj`，申请 `ui:window`，并通过 `PdppWpfWindow.ShowAsync` 在插件自己的 STA 线程中创建窗口。该窗口不属于宿主主进程，插件仍受 AppContainer、Job Object、超时和资源限制约束。
 
 SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHostClient.CallAsync`。Broker 错误会以 `PdppHostException` 抛出并保留错误码。文件类插件可使用 `PluginSelectedFile.FromJson`、`ReadFileAsync`、`ReadFileToEndAsync` 和 `DigestFileAsync`；状态型插件可使用 `GetStorageAsync`、`SetStorageAsync`、`RemoveStorageAsync`；需要平台数据时使用 `ReadProfileAsync`、`ReadHashAsync` 和 `SubmitVerificationAsync`。
+
+文件导出先在命令 Schema 中使用 `format=file-write`，宿主会把用户选择的目标转换为 `file_ref`，再通过 `WriteFileAsync(fileRef, offset, content)` 分块写入。Go、Rust、Python SDK 分别提供 `WriteFile`、`write_file`，以及 `ReadClipboard`/`WriteClipboard`、`read_clipboard`/`write_clipboard` 和 `ComputeHash`/`compute_hash` 等同构方法；所有方法仍由宿主权限和协议边界执行。
+
+开发者可在上传前运行本地结构检查：
+
+```powershell
+.venv\Scripts\python.exe scripts/pdpp-lint.py path\to\plugin.pdpkg
+```
+
+`pdpp-lint` 检查 ZIP 路径安全、大小写重复路径、必需文件、Manifest/Provenance JSON 及关键字段，并输出包 SHA-256。它是轻量前置检查，不替代服务端隔离静态、供应链和动态审核。
 
 迁移插件可覆盖 SDK 的 `MigrateAsync`，返回 `PdppMigrationResult`；每个 `PdppMigrationStep` 必须使用稳定的 `StepId`，返回 `completed`、`skipped` 或 `failed`，并填写本次步骤的 `AttemptCount`。宿主会校验步骤唯一性、状态和尝试次数，服务端设备签名回执会保存同一组脱敏步骤证据。
 

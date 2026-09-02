@@ -24,6 +24,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
     private readonly IPluginThemeService? _themeService;
     private readonly IPluginPanelHost? _panelHost;
     private readonly IPluginNotificationHost? _notificationHost;
+    private readonly IPluginClipboardHost? _clipboardHost;
     private bool _disposed;
     private static readonly Regex PanelIdPattern = new(
         "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
@@ -38,7 +39,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         IPluginThemeService? themeService = null,
         string? installedDirectory = null,
         IPluginPanelHost? panelHost = null,
-        IPluginNotificationHost? notificationHost = null)
+        IPluginNotificationHost? notificationHost = null,
+        IPluginClipboardHost? clipboardHost = null)
     {
         _pluginId = pluginId;
         _pluginVersion = pluginVersion;
@@ -49,6 +51,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         _installedDirectory = installedDirectory;
         _panelHost = panelHost;
         _notificationHost = notificationHost;
+        _clipboardHost = clipboardHost;
     }
 
     public JsonElement PrepareCommandInput(
@@ -121,6 +124,26 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
                 continue;
             }
 
+            if (format.GetString() == "file-write")
+            {
+                EnsureCapability("file:write:scoped");
+                if (!input.TryGetProperty(property.Name, out var outputPath)
+                    || outputPath.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(outputPath.GetString()))
+                {
+                    throw new InvalidOperationException($"文件字段 {property.Name} 未选择写入位置。");
+                }
+
+                var writeGrant = _files.GrantWrite(outputPath.GetString()!);
+                output[property.Name] = JsonSerializer.SerializeToNode(new
+                {
+                    file_ref = writeGrant.GrantId.ToString("N"),
+                    file_name = writeGrant.FileName,
+                    length = writeGrant.Length,
+                });
+                continue;
+            }
+
             if (format.GetString() != "file")
             {
                 continue;
@@ -152,6 +175,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         CancellationToken cancellationToken = default) => method switch
         {
             "host/file/read" => ReadFileAsync(parameters, cancellationToken),
+            PdppProtocol.HostFileWriteMethod => WriteFileAsync(parameters, cancellationToken),
+            PdppProtocol.HostComputeHashMethod => ComputeHashAsync(parameters, cancellationToken),
             "host/file/digest" => DigestFileAsync(parameters, cancellationToken),
             "host/storage/get" => GetStorageAsync(parameters, cancellationToken),
             "host/storage/set" => SetStorageAsync(parameters, cancellationToken),
@@ -163,6 +188,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             PdppProtocol.HostUiWindowOpenMethod => OpenWindowAsync(parameters, cancellationToken),
             PdppProtocol.HostUiPanelShowMethod => ShowPanelAsync(parameters, cancellationToken),
             PdppProtocol.HostUiNotificationShowMethod => ShowNotificationAsync(parameters, cancellationToken),
+            PdppProtocol.HostClipboardReadMethod => ReadClipboardAsync(cancellationToken),
+            PdppProtocol.HostClipboardWriteMethod => WriteClipboardAsync(parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -209,6 +236,88 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         {
             throw new PdppHostRequestException(-32602, "File grant is missing, revoked, or out of range.");
         }
+    }
+
+    private async Task<JsonElement> WriteFileAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("file:write:scoped");
+        if (!TryReadFileReference(parameters, out var grantId)
+            || !parameters.TryGetProperty("offset", out var offsetElement)
+            || !offsetElement.TryGetInt64(out var offset)
+            || !parameters.TryGetProperty("data_base64", out var dataElement)
+            || dataElement.ValueKind != JsonValueKind.String)
+        {
+            throw new PdppHostRequestException(-32602, "File write parameters are invalid.");
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(dataElement.GetString() ?? string.Empty);
+        }
+        catch (FormatException)
+        {
+            throw new PdppHostRequestException(-32602, "File write data is not valid Base64.");
+        }
+
+        try
+        {
+            var written = await _files.WriteAsync(grantId, offset, bytes, cancellationToken);
+            return JsonSerializer.SerializeToElement(new { written, offset });
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            throw new PdppHostRequestException(-32602, "File write grant is missing or out of range.");
+        }
+    }
+
+    private Task<JsonElement> ComputeHashAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("compute:hash");
+        if (parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("algorithm", out var algorithmElement)
+            || algorithmElement.ValueKind != JsonValueKind.String
+            || algorithmElement.GetString() is not ("md5" or "sha1" or "sha256" or "sha512")
+            || !parameters.TryGetProperty("data_base64", out var dataElement)
+            || dataElement.ValueKind != JsonValueKind.String)
+        {
+            return Task.FromException<JsonElement>(new PdppHostRequestException(-32602, "摘要参数无效。"));
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(dataElement.GetString() ?? string.Empty);
+        }
+        catch (FormatException)
+        {
+            return Task.FromException<JsonElement>(new PdppHostRequestException(-32602, "摘要数据不是有效 Base64。"));
+        }
+
+        if (bytes.Length is < 1 or > 4 * 1024 * 1024)
+        {
+            return Task.FromException<JsonElement>(new PdppHostRequestException(-32602, "摘要数据超出 4 MiB 限制。"));
+        }
+
+        var hash = algorithmElement.GetString() switch
+        {
+            "md5" => System.Security.Cryptography.MD5.HashData(bytes),
+            "sha1" => System.Security.Cryptography.SHA1.HashData(bytes),
+            "sha256" => System.Security.Cryptography.SHA256.HashData(bytes),
+            "sha512" => System.Security.Cryptography.SHA512.HashData(bytes),
+            _ => throw new InvalidOperationException(),
+        };
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(JsonSerializer.SerializeToElement(new
+        {
+            algorithm = algorithmElement.GetString(),
+            digest = Convert.ToHexStringLower(hash),
+            bytes = bytes.Length,
+        }));
     }
 
     private async Task<JsonElement> DigestFileAsync(
@@ -452,6 +561,33 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         }
 
         return element.GetString()!;
+    }
+
+    private Task<JsonElement> ReadClipboardAsync(CancellationToken cancellationToken)
+    {
+        EnsureCapability("clipboard:read");
+        return _clipboardHost is null
+            ? Task.FromException<JsonElement>(new PdppHostRequestException(-32003, "剪贴板宿主当前不可用。"))
+            : _clipboardHost.ReadAsync(cancellationToken);
+    }
+
+    private Task<JsonElement> WriteClipboardAsync(JsonElement parameters, CancellationToken cancellationToken)
+    {
+        EnsureCapability("clipboard:write");
+        if (_clipboardHost is null)
+        {
+            return Task.FromException<JsonElement>(new PdppHostRequestException(-32003, "剪贴板宿主当前不可用。"));
+        }
+
+        if (parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("text", out var textElement)
+            || textElement.ValueKind != JsonValueKind.String
+            || textElement.GetString()!.Length > 64 * 1024)
+        {
+            return Task.FromException<JsonElement>(new PdppHostRequestException(-32602, "剪贴板文本无效。"));
+        }
+
+        return _clipboardHost.WriteAsync(textElement.GetString()!, cancellationToken);
     }
 
     private static PluginPanelDescriptor ParsePanelDescriptor(JsonElement parameters)

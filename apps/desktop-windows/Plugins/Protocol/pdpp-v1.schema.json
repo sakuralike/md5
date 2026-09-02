@@ -24,6 +24,8 @@
             "shutdown",
             "host/file/read",
             "host/file/digest",
+            "host/file/write",
+            "host/compute/hash",
             "host/storage/get",
             "host/storage/set",
             "host/storage/remove",
@@ -33,7 +35,9 @@
             "host/ui/theme/apply",
             "host/ui/window/open",
             "host/ui/panel/show",
-            "host/ui/notification/show"
+            "host/ui/notification/show",
+            "host/clipboard/read",
+            "host/clipboard/write"
           ]
         },
         "params": { "type": "object" }
@@ -66,6 +70,14 @@
         {
           "if": { "properties": { "method": { "const": "host/file/digest" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/fileDigestParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/file/write" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/fileWriteParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/compute/hash" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/computeHashParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "host/storage/get" } } },
@@ -106,6 +118,14 @@
         {
           "if": { "properties": { "method": { "const": "host/ui/notification/show" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/notificationShowParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/clipboard/read" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/emptyParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/clipboard/write" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/clipboardWriteParams" } } }
         }
       ]
     },
@@ -231,6 +251,33 @@
       "properties": {
         "file_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
         "algorithm": { "enum": ["md5", "sha1", "sha256", "sha512"] }
+      }
+    },
+    "fileWriteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_ref", "offset", "data_base64"],
+      "properties": {
+        "file_ref": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "offset": { "type": "integer", "minimum": 0 },
+        "data_base64": { "type": "string", "minLength": 1, "maxLength": 699052 }
+      }
+    },
+    "computeHashParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "data_base64"],
+      "properties": {
+        "algorithm": { "enum": ["md5", "sha1", "sha256", "sha512"] },
+        "data_base64": { "type": "string", "minLength": 1, "maxLength": 5592408 }
+      }
+    },
+    "clipboardWriteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 65536 }
       }
     },
     "themeApplyParams": {

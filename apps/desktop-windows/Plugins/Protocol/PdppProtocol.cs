@@ -20,6 +20,10 @@ public static class PdppProtocol
     public const string HostUiWindowOpenMethod = "host/ui/window/open";
     public const string HostUiPanelShowMethod = "host/ui/panel/show";
     public const string HostUiNotificationShowMethod = "host/ui/notification/show";
+    public const string HostClipboardReadMethod = "host/clipboard/read";
+    public const string HostClipboardWriteMethod = "host/clipboard/write";
+    public const string HostFileWriteMethod = "host/file/write";
+    public const string HostComputeHashMethod = "host/compute/hash";
     public const string HostFileDigestMethod = "host/file/digest";
     public const string HostStorageRemoveMethod = "host/storage/remove";
     public const int DefaultMaximumMessageBytes = 1024 * 1024;

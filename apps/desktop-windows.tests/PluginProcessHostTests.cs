@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using PasswordDetective.Desktop.Plugins;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
@@ -639,6 +641,83 @@ public sealed class PluginProcessHostTests : IDisposable
             JsonSerializer.SerializeToElement(new { title = "过长", message = "无效", duration_seconds = 31 })));
     }
 
+    [Fact]
+    public async Task HostBrokerWritesOnlyThroughScopedFileGrantAndComputesBoundedHash()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "write-broker-storage"));
+        var target = Path.Combine(_workingDirectory, "output.txt");
+        var schemaDirectory = Path.Combine(_workingDirectory, "schemas");
+        Directory.CreateDirectory(schemaDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(schemaDirectory, "write.schema.json"),
+            "{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"format\":\"file-write\"}}}");
+        using var broker = new PluginHostBroker(
+            "official.compute",
+            "1.0.0",
+            ["file:write:scoped", "compute:hash"],
+            new PluginPrivateStorage(paths));
+        var grant = broker.PrepareCommandInput(
+            new PluginCommandManifest(
+                "write",
+                "写入",
+                "schemas/write.schema.json"),
+            _workingDirectory,
+            JsonSerializer.SerializeToElement(new { output = target }));
+        var reference = grant.GetProperty("output").GetProperty("file_ref").GetString()!;
+        var write = await broker.HandleAsync(
+            PdppProtocol.HostFileWriteMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                file_ref = reference,
+                offset = 0,
+                data_base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("scoped")),
+            }));
+        var hash = await broker.HandleAsync(
+            PdppProtocol.HostComputeHashMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                algorithm = "sha256",
+                data_base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("scoped")),
+            }));
+
+        Assert.Equal(6, write.GetProperty("written").GetInt32());
+        Assert.Equal("scoped", await File.ReadAllTextAsync(target));
+        Assert.Equal(
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("scoped"))),
+            hash.GetProperty("digest").GetString());
+    }
+
+    [Fact]
+    public async Task HostBrokerMediatesClipboardOnlyWithGrantedCapabilities()
+    {
+        var clipboard = new RecordingClipboardHost("synthetic clipboard");
+        using var allowed = new PluginHostBroker(
+            "official.clipboard",
+            "1.0.0",
+            ["clipboard:read", "clipboard:write"],
+            new PluginPrivateStorage(new PluginStoragePaths(Path.Combine(_workingDirectory, "clipboard-storage"))),
+            clipboardHost: clipboard);
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            "1.0.0",
+            [],
+            new PluginPrivateStorage(new PluginStoragePaths(Path.Combine(_workingDirectory, "clipboard-denied-storage"))),
+            clipboardHost: clipboard);
+
+        var read = await allowed.HandleAsync(PdppProtocol.HostClipboardReadMethod, JsonSerializer.SerializeToElement(new { }));
+        var write = await allowed.HandleAsync(
+            PdppProtocol.HostClipboardWriteMethod,
+            JsonSerializer.SerializeToElement(new { text = "updated" }));
+
+        Assert.Equal("synthetic clipboard", read.GetProperty("text").GetString());
+        Assert.True(write.GetProperty("written").GetBoolean());
+        Assert.Equal("updated", clipboard.Text);
+        var exception = await Assert.ThrowsAsync<PdppHostRequestException>(() => denied.HandleAsync(
+            PdppProtocol.HostClipboardReadMethod,
+            JsonSerializer.SerializeToElement(new { })));
+        Assert.Equal(-32001, exception.Code);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))
@@ -842,6 +921,29 @@ public sealed class PluginProcessHostTests : IDisposable
                 plugin_id = pluginId,
                 severity = notification.Severity,
             }));
+        }
+    }
+
+    private sealed class RecordingClipboardHost(string initialText) : IPluginClipboardHost
+    {
+        public string Text { get; private set; } = initialText;
+
+        public Task<JsonElement> ReadAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                available = true,
+                text = Text,
+                truncated = false,
+            }));
+        }
+
+        public Task<JsonElement> WriteAsync(string text, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Text = text;
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { written = true, length = text.Length }));
         }
     }
 }

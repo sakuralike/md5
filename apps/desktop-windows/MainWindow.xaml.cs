@@ -79,7 +79,8 @@ public partial class MainWindow : Window
             pluginApiBroker,
             _pluginThemeService,
             new WpfPluginPanelHost(),
-            new WpfPluginNotificationHost());
+            new WpfPluginNotificationHost(),
+            new WpfPluginClipboardHost());
         var installer = new PluginInstaller(
             _pluginPaths,
             new PluginPackageVerifier(),

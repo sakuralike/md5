@@ -566,16 +566,19 @@ public sealed class PluginPackageVerifier
             if (property.Value.TryGetProperty("format", out var format))
             {
                 if (format.ValueKind != JsonValueKind.String
-                    || format.GetString() is not ("file" or "theme-background")
+                    || format.GetString() is not ("file" or "file-write" or "theme-background")
                     || type.GetString() != "string")
                 {
                     throw new PluginPackageException(
                         "v1 命令输入只支持 file 或 theme-background 格式，不授予目录枚举能力。");
                 }
 
-                var requiredCapability = format.GetString() == "theme-background"
-                    ? "ui:theme"
-                    : "file:read:selected";
+                var requiredCapability = format.GetString() switch
+                {
+                    "theme-background" => "ui:theme",
+                    "file-write" => "file:write:scoped",
+                    _ => "file:read:selected",
+                };
                 if (!requestedCapabilities.Contains(requiredCapability))
                 {
                     throw new PluginPackageException($"使用 {format.GetString()} 输入的插件必须申请 {requiredCapability} 权限。");
