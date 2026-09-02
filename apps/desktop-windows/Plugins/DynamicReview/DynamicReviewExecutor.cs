@@ -440,10 +440,13 @@ public sealed class DynamicReviewExecutor
         PluginProcessStartOptions options,
         CancellationToken cancellationToken)
     {
-        if (string.Equals(
-            Environment.GetEnvironmentVariable("PDPP_SANDBOX_BACKEND"),
-            "rust",
-            StringComparison.OrdinalIgnoreCase))
+        var backend = Environment.GetEnvironmentVariable("PDPP_SANDBOX_BACKEND");
+        if (string.Equals(backend, "rust-host", StringComparison.OrdinalIgnoreCase))
+        {
+            return PluginProcessHost.StartWithHostSandboxAsync(options, cancellationToken);
+        }
+
+        if (string.Equals(backend, "rust", StringComparison.OrdinalIgnoreCase))
         {
             return PluginProcessHost.StartWithRustSandboxAsync(options, cancellationToken);
         }

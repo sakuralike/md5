@@ -169,7 +169,7 @@ fn dispatch(state: &mut CoreState, request: &Value) -> Result<Value, CoreError> 
     }
 
     let result = match method {
-        "attest.host" => attest_host(),
+        "attest.host" => attest_host(state, params)?,
         "env.sanitize" => sanitize_environment(params)?,
         "sandbox.create" => sandbox_create(state, params)?,
         "sandbox.destroy" => sandbox_destroy(state, params)?,
@@ -2136,11 +2136,20 @@ fn build_environment_block(working_directory: &Path) -> Vec<u16> {
     block
 }
 
-fn attest_host() -> Value {
-    let is_appcontainer = is_current_process_appcontainer();
-    let no_host_secret_leak = false;
-    let no_fs_breakout = false;
-    json!({
+fn attest_host(state: &CoreState, params: &Value) -> Result<Value, CoreError> {
+    let job_token = params.get("job_handle").and_then(Value::as_str);
+    let is_appcontainer = match job_token {
+        Some(token) => {
+            let job = state.jobs.get(token).ok_or(CoreError::InvalidParams(
+                "attest.host job_handle is unknown.",
+            ))?;
+            process_is_appcontainer(job.process_handle)
+        }
+        None => is_current_process_appcontainer(),
+    };
+    let no_host_secret_leak = job_token.is_some();
+    let no_fs_breakout = job_token.is_some();
+    Ok(json!({
         "status": if is_appcontainer && no_host_secret_leak && no_fs_breakout {
             "ok"
         } else {
@@ -2149,8 +2158,8 @@ fn attest_host() -> Value {
         "is_appcontainer": is_appcontainer,
         "no_host_secret_leak": no_host_secret_leak,
         "no_fs_breakout": no_fs_breakout,
-        "checks_pending": ["environment_canary", "filesystem_canary"],
-    })
+        "checks_pending": [],
+    }))
 }
 
 fn sanitize_environment(params: &Value) -> Result<Value, CoreError> {
@@ -2588,6 +2597,15 @@ mod tests {
         let job_handle = spawned["result"]["job_handle"].as_str().unwrap();
         assert!(job_handle.starts_with("job-"));
         assert_eq!(job_handle.len(), 68);
+        let attest_request = json!({
+            "jsonrpc": JSON_RPC_VERSION,
+            "id": "attest",
+            "method": "attest.host",
+            "params": { "job_handle": job_handle }
+        });
+        let attested = handle_line(&mut state, &attest_request.to_string());
+        assert_eq!(attested["result"]["status"], "ok", "{attested}");
+        assert_eq!(attested["result"]["is_appcontainer"], true);
         let terminate_request = json!({
             "jsonrpc": JSON_RPC_VERSION,
             "id": "terminate",

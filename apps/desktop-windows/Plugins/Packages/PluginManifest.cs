@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PasswordDetective.Desktop.Plugins.Packages;
@@ -37,7 +38,18 @@ public sealed record PluginCommandManifest(
 
 public sealed record PluginCapabilitiesManifest(
     [property: JsonPropertyName("required")] IReadOnlyList<string> Required,
-    [property: JsonPropertyName("optional")] IReadOnlyList<string> Optional);
+    [property: JsonPropertyName("optional")] IReadOnlyList<string> Optional,
+    [property: JsonPropertyName("grants")] IReadOnlyList<PluginCapabilityGrant>? Grants = null);
+
+public sealed record PluginCapabilityGrant(
+    [property: JsonPropertyName("capability")] string Capability,
+    [property: JsonPropertyName("constraints")] JsonElement? Constraints = null,
+    [property: JsonPropertyName("quota")] PluginCapabilityQuota? Quota = null,
+    [property: JsonPropertyName("ttl_seconds")] int? TtlSeconds = null);
+
+public sealed record PluginCapabilityQuota(
+    [property: JsonPropertyName("requests")] int? Requests = null,
+    [property: JsonPropertyName("bytes")] long? Bytes = null);
 
 public sealed record PluginLimitsManifest(
     [property: JsonPropertyName("memory_mb")] int MemoryMb,

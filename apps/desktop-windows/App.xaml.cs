@@ -1,5 +1,8 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.IO.Pipes;
+using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using PasswordDetective.Desktop.Plugins.Safety;
@@ -20,8 +23,24 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
     }
 
-    private void Application_OnStartup(object sender, StartupEventArgs e)
+    private async void Application_OnStartup(object sender, StartupEventArgs e)
     {
+        if (e.Args.Contains("--host-sandbox", StringComparer.Ordinal))
+        {
+            try
+            {
+                await RunHostSandboxAsync(e.Args);
+                Shutdown(0);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine(exception.ToString());
+                Shutdown(1);
+            }
+
+            return;
+        }
+
         try
         {
             EnsureWindowsDirectoryEnvironment();
@@ -39,6 +58,72 @@ public partial class App : Application
             Shutdown(1);
         }
     }
+
+    private static async Task RunHostSandboxAsync(IReadOnlyList<string> arguments)
+    {
+        var request = ReadArgument(arguments, "--request");
+        var controlName = ReadArgument(arguments, "--control");
+        var verifyPolicies = !arguments.Contains("--skip-policy", StringComparer.Ordinal);
+        var options = JsonSerializer.Deserialize<PasswordDetective.Desktop.Plugins.PluginProcessStartOptions>(
+            Convert.FromBase64String(request),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            ?? throw new InvalidOperationException("Host.Sandbox 启动参数无效。");
+
+        await using var process = await PasswordDetective.Desktop.Plugins.Windows.RustSandboxedProcess.StartAsync(
+            options,
+            CancellationToken.None,
+            verifyPolicies);
+        using var control = new NamedPipeClientStream(
+            ".",
+            controlName,
+            PipeDirection.Out,
+            PipeOptions.Asynchronous);
+        await control.ConnectAsync(10_000);
+        PasswordDetective.Desktop.Plugins.Windows.WindowsIntegrityLevel.LowerCurrentProcessToLow();
+        await using (var writer = new StreamWriter(control, new UTF8Encoding(false), 4096, leaveOpen: true)
+        {
+            AutoFlush = true,
+            NewLine = "\n",
+        })
+        {
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new
+            {
+                pid = process.ProcessId,
+                is_appcontainer = process.IsAppContainer,
+                integrity_level = PasswordDetective.Desktop.Plugins.Windows.WindowsIntegrityLevel.GetCurrent(),
+            }));
+        }
+
+        var input = Console.OpenStandardInput();
+        var output = Console.OpenStandardOutput();
+        var error = Console.OpenStandardError();
+        var inputTask = input.CopyToAsync(process.StandardInput);
+        var outputTask = process.StandardOutput.CopyToAsync(output);
+        var errorTask = process.StandardError.CopyToAsync(error);
+        await inputTask;
+        await process.DisposeAsync();
+        await Task.WhenAll(outputTask, errorTask);
+    }
+
+    private static string ReadArgument(IReadOnlyList<string> arguments, string name)
+    {
+        var index = -1;
+        for (var candidate = 0; candidate < arguments.Count; candidate++)
+        {
+            if (string.Equals(arguments[candidate], name, StringComparison.Ordinal))
+            {
+                index = candidate;
+                break;
+            }
+        }
+        if (index < 0 || index + 1 >= arguments.Count || string.IsNullOrWhiteSpace(arguments[index + 1]))
+        {
+            throw new InvalidOperationException($"Host.Sandbox 参数缺少 {name}。");
+        }
+
+        return arguments[index + 1];
+    }
+
 
     protected override void OnExit(ExitEventArgs e)
     {

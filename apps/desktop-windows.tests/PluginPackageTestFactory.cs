@@ -20,6 +20,7 @@ internal sealed class PluginPackageTestFactory
         string pluginId = "com.synthetic.local-plugin",
         IReadOnlyList<string>? requiredCapabilities = null,
         IReadOnlyList<string>? optionalCapabilities = null,
+        IReadOnlyList<PluginCapabilityGrant>? capabilityGrants = null,
         string commandId = "echo",
         string commandTitle = "回显输入",
         string commandSchemaPath = "schemas/echo.schema.json",
@@ -52,7 +53,8 @@ internal sealed class PluginPackageTestFactory
             [new PluginCommandManifest(commandId, commandTitle, commandSchemaPath)],
              new PluginCapabilitiesManifest(
                  requiredCapabilities ?? ["ui:command"],
-                 optionalCapabilities ?? ["storage:private"]),
+                 optionalCapabilities ?? ["storage:private"],
+                 capabilityGrants),
              new PluginLimitsManifest(128, 25, 30, 0),
              migration);
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)

@@ -42,6 +42,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
     }
 
     public int ProcessId => _sandboxedProcess.ProcessId;
+    public string IntegrityLevel => _sandboxedProcess.IntegrityLevel;
     public bool IsAppContainer => _sandboxedProcess.IsAppContainer;
     public bool HasExited => _sandboxedProcess.HasExited;
     public string StandardError
@@ -75,6 +76,19 @@ public sealed class PluginProcessHost : IAsyncDisposable
         bool verifyIsolationPolicies = true)
     {
         var process = await RustSandboxedProcess.StartAsync(
+            options,
+            cancellationToken,
+            verifyIsolationPolicies);
+        return new PluginProcessHost(process, options, hostRequestHandler);
+    }
+
+    internal static async Task<PluginProcessHost> StartWithHostSandboxAsync(
+        PluginProcessStartOptions options,
+        CancellationToken cancellationToken = default,
+        IPdppHostRequestHandler? hostRequestHandler = null,
+        bool verifyIsolationPolicies = true)
+    {
+        var process = await HostSandboxedProcess.StartAsync(
             options,
             cancellationToken,
             verifyIsolationPolicies);
@@ -204,7 +218,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
                     var hostRequest = ParseHostRequest(responseLine);
                     if (hostRequest is null)
                     {
-                        return ParseResponse<TResult>(responseLine, requestId);
+                        return ParseResponse<TResult>(responseLine, requestId, method);
                     }
 
                     await RespondToHostRequestAsync(hostRequest, linked.Token);
@@ -294,7 +308,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
         }
     }
 
-    private static TResult ParseResponse<TResult>(string responseLine, string requestId)
+    private static TResult ParseResponse<TResult>(string responseLine, string requestId, string method)
     {
         JsonDocument document;
         try
@@ -349,6 +363,8 @@ public sealed class PluginProcessHost : IAsyncDisposable
                 throw new PdppRemoteException(errorCode, message.GetString()!);
             }
 
+            ValidateResponseShape(method, result);
+
             try
             {
                 return result.Deserialize<TResult>(PdppProtocol.SerializerOptions)
@@ -358,6 +374,61 @@ public sealed class PluginProcessHost : IAsyncDisposable
             {
                 throw new PdppProtocolException("The plugin result does not match the expected contract.", exception);
             }
+        }
+    }
+
+    internal static void ValidateResponseShape(string method, JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Object)
+        {
+            throw new PdppProtocolException($"PDPP 方法 '{method}' 返回的 result 必须是对象。");
+        }
+
+        static void RequireFields(JsonElement value, params string[] fields)
+        {
+            foreach (var field in fields)
+            {
+                if (!value.TryGetProperty(field, out _))
+                {
+                    throw new PdppProtocolException($"PDPP 响应缺少字段：{field}。");
+                }
+            }
+        }
+
+        switch (method)
+        {
+            case PdppProtocol.InitializeMethod:
+                RequireFields(result, "protocol_version", "plugin_id", "plugin_version", "capabilities");
+                if (result.GetProperty("protocol_version").ValueKind != JsonValueKind.String
+                    || result.GetProperty("plugin_id").ValueKind != JsonValueKind.String
+                    || result.GetProperty("plugin_version").ValueKind != JsonValueKind.String
+                    || result.GetProperty("capabilities").ValueKind != JsonValueKind.Array)
+                {
+                    throw new PdppProtocolException("PDPP initialize 响应字段类型无效。");
+                }
+                break;
+            case PdppProtocol.HealthCheckMethod:
+                RequireFields(result, "status");
+                if (result.GetProperty("status").ValueKind != JsonValueKind.String)
+                {
+                    throw new PdppProtocolException("PDPP health/check 响应字段类型无效。");
+                }
+                break;
+            case PdppProtocol.MigrateMethod:
+                RequireFields(result, "status");
+                var status = result.GetProperty("status").GetString();
+                if (status is not ("migrated" or "not_required" or "failed"))
+                {
+                    throw new PdppProtocolException("PDPP lifecycle/migrate 响应状态无效。");
+                }
+                break;
+            case PdppProtocol.ShutdownMethod:
+                RequireFields(result, "stopped");
+                if (result.GetProperty("stopped").ValueKind != JsonValueKind.True)
+                {
+                    throw new PdppProtocolException("PDPP shutdown 响应必须确认 stopped=true。");
+                }
+                break;
         }
     }
 

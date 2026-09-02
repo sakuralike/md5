@@ -536,18 +536,22 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | 风险治理登记 | 已完成（待批准项） | `security/risk-acceptances.json` 保持正式 `acceptances` 为空；新增两个有负责人、缓解措施、工单和到期日的治理登记，状态为 `pending_approval` |
 | P1 与后续边界 | 已明确 | 双进程宿主、Rust IPC 内核、Capability v2、声明式 `ui:panel` 和 Runner 独立 VM 不计入本轮完成 |
 
-## 2026-09-02 三端架构重构 P2：Rust IPC 合同第一切片
+## 2026-09-02 三端架构重构 P2：Rust IPC 与双进程宿主验收
 
 | 范围 | 状态 | 说明 |
 |---|---|---|
-| `Pdpp.Sandbox.Core` Rust 骨架 | 已完成（合同层） | `packages/pdpp-sandbox-core` 提供 Windows IPC 可执行骨架、JSON-RPC 方法白名单、1 MiB/深度 32 限制、AppContainer 生命周期、文件句柄 Broker、`attest.host`、`env.sanitize` 和强制 canary 探针 |
-| 原生安全指令 | 部分完成，未切换生产 | `sandbox.create`/`sandbox.destroy`/`fs.grant_read`/`fs.read_chunk`/`process.spawn`/`process.terminate`/`canary.run` 已实现并测试；WFP 安装使用 Rust WFP API（管理员不足时回退隔离脚本），注册表 ACL 由 Rust Win32 安全 API 读取校验，安装仍由管理员脚本负责 |
-| Host.UI / Host.Sandbox 边界 | 已完成（接口层） | 新增 `HostSandboxProcess`、`SandboxCoreClient` 和有界 `HostSandboxPipe`；现有 C# AppContainer 保留为未部署 Rust 制品时的兼容回退 |
-| Rust PDPP 管道切片 | 已完成（受控开关） | `RustSandboxedProcess` 通过三条命名管道接通 Rust `process.spawn` 与 PDPP 初始化/命令；`PDPP_SANDBOX_BACKEND=rust` 才启用，默认仍为 C# 基准实现 |
+| `Pdpp.Sandbox.Core` Rust 内核 | 已完成（P2） | `packages/pdpp-sandbox-core` 提供 Windows IPC 可执行文件、JSON-RPC 白名单、1 MiB/深度 32 限制、AppContainer 生命周期、文件句柄 Broker、`attest.host`、`env.sanitize` 和强制五类 canary |
+| 原生安全指令 | 已完成（P2，未切默认生产） | `sandbox.create`/`sandbox.destroy`/`fs.grant_read`/`fs.read_chunk`/`process.spawn`/`process.terminate`/`canary.run` 已实现并测试；WFP 使用 Rust WFP API，注册表 ACL 使用 Rust Win32 安全 API 读取校验，管理员脚本提供安装回退 |
+| Host.UI / Host.Sandbox 双进程 | 已完成（P2） | `HostSandboxedProcess` 启动独立桌面子进程；子进程先建立 Rust/AppContainer 管道，再降为真实 Low Integrity；父进程校验子进程实际完整性级别和 AppContainer 状态 |
+| Rust PDPP 管道 | 已完成（P2，受控开关） | `RustSandboxedProcess` 和 `HostSandboxedProcess` 均通过三条命名管道接通 PDPP 初始化/命令；`PDPP_SANDBOX_BACKEND=rust` 或 `rust-host` 才启用，默认仍为 C# 基准实现 |
+| Capability v2 | 已完成（P2） | manifest 支持 `capability + constraints + quota + ttl_seconds`，验证引用已声明权限、范围和唯一性；v1 无 `grants` 字段继续兼容 |
+| 响应体 Schema | 已完成（P2） | 宿主对 initialize、health/check、lifecycle/migrate、shutdown 响应执行字段与状态校验，畸形响应失败关闭 |
 | Rust 内核制品打包 | 已完成 | 桌面端与 Review Runner 的 Windows Release 构建自动执行锁定版 Cargo，并将 `pdpp-sandbox-core.exe` 复制到输出目录，供 Host.Sandbox 默认路径使用 |
 | Rust 内核测试运行目录 | 已完成 | Desktop 测试输出目录同步复制 `pdpp-sandbox-core.exe`，并通过实际 `HostSandboxProcess` RPC 启动测试 |
 | C# 替换 seam | 已完成 | 新增 `ISandboxedProcessFactory`/`WindowsSandboxedProcessFactory`，现有实现作为可替换基准 |
-| 合同验证 | 已完成 | Rust 12 项单测、格式、锁定 Release 构建、Schema 方法集合校验、桌面构建与 PDPP conformance 通过 |
+| 合同验证 | 已完成 | Rust 12 项单测、格式、锁定 Release 构建、桌面 118 项测试、Capability/响应 Schema/双进程专项测试、PDPP 四语言 conformance 和 Runner Release 构建通过 |
+
+P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`、更多 Broker 能力、SDK 扩展或独立 Runner VM 已完成。
 
 ## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
 

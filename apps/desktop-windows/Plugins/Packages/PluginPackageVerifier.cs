@@ -286,6 +286,8 @@ public sealed class PluginPackageVerifier
             throw new PluginPackageException("包含命令的插件必须申请 ui:command 必需权限。");
         }
 
+        ValidateCapabilityGrants(manifest);
+
         foreach (var command in manifest.Commands)
         {
             if (command is null
@@ -335,6 +337,49 @@ public sealed class PluginPackageVerifier
                 || migration.Required && migration.FromVersions.Count == 0)
             {
                 throw new PluginPackageException("插件迁移声明无效，必须使用幂等策略和有效来源版本。");
+            }
+        }
+    }
+
+    private static void ValidateCapabilityGrants(PluginManifest manifest)
+    {
+        var grants = manifest.Capabilities.Grants;
+        if (grants is null)
+        {
+            return;
+        }
+
+        var declared = manifest.Capabilities.Required
+            .Concat(manifest.Capabilities.Optional)
+            .ToHashSet(StringComparer.Ordinal);
+        if (grants.Count > 64
+            || grants.Any(grant => grant is null
+                                  || string.IsNullOrWhiteSpace(grant.Capability)
+                                  || !declared.Contains(grant.Capability))
+            || grants.Select(grant => grant.Capability).Distinct(StringComparer.Ordinal).Count()
+            != grants.Count)
+        {
+            throw new PluginPackageException("插件能力约束必须引用已声明且唯一的权限。");
+        }
+
+        foreach (var grant in grants)
+        {
+            if (grant.TtlSeconds is < 1 or > 86_400)
+            {
+                throw new PluginPackageException("插件能力 ttl_seconds 必须在 1 到 86400 秒之间。");
+            }
+
+            if (grant.Constraints is { } constraints
+                && constraints.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null))
+            {
+                throw new PluginPackageException("插件能力 constraints 必须是 JSON 对象。");
+            }
+
+            if (grant.Quota is { } quota
+                && (quota.Requests is < 1 or > 1_000_000
+                    || quota.Bytes is < 1 or > 4_294_967_296))
+            {
+                throw new PluginPackageException("插件能力 quota 超出允许范围。");
             }
         }
     }

@@ -69,6 +69,65 @@ public sealed class PluginProcessHostTests : IDisposable
     }
 
     [Fact]
+    public async Task HostSandboxChildProcessCarriesPdppOverUiBoundary()
+    {
+        var executable = Path.Combine(
+            FindRepositoryRoot(),
+            "apps",
+            "desktop-windows",
+            "bin",
+            "Release",
+            "net10.0-windows",
+            "PasswordDetective.Desktop.exe");
+        Assert.True(File.Exists(executable), executable);
+        var previous = Environment.GetEnvironmentVariable("PDPP_HOST_SANDBOX_EXECUTABLE");
+        Environment.SetEnvironmentVariable("PDPP_HOST_SANDBOX_EXECUTABLE", executable);
+        try
+        {
+            var options = new PluginProcessStartOptions
+            {
+                PluginId = "synthetic.csharp",
+                ExecutablePath = FindSyntheticPlugin(),
+                WorkingDirectory = _workingDirectory,
+                MemoryLimitBytes = 256L * 1024 * 1024,
+                ActiveProcessLimit = 1,
+                CpuRatePercent = 25,
+            };
+            await using var host = await PluginProcessHost.StartWithHostSandboxAsync(
+                options,
+                verifyIsolationPolicies: false);
+            var initialized = await host.InitializeAsync(
+                "0.1.0",
+                ["command.echo"],
+                TimeSpan.FromSeconds(15));
+            var echo = await ExecuteAsync<SyntheticEchoResult>(host, "echo", "host-boundary");
+
+            Assert.True(host.IsAppContainer);
+            Assert.Equal("low", host.IntegrityLevel);
+            Assert.Equal(options.PluginId, initialized.PluginId);
+            Assert.Equal("host-boundary", echo.Output);
+            Assert.NotEqual(Environment.ProcessId, host.ProcessId);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PDPP_HOST_SANDBOX_EXECUTABLE", previous);
+        }
+    }
+
+    [Fact]
+    public void ResponseSchemaRejectsMalformedInitializeResult()
+    {
+        var result = JsonSerializer.SerializeToElement(new
+        {
+            protocol_version = "1.0",
+            plugin_id = "synthetic.csharp",
+        });
+
+        Assert.Throws<PdppProtocolException>(
+            () => PluginProcessHost.ValidateResponseShape(PdppProtocol.InitializeMethod, result));
+    }
+
+    [Fact]
     public async Task HostCompletesInitializeHealthAndEchoContract()
     {
         await using var host = await StartHostAsync(memoryLimitBytes: 256L * 1024 * 1024);

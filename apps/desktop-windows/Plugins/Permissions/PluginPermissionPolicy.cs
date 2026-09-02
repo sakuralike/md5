@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PasswordDetective.Desktop.Plugins.Packages;
 
 namespace PasswordDetective.Desktop.Plugins.Permissions;
@@ -5,7 +6,14 @@ namespace PasswordDetective.Desktop.Plugins.Permissions;
 public sealed record PluginPermissionDecision(
     IReadOnlyList<string> Granted,
     IReadOnlyList<string> DeniedRequired,
-    IReadOnlyList<string> DeniedOptional);
+    IReadOnlyList<string> DeniedOptional,
+    IReadOnlyList<PluginPermissionGrant> GrantedGrants);
+
+public sealed record PluginPermissionGrant(
+    string Capability,
+    JsonElement? Constraints,
+    PluginCapabilityQuota? Quota,
+    DateTimeOffset? ExpiresAt);
 
 public sealed class PluginPermissionPolicy
 {
@@ -81,7 +89,20 @@ public sealed class PluginPermissionPolicy
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        return new PluginPermissionDecision(granted, deniedRequired, deniedOptional);
+        var grantedSet = granted.ToHashSet(StringComparer.Ordinal);
+        var grants = manifest.Capabilities.Grants is null
+            ? []
+            : manifest.Capabilities.Grants
+                .Where(item => grantedSet.Contains(item.Capability))
+                .Select(item => new PluginPermissionGrant(
+                    item.Capability,
+                    item.Constraints,
+                    item.Quota,
+                    item.TtlSeconds is { } seconds
+                        ? DateTimeOffset.UtcNow.AddSeconds(seconds)
+                        : null))
+                .ToArray();
+        return new PluginPermissionDecision(granted, deniedRequired, deniedOptional, grants);
     }
 
     private static string[] ValidateRequested(IEnumerable<string> capabilities, string fieldName)

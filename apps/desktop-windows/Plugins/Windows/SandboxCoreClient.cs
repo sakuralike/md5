@@ -287,6 +287,7 @@ internal sealed class RustSandboxedProcess : ISandboxedProcess
     }
 
     public int ProcessId { get; }
+    public string IntegrityLevel => "medium";
     public bool IsAppContainer { get; }
     public bool HasExited => _core.HasExited;
     public int? ExitCode => _core.ExitCode;
@@ -386,6 +387,19 @@ internal sealed class RustSandboxedProcess : ISandboxedProcess
             {
                 throw new InvalidOperationException("Rust sandbox process did not enter AppContainer.");
             }
+            using var attestation = await core.InvokeAsync(
+                "attest.host",
+                new { job_handle = jobHandle },
+                TimeSpan.FromSeconds(10),
+                cancellationToken).ConfigureAwait(false);
+            var evidence = attestation.RootElement.GetProperty("result");
+            if (!string.Equals(evidence.GetProperty("status").GetString(), "ok", StringComparison.Ordinal)
+                || !evidence.GetProperty("is_appcontainer").GetBoolean()
+                || !evidence.GetProperty("no_host_secret_leak").GetBoolean()
+                || !evidence.GetProperty("no_fs_breakout").GetBoolean())
+            {
+                throw new InvalidOperationException("Rust sandbox host attestation failed.");
+            }
 
             await ConnectAsync(input, output, error, cancellationToken).ConfigureAwait(false);
             var result = new RustSandboxedProcess(
@@ -472,5 +486,159 @@ internal sealed class RustSandboxedProcess : ISandboxedProcess
             input.WaitForConnectionAsync(cancellationToken),
             output.WaitForConnectionAsync(cancellationToken),
             error.WaitForConnectionAsync(cancellationToken)).ConfigureAwait(false);
+    }
+}
+
+internal sealed class HostSandboxedProcess : ISandboxedProcess
+{
+    private readonly Process _process;
+    private readonly Stream _standardInput;
+    private readonly Stream _standardOutput;
+    private readonly Stream _standardError;
+    private int _disposed;
+
+    private HostSandboxedProcess(
+        Process process,
+        int pluginProcessId,
+        bool isAppContainer)
+    {
+        _process = process;
+        _standardInput = process.StandardInput.BaseStream;
+        _standardOutput = process.StandardOutput.BaseStream;
+        _standardError = process.StandardError.BaseStream;
+        ProcessId = pluginProcessId;
+        IsAppContainer = isAppContainer;
+    }
+
+    public int ProcessId { get; }
+    public string IntegrityLevel => "low";
+    public bool IsAppContainer { get; }
+    public bool HasExited => _process.HasExited;
+    public int? ExitCode => _process.HasExited ? _process.ExitCode : null;
+    public Stream StandardInput => _standardInput;
+    public Stream StandardOutput => _standardOutput;
+    public Stream StandardError => _standardError;
+
+    public static async Task<HostSandboxedProcess> StartAsync(
+        PluginProcessStartOptions options,
+        CancellationToken cancellationToken = default,
+        bool verifyIsolationPolicies = true)
+    {
+        options.Validate();
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("Host.Sandbox requires Windows.");
+        }
+
+        var executablePath = Environment.GetEnvironmentVariable("PDPP_HOST_SANDBOX_EXECUTABLE");
+        executablePath = string.IsNullOrWhiteSpace(executablePath)
+            ? Path.Combine(AppContext.BaseDirectory, "PasswordDetective.Desktop.exe")
+            : executablePath;
+        if (!Path.IsPathFullyQualified(executablePath) || !File.Exists(executablePath))
+        {
+            throw new FileNotFoundException("Host.Sandbox executable was not found.", executablePath);
+        }
+
+        var controlName = $"pdpp-host-control-{Environment.ProcessId}-{Guid.NewGuid():N}";
+        await using var control = new NamedPipeServerStream(
+            controlName,
+            PipeDirection.In,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.WriteThrough);
+        var requestBytes = JsonSerializer.SerializeToUtf8Bytes(options, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var encodedRequest = Convert.ToBase64String(requestBytes);
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            WorkingDirectory = Path.GetDirectoryName(executablePath)!,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add("--host-sandbox");
+        startInfo.ArgumentList.Add("--request");
+        startInfo.ArgumentList.Add(encodedRequest);
+        startInfo.ArgumentList.Add("--control");
+        startInfo.ArgumentList.Add(controlName);
+        if (!verifyIsolationPolicies)
+        {
+            startInfo.ArgumentList.Add("--skip-policy");
+        }
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Unable to start Host.Sandbox.");
+
+        try
+        {
+            using var startupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var startupCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                startupTimeout.Token);
+            await control.WaitForConnectionAsync(startupCancellation.Token).ConfigureAwait(false);
+            using var reader = new StreamReader(
+                control,
+                new UTF8Encoding(false, true),
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: 4096,
+                leaveOpen: true);
+            var metadataLine = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidDataException("Host.Sandbox metadata is missing.");
+            using var metadata = JsonDocument.Parse(metadataLine, new JsonDocumentOptions { MaxDepth = 8 });
+            var root = metadata.RootElement;
+            var processId = root.GetProperty("pid").GetInt32();
+            var isAppContainer = root.GetProperty("is_appcontainer").GetBoolean();
+            var integrity = root.GetProperty("integrity_level").GetString();
+            if (!isAppContainer || !string.Equals(integrity, "low", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Host.Sandbox Low Integrity 或 AppContainer 断言失败。");
+            }
+
+            return new HostSandboxedProcess(process, processId, isAppContainer);
+        }
+        catch
+        {
+            var childError = string.Empty;
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().ConfigureAwait(false);
+            }
+
+            try
+            {
+                childError = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+
+            process.Dispose();
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(childError)
+                    ? "Host.Sandbox 未能建立控制通道。"
+                    : $"Host.Sandbox 启动失败：{childError.Trim()}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _standardInput.Dispose();
+        if (!_process.HasExited)
+        {
+            _process.Kill(entireProcessTree: true);
+            await _process.WaitForExitAsync().ConfigureAwait(false);
+        }
+
+        _standardOutput.Dispose();
+        _standardError.Dispose();
+        _process.Dispose();
     }
 }

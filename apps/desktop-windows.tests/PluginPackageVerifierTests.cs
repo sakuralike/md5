@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Permissions;
 
@@ -214,6 +215,44 @@ public sealed class PluginPackageVerifierTests : IDisposable
 
         Assert.Empty(decision.DeniedRequired);
         Assert.Contains("api:profile:read", decision.Granted);
+    }
+
+    [Fact]
+    public async Task CapabilityV2GrantIsValidatedAndPreservedInPermissionDecision()
+    {
+        var path = _factory.Create(
+            _directory,
+            capabilityGrants:
+            [
+                new PluginCapabilityGrant(
+                    "storage:private",
+                    JsonSerializer.SerializeToElement(new { scope = "plugin" }),
+                    new PluginCapabilityQuota(Requests: 60, Bytes: 1_048_576),
+                    TtlSeconds: 3600),
+            ]);
+        var inspection = await new PluginPackageVerifier().VerifyAsync(path);
+
+        var decision = new PluginPermissionPolicy().Evaluate(
+            inspection.Manifest,
+            ["ui:command", "storage:private"]);
+
+        var grant = Assert.Single(decision.GrantedGrants);
+        Assert.Equal("storage:private", grant.Capability);
+        Assert.Equal(60, grant.Quota!.Requests);
+        Assert.True(grant.ExpiresAt > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task CapabilityV2GrantCannotReferenceUndeclaredCapability()
+    {
+        var path = _factory.Create(
+            _directory,
+            capabilityGrants: [new PluginCapabilityGrant("storage:shared")]);
+
+        var exception = await Assert.ThrowsAsync<PluginPackageException>(
+            () => new PluginPackageVerifier().VerifyAsync(path));
+
+        Assert.Contains("已声明且唯一", exception.Message);
     }
 
     [Fact]

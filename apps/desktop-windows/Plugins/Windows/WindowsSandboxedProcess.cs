@@ -36,6 +36,7 @@ internal sealed class WindowsSandboxedProcess : ISandboxedProcess
     }
 
     public int ProcessId => _processId;
+    public string IntegrityLevel => "host";
     public bool IsAppContainer => NativeMethods.IsAppContainerProcess(_processHandle);
     public bool HasExited
     {

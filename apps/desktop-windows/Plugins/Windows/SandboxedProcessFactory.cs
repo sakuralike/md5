@@ -10,6 +10,7 @@ internal interface ISandboxedProcessFactory
 internal interface ISandboxedProcess : IAsyncDisposable
 {
     int ProcessId { get; }
+    string IntegrityLevel { get; }
     bool IsAppContainer { get; }
     bool HasExited { get; }
     int? ExitCode { get; }
