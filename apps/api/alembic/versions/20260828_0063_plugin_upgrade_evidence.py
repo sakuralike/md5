@@ -96,14 +96,14 @@ def downgrade() -> None:
         batch.drop_column("migration_evidence_json")
         batch.drop_column("permission_evidence_json")
     with op.batch_alter_table("desktop_plugin_download_tickets") as batch:
-        if "ix_desktop_plugin_download_tickets_installation_id" in indexes:
-            batch.drop_index("ix_desktop_plugin_download_tickets_installation_id")
-        if "ix_desktop_plugin_download_tickets_user_id" in indexes:
-            batch.drop_index("ix_desktop_plugin_download_tickets_user_id")
         if "fk_dpdt_installation" in foreign_keys:
             batch.drop_constraint("fk_dpdt_installation", type_="foreignkey")
         if "fk_dpdt_user" in foreign_keys:
             batch.drop_constraint("fk_dpdt_user", type_="foreignkey")
+        if "ix_desktop_plugin_download_tickets_installation_id" in indexes:
+            batch.drop_index("ix_desktop_plugin_download_tickets_installation_id")
+        if "ix_desktop_plugin_download_tickets_user_id" in indexes:
+            batch.drop_index("ix_desktop_plugin_download_tickets_user_id")
         if "installation_id" in columns:
             batch.drop_column("installation_id")
         if "user_id" in columns:
