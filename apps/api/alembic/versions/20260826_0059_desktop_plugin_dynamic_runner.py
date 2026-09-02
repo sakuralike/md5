@@ -155,6 +155,16 @@ def downgrade() -> None:
         )
         batch_op.drop_index("ix_desktop_plugin_review_findings_dynamic_task_id")
         batch_op.drop_column("dynamic_task_id")
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        inspector = sa.inspect(bind)
+        for table_name in (
+            "desktop_plugin_dynamic_review_tasks",
+            "desktop_plugin_runner_agents",
+        ):
+            for foreign_key in inspector.get_foreign_keys(table_name):
+                if foreign_key.get("name"):
+                    op.drop_constraint(foreign_key["name"], table_name, type_="foreignkey")
     for column in ("runner_id", "artifact_id", "review_run_id"):
         op.drop_index(
             f"ix_desktop_plugin_dynamic_review_tasks_{column}",
