@@ -29,6 +29,9 @@ services:
       DESKTOP_PLUGIN_SIGNING_URL: ${DESKTOP_PLUGIN_SIGNING_URL:-http://openbao:8200}
       DESKTOP_PLUGIN_SIGNING_TOKEN: ${DESKTOP_PLUGIN_SIGNING_TOKEN:-}
       DESKTOP_PLUGIN_SIGNING_KEY: ${DESKTOP_PLUGIN_SIGNING_KEY:-password-detective-plugin-platform}
+      DESKTOP_PLUGIN_GITHUB_TOKEN_FILE: /run/secrets/desktop_plugin_github_token
+    secrets:
+      - desktop_plugin_github_token
     volumes:
       - desktop-plugin-data:/var/lib/password-detective/desktop-plugins
     depends_on:
@@ -109,3 +112,7 @@ volumes:
   desktop-plugin-data:
   desktop-plugin-object-data:
   openbao-data:
+
+secrets:
+  desktop_plugin_github_token:
+    file: /opt/password-detective-staging/.secrets/desktop-plugin-github-token

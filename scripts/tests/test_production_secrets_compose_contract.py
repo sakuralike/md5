@@ -56,4 +56,5 @@ def test_api_image_copies_root_only_secret_mounts_then_drops_privileges() -> Non
     assert 'exec su-exec app "$@"' in entrypoint
     assert "DIRECT_MESSAGE_KEY_VERSION_FILE" in entrypoint
     assert "DIRECT_MESSAGE_KEYRING_FILE" in entrypoint
+    assert "DESKTOP_PLUGIN_GITHUB_TOKEN_FILE" in entrypoint
     assert "/run/password-detective-secrets:mode=0700" in OVERRIDE
