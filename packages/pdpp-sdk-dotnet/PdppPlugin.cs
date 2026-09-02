@@ -63,6 +63,18 @@ public sealed class PdppHostClient
             new { window_id = windowId, title, width, height, modal },
             cancellationToken);
 
+    public Task<JsonElement> ShowPanelAsync(
+        string panelId,
+        string title,
+        IReadOnlyList<PdppPanelControl> controls,
+        double width = 640,
+        double height = 480,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(
+            "host/ui/panel/show",
+            new { panel_id = panelId, title, width, height, controls },
+            cancellationToken);
+
     public async Task<PluginFileReadResult> ReadFileAsync(
         string fileReference,
         long offset,
@@ -227,6 +239,13 @@ public sealed record PluginSelectedFile(
         return file;
     }
 }
+
+public sealed record PdppPanelControl(
+    string Id,
+    string Type,
+    string Label,
+    string? Value = null,
+    bool? Checked = null);
 
 public sealed record PluginVerificationSubmission(
     string CandidateId,

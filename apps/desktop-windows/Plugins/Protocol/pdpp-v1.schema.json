@@ -31,7 +31,8 @@
             "host/api/hash/read",
             "host/api/verification/submit",
             "host/ui/theme/apply",
-            "host/ui/window/open"
+            "host/ui/window/open",
+            "host/ui/panel/show"
           ]
         },
         "params": { "type": "object" }
@@ -96,6 +97,10 @@
         {
           "if": { "properties": { "method": { "const": "host/ui/window/open" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/windowOpenParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/ui/panel/show" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/panelShowParams" } } }
         }
       ]
     },
@@ -245,6 +250,34 @@
         "width": { "type": "number", "minimum": 320, "maximum": 1920 },
         "height": { "type": "number", "minimum": 240, "maximum": 1200 },
         "modal": { "type": "boolean" }
+      }
+    },
+    "panelShowParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["panel_id", "title", "controls"],
+      "properties": {
+        "panel_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "width": { "type": "number", "minimum": 320, "maximum": 1920 },
+        "height": { "type": "number", "minimum": 240, "maximum": 1200 },
+        "controls": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "label"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
+              "type": { "enum": ["text", "label", "input", "checkbox", "button"] },
+              "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "value": { "type": "string", "maxLength": 4096 },
+              "checked": { "type": "boolean" }
+            }
+          }
+        }
       }
     },
     "successResponse": {

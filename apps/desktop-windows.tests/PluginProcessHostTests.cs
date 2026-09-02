@@ -12,6 +12,7 @@ using PasswordDetective.Desktop.Plugins.Runtime;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.Theme;
 using PasswordDetective.Desktop.Plugins.Windows;
+using PasswordDetective.Desktop.Plugins.UI;
 
 namespace PasswordDetective.Desktop.Tests;
 
@@ -560,6 +561,45 @@ public sealed class PluginProcessHostTests : IDisposable
             })));
     }
 
+    [Fact]
+    public async Task HostBrokerRendersOnlyValidatedDeclarativePanelControls()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "panel-broker-storage"));
+        var panelHost = new RecordingPanelHost();
+        using var allowed = new PluginHostBroker(
+            "official.panel",
+            "1.0.0",
+            ["ui:panel"],
+            new PluginPrivateStorage(paths),
+            panelHost: panelHost);
+
+        var result = await allowed.HandleAsync(
+            PdppProtocol.HostUiPanelShowMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                panel_id = "settings",
+                title = "合成设置",
+                controls = new object[]
+                {
+                    new { id = "heading", type = "text", label = "设置" },
+                    new { id = "enabled", type = "checkbox", label = "启用", @checked = true },
+                    new { id = "save", type = "button", label = "保存" },
+                },
+            }));
+
+        Assert.True(result.GetProperty("shown").GetBoolean());
+        Assert.Equal("settings", panelHost.Descriptor!.PanelId);
+        Assert.Equal(3, panelHost.Descriptor.Controls.Count);
+        await Assert.ThrowsAsync<PdppHostRequestException>(() => allowed.HandleAsync(
+            PdppProtocol.HostUiPanelShowMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                panel_id = "settings",
+                title = "合成设置",
+                controls = new[] { new { id = "bad", type = "webview", label = "不允许" } },
+            })));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))
@@ -723,5 +763,26 @@ public sealed class PluginProcessHostTests : IDisposable
         }
 
         public Task ApplyPersistedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingPanelHost : IPluginPanelHost
+    {
+        public PluginPanelDescriptor? Descriptor { get; private set; }
+
+        public Task<JsonElement> ShowAsync(
+            string pluginId,
+            PluginPanelDescriptor descriptor,
+            CancellationToken cancellationToken = default)
+        {
+            Descriptor = descriptor;
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                shown = true,
+                plugin_id = pluginId,
+                panel_id = descriptor.PanelId,
+                control_count = descriptor.Controls.Count,
+                process_owned = true,
+            }));
+        }
     }
 }

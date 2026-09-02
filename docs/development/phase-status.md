@@ -553,6 +553,16 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 
 P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`、更多 Broker 能力、SDK 扩展或独立 Runner VM 已完成。
 
+## 2026-09-02 三端架构重构 P3：声明式 ui:panel 第一轮
+
+| 范围 | 状态 | 说明 |
+|---|---|---|
+| `ui:panel` 协议 | 已完成（P3 第一轮） | 新增 `host/ui/panel/show`，固定面板 ID、标题、尺寸、控件数量和字段集合；协议 Schema 同步更新 |
+| `ui:panel` 宿主渲染 | 已完成（P3 第一轮） | WPF 宿主仅渲染 `text`、`label`、`input`、`checkbox`、`button` 五类声明式控件，不执行插件 XAML、WebView 或事件代码 |
+| `ui:panel` 权限 | 已完成（P3 第一轮） | `ui:panel` 纳入本地/市场权限白名单，未授予时 Broker 失败关闭 |
+| SDK | 已完成（P3 第一轮） | .NET SDK 新增 `ShowPanelAsync` 和 `PdppPanelControl` |
+| 验收 | 已完成（P3 第一轮） | 面板校验/渲染专项、Capability v2、响应 Schema、Rust 管道、Desktop 全量测试通过 |
+
 ## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
 
 | 需求 | 实现证据 | 自动化证据 | 状态与剩余风险 |

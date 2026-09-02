@@ -7,6 +7,7 @@ using PasswordDetective.Desktop.Plugins.Registry;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.Theme;
 using PasswordDetective.Desktop.Plugins.Windows;
+using PasswordDetective.Desktop.Plugins.UI;
 
 namespace PasswordDetective.Desktop.Plugins.Runtime;
 
@@ -69,19 +70,22 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly PluginPrivateStorage _privateStorage;
     private readonly IPluginApiBroker? _apiBroker;
     private readonly IPluginThemeService? _themeService;
+    private readonly IPluginPanelHost? _panelHost;
     private readonly IWindowsPluginIsolationPolicy _isolationPolicy;
 
     public PluginExecutionService(
         PluginStoragePaths paths,
         PluginLogStore logs,
         IPluginApiBroker? apiBroker = null,
-        IPluginThemeService? themeService = null)
+        IPluginThemeService? themeService = null,
+        IPluginPanelHost? panelHost = null)
         : this(
             paths,
             logs,
             apiBroker,
             themeService,
-            RequiredWindowsPluginIsolationPolicy.Instance)
+            RequiredWindowsPluginIsolationPolicy.Instance,
+            panelHost)
     {
     }
 
@@ -90,13 +94,15 @@ public sealed class PluginExecutionService : IPluginExecutionService
         PluginLogStore logs,
         IPluginApiBroker? apiBroker,
         IPluginThemeService? themeService,
-        IWindowsPluginIsolationPolicy isolationPolicy)
+        IWindowsPluginIsolationPolicy isolationPolicy,
+        IPluginPanelHost? panelHost = null)
     {
         _paths = paths;
         _logs = logs;
         _privateStorage = new PluginPrivateStorage(paths);
         _apiBroker = apiBroker;
         _themeService = themeService;
+        _panelHost = panelHost;
         _isolationPolicy = isolationPolicy;
     }
 
@@ -154,7 +160,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             _privateStorage,
             _apiBroker,
             _themeService,
-            installedDirectory);
+            installedDirectory,
+            _panelHost);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

@@ -1,10 +1,12 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using PasswordDetective.Desktop.Plugins.Packages;
 using PasswordDetective.Desktop.Plugins.Protocol;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.Theme;
+using PasswordDetective.Desktop.Plugins.UI;
 
 namespace PasswordDetective.Desktop.Plugins.Runtime;
 
@@ -20,7 +22,11 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
     private readonly PluginPrivateStorage _storage;
     private readonly IPluginApiBroker? _apiBroker;
     private readonly IPluginThemeService? _themeService;
+    private readonly IPluginPanelHost? _panelHost;
     private bool _disposed;
+    private static readonly Regex PanelIdPattern = new(
+        "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     public PluginHostBroker(
         string pluginId,
@@ -29,7 +35,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         PluginPrivateStorage storage,
         IPluginApiBroker? apiBroker = null,
         IPluginThemeService? themeService = null,
-        string? installedDirectory = null)
+        string? installedDirectory = null,
+        IPluginPanelHost? panelHost = null)
     {
         _pluginId = pluginId;
         _pluginVersion = pluginVersion;
@@ -38,6 +45,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         _apiBroker = apiBroker;
         _themeService = themeService;
         _installedDirectory = installedDirectory;
+        _panelHost = panelHost;
     }
 
     public JsonElement PrepareCommandInput(
@@ -150,6 +158,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             PdppProtocol.HostApiVerificationSubmitMethod => CallApiAsync("api:verification:submit", parameters, cancellationToken),
             PdppProtocol.HostUiThemeApplyMethod => ApplyThemeAsync(parameters, cancellationToken),
             PdppProtocol.HostUiWindowOpenMethod => OpenWindowAsync(parameters, cancellationToken),
+            PdppProtocol.HostUiPanelShowMethod => ShowPanelAsync(parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -369,6 +378,143 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             modal = modalElement.ValueKind == JsonValueKind.True,
             process_owned = true,
         }));
+    }
+
+    private async Task<JsonElement> ShowPanelAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("ui:panel");
+        if (_panelHost is null)
+        {
+            throw new PdppHostRequestException(-32003, "声明式面板宿主当前不可用。");
+        }
+
+        var descriptor = ParsePanelDescriptor(parameters);
+        return await _panelHost.ShowAsync(_pluginId, descriptor, cancellationToken);
+    }
+
+    private static PluginPanelDescriptor ParsePanelDescriptor(JsonElement parameters)
+    {
+        if (parameters.ValueKind != JsonValueKind.Object
+            || parameters.EnumerateObject().Any(property => property.Name is not
+                ("panel_id" or "title" or "width" or "height" or "controls")))
+        {
+            throw new PdppHostRequestException(-32602, "面板参数包含未知字段。");
+        }
+
+        var panelId = parameters.TryGetProperty("panel_id", out var idElement)
+            && idElement.ValueKind == JsonValueKind.String
+            ? idElement.GetString()
+            : null;
+        var title = parameters.TryGetProperty("title", out var titleElement)
+            && titleElement.ValueKind == JsonValueKind.String
+            ? titleElement.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(panelId)
+            || panelId.Length > 64
+            || !PanelIdPattern.IsMatch(panelId)
+            || string.IsNullOrWhiteSpace(title)
+            || title.Length > 120)
+        {
+            throw new PdppHostRequestException(-32602, "面板 ID 或标题无效。");
+        }
+
+        var width = ReadPanelDimension(parameters, "width", 640, 320, 1920);
+        var height = ReadPanelDimension(parameters, "height", 480, 240, 1200);
+        if (!parameters.TryGetProperty("controls", out var controlsElement)
+            || controlsElement.ValueKind != JsonValueKind.Array
+            || controlsElement.GetArrayLength() is < 1 or > 32)
+        {
+            throw new PdppHostRequestException(-32602, "面板必须包含 1 到 32 个控件。");
+        }
+
+        var controls = new List<PluginPanelControl>(controlsElement.GetArrayLength());
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var element in controlsElement.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object
+                || element.EnumerateObject().Any(property => property.Name is not
+                    ("id" or "type" or "label" or "value" or "checked")))
+            {
+                throw new PdppHostRequestException(-32602, "面板控件包含未知字段。");
+            }
+
+            var id = ReadPanelText(element, "id", 64);
+            var type = ReadPanelText(element, "type", 16);
+            var label = ReadPanelText(element, "label", 200);
+            if (!PanelIdPattern.IsMatch(id)
+                || !ids.Add(id)
+                || type is not ("text" or "label" or "input" or "checkbox" or "button"))
+            {
+                throw new PdppHostRequestException(-32602, "面板控件 ID 或类型无效。");
+            }
+
+            string? value = null;
+            if (element.TryGetProperty("value", out var valueElement))
+            {
+                if (valueElement.ValueKind != JsonValueKind.String
+                    || valueElement.GetString()!.Length > 4096)
+                {
+                    throw new PdppHostRequestException(-32602, "面板控件 value 无效。");
+                }
+
+                value = valueElement.GetString();
+            }
+
+            bool? isChecked = null;
+            if (element.TryGetProperty("checked", out var checkedElement))
+            {
+                if (checkedElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    throw new PdppHostRequestException(-32602, "面板控件 checked 无效。");
+                }
+
+                isChecked = checkedElement.GetBoolean();
+            }
+
+            if (type == "checkbox" && isChecked is null)
+            {
+                isChecked = false;
+            }
+
+            controls.Add(new PluginPanelControl(id, type, label, value, isChecked));
+        }
+
+        return new PluginPanelDescriptor(panelId, title, width, height, controls);
+    }
+
+    private static double ReadPanelDimension(
+        JsonElement parameters,
+        string name,
+        double defaultValue,
+        double minimum,
+        double maximum)
+    {
+        if (!parameters.TryGetProperty(name, out var element))
+        {
+            return defaultValue;
+        }
+
+        if (!element.TryGetDouble(out var value) || value < minimum || value > maximum)
+        {
+            throw new PdppHostRequestException(-32602, $"面板 {name} 超出允许范围。");
+        }
+
+        return value;
+    }
+
+    private static string ReadPanelText(JsonElement element, string name, int maximum)
+    {
+        if (!element.TryGetProperty(name, out var value)
+            || value.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(value.GetString())
+            || value.GetString()!.Length > maximum)
+        {
+            throw new PdppHostRequestException(-32602, $"面板控件 {name} 无效。");
+        }
+
+        return value.GetString()!;
     }
 
     private static string ReadStorageKey(JsonElement parameters)
