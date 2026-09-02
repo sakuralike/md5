@@ -66,6 +66,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        inspector = sa.inspect(bind)
+        for foreign_key in inspector.get_foreign_keys("desktop_plugin_install_events"):
+            if foreign_key.get("constrained_columns") == ["user_id"] and foreign_key.get("name"):
+                op.drop_constraint(
+                    foreign_key["name"],
+                    "desktop_plugin_install_events",
+                    type_="foreignkey",
+                )
     for column in ("user_id", "kind", "plugin_slug"):
         op.drop_index(
             f"ix_desktop_plugin_install_events_{column}",
