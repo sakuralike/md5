@@ -207,7 +207,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "10.0.x" }
       - uses: actions/setup-python@v5
-        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+        with: { python-version: "3.12.10" }
       - name: Build the same official plugin twice
         shell: pwsh
         run: |

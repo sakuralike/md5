@@ -35,6 +35,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginCategory,
     PluginInstallEventRequest,
     PluginInstallEventResponse,
+    PluginMigrationRetryListResponse,
     PluginReportCreateRequest,
     PluginReportResponse,
     PluginRevocationListResponse,
@@ -49,6 +50,7 @@ from password_detective.modules.desktop_plugins.service import (
     get_canary_plugin,
     get_public_plugin,
     get_public_version,
+    list_migration_retries,
     list_public_catalog,
     list_revocations,
     prepare_download,
@@ -56,6 +58,19 @@ from password_detective.modules.desktop_plugins.service import (
 )
 
 router = APIRouter(prefix="/desktop/plugins", tags=["桌面插件市场"])
+
+
+@router.get("/migration-retries", response_model=PluginMigrationRetryListResponse)
+def migration_retries(
+    installation_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> PluginMigrationRetryListResponse:
+    return list_migration_retries(
+        db,
+        user_id=principal.user.id,
+        installation_id=installation_id,
+    )
 
 
 @router.get(

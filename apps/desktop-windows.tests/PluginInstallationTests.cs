@@ -469,13 +469,18 @@ public sealed class PluginInstallationTests : IDisposable
             throw new DirectoryNotFoundException("Repository root was not found.");
         }
 
-        return Path.Combine(
-            root.FullName,
-            "plugins",
-            "official-plugin-inspector",
-            "bin",
-            "Debug",
-            "net10.0");
+        var pluginRoot = Path.Combine(root.FullName, "plugins", "official-plugin-inspector", "bin");
+        foreach (var configuration in new[] { "Release", "Debug" })
+        {
+            var output = Path.Combine(pluginRoot, configuration, "net10.0");
+            if (Directory.Exists(output))
+            {
+                return output;
+            }
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Official plugin inspector output was not found under '{pluginRoot}'.");
     }
 
     private sealed class RecordingValidator : IPluginUpgradeValidator

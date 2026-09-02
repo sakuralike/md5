@@ -24,7 +24,10 @@ from password_detective.modules.community.notification_service import (
 )
 from password_detective.modules.community.search_index import dispatch_pending_search_events
 from password_detective.modules.desktop_plugins.review_service import process_pending_static_reviews
-from password_detective.modules.desktop_plugins.service import delete_due_remediation_versions
+from password_detective.modules.desktop_plugins.service import (
+    delete_due_remediation_versions,
+    schedule_due_migration_retries,
+)
 from password_detective.modules.rewards.service import process_pending_fulfillments
 from password_detective.modules.risk_alerts.notifications import (
     dispatch_pending_notifications,
@@ -94,6 +97,10 @@ celery_app.conf.update(
         "delete-due-plugin-remediations": {
             "task": "desktop_plugins.delete_due_remediations",
             "schedule": 300.0,
+        },
+        "schedule-desktop-plugin-migration-retries": {
+            "task": "desktop_plugins.schedule_migration_retries",
+            "schedule": 30.0,
         },
     },
 )
@@ -272,5 +279,15 @@ def process_due_plugin_remediations() -> dict[str, int]:
     try:
         with database.session_factory() as db:
             return {"deleted": delete_due_remediation_versions(db)}
+    finally:
+        database.dispose()
+
+
+@celery_app.task(name="desktop_plugins.schedule_migration_retries")
+def process_desktop_plugin_migration_retries() -> dict[str, int]:
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            return schedule_due_migration_retries(db)
     finally:
         database.dispose()

@@ -1,4 +1,4 @@
-import type { DesktopPluginCapability, DesktopPluginProject, DesktopPluginProjectDetail, DesktopPluginStaticReviewReport, DesktopPluginVersion } from "@password-detective/api-contract";
+import type { DesktopPluginBuildProof, DesktopPluginCapability, DesktopPluginProject, DesktopPluginProjectDetail, DesktopPluginStaticReviewReport, DesktopPluginVersion } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
 function key(prefix: string): string {
@@ -94,6 +94,32 @@ export function finalizePluginVersion(token: string, version: DesktopPluginVersi
   return apiRequest<DesktopPluginVersion>(
     `/developer/plugin-versions/${encodeURIComponent(version.id)}/finalize`,
     { method: "POST", headers: { "Idempotency-Key": key("plugin-finalize") }, body: JSON.stringify({ version: version.version }) },
+    token,
+  );
+}
+
+export function attachPluginBuildProof(
+  token: string,
+  version: DesktopPluginVersion,
+  proof: DesktopPluginBuildProof,
+  githubRunId: number,
+  githubArtifactId: number,
+  architecture: "windows-x64" | "windows-arm64" = "windows-x64",
+) {
+  return apiRequest<DesktopPluginVersion>(
+    `/developer/plugin-versions/${encodeURIComponent(version.id)}/build-proof`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": key("plugin-build-proof") },
+      body: JSON.stringify({
+        version: version.version,
+        architecture,
+        github_repository: "sakuralike/md5",
+        github_run_id: githubRunId,
+        github_artifact_id: githubArtifactId,
+        proof,
+      }),
+    },
     token,
   );
 }

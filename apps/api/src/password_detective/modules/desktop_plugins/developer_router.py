@@ -29,6 +29,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginProjectListResponse,
     PluginProjectUpdateRequest,
     PluginStaticReviewReportResponse,
+    PluginVersionBuildProofRequest,
     PluginVersionCreateRequest,
     PluginVersionFinalizeRequest,
     PluginVersionResponse,
@@ -48,6 +49,7 @@ from password_detective.modules.desktop_plugins.service import (
     get_project,
     list_projects,
     list_signing_keys,
+    record_build_proof,
     register_signing_key,
     revoke_signing_key,
     submit_version_for_review,
@@ -398,6 +400,47 @@ def finalize_plugin_version(
         return cached
     try:
         response = finalize_version(
+            db,
+            settings,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _complete(db, lease, response, status.HTTP_200_OK)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post(
+    "/plugin-versions/{version_id}/build-proof",
+    response_model=PluginVersionResponse,
+    dependencies=[
+        Depends(rate_limit("developer.plugin.version.build_proof", limit=10, window_seconds=3600))
+    ],
+)
+def attach_plugin_build_proof(
+    version_id: str,
+    payload: PluginVersionBuildProofRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginVersionResponse:
+    lease = _acquire(
+        db,
+        principal=principal,
+        scope="developer.plugin.version.build_proof",
+        key=idempotency_key,
+        payload={"version_id": version_id, **payload.model_dump(by_alias=True)},
+    )
+    if cached := _cached(lease, PluginVersionResponse):
+        return cached
+    try:
+        response = record_build_proof(
             db,
             settings,
             version_id=version_id,

@@ -10,6 +10,7 @@ import urllib.request
 import zipfile
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,8 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginInstallEvidenceItem,
     PluginInstallEvidenceListResponse,
     PluginMigrationEvidence,
+    PluginMigrationRetryItem,
+    PluginMigrationRetryListResponse,
     PluginPermissionEvidence,
     PluginProjectCreateRequest,
     PluginProjectDetailResponse,
@@ -94,6 +97,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginRevocationListResponse,
     PluginRevocationResponse,
     PluginVersionApproveRequest,
+    PluginVersionBuildProofRequest,
     PluginVersionCreateRequest,
     PluginVersionFinalizeRequest,
     PluginVersionPublishRequest,
@@ -289,6 +293,7 @@ def build_install_evidence_payload(payload: PluginInstallEventRequest) -> bytes:
             if migration
             else "",
         ),
+        ("migration_package_sha256", migration.package_sha256 if migration else ""),
     )
     return ("\n".join(f"{key}={value}" for key, value in values) + "\n").encode()
 
@@ -623,6 +628,11 @@ def _version_response(db: Session, version: DesktopPluginVersion) -> PluginVersi
         finalized_at=version.finalized_at,
         published_at=version.published_at,
         remediation_deadline_at=version.remediation_deadline_at,
+        build_proof_sha256=version.build_proof_sha256,
+        build_proof_git_commit=version.build_proof_git_commit,
+        build_proof_package_sha256=version.build_proof_package_sha256,
+        build_proof_rebuild_sha256=version.build_proof_rebuild_sha256,
+        build_proof_verified_at=version.build_proof_verified_at,
         artifacts=[_artifact_response(artifact) for artifact in artifacts],
     )
 
@@ -1377,6 +1387,250 @@ def finalize_version(
     db.commit()
     db.refresh(version)
     return _version_response(db, version)
+
+
+def record_build_proof(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+    payload: PluginVersionBuildProofRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginVersionResponse:
+    _require_verified(principal)
+    plugin, version = _owned_version(
+        db, version_id=version_id, owner_id=principal.user.id, lock=True
+    )
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict",
+            "插件版本已被其他请求修改",
+            status_code=409,
+            details={"current_version": version.version},
+        )
+    if version.source_review_mode not in {"source", "reproducible"}:
+        raise AppError(
+            "desktop_plugin.build_proof_not_required",
+            "仅源码或可复现构建审查模式需要提交构建证明",
+            status_code=409,
+        )
+    if payload.github_repository.casefold() != settings.desktop_plugin_github_repository.casefold():
+        raise AppError(
+            "desktop_plugin.build_proof_repository_invalid",
+            "构建证明不属于受信 GitHub 仓库",
+            status_code=422,
+        )
+    if version.status not in {
+        DesktopPluginVersionStatus.QUARANTINED,
+        DesktopPluginVersionStatus.REVIEW_QUEUED,
+        DesktopPluginVersionStatus.AUTO_REVIEW_RUNNING,
+        DesktopPluginVersionStatus.AUTO_REVIEW_FAILED,
+        DesktopPluginVersionStatus.MANUAL_REVIEW_READY,
+        DesktopPluginVersionStatus.APPROVED,
+    }:
+        raise AppError(
+            "desktop_plugin.build_proof_not_attachable",
+            "当前版本状态不能绑定构建证明",
+            status_code=409,
+        )
+    artifact = db.scalar(
+        select(DesktopPluginArtifact).where(
+            DesktopPluginArtifact.plugin_version_id == version.id,
+            DesktopPluginArtifact.architecture == payload.architecture,
+        )
+    )
+    if (
+        artifact is None
+        or artifact.status != DesktopPluginArtifactStatus.QUARANTINED
+        or not artifact.storage_key
+        or artifact.sha256 != payload.proof.package_sha256
+    ):
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_mismatch",
+            "构建证明制品摘要与隔离区版本制品不一致",
+            status_code=422,
+        )
+    package_path = DesktopPluginStorage(settings).quarantine_path(artifact.storage_key)
+    if not package_path.is_file():
+        raise AppError(
+            "desktop_plugin.artifact_missing", "隔离区插件制品不存在", status_code=422
+        )
+    try:
+        with zipfile.ZipFile(package_path) as archive:
+            package_provenance = json.loads(archive.read("provenance.json"))
+    except (KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        raise AppError(
+            "desktop_plugin.build_proof_provenance_invalid",
+            "插件制品缺少有效构建溯源",
+            status_code=422,
+        ) from exc
+    proof_json = payload.proof.model_dump(by_alias=True, mode="json")
+    github_proof, github_head_sha = _download_github_build_proof(
+        settings,
+        repository=payload.github_repository,
+        run_id=payload.github_run_id,
+        artifact_id=payload.github_artifact_id,
+    )
+    if github_proof != proof_json or github_head_sha != payload.proof.git_commit:
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_invalid",
+            "GitHub artifact 中的构建证明与请求不一致",
+            status_code=422,
+        )
+    proof_provenance = payload.proof.provenance.model_dump(by_alias=True)
+    if (
+        package_provenance != proof_provenance
+        or payload.proof.git_commit != proof_provenance["source_commit"]
+    ):
+        raise AppError(
+            "desktop_plugin.build_proof_provenance_mismatch",
+            "构建证明源码提交或 provenance 与插件制品不一致",
+            status_code=422,
+        )
+    proof_sha256 = hashlib.sha256(
+        json.dumps(proof_json, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    version.build_proof_sha256 = proof_sha256
+    version.build_proof_git_commit = payload.proof.git_commit
+    version.build_proof_package_sha256 = payload.proof.package_sha256
+    version.build_proof_rebuild_sha256 = payload.proof.rebuild_sha256
+    version.build_proof_verified_at = utc_now()
+    version.version += 1
+    _write_audit(
+        db,
+        action="desktop_plugin.version.build_proof_verified",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={
+            "architecture": payload.architecture,
+            "proof_sha256": proof_sha256,
+            "package_sha256": payload.proof.package_sha256,
+            "git_commit": payload.proof.git_commit,
+            "github_run_id": payload.github_run_id,
+            "github_artifact_id": payload.github_artifact_id,
+        },
+    )
+    db.commit()
+    db.refresh(version)
+    return _version_response(db, version)
+
+
+def _download_github_build_proof(
+    settings: Settings,
+    *,
+    repository: str,
+    run_id: int,
+    artifact_id: int,
+) -> tuple[dict[str, Any], str]:
+    token = settings.desktop_plugin_github_token.get_secret_value().strip()
+    if not token:
+        raise AppError(
+            "desktop_plugin.build_proof_verifier_unavailable",
+            "服务端未配置 GitHub 构建证明读取凭据",
+            status_code=503,
+        )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "password-detective-plugin-proof-verifier/1",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    def fetch_json(url: str) -> dict[str, Any]:
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
+                value = json.loads(response.read(1_048_577))
+        except (
+            OSError,
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise AppError(
+                "desktop_plugin.build_proof_verifier_unavailable",
+                "GitHub 构建证明查询失败",
+                status_code=503,
+            ) from exc
+        if not isinstance(value, dict):
+            raise AppError(
+                "desktop_plugin.build_proof_artifact_invalid",
+                "GitHub 构建证明元数据无效",
+                status_code=422,
+            )
+        return value
+
+    base = f"https://api.github.com/repos/{repository}"
+    run = fetch_json(f"{base}/actions/runs/{run_id}")
+    jobs = fetch_json(f"{base}/actions/runs/{run_id}/jobs?per_page=100")
+    artifact = fetch_json(f"{base}/actions/artifacts/{artifact_id}")
+    expected_name = f"plugin-build-proof-{run.get('head_sha', '')}"
+    plugin_jobs = [
+        job
+        for job in jobs.get("jobs", [])
+        if isinstance(job, dict) and job.get("name") == "plugin build proof"
+    ]
+    if (
+        run.get("id") != run_id
+        or run.get("status") != "completed"
+        or run.get("name") != "CI"
+        or len(plugin_jobs) != 1
+        or plugin_jobs[0].get("conclusion") != "success"
+        or artifact.get("id") != artifact_id
+        or artifact.get("workflow_run", {}).get("id") != run_id
+        or artifact.get("name") != expected_name
+        or artifact.get("expired") is True
+    ):
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_invalid",
+            "GitHub 运行或 artifact 不满足构建证明门禁",
+            status_code=422,
+        )
+    download_url = artifact.get("archive_download_url")
+    if not isinstance(download_url, str) or not download_url.startswith(
+        f"https://api.github.com/repos/{repository}/actions/artifacts/"
+    ):
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_invalid",
+            "GitHub artifact 下载地址无效",
+            status_code=422,
+        )
+    request = urllib.request.Request(download_url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+            archive_bytes = response.read(32 * 1024 * 1024 + 1)
+        if len(archive_bytes) > 32 * 1024 * 1024:
+            raise ValueError("artifact too large")
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            candidates = [
+                name for name in archive.namelist() if Path(name).name == "build-proof.json"
+            ]
+            if len(candidates) != 1:
+                raise ValueError("build proof file missing")
+            proof = json.loads(archive.read(candidates[0]))
+    except (
+        OSError,
+        urllib.error.HTTPError,
+        urllib.error.URLError,
+        ValueError,
+        zipfile.BadZipFile,
+        json.JSONDecodeError,
+    ) as exc:
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_invalid",
+            "GitHub artifact 无法解析为有效构建证明",
+            status_code=422,
+        ) from exc
+    if not isinstance(proof, dict):
+        raise AppError(
+            "desktop_plugin.build_proof_artifact_invalid",
+            "GitHub artifact 中的构建证明无效",
+            status_code=422,
+        )
+    return proof, str(run.get("head_sha", "")).lower()
 
 
 def _parse_semver(value: str) -> tuple[int, int, int]:
@@ -2183,24 +2437,42 @@ def record_install_event(
                 )
         if payload.migration_evidence is not None:
             evidence = payload.migration_evidence
+            migration_declaration = (
+                version.manifest_json.get("migration")
+                if version is not None and isinstance(version.manifest_json, dict)
+                else None
+            )
+            migration_required = (
+                isinstance(migration_declaration, dict)
+                and migration_declaration.get("required") is True
+            )
             if (
                 payload.kind != "upgraded"
                 or payload.result == "success"
                 and evidence.status not in {"completed", "not_required"}
                 or payload.result == "failure"
                 and evidence.status != "failed"
+                or evidence.status != "not_required" and not migration_required
+                or evidence.status != "not_required"
+                and (
+                    version is None
+                    or evidence.package_sha256 is None
+                    or db.scalar(
+                        select(DesktopPluginArtifact.sha256).where(
+                            DesktopPluginArtifact.plugin_version_id == version.id,
+                            DesktopPluginArtifact.architecture == payload.architecture,
+                        )
+                    )
+                    != evidence.package_sha256
+                )
                 or evidence.completed_at is None
                 or version is None
                 or evidence.to_version != version.semver
                 or evidence.from_version == evidence.to_version
-                or version.manifest_json is not None
-                and isinstance(version.manifest_json.get("migration"), dict)
-                and version.manifest_json["migration"].get("required") is True
+                or migration_required
                 and evidence.from_version
-                not in version.manifest_json["migration"].get("from_versions", [])
-                or version.manifest_json is not None
-                and isinstance(version.manifest_json.get("migration"), dict)
-                and version.manifest_json["migration"].get("required") is True
+                not in migration_declaration.get("from_versions", [])
+                or migration_required
                 and evidence.status == "completed"
                 and not evidence.steps
                 or _aware(evidence.started_at) > utc_now() + timedelta(minutes=5)
@@ -2212,8 +2484,7 @@ def record_install_event(
                     "迁移证据与平台版本记录不一致",
                     status_code=422,
                 )
-    db.add(
-        DesktopPluginInstallEvent(
+    event = DesktopPluginInstallEvent(
             event_id=payload.event_id,
             plugin_slug=payload.plugin_slug,
             semver=payload.semver,
@@ -2237,7 +2508,48 @@ def record_install_event(
             evidence_signature=payload.evidence_signature,
             user_id=user_id,
         )
-    )
+    if payload.migration_evidence is not None and installation_id is not None:
+        evidence = payload.migration_evidence
+        pending_retries = list(
+            db.scalars(
+                select(DesktopPluginInstallEvent).where(
+                    DesktopPluginInstallEvent.installation_id == installation_id,
+                    DesktopPluginInstallEvent.plugin_slug == payload.plugin_slug,
+                    DesktopPluginInstallEvent.semver == payload.semver,
+                    DesktopPluginInstallEvent.migration_retry_status.in_(
+                        ["scheduled", "available"]
+                    ),
+                )
+            ).all()
+        )
+        now = utc_now()
+        if payload.result == "success":
+            for retry in pending_retries:
+                retry.migration_retry_status = "completed"
+                retry.migration_retry_completed_at = now
+        elif evidence.status == "failed":
+            for retry in pending_retries:
+                retry.migration_retry_status = "superseded"
+                retry.migration_retry_completed_at = now
+            prior_attempts = db.scalar(
+                select(func.count(DesktopPluginInstallEvent.id)).where(
+                    DesktopPluginInstallEvent.installation_id == installation_id,
+                    DesktopPluginInstallEvent.plugin_slug == payload.plugin_slug,
+                    DesktopPluginInstallEvent.semver == payload.semver,
+                    DesktopPluginInstallEvent.result == "failure",
+                    DesktopPluginInstallEvent.migration_evidence_json.is_not(None),
+                )
+            ) or 0
+            attempt = prior_attempts + 1
+            event.migration_retry_attempt = attempt
+            if attempt >= 3:
+                event.migration_retry_status = "exhausted"
+                event.migration_retry_completed_at = now
+            else:
+                event.migration_retry_status = "scheduled"
+                delay_seconds = 60 if attempt == 1 else 300
+                event.migration_retry_next_at = now + timedelta(seconds=delay_seconds)
+    db.add(event)
     db.commit()
     return PluginInstallEventResponse(accepted=True, event_id=payload.event_id)
 
@@ -2295,6 +2607,60 @@ def list_install_evidence(
         page_size=page_size,
         total=total,
     )
+
+
+def schedule_due_migration_retries(db: Session, *, limit: int = 100) -> dict[str, int]:
+    now = utc_now()
+    rows = list(
+        db.scalars(
+            select(DesktopPluginInstallEvent)
+            .where(
+                DesktopPluginInstallEvent.migration_retry_status == "scheduled",
+                DesktopPluginInstallEvent.migration_retry_next_at <= now,
+            )
+            .order_by(DesktopPluginInstallEvent.migration_retry_next_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        ).all()
+    )
+    for row in rows:
+        row.migration_retry_status = "available"
+        row.migration_retry_available_at = now
+    db.commit()
+    return {"available": len(rows)}
+
+
+def list_migration_retries(
+    db: Session, *, user_id: str, installation_id: str
+) -> PluginMigrationRetryListResponse:
+    _active_installation(db, installation_id, user_id, for_update=False)
+    rows = list(
+        db.scalars(
+            select(DesktopPluginInstallEvent)
+            .where(
+                DesktopPluginInstallEvent.user_id == user_id,
+                DesktopPluginInstallEvent.installation_id == installation_id,
+                DesktopPluginInstallEvent.migration_retry_status == "available",
+            )
+            .order_by(DesktopPluginInstallEvent.migration_retry_available_at)
+        ).all()
+    )
+    items: list[PluginMigrationRetryItem] = []
+    for row in rows:
+        evidence = PluginMigrationEvidence.model_validate(row.migration_evidence_json)
+        items.append(
+            PluginMigrationRetryItem(
+                event_id=row.event_id,
+                plugin_slug=row.plugin_slug,
+                semver=row.semver,
+                architecture=row.architecture,
+                from_version=evidence.from_version,
+                package_sha256=evidence.package_sha256 or "",
+                attempt=row.migration_retry_attempt or 1,
+                available_at=_aware(row.migration_retry_available_at or row.created_at),
+            )
+        )
+    return PluginMigrationRetryListResponse(items=items)
 
 
 def submit_version_for_review(
@@ -2514,6 +2880,11 @@ def get_review_detail(db: Session, *, version_id: str) -> PluginReviewDetailResp
         ],
         review_runs=list_review_runs(db, version_id=version.id, developer_visible_only=False),
         remediation_deadline_at=version.remediation_deadline_at,
+        build_proof_sha256=version.build_proof_sha256,
+        build_proof_git_commit=version.build_proof_git_commit,
+        build_proof_package_sha256=version.build_proof_package_sha256,
+        build_proof_rebuild_sha256=version.build_proof_rebuild_sha256,
+        build_proof_verified_at=version.build_proof_verified_at,
         publication_channels=list(
             db.scalars(
                 select(DesktopPluginPublication.channel).where(
@@ -2880,6 +3251,16 @@ def publish_version(
     }:
         raise AppError(
             "desktop_plugin.version_not_publishable", "只有批准版本才能发布", status_code=409
+        )
+    if (
+        version.status == DesktopPluginVersionStatus.APPROVED
+        and version.source_review_mode in {"source", "reproducible"}
+        and version.build_proof_sha256 is None
+    ):
+        raise AppError(
+            "desktop_plugin.build_proof_required",
+            "源码或可复现构建版本发布前必须绑定已验证的构建证明",
+            status_code=409,
         )
     if db.scalar(
         select(DesktopPluginPublication.id).where(

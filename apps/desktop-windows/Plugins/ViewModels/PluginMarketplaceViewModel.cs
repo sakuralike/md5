@@ -348,7 +348,36 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                 installed,
                 catalogItems,
                 _revokedMarketPlugins,
-                _revokedMarketVersions);
+                _revokedMarketVersions).ToArray();
+            var accessToken = await TryGetAccessTokenAsync();
+            if (!string.IsNullOrWhiteSpace(accessToken) && _identityService is not null)
+            {
+                try
+                {
+                    var identity = await _identityService.GetOrCreateAsync();
+                    var retries = await _marketApi.GetPluginMigrationRetriesAsync(
+                        _serverBaseUrl,
+                        accessToken,
+                        identity.InstallationId);
+                    var retryAttempts = retries.Items.ToDictionary(
+                        item => $"{item.PluginSlug}@{item.Semver}",
+                        item => item.Attempt,
+                        StringComparer.Ordinal);
+                    updates = updates.Select(update => retryAttempts.TryGetValue(
+                            $"{update.PluginSlug}@{update.TargetVersion}",
+                            out var attempt)
+                        ? update with
+                        {
+                            State = "failed",
+                            LastError = $"服务器已安排第 {attempt + 1} 次迁移重试。",
+                        }
+                        : update).ToArray();
+                }
+                catch
+                {
+                    // Retry scheduling is advisory; catalog updates remain usable when it is unavailable.
+                }
+            }
             PluginUpdates.Clear();
             foreach (var update in updates)
             {
@@ -1197,7 +1226,8 @@ public sealed class PluginMarketplaceViewModel : INotifyPropertyChanged
                         new PasswordDetective.Desktop.Services.PluginMigrationStepEvidencePayload(
                             step.StepId,
                             step.Status,
-                            step.AttemptCount)).ToArray())
+                            step.AttemptCount)).ToArray(),
+                    migration.PackageSha256)
                 : null;
             var eventId = Guid.NewGuid().ToString("N");
             var canSignEvidence = !string.IsNullOrWhiteSpace(accessToken)

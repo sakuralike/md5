@@ -3200,12 +3200,14 @@ export const DESKTOP_PLUGIN_PATHS = {
   canaryCatalog: "/desktop/plugins/canary/catalog",
   canaryDetail: "/desktop/plugins/canary/{plugin_slug}",
   revocations: "/desktop/plugins/revocations",
+  migrationRetries: "/desktop/plugins/migration-retries",
   brokerAuthorize: "/desktop/plugins/{plugin_slug}/broker/authorize",
   developerProjects: "/developer/plugins",
   developerSigningKeys: "/developer/plugins/signing-keys",
   developerVersions: "/developer/plugins/{plugin_id}/versions",
   uploadSession: "/developer/plugin-versions/{version_id}/upload-session",
   finalize: "/developer/plugin-versions/{version_id}/finalize",
+  buildProof: "/developer/plugin-versions/{version_id}/build-proof",
   submit: "/developer/plugin-versions/{version_id}/submit",
   reviewReport: "/developer/plugin-versions/{version_id}/review-report",
   adminRunners: "/admin/plugin-review-runners",
@@ -3260,6 +3262,11 @@ export interface DesktopPluginVersion {
   finalized_at: string | null;
   published_at: string | null;
   remediation_deadline_at: string | null;
+  build_proof_sha256?: string | null;
+  build_proof_git_commit?: string | null;
+  build_proof_package_sha256?: string | null;
+  build_proof_rebuild_sha256?: string | null;
+  build_proof_verified_at?: string | null;
   artifacts: DesktopPluginArtifact[];
 }
 
@@ -3390,12 +3397,44 @@ export interface DesktopPluginMigrationEvidence {
   started_at: string;
   completed_at: string | null;
   steps: DesktopPluginMigrationStepEvidence[];
+  package_sha256?: string | null;
 }
 
 export interface DesktopPluginMigrationStepEvidence {
   step_id: string;
   status: "completed" | "skipped" | "failed";
   attempt_count: number;
+}
+
+export interface DesktopPluginBuildProvenanceRecord {
+  path: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+export interface DesktopPluginBuildProof {
+  schema: "pd.plugin.build-proof/v1";
+  git_commit: string;
+  package_sha256: string;
+  rebuild_sha256: string;
+  content_reproducible: true;
+  provenance: {
+    schema: "pd.plugin.provenance/v1";
+    source_commit: string;
+    source_files: DesktopPluginBuildProvenanceRecord[];
+    sbom: DesktopPluginBuildProvenanceRecord;
+    binaries: DesktopPluginBuildProvenanceRecord[];
+  };
+  toolchain: Record<string, string>;
+}
+
+export interface DesktopPluginBuildProofRequest {
+  version: number;
+  architecture: DesktopPluginArchitecture;
+  github_repository: string;
+  github_run_id: number;
+  github_artifact_id: number;
+  proof: DesktopPluginBuildProof;
 }
 
 export interface DesktopPluginInstallEvidenceItem {
@@ -3624,6 +3663,21 @@ export interface DesktopPluginReviewDetail extends DesktopPluginReviewQueueItem 
   review_runs: DesktopPluginStaticReviewRun[];
   remediation_deadline_at: string | null;
   publication_channels: string[];
+}
+
+export interface DesktopPluginMigrationRetry {
+  event_id: string;
+  plugin_slug: string;
+  semver: string;
+  architecture: DesktopPluginArchitecture;
+  from_version: string;
+  package_sha256: string;
+  attempt: number;
+  available_at: string;
+}
+
+export interface DesktopPluginMigrationRetryListResponse {
+  items: DesktopPluginMigrationRetry[];
 }
 
 export interface DesktopPluginReviewQueueResponse {

@@ -82,7 +82,7 @@ SDK 提供 `RunAsync`、健康检查、优雅关闭、结构化错误和 `PdppHo
 
 `pdpp-lint` 检查 ZIP 路径安全、大小写重复路径、必需文件、Manifest/Provenance JSON 及关键字段，并输出包 SHA-256。它是轻量前置检查，不替代服务端隔离静态、供应链和动态审核。
 
-迁移插件可覆盖 SDK 的 `MigrateAsync`，返回 `PdppMigrationResult`；每个 `PdppMigrationStep` 必须使用稳定的 `StepId`，返回 `completed`、`skipped` 或 `failed`，并填写本次步骤的 `AttemptCount`。宿主会校验步骤唯一性、状态和尝试次数，服务端设备签名回执会保存同一组脱敏步骤证据。
+迁移插件可覆盖 SDK 的 `MigrateAsync`，返回 `PdppMigrationResult`；每个 `PdppMigrationStep` 必须使用稳定的 `StepId`，返回 `completed`、`skipped` 或 `failed`，并填写本次步骤的 `AttemptCount`。宿主会校验步骤唯一性、状态和尝试次数，并把当前 `.pdpkg` 的 SHA-256 一并写入设备签名回执；服务端只接受与该版本/架构制品摘要一致的迁移证据。
 
 ### 官方插件包体检工具
 
@@ -137,7 +137,7 @@ pwsh ./plugins/official-skin/build-package.ps1
 
 ## 本地调试与上架
 
-先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。桌面端只为平台审核来源的已安装插件检查 stable 更新，本地未审核包不会自动匹配线上同名项目。已登录桌面端会用注册安装实例的 ECDSA P-256 密钥签署脱敏权限/迁移回执；回执不包含插件私有数据、文件路径、错误原文、令牌或命令输出。
+先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。源码或可复现构建审查模式还必须绑定 GitHub Actions `plugin-build-proof` artifact：服务端使用只读 `DESKTOP_PLUGIN_GITHUB_TOKEN_FILE` 下载并校验成功的 `CI` 运行、工作流 job、artifact 名称、提交、包内 `provenance.json` 和版本制品 SHA-256，证明缺失或不一致时不能发布。桌面端只为平台审核来源的已安装插件检查 stable 更新，本地未审核包不会自动匹配线上同名项目。已登录桌面端会用注册安装实例的 ECDSA P-256 密钥签署脱敏权限/迁移回执；回执不包含插件私有数据、文件路径、错误原文、令牌或命令输出。
 
 内部 Canary 通道只允许管理员账号使用。桌面端先用已注册安装实例签署版本票据请求，服务器返回一次性短期下载票据；实际下载时必须同时发送管理员 Bearer Token、安装实例 ID 和针对票据的设备签名。普通 stable 下载不携带 Canary 头，也不会看到 Canary 目录。
 

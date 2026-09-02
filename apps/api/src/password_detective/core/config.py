@@ -27,6 +27,7 @@ FILE_BACKED_SETTING_ENVIRONMENTS: dict[str, str] = {
     "desktop_plugin_s3_secret_access_key": "DESKTOP_PLUGIN_S3_SECRET_ACCESS_KEY",
     "desktop_plugin_signing_token": "DESKTOP_PLUGIN_SIGNING_TOKEN",
     "desktop_plugin_llm_review_api_key": "DESKTOP_PLUGIN_LLM_REVIEW_API_KEY",
+    "desktop_plugin_github_token": "DESKTOP_PLUGIN_GITHUB_TOKEN",
     "notification_webhook_secret": "NOTIFICATION_WEBHOOK_SECRET",
     "notification_smtp_password": "NOTIFICATION_SMTP_PASSWORD",
 }
@@ -113,6 +114,8 @@ class Settings(BaseSettings):
     desktop_plugin_llm_review_api_key: SecretStr = SecretStr("")
     desktop_plugin_llm_review_model: str = ""
     desktop_plugin_llm_review_timeout_seconds: int = Field(default=30, ge=5, le=120)
+    desktop_plugin_github_repository: str = "sakuralike/md5"
+    desktop_plugin_github_token: SecretStr = SecretStr("")
     desktop_plugin_max_package_bytes: int = Field(
         default=536_870_912, ge=1_048_576, le=2_147_483_648
     )

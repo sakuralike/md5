@@ -257,7 +257,8 @@ public sealed class PluginInstaller
                         "running",
                         migrationStartedAt.Value,
                         null,
-                        null);
+                        null,
+                        PackageSha256: inspection.PackageSha256);
                     var migrationResult = await upgradeValidator.MigrateAsync(
                         inspection,
                         finalDirectory,
@@ -285,7 +286,8 @@ public sealed class PluginInstaller
                         timestamp,
                         timestamp,
                         null,
-                        []);
+                        [],
+                        PackageSha256: inspection.PackageSha256);
                 }
                 await _validator.ValidateAsync(
                     inspection,
@@ -404,7 +406,8 @@ public sealed class PluginInstaller
                                 step.StepId,
                                 step.Status,
                                 step.AttemptCount)).ToArray()
-                            : []);
+                            : [],
+                        PackageSha256: inspection.PackageSha256);
                     try
                     {
                         await _registry.UpdateAsync(

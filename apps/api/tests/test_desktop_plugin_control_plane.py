@@ -13,6 +13,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from sqlalchemy import select
 
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
@@ -21,6 +22,7 @@ from password_detective.db.models.desktop_plugin import (
     DesktopPluginArtifact,
     DesktopPluginArtifactStatus,
     DesktopPluginArtifactZone,
+    DesktopPluginInstallEvent,
     DesktopPluginPublication,
     DesktopPluginPublicationStatus,
     DesktopPluginRevocation,
@@ -42,6 +44,7 @@ from password_detective.modules.desktop_plugins.service import (
     build_canary_download_payload,
     build_canary_ticket_payload,
     build_install_evidence_payload,
+    schedule_due_migration_retries,
 )
 from password_detective.modules.desktop_plugins.storage import DesktopPluginStorage
 
@@ -966,6 +969,95 @@ def test_optional_migration_declaration_is_validated_during_finalize(client) -> 
     assert rejected.json()["code"] == "desktop_plugin.invalid_package"
 
 
+def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> None:
+    headers, _ = _register_verified(client, "build_proof_owner")
+    private_key = Ed25519PrivateKey.generate()
+    package, public_key = _package(
+        private_key,
+        plugin_id="com.synthetic.build-proof",
+        include_provenance=True,
+        extra_files={"source/Program.cs": b"internal static class SyntheticBuildProof {}"},
+    )
+    project_id, signing_key_id = _create_project_and_key(
+        client,
+        headers,
+        slug="com.synthetic.build-proof",
+        public_key_base64=public_key,
+    )
+    version = _create_version(
+        client,
+        headers,
+        project_id=project_id,
+        signing_key_id=signing_key_id,
+        source_review_mode="source",
+    )
+    _upload(client, headers, version["id"], package)
+    current = _current_version(client, headers, project_id)
+    finalized = client.post(
+        f"/api/v1/developer/plugin-versions/{version['id']}/finalize",
+        headers={**headers, "Idempotency-Key": f"build-proof-finalize-{uuid4().hex}"},
+        json={"version": current["version"]},
+    )
+    assert finalized.status_code == 200, finalized.text
+
+    admin_headers, admin_id = _register_verified(client, "build_proof_admin")
+    with client.app.state.database.session_factory() as db:
+        admin = db.get(User, admin_id)
+        row = db.get(DesktopPluginVersion, version["id"])
+        assert admin is not None and row is not None
+        admin.role = UserRole.ADMIN
+        row.status = DesktopPluginVersionStatus.APPROVED
+        row.approved_capabilities = list(row.requested_capabilities)
+        row.review_policy_version = "synthetic-review-policy-v1"
+        db.commit()
+
+    blocked = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{version['id']}/publish",
+        headers={**admin_headers, "Idempotency-Key": f"build-proof-publish-blocked-{uuid4().hex}"},
+        json={"version": finalized.json()["version"], "channel": "stable"},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "desktop_plugin.build_proof_required"
+
+    with zipfile.ZipFile(io.BytesIO(package)) as archive:
+        provenance = json.loads(archive.read("provenance.json"))
+    proof = {
+        "schema": "pd.plugin.build-proof/v1",
+        "git_commit": "a" * 40,
+        "package_sha256": hashlib.sha256(package).hexdigest(),
+        "rebuild_sha256": "b" * 64,
+        "content_reproducible": True,
+        "provenance": provenance,
+        "toolchain": {"dotnet": "10.0.0", "python": "3.12.13"},
+    }
+    monkeypatch.setattr(
+        "password_detective.modules.desktop_plugins.service._download_github_build_proof",
+        lambda settings, repository, run_id, artifact_id: (proof, "a" * 40),
+    )
+    attached = client.post(
+        f"/api/v1/developer/plugin-versions/{version['id']}/build-proof",
+        headers={**headers, "Idempotency-Key": f"build-proof-attach-{uuid4().hex}"},
+        json={
+            "version": finalized.json()["version"],
+            "architecture": "windows-x64",
+            "github_repository": "sakuralike/md5",
+            "github_run_id": 33587836416,
+            "github_artifact_id": 9830710776,
+            "proof": proof,
+        },
+    )
+    assert attached.status_code == 200, attached.text
+    assert attached.json()["build_proof_sha256"]
+    assert attached.json()["build_proof_package_sha256"] == proof["package_sha256"]
+
+    published = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{version['id']}/publish",
+        headers={**admin_headers, "Idempotency-Key": f"build-proof-publish-{uuid4().hex}"},
+        json={"version": attached.json()["version"], "channel": "stable"},
+    )
+    assert published.status_code == 200, published.text
+
+
 def test_public_market_filters_downloads_and_returns_signed_revocations(client) -> None:
     _, owner_id, project_id, finalized, package, _, _ = _finalized_fixture(
         client, "com.synthetic.published-plugin"
@@ -1360,18 +1452,24 @@ def test_authenticated_install_event_stores_validated_upgrade_evidence_and_admin
     client,
 ) -> None:
     developer_headers, owner_id, project_id, finalized, _, _, _ = _finalized_fixture(
-        client, "com.synthetic.upgrade-evidence"
+        client,
+        "com.synthetic.upgrade-evidence",
+        migration={
+            "required": True,
+            "from_versions": ["0.9.0"],
+            "strategy": "idempotent",
+        },
     )
     with client.app.state.database.session_factory() as db:
         plugin = db.get(DesktopPlugin, project_id)
         version = db.get(DesktopPluginVersion, finalized["id"])
         artifact = db.get(DesktopPluginArtifact, finalized["artifacts"][0]["id"])
         assert plugin is not None and version is not None
+        assert artifact is not None
         plugin.status = DesktopPluginStatus.ACTIVE
         version.status = DesktopPluginVersionStatus.PUBLISHED
         version.approved_capabilities = list(version.requested_capabilities)
         version.signing_key_fingerprint = "a" * 64
-        assert artifact is not None
         artifact.status = DesktopPluginArtifactStatus.PUBLIC
         artifact.zone = DesktopPluginArtifactZone.PUBLIC
         artifact.public_storage_key = artifact.storage_key or "public/synthetic.pdpkg"
@@ -1423,6 +1521,7 @@ def test_authenticated_install_event_stores_validated_upgrade_evidence_and_admin
             "steps": [
                 {"step_id": "settings.copy", "status": "completed", "attempt_count": 2}
             ],
+            "package_sha256": artifact.sha256,
         },
         "installation_id": installation_id,
         "evidence_signature": "x" * 64,
@@ -1488,6 +1587,102 @@ def test_authenticated_install_event_stores_validated_upgrade_evidence_and_admin
     )
     assert rejected.status_code == 422
     assert rejected.json()["code"] == "desktop_plugin.permission_evidence_invalid"
+
+    mismatched = {**event, "event_id": "synthetic-upgrade-evidence-003"}
+    mismatched["migration_evidence"] = {
+        **event["migration_evidence"],
+        "package_sha256": "c" * 64,
+    }
+    mismatched["evidence_signature"] = base64.b64encode(
+        installation_key.sign(
+            build_install_evidence_payload(PluginInstallEventRequest.model_validate(mismatched)),
+            ec.ECDSA(hashes.SHA256()),
+        )
+    ).decode()
+    mismatched_rejected = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={**developer_headers, "Idempotency-Key": mismatched["event_id"]},
+        json=mismatched,
+    )
+    assert mismatched_rejected.status_code == 422
+    assert mismatched_rejected.json()["code"] == "desktop_plugin.migration_evidence_invalid"
+
+    failed = {**event, "event_id": "synthetic-upgrade-evidence-retry-001", "result": "failure"}
+    failed["permission_evidence"] = None
+    failed["migration_evidence"] = {
+        **event["migration_evidence"],
+        "status": "failed",
+        "steps": [{"step_id": "settings.copy", "status": "failed", "attempt_count": 1}],
+    }
+    failed["evidence_signature"] = base64.b64encode(
+        installation_key.sign(
+            build_install_evidence_payload(PluginInstallEventRequest.model_validate(failed)),
+            ec.ECDSA(hashes.SHA256()),
+        )
+    ).decode()
+    failed_response = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={**developer_headers, "Idempotency-Key": failed["event_id"]},
+        json=failed,
+    )
+    assert failed_response.status_code == 202, failed_response.text
+    with client.app.state.database.session_factory() as db:
+        failed_row = db.scalar(
+            select(DesktopPluginInstallEvent).where(
+                DesktopPluginInstallEvent.event_id == failed["event_id"]
+            )
+        )
+        assert failed_row is not None
+        assert failed_row.migration_retry_status == "scheduled"
+        failed_row.migration_retry_next_at = utc_now() - timedelta(seconds=1)
+        db.commit()
+        assert schedule_due_migration_retries(db) == {"available": 1}
+    available = client.get(
+        "/api/v1/desktop/plugins/migration-retries",
+        headers=developer_headers,
+        params={"installation_id": installation_id},
+    )
+    assert available.status_code == 200, available.text
+    assert available.json()["items"][0]["event_id"] == failed["event_id"]
+
+    retry_success = {**event, "event_id": "synthetic-upgrade-evidence-retry-success"}
+    retry_success["evidence_signature"] = base64.b64encode(
+        installation_key.sign(
+            build_install_evidence_payload(PluginInstallEventRequest.model_validate(retry_success)),
+            ec.ECDSA(hashes.SHA256()),
+        )
+    ).decode()
+    completed = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={**developer_headers, "Idempotency-Key": retry_success["event_id"]},
+        json=retry_success,
+    )
+    assert completed.status_code == 202, completed.text
+    assert client.get(
+        "/api/v1/desktop/plugins/migration-retries",
+        headers=developer_headers,
+        params={"installation_id": installation_id},
+    ).json()["items"] == []
+
+    with client.app.state.database.session_factory() as db:
+        version = db.get(DesktopPluginVersion, finalized["id"])
+        assert version is not None
+        version.manifest_json = {**version.manifest_json, "migration": None}
+        db.commit()
+    undeclared = {**event, "event_id": "synthetic-upgrade-evidence-004"}
+    undeclared["evidence_signature"] = base64.b64encode(
+        installation_key.sign(
+            build_install_evidence_payload(PluginInstallEventRequest.model_validate(undeclared)),
+            ec.ECDSA(hashes.SHA256()),
+        )
+    ).decode()
+    undeclared_rejected = client.post(
+        "/api/v1/desktop/plugins/install-events",
+        headers={**developer_headers, "Idempotency-Key": undeclared["event_id"]},
+        json=undeclared,
+    )
+    assert undeclared_rejected.status_code == 422
+    assert undeclared_rejected.json()["code"] == "desktop_plugin.migration_evidence_invalid"
 
 
 def test_failed_market_install_event_is_accepted_for_withdrawn_version(client) -> None:

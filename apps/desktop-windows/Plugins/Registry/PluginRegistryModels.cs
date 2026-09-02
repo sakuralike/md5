@@ -69,7 +69,8 @@ public sealed record PluginMigrationRecord(
     DateTimeOffset StartedAt,
     DateTimeOffset? CompletedAt,
     string? Error,
-    IReadOnlyList<PluginMigrationStepRecord>? Steps = null);
+    IReadOnlyList<PluginMigrationStepRecord>? Steps = null,
+    string? PackageSha256 = null);
 
 public sealed record PluginMigrationStepRecord(
     string StepId,

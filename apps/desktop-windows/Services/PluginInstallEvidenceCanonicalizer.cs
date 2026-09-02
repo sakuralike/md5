@@ -36,6 +36,7 @@ public static class PluginInstallEvidenceCanonicalizer
             ("migration_started_at", Timestamp(migration?.StartedAt)),
             ("migration_completed_at", Timestamp(migration?.CompletedAt)),
             ("migration_steps", JoinSteps(migration?.Steps)),
+            ("migration_package_sha256", migration?.PackageSha256 ?? string.Empty),
         };
         return Encoding.UTF8.GetBytes(
             string.Join('\n', values.Select(item => $"{item.Key}={item.Value}")) + "\n");

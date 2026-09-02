@@ -258,6 +258,93 @@ class PluginVersionFinalizeRequest(BaseModel):
     version: int = Field(ge=1)
 
 
+class PluginBuildProvenanceRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=512)
+    size_bytes: int = Field(ge=0)
+    sha256: str = Field(min_length=64, max_length=64)
+
+    @field_validator("sha256")
+    @classmethod
+    def normalize_sha256(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) != 64 or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("构建证明摘要必须是 64 位十六进制摘要")
+        return normalized
+
+
+class PluginBuildProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_: Literal["pd.plugin.provenance/v1"] = Field(alias="schema")
+    source_commit: str = Field(min_length=40, max_length=64)
+    source_files: list[PluginBuildProvenanceRecord] = Field(max_length=256)
+    sbom: PluginBuildProvenanceRecord
+    binaries: list[PluginBuildProvenanceRecord] = Field(max_length=256)
+
+    @field_validator("source_commit")
+    @classmethod
+    def normalize_source_commit(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) not in {40, 64} or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("构建证明源码提交无效")
+        return normalized
+
+
+class PluginBuildProof(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_: Literal["pd.plugin.build-proof/v1"] = Field(alias="schema")
+    git_commit: str = Field(min_length=40, max_length=64)
+    package_sha256: str = Field(min_length=64, max_length=64)
+    rebuild_sha256: str = Field(min_length=64, max_length=64)
+    content_reproducible: Literal[True]
+    provenance: PluginBuildProvenance
+    toolchain: dict[str, str] = Field(min_length=1, max_length=16)
+
+    @field_validator("git_commit")
+    @classmethod
+    def normalize_git_commit(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) not in {40, 64} or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("构建证明 Git 提交无效")
+        return normalized
+
+    @field_validator("package_sha256", "rebuild_sha256")
+    @classmethod
+    def normalize_proof_hash(cls, value: str) -> str:
+        normalized = _strip(value).lower()
+        if len(normalized) != 64 or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("构建证明制品摘要必须是 64 位十六进制摘要")
+        return normalized
+
+
+class PluginVersionBuildProofRequest(BaseModel):
+    version: int = Field(ge=1)
+    architecture: PluginArchitecture
+    github_repository: str = Field(min_length=3, max_length=200)
+    github_run_id: int = Field(ge=1)
+    github_artifact_id: int = Field(ge=1)
+    proof: PluginBuildProof
+
+    @field_validator("github_repository")
+    @classmethod
+    def normalize_repository(cls, value: str) -> str:
+        normalized = _strip(value)
+        if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", normalized) is None:
+            raise ValueError("GitHub 仓库必须使用 owner/repository 格式")
+        return normalized
+
+
 class PluginVersionSubmitRequest(BaseModel):
     version: int = Field(ge=1)
 
@@ -690,6 +777,11 @@ class PluginReviewDetailResponse(PluginReviewQueueItem):
     events: list[PluginReviewEventResponse]
     review_runs: list[PluginStaticReviewRunResponse]
     remediation_deadline_at: datetime | None = None
+    build_proof_sha256: str | None = None
+    build_proof_git_commit: str | None = None
+    build_proof_package_sha256: str | None = None
+    build_proof_rebuild_sha256: str | None = None
+    build_proof_verified_at: datetime | None = None
     publication_channels: list[str] = Field(default_factory=list)
 
 
@@ -765,6 +857,11 @@ class PluginVersionResponse(BaseModel):
     finalized_at: datetime | None
     published_at: datetime | None
     remediation_deadline_at: datetime | None = None
+    build_proof_sha256: str | None = None
+    build_proof_git_commit: str | None = None
+    build_proof_package_sha256: str | None = None
+    build_proof_rebuild_sha256: str | None = None
+    build_proof_verified_at: datetime | None = None
     artifacts: list[PluginArtifactResponse] = Field(default_factory=list)
 
 
@@ -1021,6 +1118,7 @@ class PluginMigrationEvidence(BaseModel):
     started_at: datetime
     completed_at: datetime | None = None
     steps: list[PluginMigrationStepEvidence] = Field(default_factory=list, max_length=64)
+    package_sha256: str | None = Field(default=None, min_length=64, max_length=64)
 
     @field_validator("from_version", "to_version")
     @classmethod
@@ -1028,6 +1126,18 @@ class PluginMigrationEvidence(BaseModel):
         normalized = _strip(value)
         if not _SEMVER_PATTERN.fullmatch(normalized):
             raise ValueError("迁移证据版本必须是严格 SemVer x.y.z")
+        return normalized
+
+    @field_validator("package_sha256")
+    @classmethod
+    def normalize_package_sha256(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = _strip(value).lower()
+        if len(normalized) != 64 or any(
+            character not in "0123456789abcdef" for character in normalized
+        ):
+            raise ValueError("迁移证据制品摘要必须是 64 位十六进制摘要")
         return normalized
 
     @model_validator(mode="after")
@@ -1080,6 +1190,21 @@ class PluginInstallEvidenceListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class PluginMigrationRetryItem(BaseModel):
+    event_id: str
+    plugin_slug: str
+    semver: str
+    architecture: PluginArchitecture
+    from_version: str
+    package_sha256: str
+    attempt: int
+    available_at: datetime
+
+
+class PluginMigrationRetryListResponse(BaseModel):
+    items: list[PluginMigrationRetryItem]
 
 
 class PluginBrokerAuthorizationRequest(BaseModel):

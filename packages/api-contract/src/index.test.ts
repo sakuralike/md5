@@ -272,6 +272,12 @@ describe("shared API contract", () => {
     expect(DESKTOP_PLUGIN_PATHS.reviewReport).toBe(
       "/developer/plugin-versions/{version_id}/review-report",
     );
+    expect(DESKTOP_PLUGIN_PATHS.buildProof).toBe(
+      "/developer/plugin-versions/{version_id}/build-proof",
+    );
+    expect(DESKTOP_PLUGIN_PATHS.migrationRetries).toBe(
+      "/desktop/plugins/migration-retries",
+    );
     expect(DESKTOP_PLUGIN_PATHS.adminRunners).toBe("/admin/plugin-review-runners");
     expect(DESKTOP_PLUGIN_PATHS.brokerAuthorize).toContain("broker/authorize");
     expect(catalog.items[0]?.latest_version).toBe("1.0.0");

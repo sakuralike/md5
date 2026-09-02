@@ -136,7 +136,8 @@ public sealed class PluginMarketTests
             "completed",
             DateTimeOffset.Parse("2026-08-28T00:00:01Z"),
             DateTimeOffset.Parse("2026-08-28T00:00:02Z"),
-            [new PluginMigrationStepEvidencePayload("settings.copy", "completed", 2)]);
+            [new PluginMigrationStepEvidencePayload("settings.copy", "completed", 2)],
+            new string('b', 64));
         var payload = new PluginInstallEventRequest(
             "synthetic-install-evidence-001",
             "com.synthetic.market",
@@ -161,6 +162,7 @@ public sealed class PluginMarketTests
         Assert.Contains("installation_id=11111111-1111-1111-1111-111111111111\n", canonical);
         Assert.Contains("consented_at=2026-08-28T00:00:00.000Z\n", canonical);
         Assert.Contains("migration_steps=settings.copy:completed:2\n", canonical);
+        Assert.Contains($"migration_package_sha256={new string('b', 64)}\n", canonical);
         Assert.Equal("Bearer", handler.AuthorizationScheme);
         Assert.Equal("synthetic-access-token", handler.AuthorizationParameter);
         Assert.Contains("\"permission_evidence\"", handler.RequestBody);

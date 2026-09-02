@@ -183,6 +183,17 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
             null,
             cancellationToken);
 
+    public Task<PluginMigrationRetryListResponse> GetPluginMigrationRetriesAsync(
+        string serverBaseUrl,
+        string accessToken,
+        Guid installationId,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<PluginMigrationRetryListResponse>(
+            serverBaseUrl,
+            $"desktop/plugins/migration-retries?installation_id={installationId:D}",
+            accessToken,
+            cancellationToken);
+
     public Task<MarketPluginDownloadTicket> IssueCanaryPluginDownloadTicketAsync(
         string serverBaseUrl,
         string accessToken,
@@ -475,12 +486,26 @@ public sealed record PluginMigrationEvidencePayload(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("started_at")] DateTimeOffset StartedAt,
     [property: JsonPropertyName("completed_at")] DateTimeOffset? CompletedAt,
-    [property: JsonPropertyName("steps")] IReadOnlyList<PluginMigrationStepEvidencePayload> Steps);
+    [property: JsonPropertyName("steps")] IReadOnlyList<PluginMigrationStepEvidencePayload> Steps,
+    [property: JsonPropertyName("package_sha256")] string? PackageSha256 = null);
 
 public sealed record PluginMigrationStepEvidencePayload(
     [property: JsonPropertyName("step_id")] string StepId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("attempt_count")] int AttemptCount);
+
+public sealed record PluginMigrationRetryItem(
+    [property: JsonPropertyName("event_id")] string EventId,
+    [property: JsonPropertyName("plugin_slug")] string PluginSlug,
+    [property: JsonPropertyName("semver")] string Semver,
+    [property: JsonPropertyName("architecture")] string Architecture,
+    [property: JsonPropertyName("from_version")] string FromVersion,
+    [property: JsonPropertyName("package_sha256")] string PackageSha256,
+    [property: JsonPropertyName("attempt")] int Attempt,
+    [property: JsonPropertyName("available_at")] DateTimeOffset AvailableAt);
+
+public sealed record PluginMigrationRetryListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<PluginMigrationRetryItem> Items);
 
 public sealed class DesktopApiException(
     int statusCode,

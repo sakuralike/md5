@@ -285,6 +285,13 @@ class DesktopPluginVersion(Base):
     remediation_deadline_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    build_proof_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    build_proof_git_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    build_proof_package_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    build_proof_rebuild_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    build_proof_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class DesktopPluginArtifact(Base):
@@ -663,6 +670,11 @@ class DesktopPluginInstallEvent(Base):
     __table_args__ = (
         UniqueConstraint("event_id", name="uq_desktop_plugin_install_events_event_id"),
         Index("ix_desktop_plugin_install_events_plugin_created", "plugin_slug", "created_at"),
+        Index(
+            "ix_desktop_plugin_install_events_migration_retry",
+            "migration_retry_status",
+            "migration_retry_next_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -686,6 +698,17 @@ class DesktopPluginInstallEvent(Base):
     )
     evidence_payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     evidence_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    migration_retry_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    migration_retry_attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    migration_retry_next_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    migration_retry_available_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    migration_retry_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
