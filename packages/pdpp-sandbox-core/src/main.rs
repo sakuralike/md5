@@ -513,22 +513,30 @@ fn process_spawn(state: &mut CoreState, params: &Value) -> Result<Value, CoreErr
         hex_digest(format!("{profile_sid}\n{nonce}").as_bytes())
     );
     let process_id = handle.process_id;
+    let is_appcontainer = process_is_appcontainer(handle.process_handle);
     state.jobs.insert(job_token.clone(), handle);
     Ok(json!({
         "pid": process_id,
         "job_handle": job_token,
         "appcontainer_sid": profile_sid,
         "command_timeout_seconds": sandbox.command_timeout_seconds,
+        "is_appcontainer": is_appcontainer,
     }))
 }
 
 fn parse_stdio_handles(params: &Value) -> Result<StdioHandles, CoreError> {
-    let handles = params
-        .get("stdio_handles")
-        .and_then(Value::as_object)
-        .ok_or(CoreError::InvalidParams(
-            "process.spawn requires stdio_handles.",
-        ))?;
+    if let Some(handles) = params.get("stdio_handles").and_then(Value::as_object) {
+        return parse_raw_stdio_handles(handles);
+    }
+    if let Some(pipes) = params.get("stdio_pipe_names").and_then(Value::as_object) {
+        return open_named_stdio_pipes(pipes);
+    }
+    Err(CoreError::InvalidParams(
+        "process.spawn requires stdio_handles or stdio_pipe_names.",
+    ))
+}
+
+fn parse_raw_stdio_handles(handles: &Map<String, Value>) -> Result<StdioHandles, CoreError> {
     let parse = |name: &str| {
         handles
             .get(name)
@@ -544,6 +552,109 @@ fn parse_stdio_handles(params: &Value) -> Result<StdioHandles, CoreError> {
         output: parse("stdout")?,
         error: parse("stderr")?,
     })
+}
+
+#[cfg(windows)]
+fn open_named_stdio_pipes(pipes: &Map<String, Value>) -> Result<StdioHandles, CoreError> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+    let open = |name: &str, access: u32| -> Result<usize, CoreError> {
+        let Some(pipe_name) = name.strip_prefix(r"\\.\pipe\") else {
+            return Err(CoreError::InvalidParams(
+                "process.spawn stdio pipe name is invalid.",
+            ));
+        };
+        if pipe_name.is_empty()
+            || name.len() > 256
+            || pipe_name.chars().any(|character| {
+                !(character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+            })
+        {
+            return Err(CoreError::InvalidParams(
+                "process.spawn stdio pipe name is invalid.",
+            ));
+        }
+        let wide: Vec<u16> = OsStr::new(name).encode_wide().chain([0]).collect();
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn CreateFileW(
+                name: *const u16,
+                desired_access: u32,
+                share_mode: u32,
+                security_attributes: *mut std::ffi::c_void,
+                creation_disposition: u32,
+                flags_and_attributes: u32,
+                template_file: *mut std::ffi::c_void,
+            ) -> *mut std::ffi::c_void;
+            fn SetHandleInformation(handle: *mut std::ffi::c_void, mask: u32, flags: u32) -> i32;
+            fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+        }
+        const OPEN_EXISTING: u32 = 3;
+        const FILE_FLAG_OVERLAPPED: u32 = 0x40000000;
+        const HANDLE_FLAG_INHERIT: u32 = 1;
+        let handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                access,
+                0,
+                null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_OVERLAPPED,
+                null_mut(),
+            )
+        };
+        if handle as isize == -1 {
+            return Err(CoreError::InvalidParams(
+                "process.spawn stdio pipe is unavailable.",
+            ));
+        }
+        if unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0 {
+            unsafe {
+                CloseHandle(handle);
+            }
+            return Err(CoreError::InvalidParams(
+                "process.spawn stdio pipe cannot be inherited.",
+            ));
+        }
+        Ok(handle as usize)
+    };
+    Ok(StdioHandles {
+        input: open(
+            pipes
+                .get("stdin")
+                .and_then(Value::as_str)
+                .ok_or(CoreError::InvalidParams(
+                    "process.spawn stdio_pipe_names.stdin is required.",
+                ))?,
+            0x80000000,
+        )?,
+        output: open(
+            pipes
+                .get("stdout")
+                .and_then(Value::as_str)
+                .ok_or(CoreError::InvalidParams(
+                    "process.spawn stdio_pipe_names.stdout is required.",
+                ))?,
+            0x40000000,
+        )?,
+        error: open(
+            pipes
+                .get("stderr")
+                .and_then(Value::as_str)
+                .ok_or(CoreError::InvalidParams(
+                    "process.spawn stdio_pipe_names.stderr is required.",
+                ))?,
+            0x40000000,
+        )?,
+    })
+}
+
+#[cfg(not(windows))]
+fn open_named_stdio_pipes(_pipes: &Map<String, Value>) -> Result<StdioHandles, CoreError> {
+    Err(CoreError::NotImplemented(
+        "Named stdio pipes are only available on Windows.",
+    ))
 }
 
 fn process_terminate(state: &mut CoreState, params: &Value) -> Result<Value, CoreError> {
@@ -1894,6 +2005,51 @@ fn terminate_native_process(_handle: NativeProcessHandle) -> Result<(), CoreErro
     Err(CoreError::NotImplemented(
         "process.terminate is only available on Windows.",
     ))
+}
+
+#[cfg(windows)]
+fn process_is_appcontainer(process_handle: usize) -> bool {
+    use std::ffi::c_void;
+    const TOKEN_QUERY: u32 = 0x0008;
+    const TOKEN_IS_APPCONTAINER: u32 = 29;
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn OpenProcessToken(
+            process_handle: *mut c_void,
+            desired_access: u32,
+            token_handle: *mut *mut c_void,
+        ) -> i32;
+        fn GetTokenInformation(
+            token_handle: *mut c_void,
+            token_information_class: u32,
+            token_information: *mut c_void,
+            token_information_length: u32,
+            return_length: *mut u32,
+        ) -> i32;
+        fn CloseHandle(object: *mut c_void) -> i32;
+    }
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(process_handle as *mut c_void, TOKEN_QUERY, &mut token) == 0 {
+            return false;
+        }
+        let mut value = 0u32;
+        let mut length = 0u32;
+        let result = GetTokenInformation(
+            token,
+            TOKEN_IS_APPCONTAINER,
+            (&mut value as *mut u32).cast(),
+            std::mem::size_of::<u32>() as u32,
+            &mut length,
+        ) != 0;
+        CloseHandle(token);
+        result && value != 0
+    }
+}
+
+#[cfg(not(windows))]
+fn process_is_appcontainer(_process_handle: usize) -> bool {
+    false
 }
 
 #[cfg(windows)]

@@ -321,11 +321,19 @@ public sealed class PluginExecutionService : IPluginExecutionService
         };
         try
         {
-            var host = await PluginProcessHost.StartWithIsolationPolicyAsync(
-                options,
-                _isolationPolicy,
-                cancellationToken,
-                hostRequestHandler);
+            var host = string.Equals(
+                    Environment.GetEnvironmentVariable("PDPP_SANDBOX_BACKEND"),
+                    "rust",
+                    StringComparison.OrdinalIgnoreCase)
+                ? await PluginProcessHost.StartWithRustSandboxAsync(
+                    options,
+                    cancellationToken,
+                    hostRequestHandler)
+                : await PluginProcessHost.StartWithIsolationPolicyAsync(
+                    options,
+                    _isolationPolicy,
+                    cancellationToken,
+                    hostRequestHandler);
             return new PluginRunSession(host, runDirectory);
         }
         catch

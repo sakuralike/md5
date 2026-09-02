@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 
@@ -40,6 +41,8 @@ internal sealed class SandboxCoreClient : IAsyncDisposable
 
     public int ProcessId => _process.Id;
     public string IntegrityLevel => "low";
+    public bool HasExited => _process.HasExited;
+    public int? ExitCode => _process.HasExited ? _process.ExitCode : null;
 
     public static SandboxCoreClient Start(string? executablePath = null)
     {
@@ -248,4 +251,226 @@ internal sealed class HostSandboxProcess : IAsyncDisposable
         _core.InvokeAsync(method, parameters, timeout, cancellationToken);
 
     public ValueTask DisposeAsync() => _core.DisposeAsync();
+}
+
+internal sealed class RustSandboxedProcess : ISandboxedProcess
+{
+    private readonly SandboxCoreClient _core;
+    private readonly string _profileSid;
+    private readonly string _jobHandle;
+    private readonly NamedPipeServerStream _standardInputPipe;
+    private readonly NamedPipeServerStream _standardOutputPipe;
+    private readonly NamedPipeServerStream _standardErrorPipe;
+    private int _disposed;
+
+    private RustSandboxedProcess(
+        SandboxCoreClient core,
+        string profileSid,
+        string jobHandle,
+        NamedPipeServerStream standardInputPipe,
+        NamedPipeServerStream standardOutputPipe,
+        NamedPipeServerStream standardErrorPipe,
+        bool isAppContainer,
+        int processId)
+    {
+        _core = core;
+        _profileSid = profileSid;
+        _jobHandle = jobHandle;
+        _standardInputPipe = standardInputPipe;
+        _standardOutputPipe = standardOutputPipe;
+        _standardErrorPipe = standardErrorPipe;
+        IsAppContainer = isAppContainer;
+        ProcessId = processId;
+        StandardInput = standardInputPipe;
+        StandardOutput = standardOutputPipe;
+        StandardError = standardErrorPipe;
+    }
+
+    public int ProcessId { get; }
+    public bool IsAppContainer { get; }
+    public bool HasExited => _core.HasExited;
+    public int? ExitCode => _core.ExitCode;
+    public Stream StandardInput { get; }
+    public Stream StandardOutput { get; }
+    public Stream StandardError { get; }
+
+    public static async Task<RustSandboxedProcess> StartAsync(
+        PluginProcessStartOptions options,
+        CancellationToken cancellationToken = default,
+        bool verifyIsolationPolicies = true)
+    {
+        options.Validate();
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("Rust plugin sandbox requires Windows.");
+        }
+
+        var core = SandboxCoreClient.Start();
+        NamedPipeServerStream? input = null;
+        NamedPipeServerStream? output = null;
+        NamedPipeServerStream? error = null;
+        try
+        {
+            var workspaceRoot = Directory.GetParent(options.WorkingDirectory)?.FullName
+                ?? options.WorkingDirectory;
+            using var sandbox = await core.InvokeAsync(
+                "sandbox.create",
+                new
+                {
+                    plugin_id = options.PluginId,
+                    workspace_root = workspaceRoot,
+                    limits = new
+                    {
+                        memory_mb = Math.Max(32, checked((int)(options.MemoryLimitBytes / (1024 * 1024)))),
+                        cpu_percent = options.CpuRatePercent,
+                        command_timeout_seconds = 300,
+                    },
+                },
+                TimeSpan.FromSeconds(15),
+                cancellationToken).ConfigureAwait(false);
+            var sandboxResult = sandbox.RootElement.GetProperty("result");
+            var profileSid = sandboxResult.GetProperty("profile_sid").GetString()
+                ?? throw new InvalidDataException("Rust sandbox did not return an AppContainer SID.");
+            using var networkPolicy = verifyIsolationPolicies
+                ? await core.InvokeAsync(
+                "net.block_outbound",
+                new { plugin_id = options.PluginId, appcontainer_sid = profileSid, action = "verify" },
+                TimeSpan.FromSeconds(10),
+                cancellationToken).ConfigureAwait(false)
+                : null;
+            using var registryPolicy = verifyIsolationPolicies
+                ? await core.InvokeAsync(
+                "reg.deny_write",
+                new { plugin_id = options.PluginId, appcontainer_sid = profileSid, action = "verify" },
+                TimeSpan.FromSeconds(10),
+                cancellationToken).ConfigureAwait(false)
+                : null;
+            if (verifyIsolationPolicies)
+            {
+                if (networkPolicy is null
+                    || registryPolicy is null
+                    || !networkPolicy.RootElement.GetProperty("result").GetProperty("configured").GetBoolean()
+                    || !registryPolicy.RootElement.GetProperty("result").GetProperty("configured").GetBoolean())
+                {
+                    throw new InvalidOperationException("Rust sandbox isolation policies are not configured.");
+                }
+            }
+
+            var prefix = $"pdpp-{Environment.ProcessId}-{Guid.NewGuid():N}";
+            input = CreatePipe($"{prefix}-stdin", PipeDirection.Out);
+            output = CreatePipe($"{prefix}-stdout", PipeDirection.In);
+            error = CreatePipe($"{prefix}-stderr", PipeDirection.In);
+            using var spawned = await core.InvokeAsync(
+                "process.spawn",
+                new
+                {
+                    profile_sid = profileSid,
+                    entrypoint = options.ExecutablePath,
+                    working_directory = options.WorkingDirectory,
+                    arguments = options.Arguments,
+                    stdio_pipe_names = new
+                    {
+                        stdin = $"\\\\.\\pipe\\{prefix}-stdin",
+                        stdout = $"\\\\.\\pipe\\{prefix}-stdout",
+                        stderr = $"\\\\.\\pipe\\{prefix}-stderr",
+                    },
+                },
+                TimeSpan.FromSeconds(15),
+                cancellationToken).ConfigureAwait(false);
+            var spawnResult = spawned.RootElement.GetProperty("result");
+            var jobHandle = spawnResult.GetProperty("job_handle").GetString()
+                ?? throw new InvalidDataException("Rust sandbox did not return a Job handle.");
+            var processId = spawnResult.GetProperty("pid").GetInt32();
+            var isAppContainer = spawnResult.GetProperty("is_appcontainer").GetBoolean();
+            if (!isAppContainer)
+            {
+                throw new InvalidOperationException("Rust sandbox process did not enter AppContainer.");
+            }
+
+            await ConnectAsync(input, output, error, cancellationToken).ConfigureAwait(false);
+            var result = new RustSandboxedProcess(
+                core,
+                profileSid,
+                jobHandle,
+                input,
+                output,
+                error,
+                isAppContainer,
+                processId);
+            input = null;
+            output = null;
+            error = null;
+            return result;
+        }
+        catch
+        {
+            input?.Dispose();
+            output?.Dispose();
+            error?.Dispose();
+            await core.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            try
+            {
+                await _core.InvokeAsync(
+                    "process.terminate",
+                    new { job_handle = _jobHandle },
+                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch (SandboxCoreException)
+            {
+            }
+
+            try
+            {
+                await _core.InvokeAsync(
+                    "sandbox.destroy",
+                    new { profile_sid = _profileSid },
+                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch (SandboxCoreException)
+            {
+            }
+        }
+        finally
+        {
+            _standardInputPipe.Dispose();
+            _standardOutputPipe.Dispose();
+            _standardErrorPipe.Dispose();
+            await _core.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static NamedPipeServerStream CreatePipe(string name, PipeDirection direction) =>
+        new(
+            name,
+            direction,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.WriteThrough,
+            64 * 1024,
+            64 * 1024);
+
+    private static async Task ConnectAsync(
+        NamedPipeServerStream input,
+        NamedPipeServerStream output,
+        NamedPipeServerStream error,
+        CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(
+            input.WaitForConnectionAsync(cancellationToken),
+            output.WaitForConnectionAsync(cancellationToken),
+            error.WaitForConnectionAsync(cancellationToken)).ConfigureAwait(false);
+    }
 }

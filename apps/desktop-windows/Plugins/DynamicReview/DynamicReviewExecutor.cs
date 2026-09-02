@@ -438,8 +438,18 @@ public sealed class DynamicReviewExecutor
 
     private Task<PluginProcessHost> StartHostAsync(
         PluginProcessStartOptions options,
-        CancellationToken cancellationToken) =>
-        PluginProcessHost.StartWithIsolationPolicyAsync(options, _isolationPolicy, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(
+            Environment.GetEnvironmentVariable("PDPP_SANDBOX_BACKEND"),
+            "rust",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return PluginProcessHost.StartWithRustSandboxAsync(options, cancellationToken);
+        }
+
+        return PluginProcessHost.StartWithIsolationPolicyAsync(options, _isolationPolicy, cancellationToken);
+    }
 
     private static DynamicReviewExecutionResult Failed(
         string taskId,

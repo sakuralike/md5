@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace PasswordDetective.Desktop.Plugins.Windows;
 
-internal sealed class WindowsSandboxedProcess : IAsyncDisposable
+internal sealed class WindowsSandboxedProcess : ISandboxedProcess
 {
     private readonly PluginJobObject _job;
     private readonly AppContainerProfile? _profile;

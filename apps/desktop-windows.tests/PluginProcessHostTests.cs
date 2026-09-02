@@ -42,6 +42,33 @@ public sealed class PluginProcessHostTests : IDisposable
     }
 
     [Fact]
+    public async Task RustSandboxProcessCarriesPdppInitializeOverNamedPipes()
+    {
+        var options = new PluginProcessStartOptions
+        {
+            PluginId = "synthetic.csharp",
+            ExecutablePath = FindSyntheticPlugin(),
+            WorkingDirectory = _workingDirectory,
+            MemoryLimitBytes = 256L * 1024 * 1024,
+            ActiveProcessLimit = 1,
+            CpuRatePercent = 25,
+        };
+
+        await using var host = await PluginProcessHost.StartWithRustSandboxAsync(
+            options,
+            verifyIsolationPolicies: false);
+        var initialized = await host.InitializeAsync(
+            "0.1.0",
+            ["command.echo"],
+            TimeSpan.FromSeconds(15));
+        var echo = await ExecuteAsync<SyntheticEchoResult>(host, "echo", "rust-pipe");
+
+        Assert.Equal(options.PluginId, initialized.PluginId);
+        Assert.True(host.IsAppContainer);
+        Assert.Equal("rust-pipe", echo.Output);
+    }
+
+    [Fact]
     public async Task HostCompletesInitializeHealthAndEchoContract()
     {
         await using var host = await StartHostAsync(memoryLimitBytes: 256L * 1024 * 1024);

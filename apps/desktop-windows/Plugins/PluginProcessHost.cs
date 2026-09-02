@@ -8,7 +8,7 @@ namespace PasswordDetective.Desktop.Plugins;
 
 public sealed class PluginProcessHost : IAsyncDisposable
 {
-    private readonly WindowsSandboxedProcess _sandboxedProcess;
+    private readonly ISandboxedProcess _sandboxedProcess;
     private readonly PluginProcessStartOptions _options;
     private readonly IPdppHostRequestHandler? _hostRequestHandler;
     private readonly Stream _output;
@@ -21,7 +21,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
     private int _disposeStarted;
 
     private PluginProcessHost(
-        WindowsSandboxedProcess sandboxedProcess,
+        ISandboxedProcess sandboxedProcess,
         PluginProcessStartOptions options,
         IPdppHostRequestHandler? hostRequestHandler)
     {
@@ -67,6 +67,19 @@ public sealed class PluginProcessHost : IAsyncDisposable
         CancellationToken cancellationToken = default,
         IPdppHostRequestHandler? hostRequestHandler = null)
         => StartCoreAsync(options, cancellationToken, hostRequestHandler, isolationPolicy);
+
+    internal static async Task<PluginProcessHost> StartWithRustSandboxAsync(
+        PluginProcessStartOptions options,
+        CancellationToken cancellationToken = default,
+        IPdppHostRequestHandler? hostRequestHandler = null,
+        bool verifyIsolationPolicies = true)
+    {
+        var process = await RustSandboxedProcess.StartAsync(
+            options,
+            cancellationToken,
+            verifyIsolationPolicies);
+        return new PluginProcessHost(process, options, hostRequestHandler);
+    }
 
     private static Task<PluginProcessHost> StartCoreAsync(
         PluginProcessStartOptions options,

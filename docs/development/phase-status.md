@@ -543,6 +543,7 @@ M1 代码门禁、本地 Docker/Redis 门禁和 PR 托管 CI 已完成；合入�
 | `Pdpp.Sandbox.Core` Rust 骨架 | 已完成（合同层） | `packages/pdpp-sandbox-core` 提供 Windows IPC 可执行骨架、JSON-RPC 方法白名单、1 MiB/深度 32 限制、AppContainer 生命周期、文件句柄 Broker、`attest.host`、`env.sanitize` 和强制 canary 探针 |
 | 原生安全指令 | 部分完成，未切换生产 | `sandbox.create`/`sandbox.destroy`/`fs.grant_read`/`fs.read_chunk`/`process.spawn`/`process.terminate`/`canary.run` 已实现并测试；WFP 安装使用 Rust WFP API（管理员不足时回退隔离脚本），注册表 ACL 由 Rust Win32 安全 API 读取校验，安装仍由管理员脚本负责 |
 | Host.UI / Host.Sandbox 边界 | 已完成（接口层） | 新增 `HostSandboxProcess`、`SandboxCoreClient` 和有界 `HostSandboxPipe`；现有 C# AppContainer 保留为未部署 Rust 制品时的兼容回退 |
+| Rust PDPP 管道切片 | 已完成（受控开关） | `RustSandboxedProcess` 通过三条命名管道接通 Rust `process.spawn` 与 PDPP 初始化/命令；`PDPP_SANDBOX_BACKEND=rust` 才启用，默认仍为 C# 基准实现 |
 | Rust 内核制品打包 | 已完成 | 桌面端与 Review Runner 的 Windows Release 构建自动执行锁定版 Cargo，并将 `pdpp-sandbox-core.exe` 复制到输出目录，供 Host.Sandbox 默认路径使用 |
 | Rust 内核测试运行目录 | 已完成 | Desktop 测试输出目录同步复制 `pdpp-sandbox-core.exe`，并通过实际 `HostSandboxProcess` RPC 启动测试 |
 | C# 替换 seam | 已完成 | 新增 `ISandboxedProcessFactory`/`WindowsSandboxedProcessFactory`，现有实现作为可替换基准 |

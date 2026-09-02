@@ -8,7 +8,7 @@ Implemented in this slice:
 
 - `sandbox.create`/`sandbox.destroy`: create and remove a Windows AppContainer profile, a controlled work directory, and its ACL grant.
 - `fs.grant_read`/`fs.read_chunk`: enforce absolute-path, UNC/Windows-directory denial and size limits, then expose only an opaque file reference and bounded base64 chunks.
-- `process.spawn`/`process.terminate`: validate and inherit exactly three caller-provided stdio handles, create a Windows Job Object with memory, CPU, process-count and kill-on-close limits, start an AppContainer process, and retain the native handles behind an opaque job token.
+- `process.spawn`/`process.terminate`: validate and inherit exactly three caller-provided stdio handles, or open three caller-created local named pipes, create a Windows Job Object with memory, CPU, process-count and kill-on-close limits, start an AppContainer process, and retain native handles behind an opaque job token.
 - `canary.run`: injects the complete probe set (`probe`, `environment`, `spawn-child`, `hang`, `oversized-output`) for every task, redacts sensitive values, and returns a destruction proof for the isolated marker.
 - `attest.host`: reports AppContainer state and fails closed outside an AppContainer.
 - `env.sanitize`: emits a fixed environment allowlist and redirects profile paths without returning requested secret values.
