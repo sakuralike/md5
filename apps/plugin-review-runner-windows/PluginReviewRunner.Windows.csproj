@@ -11,5 +11,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\scripts\desktop-plugin-isolation.ps1" Link="desktop-plugin-isolation.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\packages\pdpp-sandbox-core\target\release\pdpp-sandbox-core.exe"
+          Link="pdpp-sandbox-core.exe"
+          Condition="Exists('..\..\packages\pdpp-sandbox-core\target\release\pdpp-sandbox-core.exe')"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopyPdppSandboxCore" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\packages\pdpp-sandbox-core\target\release\pdpp-sandbox-core.exe"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 </Project>

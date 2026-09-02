@@ -25,6 +25,23 @@ public sealed class PluginProcessHostTests : IDisposable
     public PluginProcessHostTests() => Directory.CreateDirectory(_workingDirectory);
 
     [Fact]
+    public async Task PackagedSandboxCoreStartsAndServesBoundedRpc()
+    {
+        await using var sandbox = HostSandboxProcess.Start();
+        using var response = await sandbox.InvokeAsync(
+            "env.sanitize",
+            new { host_secret_keys = new[] { "APP_SECRET_KEY" } },
+            TimeSpan.FromSeconds(5));
+
+        Assert.True(sandbox.ProcessId > 0);
+        Assert.Equal("ok", response.RootElement.GetProperty("result").GetProperty("status").GetString());
+        Assert.False(response.RootElement
+            .GetProperty("result")
+            .GetProperty("environment")
+            .TryGetProperty("APP_SECRET_KEY", out _));
+    }
+
+    [Fact]
     public async Task HostCompletesInitializeHealthAndEchoContract()
     {
         await using var host = await StartHostAsync(memoryLimitBytes: 256L * 1024 * 1024);
