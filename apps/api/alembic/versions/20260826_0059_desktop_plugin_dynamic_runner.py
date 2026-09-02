@@ -149,11 +149,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("desktop_plugin_review_findings") as batch_op:
-        batch_op.drop_index("ix_desktop_plugin_review_findings_dynamic_task_id")
         batch_op.drop_constraint(
             "fk_desktop_plugin_review_findings_dynamic_task",
             type_="foreignkey",
         )
+        batch_op.drop_index("ix_desktop_plugin_review_findings_dynamic_task_id")
         batch_op.drop_column("dynamic_task_id")
     for column in ("runner_id", "artifact_id", "review_run_id"):
         op.drop_index(
