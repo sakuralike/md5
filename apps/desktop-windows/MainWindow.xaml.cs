@@ -78,7 +78,8 @@ public partial class MainWindow : Window
             logs,
             pluginApiBroker,
             _pluginThemeService,
-            new WpfPluginPanelHost());
+            new WpfPluginPanelHost(),
+            new WpfPluginNotificationHost());
         var installer = new PluginInstaller(
             _pluginPaths,
             new PluginPackageVerifier(),

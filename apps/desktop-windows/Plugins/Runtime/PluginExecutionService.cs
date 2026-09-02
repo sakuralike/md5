@@ -71,6 +71,7 @@ public sealed class PluginExecutionService : IPluginExecutionService
     private readonly IPluginApiBroker? _apiBroker;
     private readonly IPluginThemeService? _themeService;
     private readonly IPluginPanelHost? _panelHost;
+    private readonly IPluginNotificationHost? _notificationHost;
     private readonly IWindowsPluginIsolationPolicy _isolationPolicy;
 
     public PluginExecutionService(
@@ -78,14 +79,16 @@ public sealed class PluginExecutionService : IPluginExecutionService
         PluginLogStore logs,
         IPluginApiBroker? apiBroker = null,
         IPluginThemeService? themeService = null,
-        IPluginPanelHost? panelHost = null)
+        IPluginPanelHost? panelHost = null,
+        IPluginNotificationHost? notificationHost = null)
         : this(
             paths,
             logs,
             apiBroker,
             themeService,
             RequiredWindowsPluginIsolationPolicy.Instance,
-            panelHost)
+            panelHost,
+            notificationHost)
     {
     }
 
@@ -95,7 +98,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
         IPluginApiBroker? apiBroker,
         IPluginThemeService? themeService,
         IWindowsPluginIsolationPolicy isolationPolicy,
-        IPluginPanelHost? panelHost = null)
+        IPluginPanelHost? panelHost = null,
+        IPluginNotificationHost? notificationHost = null)
     {
         _paths = paths;
         _logs = logs;
@@ -103,6 +107,7 @@ public sealed class PluginExecutionService : IPluginExecutionService
         _apiBroker = apiBroker;
         _themeService = themeService;
         _panelHost = panelHost;
+        _notificationHost = notificationHost;
         _isolationPolicy = isolationPolicy;
     }
 
@@ -161,7 +166,8 @@ public sealed class PluginExecutionService : IPluginExecutionService
             _apiBroker,
             _themeService,
             installedDirectory,
-            _panelHost);
+            _panelHost,
+            _notificationHost);
         var preparedInput = broker.PrepareCommandInput(
             commandManifest,
             installedDirectory,

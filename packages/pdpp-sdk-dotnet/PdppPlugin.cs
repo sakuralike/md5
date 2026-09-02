@@ -75,6 +75,17 @@ public sealed class PdppHostClient
             new { panel_id = panelId, title, width, height, controls },
             cancellationToken);
 
+    public Task<JsonElement> ShowNotificationAsync(
+        string title,
+        string message,
+        string severity = "info",
+        int durationSeconds = 5,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(
+            "host/ui/notification/show",
+            new { title, message, severity, duration_seconds = durationSeconds },
+            cancellationToken);
+
     public async Task<PluginFileReadResult> ReadFileAsync(
         string fileReference,
         long offset,

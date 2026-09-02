@@ -32,7 +32,8 @@
             "host/api/verification/submit",
             "host/ui/theme/apply",
             "host/ui/window/open",
-            "host/ui/panel/show"
+            "host/ui/panel/show",
+            "host/ui/notification/show"
           ]
         },
         "params": { "type": "object" }
@@ -101,6 +102,10 @@
         {
           "if": { "properties": { "method": { "const": "host/ui/panel/show" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/panelShowParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "host/ui/notification/show" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/notificationShowParams" } } }
         }
       ]
     },
@@ -278,6 +283,17 @@
             }
           }
         }
+      }
+    },
+    "notificationShowParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "message"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "severity": { "enum": ["info", "success", "warning", "error"] },
+        "duration_seconds": { "type": "integer", "minimum": 1, "maximum": 30 }
       }
     },
     "successResponse": {

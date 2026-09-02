@@ -23,6 +23,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
     private readonly IPluginApiBroker? _apiBroker;
     private readonly IPluginThemeService? _themeService;
     private readonly IPluginPanelHost? _panelHost;
+    private readonly IPluginNotificationHost? _notificationHost;
     private bool _disposed;
     private static readonly Regex PanelIdPattern = new(
         "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
@@ -36,7 +37,8 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         IPluginApiBroker? apiBroker = null,
         IPluginThemeService? themeService = null,
         string? installedDirectory = null,
-        IPluginPanelHost? panelHost = null)
+        IPluginPanelHost? panelHost = null,
+        IPluginNotificationHost? notificationHost = null)
     {
         _pluginId = pluginId;
         _pluginVersion = pluginVersion;
@@ -46,6 +48,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
         _themeService = themeService;
         _installedDirectory = installedDirectory;
         _panelHost = panelHost;
+        _notificationHost = notificationHost;
     }
 
     public JsonElement PrepareCommandInput(
@@ -159,6 +162,7 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
             PdppProtocol.HostUiThemeApplyMethod => ApplyThemeAsync(parameters, cancellationToken),
             PdppProtocol.HostUiWindowOpenMethod => OpenWindowAsync(parameters, cancellationToken),
             PdppProtocol.HostUiPanelShowMethod => ShowPanelAsync(parameters, cancellationToken),
+            PdppProtocol.HostUiNotificationShowMethod => ShowNotificationAsync(parameters, cancellationToken),
             _ => Task.FromException<JsonElement>(
                 new PdppHostRequestException(-32601, "Host method is not supported.")),
         };
@@ -392,6 +396,62 @@ public sealed class PluginHostBroker : IPdppHostRequestHandler, IDisposable
 
         var descriptor = ParsePanelDescriptor(parameters);
         return await _panelHost.ShowAsync(_pluginId, descriptor, cancellationToken);
+    }
+
+    private async Task<JsonElement> ShowNotificationAsync(
+        JsonElement parameters,
+        CancellationToken cancellationToken)
+    {
+        EnsureCapability("ui:notification");
+        if (_notificationHost is null)
+        {
+            throw new PdppHostRequestException(-32003, "插件通知宿主当前不可用。");
+        }
+
+        if (parameters.ValueKind != JsonValueKind.Object
+            || parameters.EnumerateObject().Any(property => property.Name is not
+                ("title" or "message" or "severity" or "duration_seconds")))
+        {
+            throw new PdppHostRequestException(-32602, "通知参数包含未知字段。");
+        }
+
+        var title = ReadNotificationText(parameters, "title", 120);
+        var message = ReadNotificationText(parameters, "message", 500);
+        var severity = parameters.TryGetProperty("severity", out var severityElement)
+            ? severityElement.ValueKind == JsonValueKind.String
+                ? severityElement.GetString()
+                : null
+            : "info";
+        if (severity is not ("info" or "success" or "warning" or "error"))
+        {
+            throw new PdppHostRequestException(-32602, "通知严重级别无效。");
+        }
+
+        var durationSeconds = parameters.TryGetProperty("duration_seconds", out var durationElement)
+            ? durationElement.TryGetInt32(out var value) ? value : 0
+            : 5;
+        if (durationSeconds is < 1 or > 30)
+        {
+            throw new PdppHostRequestException(-32602, "通知显示时长必须在 1 到 30 秒之间。");
+        }
+
+        return await _notificationHost.ShowAsync(
+            _pluginId,
+            new PluginNotification(title, message, severity, durationSeconds),
+            cancellationToken);
+    }
+
+    private static string ReadNotificationText(JsonElement parameters, string name, int maximum)
+    {
+        if (!parameters.TryGetProperty(name, out var element)
+            || element.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(element.GetString())
+            || element.GetString()!.Length > maximum)
+        {
+            throw new PdppHostRequestException(-32602, $"通知 {name} 无效。");
+        }
+
+        return element.GetString()!;
     }
 
     private static PluginPanelDescriptor ParsePanelDescriptor(JsonElement parameters)

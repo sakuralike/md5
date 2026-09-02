@@ -600,6 +600,45 @@ public sealed class PluginProcessHostTests : IDisposable
             })));
     }
 
+    [Fact]
+    public async Task HostBrokerShowsBoundedPluginNotificationOnlyWithCapability()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_workingDirectory, "notification-broker-storage"));
+        var notificationHost = new RecordingNotificationHost();
+        using var allowed = new PluginHostBroker(
+            "official.notification",
+            "1.0.0",
+            ["ui:notification"],
+            new PluginPrivateStorage(paths),
+            notificationHost: notificationHost);
+        using var denied = new PluginHostBroker(
+            "synthetic.denied",
+            "1.0.0",
+            [],
+            new PluginPrivateStorage(paths),
+            notificationHost: notificationHost);
+
+        var result = await allowed.HandleAsync(
+            PdppProtocol.HostUiNotificationShowMethod,
+            JsonSerializer.SerializeToElement(new
+            {
+                title = "检查完成",
+                message = "插件检查已完成。",
+                severity = "success",
+                duration_seconds = 3,
+            }));
+
+        Assert.True(result.GetProperty("shown").GetBoolean());
+        Assert.Equal("success", notificationHost.Notification!.Severity);
+        Assert.Equal(3, notificationHost.Notification.DurationSeconds);
+        await Assert.ThrowsAsync<PdppHostRequestException>(() => denied.HandleAsync(
+            PdppProtocol.HostUiNotificationShowMethod,
+            JsonSerializer.SerializeToElement(new { title = "拒绝", message = "无权限" })));
+        await Assert.ThrowsAsync<PdppHostRequestException>(() => allowed.HandleAsync(
+            PdppProtocol.HostUiNotificationShowMethod,
+            JsonSerializer.SerializeToElement(new { title = "过长", message = "无效", duration_seconds = 31 })));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_workingDirectory))
@@ -782,6 +821,26 @@ public sealed class PluginProcessHostTests : IDisposable
                 panel_id = descriptor.PanelId,
                 control_count = descriptor.Controls.Count,
                 process_owned = true,
+            }));
+        }
+    }
+
+    private sealed class RecordingNotificationHost : IPluginNotificationHost
+    {
+        public PluginNotification? Notification { get; private set; }
+
+        public Task<JsonElement> ShowAsync(
+            string pluginId,
+            PluginNotification notification,
+            CancellationToken cancellationToken = default)
+        {
+            Notification = notification;
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                shown = true,
+                notification_id = "synthetic-notification",
+                plugin_id = pluginId,
+                severity = notification.Severity,
             }));
         }
     }
