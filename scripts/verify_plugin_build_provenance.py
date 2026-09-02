@@ -102,10 +102,8 @@ def main() -> int:
         json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     checksum = hashlib.sha256(args.output.read_bytes()).hexdigest()
-    args.output.with_name("SHA256SUMS").write_text(
-        f"{checksum}  {args.output.name}\n"
-        f"{evidence['package_sha256']}  {args.package.name}\n"
-        f"{evidence['rebuild_sha256']}  {args.rebuild.name}\n",
+    args.output.with_name("build-proof.sha256").write_text(
+        f"{checksum}  {args.output.name}\n",
         encoding="utf-8",
     )
     return 0

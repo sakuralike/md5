@@ -137,7 +137,7 @@ pwsh ./plugins/official-skin/build-package.ps1
 
 ## 本地调试与上架
 
-先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。源码或可复现构建审查模式还必须绑定 GitHub Actions `plugin-build-proof` artifact：服务端使用只读 `DESKTOP_PLUGIN_GITHUB_TOKEN_FILE` 下载并校验成功的 `CI` 运行、工作流 job、artifact 名称、提交、包内 `provenance.json` 和版本制品 SHA-256，证明缺失或不一致时不能发布。桌面端只为平台审核来源的已安装插件检查 stable 更新，本地未审核包不会自动匹配线上同名项目。已登录桌面端会用注册安装实例的 ECDSA P-256 密钥签署脱敏权限/迁移回执；回执不包含插件私有数据、文件路径、错误原文、令牌或命令输出。
+先运行 `dotnet build`，再在本地插件市场浏览 `.pdpkg`。本地包始终显示“未审核”。上架必须经过项目、密钥、版本、隔离上传、finalize、自动审核、Windows 动态审核、管理员批准和 stable 发布；发布后目录还会校验平台签章、撤销列表、架构和制品摘要。源码或可复现构建审查模式还必须绑定 GitHub Actions `plugin-build-proof` artifact：服务端使用只读 `DESKTOP_PLUGIN_GITHUB_TOKEN_FILE` 下载并校验成功的 `CI` 运行、工作流 job、artifact 名称、proof 清单摘要、提交和包内 `provenance.json` 所列源码、二进制及 SBOM 摘要；CI 临时签名包与正式签名包的整包摘要可以不同，证明缺失或内容不一致时不能发布。桌面端只为平台审核来源的已安装插件检查 stable 更新，本地未审核包不会自动匹配线上同名项目。已登录桌面端会用注册安装实例的 ECDSA P-256 密钥签署脱敏权限/迁移回执；回执不包含插件私有数据、文件路径、错误原文、令牌或命令输出。
 
 内部 Canary 通道只允许管理员账号使用。桌面端先用已注册安装实例签署版本票据请求，服务器返回一次性短期下载票据；实际下载时必须同时发送管理员 Bearer Token、安装实例 ID 和针对票据的设备签名。普通 stable 下载不携带 Canary 头，也不会看到 Canary 目录。
 

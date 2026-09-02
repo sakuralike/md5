@@ -1021,10 +1021,12 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
 
     with zipfile.ZipFile(io.BytesIO(package)) as archive:
         provenance = json.loads(archive.read("provenance.json"))
+    ci_package_sha256 = "c" * 64
+    assert ci_package_sha256 != hashlib.sha256(package).hexdigest()
     proof = {
         "schema": "pd.plugin.build-proof/v1",
         "git_commit": "a" * 40,
-        "package_sha256": hashlib.sha256(package).hexdigest(),
+        "package_sha256": ci_package_sha256,
         "rebuild_sha256": "b" * 64,
         "content_reproducible": True,
         "provenance": provenance,

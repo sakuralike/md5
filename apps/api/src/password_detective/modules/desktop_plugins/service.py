@@ -1444,11 +1444,10 @@ def record_build_proof(
         artifact is None
         or artifact.status != DesktopPluginArtifactStatus.QUARANTINED
         or not artifact.storage_key
-        or artifact.sha256 != payload.proof.package_sha256
     ):
         raise AppError(
             "desktop_plugin.build_proof_artifact_mismatch",
-            "构建证明制品摘要与隔离区版本制品不一致",
+            "构建证明没有对应的隔离区版本制品",
             status_code=422,
         )
     package_path = DesktopPluginStorage(settings).quarantine_path(artifact.storage_key)
@@ -1642,12 +1641,20 @@ def _download_github_build_proof(
         if len(archive_bytes) > 2 * 1024 * 1024:
             raise ValueError("artifact too large")
         with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
-            candidates = [
+            proof_candidates = [
                 name for name in archive.namelist() if Path(name).name == "build-proof.json"
             ]
-            if len(candidates) != 1:
+            checksum_candidates = [
+                name for name in archive.namelist() if Path(name).name == "build-proof.sha256"
+            ]
+            if len(proof_candidates) != 1 or len(checksum_candidates) != 1:
                 raise ValueError("build proof file missing")
-            proof = json.loads(archive.read(candidates[0]))
+            proof_bytes = archive.read(proof_candidates[0])
+            checksum = archive.read(checksum_candidates[0]).decode("ascii").strip()
+            expected_checksum = f"{hashlib.sha256(proof_bytes).hexdigest()}  build-proof.json"
+            if checksum != expected_checksum:
+                raise ValueError("build proof checksum mismatch")
+            proof = json.loads(proof_bytes)
     except (
         OSError,
         urllib.error.HTTPError,

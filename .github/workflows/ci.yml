@@ -228,7 +228,7 @@ jobs:
       - name: Verify four-language PDPP conformance
         shell: pwsh
         run: |
-          python -m pip install pyinstaller==6.16.0
+          python -m pip install uv==0.12.5 pyinstaller==6.16.0
           pwsh ./scripts/test-pdpp-conformance.ps1
       - name: Upload plugin build proof
         uses: actions/upload-artifact@v4
@@ -236,7 +236,7 @@ jobs:
           name: plugin-build-proof-${{ github.sha }}
           path: |
             .local/plugin-proof/build-proof.json
-            .local/plugin-proof/SHA256SUMS
+            .local/plugin-proof/build-proof.sha256
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: error

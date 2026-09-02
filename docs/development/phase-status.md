@@ -581,7 +581,7 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 
 | 范围 | 状态 | 说明 |
 |---|---|---|
-| GitHub 构建证明 | 已实现（待真实 CI 成功运行） | 服务端只接受受信仓库成功 CI 的 `plugin-build-proof` artifact，校验运行、job、artifact、提交、provenance 和包摘要；发布前 source/reproducible 版本强制具备已验证证明 |
+| GitHub 构建证明 | 已实现（待真实 CI 成功运行） | 服务端只接受受信仓库成功 CI 的 `plugin-build-proof` artifact，校验运行、job、artifact、proof 清单摘要、提交和 provenance 内容摘要；发布前 source/reproducible 版本强制具备已验证证明 |
 | 迁移失败重试 | 已实现（待目标环境调度） | 失败迁移回执按 60 秒、300 秒退避进入最多三次重试队列；Celery 每 30 秒标记可领取，桌面认证轮询获取，成功回执关闭待重试项 |
 | CI 修复 | 已修复 | Windows 2025 的插件证明作业使用可用 Python 3.12.10；桌面测试兼容 Release 输出目录 |
 | 目标环境边界 | 未完成 | 独立 Runner VM、真实 mTLS/隔离网络、认证 Canary、真实 Windows 安装和 UAT/Production 仍需外部环境执行 |
