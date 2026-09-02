@@ -85,11 +85,11 @@ def downgrade() -> None:
     }
     indexes = {index["name"] for index in inspector.get_indexes("desktop_plugin_download_tickets")}
     with op.batch_alter_table("desktop_plugin_install_events") as batch:
-        batch.drop_index("ix_desktop_plugin_install_events_installation_id")
         batch.drop_constraint(
             "fk_dpie_installation",
             type_="foreignkey",
         )
+        batch.drop_index("ix_desktop_plugin_install_events_installation_id")
         batch.drop_column("evidence_signature")
         batch.drop_column("evidence_payload_hash")
         batch.drop_column("installation_id")
