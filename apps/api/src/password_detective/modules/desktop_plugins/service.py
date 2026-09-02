@@ -392,12 +392,12 @@ def _openbao_platform_signature(settings: Settings, message: bytes) -> tuple[str
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:  # nosec B310
             signed = json.loads(response.read(256 * 1024).decode("utf-8"))
         signature = str(signed["data"]["signature"])
         if not signature.startswith("vault:"):
             raise ValueError("invalid signature format")
-        with urllib.request.urlopen(
+        with urllib.request.urlopen(  # nosec B310
             urllib.request.Request(
                 f"{base_url}/v1/transit/keys/{urllib.parse.quote(key_name, safe='')}",
                 headers=headers,
@@ -1542,7 +1542,7 @@ def _download_github_build_proof(
     def fetch_json(url: str) -> dict[str, Any]:
         request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
+            with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310
                 value = json.loads(response.read(1_048_577))
         except (
             OSError,
@@ -1568,6 +1568,15 @@ def _download_github_build_proof(
     jobs = fetch_json(f"{base}/actions/runs/{run_id}/jobs?per_page=100")
     artifact = fetch_json(f"{base}/actions/artifacts/{artifact_id}")
     expected_name = f"plugin-build-proof-{run.get('head_sha', '')}"
+    required_jobs = {
+        "plugin build proof",
+        "desktop",
+    }
+    successful_jobs = {
+        job.get("name")
+        for job in jobs.get("jobs", [])
+        if isinstance(job, dict) and job.get("conclusion") == "success"
+    }
     plugin_jobs = [
         job
         for job in jobs.get("jobs", [])
@@ -1579,6 +1588,7 @@ def _download_github_build_proof(
         or run.get("name") != "CI"
         or len(plugin_jobs) != 1
         or plugin_jobs[0].get("conclusion") != "success"
+        or not required_jobs.issubset(successful_jobs)
         or artifact.get("id") != artifact_id
         or artifact.get("workflow_run", {}).get("id") != run_id
         or artifact.get("name") != expected_name
@@ -1598,11 +1608,38 @@ def _download_github_build_proof(
             "GitHub artifact 下载地址无效",
             status_code=422,
         )
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, response_headers, newurl):  # noqa: ANN001
+            return None
+
     request = urllib.request.Request(download_url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            archive_bytes = response.read(32 * 1024 * 1024 + 1)
-        if len(archive_bytes) > 32 * 1024 * 1024:
+        try:
+            urllib.request.build_opener(NoRedirect).open(request, timeout=15)
+            raise ValueError("artifact API did not redirect")
+        except urllib.error.HTTPError as redirect:
+            if redirect.code not in {301, 302, 303, 307, 308}:
+                raise
+            location = redirect.headers.get("Location", "")
+        parsed_location = urllib.parse.urlsplit(location)
+        allowed_host = parsed_location.hostname or ""
+        if (
+            parsed_location.scheme != "https"
+            or parsed_location.username
+            or parsed_location.password
+            or not (
+                allowed_host.endswith(".actions.githubusercontent.com")
+                or allowed_host.endswith(".blob.core.windows.net")
+            )
+        ):
+            raise ValueError("artifact redirect host is invalid")
+        blob_request = urllib.request.Request(
+            location,
+            headers={"User-Agent": headers["User-Agent"]},
+        )
+        with urllib.request.urlopen(blob_request, timeout=30) as response:  # nosec B310
+            archive_bytes = response.read(2 * 1024 * 1024 + 1)
+        if len(archive_bytes) > 2 * 1024 * 1024:
             raise ValueError("artifact too large")
         with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
             candidates = [

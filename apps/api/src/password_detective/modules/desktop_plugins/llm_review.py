@@ -116,7 +116,7 @@ def _post(url: str, headers: dict[str, str], body: dict, timeout: int) -> str:
         url, data=json.dumps(body).encode(), headers=headers, method="POST"
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             return response.read(256 * 1024).decode("utf-8")
     except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError) as exc:
         raise LlmReviewUnavailable("LLM 审核服务不可用") from exc

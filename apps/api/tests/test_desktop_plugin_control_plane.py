@@ -1030,9 +1030,15 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
         "provenance": provenance,
         "toolchain": {"dotnet": "10.0.0", "python": "3.12.13"},
     }
+    def fake_download_proof(settings, *, repository, run_id, artifact_id):
+        assert repository == "sakuralike/md5"
+        assert run_id == 33_655_843_084
+        assert artifact_id == 9_856_748_830
+        return proof, "a" * 40
+
     monkeypatch.setattr(
         "password_detective.modules.desktop_plugins.service._download_github_build_proof",
-        lambda settings, repository, run_id, artifact_id: (proof, "a" * 40),
+        fake_download_proof,
     )
     attached = client.post(
         f"/api/v1/developer/plugin-versions/{version['id']}/build-proof",
@@ -1041,8 +1047,8 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
             "version": finalized.json()["version"],
             "architecture": "windows-x64",
             "github_repository": "sakuralike/md5",
-            "github_run_id": 33587836416,
-            "github_artifact_id": 9830710776,
+            "github_run_id": 33_655_843_084,
+            "github_artifact_id": 9_856_748_830,
             "proof": proof,
         },
     )
