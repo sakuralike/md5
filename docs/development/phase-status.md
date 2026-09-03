@@ -582,7 +582,7 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 | 范围 | 状态 | 说明 |
 |---|---|---|
 | GitHub 构建证明 | 已完成（真实 CI 已验证） | CI run `33674455086` 的 `plugin build proof` 与 `desktop` job 均成功；artifact `9863979694` 已由服务端真实下载并校验 proof 清单摘要、commit `c68d1d3...` 和 provenance 内容摘要 |
-| 迁移失败重试 | 已部署 Staging（认证设备闭环未验收） | Staging 已运行 `031afdf59f35`，Scheduler 已加载每 30 秒调度任务，重试路由未认证返回 `401`；真实认证桌面失败→重试→成功/耗尽闭环仍未验收 |
+| 迁移失败重试 | 已部署 Staging（认证设备闭环未验收） | Staging API/Worker/Scheduler 当前运行 `63f535dfa0c4`，配置提交 `ce2ccd3`；Scheduler 已加载每 30 秒调度任务，重试路由未认证返回 `401`；真实认证桌面失败→重试→成功/耗尽闭环仍未验收 |
 | CI 修复 | 已修复 | Windows 2025 的插件证明作业使用可用 Python 3.12.10；桌面测试兼容 Release 输出目录 |
 | 目标环境边界 | 未完成 | 独立 Runner VM、真实 mTLS/隔离网络、认证 Canary、真实 Windows 安装和 UAT/Production 仍需外部环境执行 |
 
