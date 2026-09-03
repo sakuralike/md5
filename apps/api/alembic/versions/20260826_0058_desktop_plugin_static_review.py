@@ -136,13 +136,14 @@ def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "mysql":
         inspector = sa.inspect(bind)
-        for foreign_key in inspector.get_foreign_keys("desktop_plugin_review_findings"):
-            if foreign_key.get("name"):
-                op.drop_constraint(
-                    foreign_key["name"],
-                    "desktop_plugin_review_findings",
-                    type_="foreignkey",
-                )
+        for table_name in ("desktop_plugin_review_findings", "desktop_plugin_review_runs"):
+            for foreign_key in inspector.get_foreign_keys(table_name):
+                if foreign_key.get("name"):
+                    op.drop_constraint(
+                        foreign_key["name"],
+                        table_name,
+                        type_="foreignkey",
+                    )
     op.drop_index(
         "ix_desktop_plugin_review_findings_rule_severity",
         table_name="desktop_plugin_review_findings",

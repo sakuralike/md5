@@ -344,6 +344,25 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        inspector = sa.inspect(bind)
+        for table_name in (
+            "desktop_plugin_revocations",
+            "desktop_plugin_download_tickets",
+            "desktop_plugin_upload_sessions",
+            "desktop_plugin_artifacts",
+            "desktop_plugin_versions",
+            "desktop_plugin_signing_keys",
+            "desktop_plugins",
+        ):
+            for foreign_key in inspector.get_foreign_keys(table_name):
+                if foreign_key.get("name"):
+                    op.drop_constraint(
+                        foreign_key["name"],
+                        table_name,
+                        type_="foreignkey",
+                    )
     op.drop_index(
         "ix_desktop_plugin_revocations_scope_effective",
         table_name="desktop_plugin_revocations",
