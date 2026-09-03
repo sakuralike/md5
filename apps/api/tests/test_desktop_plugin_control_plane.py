@@ -40,6 +40,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginInstallEventRequest,
 )
 from password_detective.modules.desktop_plugins.service import (
+    _allowed_build_proof_artifact_names,
     _schema_is_backward_compatible,
     build_canary_download_payload,
     build_canary_ticket_payload,
@@ -1032,10 +1033,13 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
         "provenance": provenance,
         "toolchain": {"dotnet": "10.0.0", "python": "3.12.13"},
     }
-    def fake_download_proof(settings, *, repository, run_id, artifact_id):
+    def fake_download_proof(
+        settings, *, repository, run_id, artifact_id, expected_plugin_id
+    ):
         assert repository == "sakuralike/md5"
         assert run_id == 33_655_843_084
         assert artifact_id == 9_856_748_830
+        assert expected_plugin_id == "com.synthetic.build-proof"
         return proof, "a" * 40
 
     monkeypatch.setattr(
@@ -1064,6 +1068,24 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
         json={"version": attached.json()["version"], "channel": "stable"},
     )
     assert published.status_code == 200, published.text
+
+
+def test_build_proof_artifact_names_are_scoped_to_plugin() -> None:
+    head_sha = "a" * 40
+    skin_names = _allowed_build_proof_artifact_names(
+        head_sha=head_sha,
+        plugin_id="com.passworddetective.official-skin",
+    )
+    assert skin_names == {
+        f"plugin-build-proof-{head_sha}",
+        f"plugin-build-proof-{head_sha}-com.passworddetective.official-skin",
+    }
+    assert _allowed_build_proof_artifact_names(
+        head_sha=head_sha,
+        plugin_id="com.passworddetective.official-hash-query",
+    ) == {
+        f"plugin-build-proof-{head_sha}-com.passworddetective.official-hash-query"
+    }
 
 
 def test_public_market_filters_downloads_and_returns_signed_revocations(client) -> None:

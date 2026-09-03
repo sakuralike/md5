@@ -1470,6 +1470,7 @@ def record_build_proof(
         repository=payload.github_repository,
         run_id=payload.github_run_id,
         artifact_id=payload.github_artifact_id,
+        expected_plugin_id=plugin.slug,
     )
     if github_proof != proof_json or github_head_sha != payload.proof.git_commit:
         raise AppError(
@@ -1517,12 +1518,20 @@ def record_build_proof(
     return _version_response(db, version)
 
 
+def _allowed_build_proof_artifact_names(*, head_sha: str, plugin_id: str) -> set[str]:
+    names = {f"plugin-build-proof-{head_sha}-{plugin_id}"}
+    if plugin_id == "com.passworddetective.official-skin":
+        names.add(f"plugin-build-proof-{head_sha}")
+    return names
+
+
 def _download_github_build_proof(
     settings: Settings,
     *,
     repository: str,
     run_id: int,
     artifact_id: int,
+    expected_plugin_id: str,
 ) -> tuple[dict[str, Any], str]:
     token = settings.desktop_plugin_github_token.get_secret_value().strip()
     if not token:
@@ -1566,7 +1575,10 @@ def _download_github_build_proof(
     run = fetch_json(f"{base}/actions/runs/{run_id}")
     jobs = fetch_json(f"{base}/actions/runs/{run_id}/jobs?per_page=100")
     artifact = fetch_json(f"{base}/actions/artifacts/{artifact_id}")
-    expected_name = f"plugin-build-proof-{run.get('head_sha', '')}"
+    allowed_artifact_names = _allowed_build_proof_artifact_names(
+        head_sha=str(run.get("head_sha", "")).lower(),
+        plugin_id=expected_plugin_id,
+    )
     required_jobs = {
         "plugin build proof",
         "desktop",
@@ -1590,7 +1602,7 @@ def _download_github_build_proof(
         or not required_jobs.issubset(successful_jobs)
         or artifact.get("id") != artifact_id
         or artifact.get("workflow_run", {}).get("id") != run_id
-        or artifact.get("name") != expected_name
+        or artifact.get("name") not in allowed_artifact_names
         or artifact.get("expired") is True
     ):
         raise AppError(

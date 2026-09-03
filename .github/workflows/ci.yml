@@ -208,35 +208,83 @@ jobs:
         with: { dotnet-version: "10.0.x" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12.10" }
-      - name: Build the same official plugin twice
+      - name: Build each official plugin twice
         shell: pwsh
         run: |
           $seed = [byte[]]::new(32)
           [System.Security.Cryptography.RandomNumberGenerator]::Fill($seed)
-          $env:PDPP_PUBLISHER_KEY_ID = "ci-official-skin-key"
           $env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64 = [Convert]::ToBase64String($seed)
-          pwsh ./plugins/official-skin/build-package.ps1 -OutputPath .local/plugin-proof/official-skin-1.pdpkg
-          pwsh ./plugins/official-skin/build-package.ps1 -OutputPath .local/plugin-proof/official-skin-2.pdpkg
+          $plugins = @(
+            @{ Directory = "official-skin"; KeyId = "ci-official-skin-key" },
+            @{ Directory = "official-hash-query"; KeyId = "ci-official-hash-query-key" },
+            @{ Directory = "official-archive-security"; KeyId = "ci-official-archive-security-key" },
+            @{ Directory = "official-plugin-inspector"; KeyId = "ci-official-plugin-inspector-key" }
+          )
+          foreach ($plugin in $plugins) {
+            $outputDirectory = ".local/plugin-proof/$($plugin.Directory)"
+            New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+            $env:PDPP_PUBLISHER_KEY_ID = $plugin.KeyId
+            pwsh "./plugins/$($plugin.Directory)/build-package.ps1" -OutputPath "$outputDirectory/package-1.pdpkg"
+            if ($LASTEXITCODE -ne 0) { throw "$($plugin.Directory) first build failed." }
+            pwsh "./plugins/$($plugin.Directory)/build-package.ps1" -OutputPath "$outputDirectory/package-2.pdpkg"
+            if ($LASTEXITCODE -ne 0) { throw "$($plugin.Directory) rebuild failed." }
+          }
           Remove-Item Env:PDPP_PUBLISHER_PRIVATE_KEY_BASE64
-      - name: Verify Git-bound reproducible proof
-        run: >-
-          python scripts/verify_plugin_build_provenance.py
-          --repository-root .
-          --package .local/plugin-proof/official-skin-1.pdpkg
-          --rebuild .local/plugin-proof/official-skin-2.pdpkg
-          --output .local/plugin-proof/build-proof.json
+      - name: Verify Git-bound reproducible proofs
+        shell: pwsh
+        run: |
+          $plugins = @("official-skin", "official-hash-query", "official-archive-security", "official-plugin-inspector")
+          foreach ($plugin in $plugins) {
+            $outputDirectory = ".local/plugin-proof/$plugin"
+            python scripts/verify_plugin_build_provenance.py `
+              --repository-root . `
+              --package "$outputDirectory/package-1.pdpkg" `
+              --rebuild "$outputDirectory/package-2.pdpkg" `
+              --output "$outputDirectory/build-proof.json"
+            if ($LASTEXITCODE -ne 0) { throw "$plugin build proof verification failed." }
+          }
       - name: Verify four-language PDPP conformance
         shell: pwsh
         run: |
           python -m pip install uv==0.12.5 pyinstaller==6.16.0
           pwsh ./scripts/test-pdpp-conformance.ps1
-      - name: Upload plugin build proof
+      - name: Upload official skin plugin build proof
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-build-proof-${{ github.sha }}
+          name: plugin-build-proof-${{ github.sha }}-com.passworddetective.official-skin
           path: |
-            .local/plugin-proof/build-proof.json
-            .local/plugin-proof/build-proof.sha256
+            .local/plugin-proof/official-skin/build-proof.json
+            .local/plugin-proof/official-skin/build-proof.sha256
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload official hash query plugin build proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-proof-${{ github.sha }}-com.passworddetective.official-hash-query
+          path: |
+            .local/plugin-proof/official-hash-query/build-proof.json
+            .local/plugin-proof/official-hash-query/build-proof.sha256
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload official archive security plugin build proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-proof-${{ github.sha }}-com.passworddetective.official-archive-security
+          path: |
+            .local/plugin-proof/official-archive-security/build-proof.json
+            .local/plugin-proof/official-archive-security/build-proof.sha256
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload official plugin inspector build proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-proof-${{ github.sha }}-com.passworddetective.official-plugin-inspector
+          path: |
+            .local/plugin-proof/official-plugin-inspector/build-proof.json
+            .local/plugin-proof/official-plugin-inspector/build-proof.sha256
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: error
