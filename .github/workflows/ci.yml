@@ -193,7 +193,7 @@ jobs:
           retention-days: 7
 
   desktop:
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -203,7 +203,7 @@ jobs:
 
   plugin-build-proof:
     name: plugin build proof
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
