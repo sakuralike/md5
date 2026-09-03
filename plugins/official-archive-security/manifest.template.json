@@ -1,7 +1,7 @@
 {
   "schema": "pd.plugin/v1",
   "plugin_id": "com.passworddetective.official-archive-security",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "display_name": "官方归档安全检查器",
   "description": "检查 ZIP、7z、RAR、TAR、GZ 和 BZ2 归档的路径、压缩比、展开大小、加密条目和可执行文件风险。",
   "publisher_key_id": "$PUBLISHER_KEY_ID",

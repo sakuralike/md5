@@ -1,7 +1,7 @@
 {
   "schema": "pd.plugin/v1",
   "plugin_id": "com.passworddetective.official-plugin-inspector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "display_name": "官方插件包体检工具",
   "description": "检查 PDPKG 的结构、路径、Manifest、SBOM、源码、开发者签名、权限与资源限制。",
   "publisher_key_id": "$PUBLISHER_KEY_ID",

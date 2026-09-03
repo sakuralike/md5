@@ -1,7 +1,7 @@
 {
   "schema": "pd.plugin/v1",
   "plugin_id": "com.passworddetective.official-hash-query",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "display_name": "官方哈希查询助手",
   "description": "通过宿主 API Broker 查询授权档案中的哈希摘要和候选状态。",
   "publisher_key_id": "$PUBLISHER_KEY_ID",

@@ -1,7 +1,7 @@
 {
   "schema": "pd.plugin/v1",
   "plugin_id": "com.passworddetective.official-skin",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "display_name": "官方皮肤",
   "description": "由密码侦探社桌面端宿主渲染的预设配色与本地背景图片皮肤。",
   "publisher_key_id": "$PUBLISHER_KEY_ID",
