@@ -32,7 +32,7 @@ test("Admin 用户治理与角色审批覆盖桌面、移动、跳转主内容�
     criticalRegions: [
       page.getByRole("heading", { name: "用户审批工作台" }),
       page.getByRole("navigation", { name: "管理导航" }),
-      page.getByRole("table"),
+      page.getByRole("table").filter({ hasText: "用户状态角色" }),
     ],
   });
 

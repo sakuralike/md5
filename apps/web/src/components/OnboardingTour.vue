@@ -130,7 +130,9 @@ defineExpose<{ open: () => void }>({ open: openTour });
         <span class="rounded-full bg-primary/10 p-2 text-primary" aria-hidden="true"><CircleHelp class="size-4" /></span>
         <div class="min-w-0 flex-1">
           <p class="text-xs font-medium text-muted-foreground">新手引导 · 第 {{ currentStep + 1 }} / {{ steps.length }} 步</p>
-          <CardTitle id="onboarding-tour-title" ref="heading" tabindex="-1" class="mt-1 text-base leading-6">{{ steps[currentStep].title }}</CardTitle>
+          <div ref="heading" tabindex="-1" class="outline-none">
+            <CardTitle id="onboarding-tour-title" class="mt-1 text-base leading-6">{{ steps[currentStep].title }}</CardTitle>
+          </div>
         </div>
         <Button variant="ghost" size="icon" type="button" aria-label="暂时关闭新手引导" @click="closeForSession"><X class="size-4" /></Button>
       </CardHeader>

@@ -22,7 +22,8 @@ COPY apps/api/alembic.ini ./
 COPY apps/api/alembic ./alembic
 COPY infra/docker/api-entrypoint.sh /usr/local/bin/password-detective-api-entrypoint
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --retries 10 . && \
+    (pip install --retries 10 . || \
+      PIP_INDEX_URL=https://pypi.org/simple pip install --retries 10 .) && \
     sed -i 's/\r$//' /usr/local/bin/password-detective-api-entrypoint && \
     chmod 0755 /usr/local/bin/password-detective-api-entrypoint
 ENTRYPOINT ["password-detective-api-entrypoint"]
