@@ -193,15 +193,8 @@ jobs:
           retention-days: 7
 
   desktop:
-    runs-on: [self-hosted, windows-latest]
+    runs-on: windows-latest
     steps:
-      - name: Prepare cached source
-        shell: pwsh
-        run: |
-          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          git -C $env:GITHUB_WORKSPACE reset --hard $env:GITHUB_SHA
-          git -C $env:GITHUB_WORKSPACE clean -ffdx
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "10.0.x" }
       - run: dotnet build ./apps/desktop-windows/PasswordDetective.Desktop.csproj --configuration Release
@@ -209,15 +202,9 @@ jobs:
 
   plugin-build-proof:
     name: plugin build proof
-    runs-on: [self-hosted, windows-latest]
+    runs-on: windows-latest
     steps:
-      - name: Prepare cached source
-        shell: pwsh
-        run: |
-          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          git -C $env:GITHUB_WORKSPACE reset --hard $env:GITHUB_SHA
-          git -C $env:GITHUB_WORKSPACE clean -ffdx
+      - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "10.0.x" }
       - uses: actions/setup-python@v5
