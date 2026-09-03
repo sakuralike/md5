@@ -194,13 +194,12 @@ jobs:
 
   desktop:
     runs-on: [self-hosted, windows-latest]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}\dotnet
-      NUGET_PACKAGES: ${{ runner.temp }}\nuget
     steps:
       - name: Prepare cached source
         shell: pwsh
         run: |
+          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           git -C $env:GITHUB_WORKSPACE reset --hard $env:GITHUB_SHA
           git -C $env:GITHUB_WORKSPACE clean -ffdx
       - uses: actions/setup-dotnet@v4
@@ -211,13 +210,12 @@ jobs:
   plugin-build-proof:
     name: plugin build proof
     runs-on: [self-hosted, windows-latest]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}\dotnet
-      NUGET_PACKAGES: ${{ runner.temp }}\nuget
     steps:
       - name: Prepare cached source
         shell: pwsh
         run: |
+          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           git -C $env:GITHUB_WORKSPACE reset --hard $env:GITHUB_SHA
           git -C $env:GITHUB_WORKSPACE clean -ffdx
       - uses: actions/setup-dotnet@v4
