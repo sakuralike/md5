@@ -207,6 +207,7 @@ public sealed class PluginProcessHost : IAsyncDisposable
                     var responseLine = await read;
                     if (responseLine is null)
                     {
+                        await DrainStandardErrorAsync();
                         throw CreateExitedException();
                     }
 
@@ -542,6 +543,26 @@ public sealed class PluginProcessHost : IAsyncDisposable
 
                 _standardError.Append(Encoding.UTF8.GetString(buffer, 0, Math.Min(read, remaining)));
             }
+        }
+    }
+
+    private async Task DrainStandardErrorAsync()
+    {
+        try
+        {
+            await _standardErrorTask.WaitAsync(TimeSpan.FromSeconds(1));
+        }
+        catch (TimeoutException)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
