@@ -3484,6 +3484,66 @@ def resign_published_version(
     return get_review_detail(db, version_id=version.id)
 
 
+def resign_revocation(
+    db: Session,
+    settings: Settings,
+    *,
+    revocation_id: str,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginRevocationResponse:
+    record = db.scalar(
+        select(DesktopPluginRevocation)
+        .where(DesktopPluginRevocation.id == revocation_id)
+        .with_for_update()
+    )
+    if record is None:
+        raise AppError("desktop_plugin.revocation_not_found", "撤销记录不存在", status_code=404)
+    version = (
+        db.get(DesktopPluginVersion, record.plugin_version_id)
+        if record.plugin_version_id
+        else None
+    )
+    plugin = (
+        db.get(DesktopPlugin, record.plugin_id)
+        if record.plugin_id
+        else db.get(DesktopPlugin, version.plugin_id)
+        if version is not None
+        else None
+    )
+    key = (
+        db.get(DesktopPluginSigningKey, record.signing_key_id)
+        if record.signing_key_id
+        else None
+    )
+    key_id, public_key, signature = _platform_signature(
+        settings,
+        _revocation_signature_payload(
+            scope=record.scope,
+            plugin=plugin,
+            version=version,
+            signing_key_fingerprint=key.fingerprint if key else None,
+            reason_code=record.reason_code,
+            affects_historical_versions=record.affects_historical_versions,
+            effective_at=record.effective_at,
+        ),
+    )
+    record.platform_key_id = key_id
+    record.platform_public_key_base64 = public_key
+    record.platform_signature_base64 = signature
+    _write_audit(
+        db,
+        action="desktop_plugin.revocation.resigned",
+        target_type="desktop_plugin_revocation",
+        target_id=record.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"platform_key_id": key_id},
+    )
+    db.commit()
+    return next(item for item in list_revocations(db).items if item.id == record.id)
+
+
 def yank_version(
     db: Session,
     *,

@@ -1197,22 +1197,22 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
     assert client.get(ticket.json()["download_url"]).status_code == 410
 
     with client.app.state.database.session_factory() as db:
-        db.add(
-            DesktopPluginRevocation(
-                scope=DesktopPluginRevocationScope.VERSION,
-                plugin_version_id=finalized["id"],
-                reason_code="synthetic_security_test",
-                affects_historical_versions=True,
-                effective_at=utc_now() - timedelta(seconds=1),
-                batch_id="synthetic-batch-001",
-                platform_key_id="synthetic-platform-ed25519-v1",
-                platform_public_key_base64=base64.b64encode(b"\x01" * 32).decode(),
-                platform_signature_base64=base64.b64encode(
-                    b"synthetic-revocation-signature"
-                ).decode(),
-            )
+        revocation = DesktopPluginRevocation(
+            scope=DesktopPluginRevocationScope.VERSION,
+            plugin_version_id=finalized["id"],
+            reason_code="synthetic_security_test",
+            affects_historical_versions=True,
+            effective_at=utc_now() - timedelta(seconds=1),
+            batch_id="synthetic-batch-001",
+            platform_key_id="synthetic-platform-ed25519-v1",
+            platform_public_key_base64=base64.b64encode(b"\x01" * 32).decode(),
+            platform_signature_base64=base64.b64encode(
+                b"synthetic-revocation-signature"
+            ).decode(),
         )
+        db.add(revocation)
         db.commit()
+        revocation_id = revocation.id
 
     revocations = client.get("/api/v1/desktop/plugins/revocations")
     assert revocations.status_code == 200
@@ -1223,6 +1223,30 @@ def test_public_market_filters_downloads_and_returns_signed_revocations(client) 
     )
     assert conditional.status_code == 304
     assert client.get("/api/v1/desktop/plugins/catalog").json()["total"] == 0
+
+    admin_headers, admin_id = _register_verified(client, "revocation_resign_admin")
+    with client.app.state.database.session_factory() as db:
+        admin = db.get(User, admin_id)
+        assert admin is not None
+        admin.role = UserRole.ADMIN
+        db.commit()
+    resigned = client.post(
+        f"/api/v1/admin/plugin-reviews/revocations/{revocation_id}/resign",
+        headers={**admin_headers, "Idempotency-Key": f"revocation-resign-{uuid4().hex}"},
+    )
+    assert resigned.status_code == 200, resigned.text
+    resigned_body = resigned.json()
+    assert resigned_body["plugin_slug"] == "com.synthetic.published-plugin"
+    canonical = json.dumps(
+        resigned_body["platform_signature_payload"],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    public_key = Ed25519PublicKey.from_public_bytes(
+        base64.b64decode(resigned_body["platform_public_key_base64"])
+    )
+    public_key.verify(base64.b64decode(resigned_body["platform_signature_base64"]), canonical)
     blocked_ticket = client.post(
         "/api/v1/desktop/plugins/com.synthetic.published-plugin/download-ticket",
         json={"architecture": "windows-x64", "semver": "1.0.0"},

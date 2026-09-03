@@ -53,6 +53,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginReviewPolicyUpdate,
     PluginReviewQueueResponse,
     PluginReviewSourceResponse,
+    PluginRevocationResponse,
     PluginSourceLlmReviewRequest,
     PluginVersionApproveRequest,
     PluginVersionPublishRequest,
@@ -76,6 +77,7 @@ from password_detective.modules.desktop_plugins.service import (
     reject_version,
     rerun_static_review,
     resign_published_version,
+    resign_revocation,
     review_report,
     revoke_version,
     rollback_version,
@@ -368,6 +370,39 @@ def resign_plugin_version(
             settings,
             version_id=version_id,
             payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post("/revocations/{revocation_id}/resign", response_model=PluginRevocationResponse)
+def resign_plugin_revocation(
+    revocation_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginRevocationResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin.revocation.resign",
+        idempotency_key,
+        {"revocation_id": revocation_id},
+    )
+    if lease.cached_response is not None:
+        return PluginRevocationResponse.model_validate(lease.cached_response)
+    try:
+        response = resign_revocation(
+            db,
+            settings,
+            revocation_id=revocation_id,
             principal=principal,
             context=get_client_context(request),
         )
