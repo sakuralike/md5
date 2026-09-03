@@ -93,6 +93,14 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 }
 
+function maybeAutoOpen(): void {
+  if (!props.autoOpen || props.initialOpen || open.value) return;
+  const hasCompleted = window.localStorage.getItem(COMPLETED_KEY) === "1";
+  const hasDismissed = window.localStorage.getItem(DISMISSED_KEY) === "1";
+  const hasSkipped = window.sessionStorage.getItem(SKIPPED_KEY) === "1";
+  if (!hasCompleted && !hasDismissed && !hasSkipped) openTour();
+}
+
 async function focusHeading(): Promise<void> {
   await nextTick();
   heading.value?.focus();
@@ -102,13 +110,20 @@ watch([open, currentStep], () => {
   if (open.value) void focusHeading();
 });
 
+watch(
+  () => props.autoOpen,
+  (enabled) => {
+    if (enabled) {
+      void nextTick(maybeAutoOpen);
+    } else if (!props.initialOpen) {
+      open.value = false;
+    }
+  },
+);
+
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
-  if (!props.autoOpen || props.initialOpen) return;
-  const hasCompleted = window.localStorage.getItem(COMPLETED_KEY) === "1";
-  const hasDismissed = window.localStorage.getItem(DISMISSED_KEY) === "1";
-  const hasSkipped = window.sessionStorage.getItem(SKIPPED_KEY) === "1";
-  if (!hasCompleted && !hasDismissed && !hasSkipped) openTour();
+  window.setTimeout(maybeAutoOpen, 0);
 });
 
 onBeforeUnmount(() => window.removeEventListener("keydown", handleKeydown));
