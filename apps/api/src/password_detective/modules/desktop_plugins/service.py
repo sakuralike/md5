@@ -102,6 +102,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionFinalizeRequest,
     PluginVersionPublishRequest,
     PluginVersionRejectRequest,
+    PluginVersionResignRequest,
     PluginVersionResponse,
     PluginVersionRevokeRequest,
     PluginVersionRollbackRequest,
@@ -233,7 +234,8 @@ def _aware(value: datetime) -> datetime:
 
 
 def _signature_timestamp(value: datetime) -> str:
-    return _aware(value).astimezone(UTC).isoformat().replace("+00:00", "Z")
+    normalized = _aware(value).astimezone(UTC).replace(microsecond=0)
+    return normalized.isoformat().replace("+00:00", "Z")
 
 
 def _evidence_timestamp(value: datetime | None) -> str:
@@ -3415,6 +3417,68 @@ def publish_version(
         actor_id=principal.user.id,
         context=context,
         details={"channel": payload.channel, "platform_key_id": key_id},
+    )
+    db.commit()
+    return get_review_detail(db, version_id=version.id)
+
+
+def resign_published_version(
+    db: Session,
+    settings: Settings,
+    *,
+    version_id: str,
+    payload: PluginVersionResignRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> PluginReviewDetailResponse:
+    plugin, version = _admin_version(db, version_id=version_id, lock=True)
+    if version.version != payload.version:
+        raise AppError(
+            "desktop_plugin.version_conflict", "插件版本已被其他请求修改", status_code=409
+        )
+    if version.status != DesktopPluginVersionStatus.PUBLISHED or version.published_at is None:
+        raise AppError(
+            "desktop_plugin.version_not_resignable", "只有已发布版本可以重新签章", status_code=409
+        )
+    if not _has_stable_publication(db, version.id):
+        raise AppError(
+            "desktop_plugin.stable_publication_missing",
+            "当前版本没有有效的 stable 发布记录",
+            status_code=409,
+        )
+    artifacts = _public_artifacts(db, version.id)
+    if not artifacts:
+        raise AppError(
+            "desktop_plugin.artifact_not_ready", "当前版本没有公开制品", status_code=409
+        )
+    key_id, public_key, signature = _platform_signature(
+        settings,
+        _publication_signature_payload(
+            plugin,
+            version,
+            artifacts,
+            published_at=version.published_at,
+        ),
+    )
+    version.platform_key_id = key_id
+    version.platform_public_key_base64 = public_key
+    version.platform_signature_base64 = signature
+    version.version += 1
+    _review_event(
+        db,
+        version=version,
+        kind=DesktopPluginReviewEventKind.PUBLISHED,
+        actor_id=principal.user.id,
+        note="管理员重新签署平台发布证明。",
+    )
+    _write_audit(
+        db,
+        action="desktop_plugin.version.resigned",
+        target_type="desktop_plugin_version",
+        target_id=version.id,
+        actor_id=principal.user.id,
+        context=context,
+        details={"platform_key_id": key_id},
     )
     db.commit()
     return get_review_detail(db, version_id=version.id)

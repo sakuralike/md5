@@ -389,6 +389,10 @@ class PluginVersionPublishRequest(BaseModel):
         return normalized
 
 
+class PluginVersionResignRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
 class PluginVersionYankRequest(BaseModel):
     version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=2_000)

@@ -57,6 +57,7 @@ from password_detective.modules.desktop_plugins.schemas import (
     PluginVersionApproveRequest,
     PluginVersionPublishRequest,
     PluginVersionRejectRequest,
+    PluginVersionResignRequest,
     PluginVersionRevokeRequest,
     PluginVersionRollbackRequest,
     PluginVersionYankRequest,
@@ -74,6 +75,7 @@ from password_detective.modules.desktop_plugins.service import (
     publish_version,
     reject_version,
     rerun_static_review,
+    resign_published_version,
     review_report,
     revoke_version,
     rollback_version,
@@ -327,6 +329,41 @@ def publish_plugin_version(
         return PluginReviewDetailResponse.model_validate(lease.cached_response)
     try:
         response = publish_version(
+            db,
+            settings,
+            version_id=version_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        )
+        _finish(db, lease, response)
+        return response
+    except Exception:
+        _abort(db, lease)
+        raise
+
+
+@router.post("/versions/{version_id}/resign", response_model=PluginReviewDetailResponse)
+def resign_plugin_version(
+    version_id: str,
+    payload: PluginVersionResignRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> PluginReviewDetailResponse:
+    lease = _lease(
+        db,
+        principal,
+        "admin.plugin.version.resign",
+        idempotency_key,
+        {"version_id": version_id, **payload.model_dump()},
+    )
+    if lease.cached_response is not None:
+        return PluginReviewDetailResponse.model_validate(lease.cached_response)
+    try:
+        response = resign_published_version(
             db,
             settings,
             version_id=version_id,

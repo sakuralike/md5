@@ -6,13 +6,16 @@ import io
 import json
 import shutil
 import zipfile
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 from sqlalchemy import select
 
 from password_detective.core.errors import AppError
@@ -42,6 +45,7 @@ from password_detective.modules.desktop_plugins.schemas import (
 from password_detective.modules.desktop_plugins.service import (
     _allowed_build_proof_artifact_names,
     _schema_is_backward_compatible,
+    _signature_timestamp,
     build_canary_download_payload,
     build_canary_ticket_payload,
     build_install_evidence_payload,
@@ -50,6 +54,12 @@ from password_detective.modules.desktop_plugins.service import (
 from password_detective.modules.desktop_plugins.storage import DesktopPluginStorage
 
 _PASSWORD = "SyntheticPluginDeveloper123!"
+
+
+def test_publication_signature_timestamp_is_stable_at_database_precision() -> None:
+    value = datetime(2026, 9, 4, 12, 34, 56, 789000, tzinfo=UTC)
+
+    assert _signature_timestamp(value) == "2026-09-04T12:34:56Z"
 
 
 def _register_verified(client, prefix: str) -> tuple[dict[str, str], str]:
@@ -1068,6 +1078,22 @@ def test_source_publish_requires_verified_build_proof(client, monkeypatch) -> No
         json={"version": attached.json()["version"], "channel": "stable"},
     )
     assert published.status_code == 200, published.text
+    resigned = client.post(
+        f"/api/v1/admin/plugin-reviews/versions/{version['id']}/resign",
+        headers={**admin_headers, "Idempotency-Key": f"build-proof-resign-{uuid4().hex}"},
+        json={"version": published.json()["version"]},
+    )
+    assert resigned.status_code == 200, resigned.text
+    resigned_body = resigned.json()
+    signed_payload = resigned_body["platform_signature_payload"]
+    assert "." not in signed_payload["published_at"]
+    canonical = json.dumps(
+        signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    public_key = Ed25519PublicKey.from_public_bytes(
+        base64.b64decode(resigned_body["platform_public_key_base64"])
+    )
+    public_key.verify(base64.b64decode(resigned_body["platform_signature_base64"]), canonical)
 
 
 def test_build_proof_artifact_names_are_scoped_to_plugin() -> None:
