@@ -302,7 +302,10 @@ onBeforeUnmount(releaseCustomBackground);
     </main>
 
     <AnnouncementPopup />
-    <OnboardingTour ref="onboardingTour" />
+    <OnboardingTour
+      ref="onboardingTour"
+      :auto-open="route.path === '/' && !auth.isAuthenticated"
+    />
 
     <footer class="site-footer">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
