@@ -7,7 +7,7 @@ vi.mock("../stores/auth", () => ({ useAuthStore: () => ({ accessToken: "syntheti
 vi.mock("../services/developerPlugins", () => ({
   listDeveloperPlugins: vi.fn().mockResolvedValue([]), listPluginSigningKeys: vi.fn().mockResolvedValue([]), createDeveloperPlugin: vi.fn(),
   registerPluginSigningKey: vi.fn(), createPluginVersion: vi.fn(), uploadPluginPackage: vi.fn(),
-  finalizePluginVersion: vi.fn(), submitPluginVersion: vi.fn(), getPluginReviewReport: vi.fn(), withdrawPluginVersion: vi.fn(),
+  finalizePluginVersion: vi.fn(), submitPluginVersion: vi.fn(), getPluginReviewReport: vi.fn(), withdrawPluginVersion: vi.fn(), attachPluginBuildProof: vi.fn(),
 }));
 vi.mock("../services/developerApplications", () => ({
   listDeveloperApplications: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 100, total: 0 }),
@@ -28,6 +28,10 @@ describe("DeveloperPluginsPage", () => {
     expect(html).toContain("发布说明");
     expect(html).toContain("自动审核报告");
     expect(html).toContain("创建、上传并提交审核");
+    expect(html).toContain("绑定 GitHub 构建证明");
+    expect(html).toContain("GitHub Run ID");
+    expect(html).toContain("GitHub Artifact ID");
+    expect(html).toContain("build-proof.json");
     expect(html).not.toContain("synthetic-token");
   });
 });

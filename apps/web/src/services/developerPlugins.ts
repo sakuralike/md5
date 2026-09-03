@@ -100,7 +100,7 @@ export function finalizePluginVersion(token: string, version: DesktopPluginVersi
 
 export function attachPluginBuildProof(
   token: string,
-  version: DesktopPluginVersion,
+  version: Pick<DesktopPluginVersion, "id" | "version">,
   proof: DesktopPluginBuildProof,
   githubRunId: number,
   githubArtifactId: number,

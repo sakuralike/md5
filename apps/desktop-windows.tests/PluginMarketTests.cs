@@ -16,6 +16,7 @@ using PasswordDetective.Desktop.Plugins.Safety;
 using PasswordDetective.Desktop.Plugins.Storage;
 using PasswordDetective.Desktop.Plugins.UI;
 using PasswordDetective.Desktop.Plugins.ViewModels;
+using PasswordDetective.Desktop.Models;
 using PasswordDetective.Desktop.Services;
 
 namespace PasswordDetective.Desktop.Tests;
@@ -133,6 +134,54 @@ public sealed class PluginMarketTests
         Assert.Equal("/api/v1/desktop/plugins/catalog", handler.LastRequestUri?.AbsolutePath);
         Assert.Contains("query=recover%20guide", handler.LastRequestUri?.Query);
         Assert.DoesNotContain("q=", handler.LastRequestUri?.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateCheckMarksScheduledMigrationRetriesForTheRegisteredInstallation()
+    {
+        var paths = new PluginStoragePaths(Path.Combine(_directory, "migration-retry"));
+        var registry = new PluginRegistry(paths);
+        await registry.UpsertAsync(CreateInstalledPlugin(
+            "com.synthetic.market",
+            "1.9.0",
+            PluginSource.MarketReviewed));
+        var installationId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var handler = new MigrationRetryHandler(
+            CreateCatalogItem("com.synthetic.market", "1.10.0"),
+            installationId);
+        using var httpClient = new HttpClient(handler);
+        using var apiClient = new DesktopApiClient(httpClient);
+        var permissions = new PluginPermissionPolicy();
+        var logs = new PluginLogStore(paths);
+        var execution = new PluginExecutionService(paths, logs);
+        var safeMode = new PluginSafeMode(paths);
+        var installer = new PluginInstaller(
+            paths,
+            new PluginPackageVerifier(),
+            permissions,
+            registry,
+            execution);
+        var viewModel = new PluginMarketplaceViewModel(
+            paths,
+            installer,
+            permissions,
+            registry,
+            new PluginRuntimeService(registry, execution, safeMode, logs),
+            safeMode,
+            new RejectingDialogService(),
+            "http://localhost/api/v1/",
+            logs,
+            apiClient,
+            _ => Task.FromResult<string?>("synthetic-access-token"),
+            new SyntheticIdentityService(installationId));
+
+        await viewModel.CheckPluginUpdatesAsync();
+
+        var update = Assert.Single(viewModel.PluginUpdates);
+        Assert.Equal("failed", update.State);
+        Assert.Equal("服务器已安排第 2 次迁移重试。", update.LastError);
+        Assert.Equal("synthetic-access-token", handler.MigrationRetryAuthorization);
+        Assert.Contains($"installation_id={installationId:D}", handler.MigrationRetryRequestUri?.Query);
     }
 
     [Fact]
@@ -432,6 +481,74 @@ public sealed class PluginMarketTests
                 Content = new StringContent(content, Encoding.UTF8, "application/json"),
             });
         }
+    }
+
+    private sealed class MigrationRetryHandler(
+        MarketPluginCatalogItem item,
+        Guid installationId) : HttpMessageHandler
+    {
+        public Uri? MigrationRetryRequestUri { get; private set; }
+        public string? MigrationRetryAuthorization { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/migration-retries", StringComparison.Ordinal) == true)
+            {
+                MigrationRetryRequestUri = request.RequestUri;
+                MigrationRetryAuthorization = request.Headers.Authorization?.Parameter;
+                if (!request.RequestUri.Query.Contains(
+                        $"installation_id={installationId:D}",
+                        StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest));
+                }
+                var retryBody = JsonSerializer.Serialize(new PluginMigrationRetryListResponse(
+                [
+                    new PluginMigrationRetryItem(
+                        "synthetic-migration-retry-event",
+                        item.Slug,
+                        item.LatestVersion,
+                        "windows-x64",
+                        "1.9.0",
+                        new string('a', 64),
+                        1,
+                        DateTimeOffset.UtcNow),
+                ]));
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(retryBody, Encoding.UTF8, "application/json"),
+                });
+            }
+
+            var catalogBody = JsonSerializer.Serialize(new MarketPluginCatalogResponse([item], 1, 100, 1));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(catalogBody, Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    private sealed class SyntheticIdentityService(Guid installationId) : IInstallationIdentityService
+    {
+        private readonly InstallationIdentity _identity = new(
+            installationId,
+            "synthetic-public-key",
+            new string('a', 64),
+            "ecdsa-p256-sha256",
+            DateTimeOffset.UtcNow);
+
+        public Task<InstallationIdentity> GetOrCreateAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_identity);
+
+        public Task<InstallationIdentity> RegenerateAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_identity);
+
+        public Task<string> SignAsync(
+            ReadOnlyMemory<byte> canonicalPayload,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult("synthetic-signature");
     }
 
     private sealed class InstallEventHandler : HttpMessageHandler
