@@ -219,40 +219,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for index_name, table_name in (
-        ("ix_third_party_token_sessions_refresh_token_hash", "third_party_token_sessions"),
-        ("ix_third_party_token_sessions_family_id", "third_party_token_sessions"),
-        ("ix_third_party_token_sessions_user_id", "third_party_token_sessions"),
-        ("ix_third_party_token_sessions_app_id", "third_party_token_sessions"),
-    ):
-        op.drop_index(index_name, table_name=table_name)
     op.drop_table("third_party_token_sessions")
 
-    for index_name, table_name in (
-        ("ix_third_party_authorization_codes_code_hash", "third_party_authorization_codes"),
-        ("ix_third_party_authorization_codes_expires_at", "third_party_authorization_codes"),
-        ("ix_third_party_authorization_codes_app_id", "third_party_authorization_codes"),
-    ):
-        op.drop_index(index_name, table_name=table_name)
     op.drop_table("third_party_authorization_codes")
 
-    op.drop_index("ix_third_party_authorizations_user_id", table_name="third_party_authorizations")
     op.drop_table("third_party_authorizations")
 
-    op.drop_index(
-        "ix_third_party_app_redirect_uris_app_id", table_name="third_party_app_redirect_uris"
-    )
     op.drop_table("third_party_app_redirect_uris")
 
-    for index_name in (
-        "ix_third_party_apps_submitted_by_status",
-        "ix_third_party_apps_status_created",
-        "ix_third_party_apps_trusted_verification_enabled",
-        "ix_third_party_apps_reviewer_user_id",
-        "ix_third_party_apps_submitted_by_user_id",
-        "ix_third_party_apps_application_source",
-        "ix_third_party_apps_status",
-        "ix_third_party_apps_client_id",
-    ):
-        op.drop_index(index_name, table_name="third_party_apps")
     op.drop_table("third_party_apps")

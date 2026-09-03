@@ -43,8 +43,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_web_announcements_published_at", table_name="web_announcements")
-    op.drop_index("ix_web_announcements_created_by", table_name="web_announcements")
-    op.drop_index("ix_web_announcements_sort_order", table_name="web_announcements")
-    op.drop_index("ix_web_announcements_status", table_name="web_announcements")
     op.drop_table("web_announcements")

@@ -187,46 +187,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_third_party_application_review_events_request_created",
-        table_name="third_party_application_review_events",
-    )
-    op.drop_index(
-        "ix_third_party_application_review_events_kind",
-        table_name="third_party_application_review_events",
-    )
-    op.drop_index(
-        "ix_third_party_application_review_events_actor_user_id",
-        table_name="third_party_application_review_events",
-    )
-    op.drop_index(
-        "ix_third_party_application_review_events_application_request_id",
-        table_name="third_party_application_review_events",
-    )
     op.drop_table("third_party_application_review_events")
-    op.drop_index(
-        "ix_third_party_application_requests_submitter_status",
-        table_name="third_party_application_requests",
-    )
-    op.drop_index(
-        "ix_third_party_application_requests_status_created",
-        table_name="third_party_application_requests",
-    )
-    op.drop_index(
-        "ix_third_party_application_requests_approved_application_id",
-        table_name="third_party_application_requests",
-    )
-    op.drop_index(
-        "ix_third_party_application_requests_reviewer_user_id",
-        table_name="third_party_application_requests",
-    )
-    op.drop_index(
-        "ix_third_party_application_requests_status", table_name="third_party_application_requests"
-    )
-    op.drop_index(
-        "ix_third_party_application_requests_submitted_by_user_id",
-        table_name="third_party_application_requests",
-    )
     op.drop_table("third_party_application_requests")
     with op.batch_alter_table("community_public_profiles") as batch_op:
         batch_op.drop_index("ix_community_public_profiles_avatar_kind")

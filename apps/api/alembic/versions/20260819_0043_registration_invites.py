@@ -91,11 +91,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_registration_invite_uses_user_id"), table_name="registration_invite_uses")
-    op.drop_index(op.f("ix_registration_invite_uses_invite_id"), table_name="registration_invite_uses")
     op.drop_table("registration_invite_uses")
-    op.drop_index(op.f("ix_registration_invites_revoked_at"), table_name="registration_invites")
-    op.drop_index(op.f("ix_registration_invites_expires_at"), table_name="registration_invites")
-    op.drop_index(op.f("ix_registration_invites_created_by"), table_name="registration_invites")
-    op.drop_index(op.f("ix_registration_invites_code_hash"), table_name="registration_invites")
     op.drop_table("registration_invites")

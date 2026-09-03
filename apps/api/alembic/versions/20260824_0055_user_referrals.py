@@ -114,11 +114,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_user_referral_uses_invitee_id"), table_name="user_referral_uses")
-    op.drop_index(
-        op.f("ix_user_referral_uses_referral_profile_id"), table_name="user_referral_uses"
-    )
     op.drop_table("user_referral_uses")
-    op.drop_index(op.f("ix_user_referral_profiles_code"), table_name="user_referral_profiles")
-    op.drop_index(op.f("ix_user_referral_profiles_user_id"), table_name="user_referral_profiles")
     op.drop_table("user_referral_profiles")

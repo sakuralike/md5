@@ -63,8 +63,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_reward_catalog_items_updated_by", table_name="reward_catalog_items")
-    op.drop_index("ix_reward_catalog_items_created_by", table_name="reward_catalog_items")
-    op.drop_index("ix_reward_catalog_items_status", table_name="reward_catalog_items")
-    op.drop_index("ix_reward_catalog_items_slug", table_name="reward_catalog_items")
     op.drop_table("reward_catalog_items")

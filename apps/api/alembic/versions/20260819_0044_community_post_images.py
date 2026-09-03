@@ -52,9 +52,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for column in ("created_at", "status", "sha256", "post_id", "owner_id"):
-        op.drop_index(
-            op.f(f"ix_community_post_images_{column}"),
-            table_name="community_post_images",
-        )
     op.drop_table("community_post_images")

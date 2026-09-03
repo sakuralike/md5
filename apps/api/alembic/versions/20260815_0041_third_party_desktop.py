@@ -122,32 +122,32 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_verification_receipts_trust_channel", table_name="verification_receipts")
-    op.drop_index("ix_verification_receipts_receipt_protocol", table_name="verification_receipts")
-    op.drop_index("ix_verification_receipts_third_party_app_id", table_name="verification_receipts")
     with op.batch_alter_table("verification_receipts") as batch_op:
         batch_op.drop_constraint(
             "fk_verification_receipts_third_party_app_id", type_="foreignkey"
         )
+        batch_op.drop_index("ix_verification_receipts_trust_channel")
+        batch_op.drop_index("ix_verification_receipts_receipt_protocol")
+        batch_op.drop_index("ix_verification_receipts_third_party_app_id")
         batch_op.drop_column("trust_channel")
         batch_op.drop_column("receipt_protocol")
         batch_op.drop_column("third_party_app_id")
 
-    op.drop_index("ix_verification_challenges_receipt_protocol", table_name="verification_challenges")
-    op.drop_index("ix_verification_challenges_third_party_app_id", table_name="verification_challenges")
     with op.batch_alter_table("verification_challenges") as batch_op:
         batch_op.drop_constraint(
             "fk_verification_challenges_third_party_app_id", type_="foreignkey"
         )
+        batch_op.drop_index("ix_verification_challenges_receipt_protocol")
+        batch_op.drop_index("ix_verification_challenges_third_party_app_id")
         batch_op.drop_column("receipt_protocol")
         batch_op.drop_column("third_party_app_id")
 
-    op.drop_index("ix_client_installations_receipt_protocol", table_name="client_installations")
-    op.drop_index("ix_client_installations_third_party_app_id", table_name="client_installations")
     with op.batch_alter_table("client_installations") as batch_op:
         batch_op.drop_constraint(
             "fk_client_installations_third_party_app_id", type_="foreignkey"
         )
+        batch_op.drop_index("ix_client_installations_receipt_protocol")
+        batch_op.drop_index("ix_client_installations_third_party_app_id")
         batch_op.drop_column("architecture")
         batch_op.drop_column("operating_system")
         batch_op.drop_column("receipt_protocol")
