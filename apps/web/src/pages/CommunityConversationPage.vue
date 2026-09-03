@@ -31,6 +31,7 @@ const body = ref("");
 const error = ref("");
 const counterpartLastReadSequence = ref(0);
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let loadRequestId = 0;
 
 const conversationId = computed(() => String(route.params.conversationId ?? ""));
 const orderedMessages = computed(() =>
@@ -77,7 +78,9 @@ async function markLoadedMessagesRead(
 
 async function load(reset = true): Promise<void> {
   if (!conversationId.value) return;
-  if (reset) loading.value = true;
+  const requestId = ++loadRequestId;
+  const requestedConversationId = conversationId.value;
+  if (reset && messages.value.length === 0) loading.value = true;
   else loadingMore.value = true;
   error.value = "";
   try {
@@ -89,6 +92,7 @@ async function load(reset = true): Promise<void> {
         limit: 30,
       },
     );
+    if (requestId !== loadRequestId || requestedConversationId !== conversationId.value) return;
     const incoming = reset ? response.items : [...messages.value, ...response.items];
     messages.value = mergeMessages(incoming);
     counterpartLastReadSequence.value = Math.max(
@@ -99,10 +103,13 @@ async function load(reset = true): Promise<void> {
     hasMore.value = response.has_more;
     if (reset) await markLoadedMessagesRead(response.items, response.last_read_sequence);
   } catch (caught) {
+    if (requestId !== loadRequestId || requestedConversationId !== conversationId.value) return;
     error.value = caught instanceof Error ? caught.message : "无法加载私信会话";
   } finally {
-    loading.value = false;
-    loadingMore.value = false;
+    if (requestId === loadRequestId) {
+      loading.value = false;
+      loadingMore.value = false;
+    }
   }
 }
 
@@ -152,6 +159,7 @@ watch(
 onMounted(() => void load());
 onServerPrefetch(() => load());
 onBeforeUnmount(() => {
+  loadRequestId += 1;
   if (refreshTimer !== null) clearTimeout(refreshTimer);
 });
 </script>

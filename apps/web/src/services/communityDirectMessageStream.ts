@@ -31,22 +31,27 @@ export async function consumeCommunityDirectMessageStream(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (!options.signal.aborted) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done }).replaceAll("\r\n", "\n");
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary >= 0) {
-      const block = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const parsed = parseSseBlock(block);
-      if (parsed) {
-        options.handlers.onEvent(
-          parseDirectMessageSseEvent(parsed.event, parsed.id, parsed.data),
-        );
+  try {
+    while (!options.signal.aborted) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done }).replaceAll("\r\n", "\n");
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const parsed = parseSseBlock(block);
+        if (parsed) {
+          options.handlers.onEvent(
+            parseDirectMessageSseEvent(parsed.event, parsed.id, parsed.data),
+          );
+        }
+        boundary = buffer.indexOf("\n\n");
       }
-      boundary = buffer.indexOf("\n\n");
+      if (done) break;
     }
-    if (done) break;
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

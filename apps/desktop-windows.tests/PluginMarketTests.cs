@@ -118,6 +118,24 @@ public sealed class PluginMarketTests
     }
 
     [Fact]
+    public async Task PluginCatalogSearchUsesTheServerQueryParameter()
+    {
+        var handler = new CatalogHandler(CreateCatalogItem("com.synthetic.market", "1.10.0"));
+        using var httpClient = new HttpClient(handler);
+        using var apiClient = new DesktopApiClient(httpClient);
+
+        await apiClient.GetPluginCatalogAsync(
+            "http://localhost/api/v1/",
+            query: "recover guide",
+            page: 2,
+            pageSize: 20);
+
+        Assert.Equal("/api/v1/desktop/plugins/catalog", handler.LastRequestUri?.AbsolutePath);
+        Assert.Contains("query=recover%20guide", handler.LastRequestUri?.Query);
+        Assert.DoesNotContain("q=", handler.LastRequestUri?.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InstallEvidenceUsesAuthenticatedPrivacyMinimizedPayload()
     {
         var handler = new InstallEventHandler();

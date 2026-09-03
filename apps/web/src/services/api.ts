@@ -130,6 +130,7 @@ export async function apiStreamRequest(
 ): Promise<Response> {
   const requestOptions: RequestInit = {
     method: "GET",
+    cache: "no-store",
     signal: options.signal,
     headers: options.lastEventId ? { "Last-Event-ID": options.lastEventId } : {},
   };

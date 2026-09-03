@@ -3,6 +3,9 @@ import { defineConfig, devices } from "@playwright/test";
 const apiPort = 18100;
 const webPort = 15173;
 const adminPort = 15174;
+const e2eApiBaseUrl = process.env.E2E_DIRECT_API === "1"
+  ? `http://127.0.0.1:${apiPort}/api/v1`
+  : "/api/v1";
 
 process.env.E2E_ADMIN_USERNAME ??= "synthetic_e2e_admin";
 process.env.E2E_ADMIN_EMAIL ??= "synthetic-e2e-admin@example.com";
@@ -165,7 +168,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         ...process.env,
-        VITE_API_BASE_URL: "/api/v1",
+        VITE_API_BASE_URL: e2eApiBaseUrl,
         VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
       },
     },
@@ -176,7 +179,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         ...process.env,
-        VITE_API_BASE_URL: `http://127.0.0.1:${apiPort}/api/v1`,
+        VITE_API_BASE_URL: e2eApiBaseUrl,
         VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
       },
     },

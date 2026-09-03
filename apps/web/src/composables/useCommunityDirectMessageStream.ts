@@ -45,10 +45,12 @@ export function useCommunityDirectMessageStream() {
           lastEventId: sessionStorage.getItem(cursorKey(userId)),
           handlers: {
             onOpen: () => {
+              if (currentGeneration !== generation || activeController.signal.aborted) return;
               directMessages.setStatus("connected");
               reconnectAttempt = 0;
             },
             onEvent: (event) => {
+              if (currentGeneration !== generation || activeController.signal.aborted) return;
               if (!directMessages.apply(event, userId)) return;
               sessionStorage.setItem(cursorKey(userId), String(event.eventId));
             },

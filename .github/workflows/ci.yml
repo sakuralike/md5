@@ -157,6 +157,8 @@ jobs:
     name: e2e (${{ matrix.browser }})
     runs-on: ubuntu-latest
     needs: [api, frontend]
+    env:
+      E2E_DIRECT_API: "1"
     strategy:
       fail-fast: false
       matrix:

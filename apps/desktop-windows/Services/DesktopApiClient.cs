@@ -90,7 +90,7 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
                      + $"&page={page}&page_size={pageSize}";
         if (!string.IsNullOrWhiteSpace(query))
         {
-            suffix += $"&q={Uri.EscapeDataString(query)}";
+            suffix += $"&query={Uri.EscapeDataString(query)}";
         }
         return GetAsync<MarketPluginCatalogResponse>(serverBaseUrl, suffix, cancellationToken);
     }
@@ -108,7 +108,7 @@ public sealed class DesktopApiClient : IDesktopApiClient, IDisposable
                      + $"&page={page}&page_size={pageSize}";
         if (!string.IsNullOrWhiteSpace(query))
         {
-            suffix += $"&q={Uri.EscapeDataString(query)}";
+            suffix += $"&query={Uri.EscapeDataString(query)}";
         }
         return GetAsync<MarketPluginCatalogResponse>(
             serverBaseUrl,

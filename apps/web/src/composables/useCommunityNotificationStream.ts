@@ -56,6 +56,7 @@ export function useCommunityNotificationStream() {
     const activeController = controller;
     notifications.setStatus(navigator.onLine ? "connecting" : "offline");
     await refreshUnreadCount();
+    if (currentGeneration !== generation || activeController.signal.aborted) return;
     while (
       currentGeneration === generation &&
       !activeController.signal.aborted &&
@@ -72,14 +73,17 @@ export function useCommunityNotificationStream() {
           lastEventId: sessionStorage.getItem(cursorKey(userId)),
           handlers: {
             onOpen: () => {
+              if (currentGeneration !== generation || activeController.signal.aborted) return;
               notifications.setStatus("connected");
               reconnectAttempt = 0;
             },
             onReady: (payload) => {
+              if (currentGeneration !== generation || activeController.signal.aborted) return;
               notifications.setUnreadCount(payload.unread_count);
               if (payload.event_id) sessionStorage.setItem(cursorKey(userId), payload.event_id);
             },
             onNotification: (payload) => {
+              if (currentGeneration !== generation || activeController.signal.aborted) return;
               notifications.receive(payload.notification, payload.unread_count);
               sessionStorage.setItem(cursorKey(userId), payload.event_id);
             },
