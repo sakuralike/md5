@@ -84,11 +84,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_community_reports_created_at", table_name="community_reports")
-    op.drop_index("ix_community_reports_resolved_by_id", table_name="community_reports")
-    op.drop_index("ix_community_reports_status", table_name="community_reports")
-    op.drop_index("ix_community_reports_reason", table_name="community_reports")
-    op.drop_index("ix_community_reports_comment_id", table_name="community_reports")
-    op.drop_index("ix_community_reports_post_id", table_name="community_reports")
-    op.drop_index("ix_community_reports_reporter_id", table_name="community_reports")
     op.drop_table("community_reports")
