@@ -258,10 +258,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("community_posts") as batch:
-        batch.drop_index("ix_community_posts_group_id")
-        batch.drop_index("ix_community_posts_board_id")
         batch.drop_constraint("fk_community_posts_group_id", type_="foreignkey")
         batch.drop_constraint("fk_community_posts_board_id", type_="foreignkey")
+        batch.drop_index("ix_community_posts_group_id")
+        batch.drop_index("ix_community_posts_board_id")
         batch.drop_column("group_id")
         batch.drop_column("board_id")
     op.drop_table("community_group_governance_events")

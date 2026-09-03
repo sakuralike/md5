@@ -36,11 +36,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("community_notification_outbox") as batch_op:
-        batch_op.drop_index("ix_community_notification_outbox_last_replayed_by_id")
         batch_op.drop_constraint(
             "fk_community_notification_outbox_last_replayed_by_users",
             type_="foreignkey",
         )
+        batch_op.drop_index("ix_community_notification_outbox_last_replayed_by_id")
         batch_op.drop_column("last_replayed_by_id")
         batch_op.drop_column("last_replayed_at")
         batch_op.drop_column("replay_count")

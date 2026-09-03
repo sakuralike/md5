@@ -179,25 +179,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("community_comments") as batch:
-        batch.drop_index("ix_community_comments_reply_to_user_id")
-        batch.drop_index("ix_community_comments_root_id")
         batch.drop_constraint("fk_community_comments_reply_to_user_id", type_="foreignkey")
         batch.drop_constraint("fk_community_comments_root_id", type_="foreignkey")
+        batch.drop_index("ix_community_comments_reply_to_user_id")
+        batch.drop_index("ix_community_comments_root_id")
         batch.drop_column("deleted_by_author_at")
         batch.drop_column("edited_at")
         batch.drop_column("version")
         batch.drop_column("reply_to_user_id")
         batch.drop_column("root_id")
 
-    op.drop_index(
-        "ix_community_post_revisions_created_at", table_name="community_post_revisions"
-    )
-    op.drop_index(
-        "ix_community_post_revisions_editor_id", table_name="community_post_revisions"
-    )
-    op.drop_index(
-        "ix_community_post_revisions_post_id", table_name="community_post_revisions"
-    )
     op.drop_table("community_post_revisions")
 
     with op.batch_alter_table("community_posts") as batch:
