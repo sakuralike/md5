@@ -518,7 +518,7 @@ def _fixture_common(evidence_kind: str, execution_id: str) -> dict[str, Any]:
 def generate_contract_sources(directory: Path, profile: dict[str, Any]) -> tuple[Path, Path, Path]:
     directory.mkdir(parents=True, exist_ok=True)
     start = datetime(2026, 8, 10, 0, 0, tzinfo=UTC)
-    duration = int(profile["stability"]["duration_seconds"])
+    duration = max(int(profile["stability"]["duration_seconds"]), 4 * 60 * 60)
     interval = int(profile["stability"]["resource_sample_interval_seconds"])
     finish = start + timedelta(seconds=duration)
     samples: list[dict[str, Any]] = []
