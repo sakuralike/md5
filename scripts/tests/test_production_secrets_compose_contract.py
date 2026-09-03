@@ -16,6 +16,7 @@ def test_base_compose_exposes_file_setting_hooks_for_all_app_processes() -> None
     assert sum(line.strip().startswith("CANDIDATE_SECRET_DEDUP_KEY_FILE:") for line in lines) == 3
     assert sum(line.strip().startswith("DIRECT_MESSAGE_KEY_VERSION_FILE:") for line in lines) == 3
     assert sum(line.strip().startswith("DIRECT_MESSAGE_KEYRING_FILE:") for line in lines) == 3
+    assert sum(line.strip().startswith("DESKTOP_PLUGIN_GITHUB_TOKEN_FILE:") for line in lines) == 3
 
 
 def test_production_override_clears_direct_secrets_and_mounts_file_secrets() -> None:
@@ -30,6 +31,7 @@ def test_production_override_clears_direct_secrets_and_mounts_file_secrets() -> 
         "DIRECT_MESSAGE_KEYRING",
         "NOTIFICATION_WEBHOOK_SECRET",
         "NOTIFICATION_SMTP_PASSWORD",
+        "DESKTOP_PLUGIN_GITHUB_TOKEN",
     ):
         assert f'{direct_name}: ""' in OVERRIDE
         assert f"{direct_name}_FILE: /run/secrets/{direct_name.lower()}" in OVERRIDE
