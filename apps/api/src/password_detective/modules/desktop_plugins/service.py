@@ -2015,7 +2015,7 @@ def _public_version_response(
             if version.published_at is not None and version.platform_signature_base64 is not None
             else None
         ),
-        published_at=_aware(version.published_at),
+        published_at=_aware(version.published_at).replace(microsecond=0),
         artifacts=[
             PublicPluginArtifactResponse(
                 architecture=artifact.architecture,
