@@ -126,6 +126,19 @@ function statusVariant(status: CandidateStatus): "default" | "secondary" | "dest
   return status === "quarantined" ? "default" : "outline";
 }
 
+function statusClass(status: CandidateStatus): string {
+  if (status === "verified") {
+    return "border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]";
+  }
+  if (status === "pending") {
+    return "border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.12)] text-[hsl(var(--warning))]";
+  }
+  if (status === "quarantined") {
+    return "border-border bg-muted text-muted-foreground";
+  }
+  return "border-destructive/30 bg-destructive/10 text-destructive";
+}
+
 function describeError(value: unknown): string {
   return value instanceof ApiError ? `${value.body.message}（${value.body.code}）` : value instanceof Error ? value.message : "操作失败";
 }
@@ -204,7 +217,7 @@ onMounted(() => loadCandidates(true));
           按状态或指纹定位候选，查看独立证据与状态时间线，并执行具备 MFA、幂等和审计约束的人工处置。
         </p>
       </div>
-      <aside class="max-w-md space-y-2 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm">
+      <aside class="glass max-w-md space-y-2 rounded-2xl p-4 text-sm">
         <strong class="text-primary">最小披露</strong>
         <p class="leading-6 text-muted-foreground">
           管理端只展示候选 ID、存档指纹和证据摘要，不读取或返回候选密码材料。
@@ -213,7 +226,7 @@ onMounted(() => loadCandidates(true));
     </header>
 
     <form
-      class="grid gap-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm md:grid-cols-[minmax(10rem,0.7fr)_minmax(16rem,1.5fr)_auto_auto] md:items-end"
+      class="glass grid gap-4 rounded-3xl p-4 text-card-foreground md:grid-cols-[minmax(10rem,0.7fr)_minmax(16rem,1.5fr)_auto_auto] md:items-end"
       aria-label="候选筛选"
       @submit.prevent="loadCandidates(true)"
     >
@@ -256,7 +269,7 @@ onMounted(() => loadCandidates(true));
     </p>
 
     <section class="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
-      <aside class="grid min-w-0 max-w-full max-h-[calc(100vh-14rem)] gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+      <aside class="glass grid max-h-[calc(100vh-14rem)] min-w-0 max-w-full gap-3 overflow-y-auto rounded-3xl p-4 lg:sticky lg:top-4">
         <div class="flex items-start justify-between gap-3">
           <h2 class="font-semibold">审核队列</h2>
           <span class="text-xs text-muted-foreground">当前页 {{ candidates.length }} 条</span>
@@ -276,7 +289,7 @@ onMounted(() => loadCandidates(true));
           <span class="grid min-w-0 w-full gap-2">
             <span class="flex items-start justify-between gap-3">
               <strong class="break-all">{{ shortId(candidate.id) }}</strong>
-              <Badge :variant="statusVariant(candidate.status)">
+              <Badge :variant="statusVariant(candidate.status)" :class="statusClass(candidate.status)">
                 {{ statusLabels[candidate.status] }}
               </Badge>
             </span>
@@ -293,17 +306,17 @@ onMounted(() => loadCandidates(true));
       </aside>
 
       <div class="min-w-0 space-y-5">
-        <section v-if="detailLoading" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+        <section v-if="detailLoading" class="glass rounded-3xl p-8 text-center text-sm text-muted-foreground">
           正在加载审核详情…
         </section>
         <template v-else-if="selected">
-          <section class="space-y-5 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-5 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">候选详情</p>
                 <h2 class="break-all text-lg font-semibold tracking-tight">{{ shortId(selected.id) }}</h2>
               </div>
-              <Badge :variant="statusVariant(selected.status)">{{ statusLabels[selected.status] }}</Badge>
+              <Badge :variant="statusVariant(selected.status)" :class="statusClass(selected.status)">{{ statusLabels[selected.status] }}</Badge>
             </div>
             <dl class="grid gap-4 sm:grid-cols-2">
               <div class="space-y-1"><dt class="text-xs font-semibold text-muted-foreground">存档 ID</dt><dd><code class="break-all text-sm">{{ selected.archive_id }}</code></dd></div>
@@ -323,7 +336,7 @@ onMounted(() => loadCandidates(true));
             </div>
           </section>
 
-          <section class="space-y-5 rounded-lg border border-primary/20 bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-5 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
@@ -380,7 +393,7 @@ onMounted(() => loadCandidates(true));
             </details>
           </section>
 
-          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-4 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="space-y-1">
               <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">受控处置</p>
               <h2 class="text-lg font-semibold tracking-tight">状态操作</h2>
@@ -400,6 +413,7 @@ onMounted(() => loadCandidates(true));
                 :key="`${action.target}:${action.reason}`"
                 type="button"
                 :variant="action.danger ? 'destructive' : 'default'"
+                :class="action.danger ? '' : 'btn-gradient'"
                 :disabled="Boolean(activeAction)"
                 @click="applyTransition(action)"
               >
@@ -408,7 +422,7 @@ onMounted(() => loadCandidates(true));
             </div>
           </section>
 
-          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-4 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="flex items-start justify-between gap-3">
               <h2 class="text-lg font-semibold tracking-tight">状态时间线</h2>
               <Badge variant="secondary">{{ selected.state_events.length }} 条</Badge>
@@ -428,7 +442,7 @@ onMounted(() => loadCandidates(true));
             </ol>
           </section>
 
-          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-4 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="flex items-start justify-between gap-3">
               <h2 class="text-lg font-semibold tracking-tight">积分 / 信誉调整</h2>
               <Badge variant="secondary">{{ selected.reward_adjustments.length }} 条</Badge>
@@ -448,7 +462,7 @@ onMounted(() => loadCandidates(true));
             </ol>
           </section>
 
-          <section class="space-y-4 rounded-lg border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
+          <section class="glass space-y-4 rounded-3xl p-5 text-card-foreground sm:p-6">
             <div class="flex items-start justify-between gap-3">
               <h2 class="text-lg font-semibold tracking-tight">证据修订</h2>
               <Badge variant="secondary">{{ selected.evidence_events.length }} 条</Badge>
@@ -468,7 +482,7 @@ onMounted(() => loadCandidates(true));
             </ol>
           </section>
         </template>
-        <section v-else class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+        <section v-else class="glass rounded-3xl p-8 text-center text-sm text-muted-foreground">
           从左侧审核队列选择一条候选记录。
         </section>
       </div>

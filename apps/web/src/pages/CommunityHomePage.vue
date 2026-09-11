@@ -73,7 +73,7 @@ function formatDate(value: string): string {
 
 <template>
   <section class="mx-auto flex w-full flex-col gap-6 py-2 sm:py-4">
-    <header class="overflow-hidden rounded-3xl border border-card/80 bg-card/70 p-6 shadow-xl backdrop-blur-2xl sm:p-8">
+    <header class="glass overflow-hidden rounded-3xl p-6 sm:p-8">
       <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl space-y-3">
           <div class="flex flex-wrap items-center gap-2">
@@ -90,7 +90,7 @@ function formatDate(value: string): string {
           <Button variant="outline" as-child>
             <RouterLink to="/community/search">搜索社区</RouterLink>
           </Button>
-          <Button as-child>
+          <Button class="btn-gradient" as-child>
             <RouterLink to="/community/new">发布新主题</RouterLink>
           </Button>
         </div>
@@ -102,13 +102,13 @@ function formatDate(value: string): string {
       <AlertDescription>{{ error }}</AlertDescription>
     </Alert>
 
-    <div class="space-y-6">
-      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
+    <div class="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)_16rem] lg:items-start">
+      <Card class="glass lg:col-start-1">
         <CardHeader>
           <CardTitle>社区板块</CardTitle>
           <CardDescription>选择讨论边界。</CardDescription>
         </CardHeader>
-        <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <Button
             class="h-auto min-h-20 w-full justify-start whitespace-normal border border-border/60 px-4 py-3 text-left"
             :variant="selectedBoard ? 'ghost' : 'secondary'"
@@ -131,7 +131,7 @@ function formatDate(value: string): string {
         </CardContent>
       </Card>
 
-      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
+      <Card class="glass lg:col-start-3 lg:row-start-1">
         <CardHeader class="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>社区群组</CardTitle>
@@ -139,7 +139,7 @@ function formatDate(value: string): string {
           </div>
           <Button variant="outline" as-child><RouterLink to="/community/groups">查看全部</RouterLink></Button>
         </CardHeader>
-        <CardContent class="grid gap-3 md:grid-cols-3">
+        <CardContent class="grid gap-3">
           <RouterLink v-for="group in groups.slice(0, 3)" :key="group.slug" :to="`/community/groups/${group.slug}`" class="rounded-xl border p-4 transition-colors hover:bg-muted/50">
             <div class="flex items-start justify-between gap-3">
               <h2 class="font-medium">{{ group.name }}</h2>
@@ -148,11 +148,11 @@ function formatDate(value: string): string {
             <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ group.description || "暂无群组说明" }}</p>
             <p class="mt-3 text-xs text-muted-foreground">{{ group.member_count }} 名成员 · {{ group.post_count }} 个主题</p>
           </RouterLink>
-          <div v-if="groups.length === 0" class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground md:col-span-3">暂时没有可见群组。</div>
+          <div v-if="groups.length === 0" class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">暂时没有可见群组。</div>
         </CardContent>
       </Card>
 
-      <Card class="border-card/80 bg-card/70 shadow-lg backdrop-blur-xl">
+      <Card class="glass lg:col-start-2 lg:row-start-1">
         <CardHeader class="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>{{ selectedBoardName }}</CardTitle>

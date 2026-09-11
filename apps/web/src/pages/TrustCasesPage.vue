@@ -324,8 +324,8 @@ function formatDate(value: string): string {
           />
         </div>
 
-        <p v-if="error" class="error" role="alert" aria-live="assertive">{{ error }}</p>
-        <p v-if="success" class="success" role="status" aria-live="polite">{{ success }}</p>
+        <p v-if="error" class="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert" aria-live="assertive">{{ error }}</p>
+        <p v-if="success" class="rounded-xl border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.12)] px-4 py-3 text-sm text-[hsl(var(--success))]" role="status" aria-live="polite">{{ success }}</p>
         <Button type="submit" :disabled="submitting || !canSubmit">
           {{ submitting ? "提交中…" : isAccountAppeal ? "提交账号申诉" : isAppeal ? "提交申诉" : "提交举报" }}
         </Button>
@@ -342,7 +342,7 @@ function formatDate(value: string): string {
           </Button>
         </div>
         <p v-if="loading" class="muted" role="status" aria-live="polite">正在加载案件…</p>
-        <p v-else-if="error && !data" class="error" role="alert" aria-live="assertive">{{ error }}</p>
+        <p v-else-if="error && !data" class="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert" aria-live="assertive">{{ error }}</p>
         <div v-else-if="data && data.items.length === 0" class="empty-state">
           <strong>暂无举报或申诉</strong>
           <span>提交后可以在这里查看处理状态。</span>

@@ -85,7 +85,7 @@ onMounted(() => {
       <Button variant="outline" :disabled="loading" @click="load">{{ loading ? "同步中…" : "刷新数据" }}</Button>
     </div>
 
-    <Card class="overflow-hidden rounded-[2rem] border-border/70 bg-card/75 shadow-xl backdrop-blur-xl">
+    <Card class="glass overflow-hidden rounded-[2rem]">
       <CardContent class="grid gap-6 p-6 sm:grid-cols-[auto_1fr] sm:items-center sm:p-8">
         <Avatar size="base" class="h-24 w-24 border-4 border-background shadow-lg sm:h-28 sm:w-28">
           <AvatarImage v-if="currentAvatarSrc" :src="currentAvatarSrc" :alt="`${user?.username ?? '用户'} 的头像`" />
@@ -132,15 +132,15 @@ onMounted(() => {
     </Card>
 
     <div class="grid gap-4 sm:grid-cols-3">
-      <Card class="rounded-3xl border-border/70 bg-card/65">
+      <Card class="glass rounded-3xl">
         <CardHeader class="pb-3"><CardDescription>成长值</CardDescription><CardTitle>{{ data?.profile.level.growth_points ?? "—" }}</CardTitle></CardHeader>
         <CardContent><Progress :model-value="data?.profile.level.progress_percent ?? 0" aria-label="等级成长进度" /></CardContent>
       </Card>
-      <Card class="rounded-3xl border-border/70 bg-card/65">
+      <Card class="glass rounded-3xl">
         <CardHeader class="pb-3"><CardDescription>可用积分</CardDescription><CardTitle>{{ data?.profile.points.available ?? "—" }}</CardTitle></CardHeader>
         <CardContent><p class="text-sm text-muted-foreground">{{ data ? `待结算 ${data.profile.points.pending} · 已冲正 ${data.profile.points.reversed}` : "正在同步账户数据" }}</p></CardContent>
       </Card>
-      <Card class="rounded-3xl border-border/70 bg-card/65">
+      <Card class="glass rounded-3xl">
         <CardHeader class="pb-3"><CardDescription>信誉进度</CardDescription><CardTitle>{{ data ? `${data.profile.reputation_score} / ${data.profile.reputation_max}` : "—" }}</CardTitle></CardHeader>
         <CardContent><Progress :model-value="reputationPercent" aria-label="信誉分进度" /></CardContent>
       </Card>
@@ -153,7 +153,7 @@ onMounted(() => {
         <div><h2 class="text-xl font-semibold">快捷入口</h2><p class="text-sm text-muted-foreground">将原先分散在导航栏的账号能力集中到一个工作台。</p></div>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card v-for="item in centerLinks" :key="item.to" class="group rounded-3xl border-border/70 bg-card/65 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
+        <Card v-for="item in centerLinks" :key="item.to" class="glass group rounded-3xl transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
           <CardHeader class="gap-3">
             <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><component :is="item.icon" class="h-5 w-5" /></div>
             <CardTitle class="text-base">{{ item.title }}</CardTitle>

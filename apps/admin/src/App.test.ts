@@ -44,7 +44,7 @@ describe("App", () => {
     expect(html).toContain("社区配置");
     expect(html).toContain("系统配置");
     expect(html).toContain("fixed bottom-4 left-4 top-24");
-    expect(html).toContain("fixed inset-x-0 top-0 z-50");
+    expect(html).toContain("sticky top-0 z-50");
     expect(html).toContain('aria-label="系统配置二级导航"');
     expect(html).toContain("站点外观");
     expect(html).toContain("用户等级与权益");
@@ -52,7 +52,9 @@ describe("App", () => {
     expect(html).toContain("lg:pl-[18rem]");
     expect(html).toContain("focus-visible:ring-2");
     expect(html).toContain("bg-gradient-to-br from-primary to-accent");
-    expect(html).toContain("backdrop-blur-2xl");
+    expect(html).toContain("backdrop-blur-xl");
+    expect(html).toContain('aria-label="切换主题"');
+    expect(html).toContain('role="switch"');
     expect(html).toContain("退出");
   });
 });

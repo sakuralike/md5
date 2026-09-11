@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToString } from "@vue/server-renderer";
 import { createSSRApp } from "vue";
 import { describe, expect, it, vi } from "vitest";
@@ -19,5 +20,14 @@ describe("TotpSetupPage", () => {
     expect(html).toContain("TOTP 默认关闭");
     expect(html).toContain("密钥只在本次设置流程中显示");
     expect(html).not.toContain("synthetic-secret");
+  });
+
+  it("uses semantic destructive tokens instead of the removed legacy error class", () => {
+    const source = readFileSync(new URL("./TotpSetupPage.vue", import.meta.url), "utf8");
+
+    expect(source).not.toMatch(/class="error"/u);
+    expect(source).toContain("border-destructive/40");
+    expect(source).toContain("bg-destructive/10");
+    expect(source).toContain("text-destructive");
   });
 });

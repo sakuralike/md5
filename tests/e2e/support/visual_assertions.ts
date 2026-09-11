@@ -18,6 +18,98 @@ interface AccessibilityViolationSummary {
   }>;
 }
 
+interface RgbColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+}
+
+function parseRgb(value: string): RgbColor {
+  const channels = value.match(/[\d.]+/gu)?.map(Number);
+  if (!channels || channels.length < 3) throw new Error(`无法解析颜色 ${value}`);
+  return { red: channels[0], green: channels[1], blue: channels[2], alpha: channels[3] ?? 1 };
+}
+
+function applyBrightness(color: RgbColor, brightness: number): RgbColor {
+  return {
+    red: Math.min(255, color.red * brightness),
+    green: Math.min(255, color.green * brightness),
+    blue: Math.min(255, color.blue * brightness),
+    alpha: color.alpha,
+  };
+}
+
+function composite(foreground: RgbColor, background: RgbColor, opacity = foreground.alpha): RgbColor {
+  return {
+    red: foreground.red * opacity + background.red * (1 - opacity),
+    green: foreground.green * opacity + background.green * (1 - opacity),
+    blue: foreground.blue * opacity + background.blue * (1 - opacity),
+    alpha: 1,
+  };
+}
+
+function relativeLuminance(color: RgbColor): number {
+  const linear = [color.red, color.green, color.blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+}
+
+function contrastRatio(first: RgbColor, second: RgbColor): number {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (Math.max(firstLuminance, secondLuminance) + 0.05)
+    / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+
+export async function expectGradientControlContrast(
+  control: Locator,
+  state: string,
+): Promise<void> {
+  const styles = await control.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      color: computed.color,
+      backgroundColor: computed.backgroundColor,
+      backgroundImage: computed.backgroundImage,
+      filter: computed.filter,
+      opacity: computed.opacity,
+      pageBackground: getComputedStyle(document.body).backgroundColor,
+    };
+  });
+  const foreground = parseRgb(styles.color);
+  expect(foreground, `${state} 应计算为专用白色前景`).toMatchObject({
+    red: 255,
+    green: 255,
+    blue: 255,
+    alpha: 1,
+  });
+
+  const brightnessMatch = /brightness\(([\d.]+)\)/u.exec(styles.filter);
+  const brightness = brightnessMatch ? Number(brightnessMatch[1]) : 1;
+  const opacity = Number(styles.opacity);
+  const pageBackground = parseRgb(styles.pageBackground);
+  const effectiveForeground = composite(applyBrightness(foreground, brightness), pageBackground, opacity);
+  const gradientStops = styles.backgroundImage === "none"
+    ? []
+    : styles.backgroundImage.match(/rgba?\([^)]+\)/gu) ?? [];
+  const backgrounds = gradientStops.length > 0
+    ? gradientStops.map(parseRgb)
+    : [parseRgb(styles.backgroundColor)];
+
+  for (const background of backgrounds) {
+    const effectiveBackground = composite(applyBrightness(background, brightness), pageBackground, opacity);
+    expect(
+      contrastRatio(effectiveForeground, effectiveBackground),
+      `${state} 对比度不足：${styles.color} / ${styles.backgroundImage || styles.backgroundColor}`,
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+}
+
 export async function expectPageVisualBaseline(
   page: Page,
   testInfo: TestInfo,

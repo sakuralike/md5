@@ -10,6 +10,7 @@ import type {
   FeedbackOutcome,
   HomeDiscoveryResponse,
 } from "@password-detective/api-contract";
+import { Upload } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -283,9 +284,9 @@ function statusLabel(status: CandidateStatus): string {
 </script>
 
 <template>
-  <section class="mx-auto flex min-w-0 w-full max-w-4xl flex-col items-center px-4 py-8 text-center sm:py-12">
+  <section class="mx-auto flex min-w-0 w-full max-w-4xl flex-col items-center px-4 py-10 text-center sm:py-16">
     <div class="eyebrow">TRUSTED ARCHIVE LAB · LOCAL FIRST</div>
-    <h1 class="mt-4 max-w-3xl bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
+    <h1 class="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
       计算压缩包指纹，精确寻找可信候选。
     </h1>
     <p class="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
@@ -323,19 +324,19 @@ function statusLabel(status: CandidateStatus): string {
       </div>
     </div>
 
-    <div class="min-w-0 rounded-[2rem] border border-border/70 bg-card/70 p-4 shadow-xl backdrop-blur-xl sm:p-6">
+    <div class="glass min-w-0 rounded-[2rem] p-4 sm:p-6">
       <div v-if="searchMode === 'file'" class="grid gap-4">
         <label
-          class="flex min-w-0 min-h-16 cursor-pointer items-center gap-3 rounded-full border border-dashed border-primary/40 bg-background/75 px-5 py-3 text-left transition hover:border-primary hover:bg-primary/5"
+          class="flex min-h-44 min-w-0 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-primary/40 bg-background/75 px-5 py-5 text-center transition hover:border-primary hover:bg-primary/5"
           :class="{ 'pointer-events-none opacity-60': calculating }"
         >
           <Input type="file" class="!absolute !h-px !w-px !overflow-hidden !p-0 !opacity-0" :disabled="calculating" @change="onFileSelected" />
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">↑</span>
-          <span class="min-w-0 flex-1">
+          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true"><Upload class="size-5" /></span>
+          <span class="min-w-0">
             <strong class="block truncate text-sm sm:text-base">{{ selectedFile?.name ?? "选择 ZIP、7z 或其他压缩包" }}</strong>
             <span class="mt-1 block truncate text-xs text-muted-foreground">{{ selectedFile ? formatBytes(selectedFile.size) : `文件内容仅由当前浏览器读取 · 上限 ${formatBytes(maxFileSizeBytes)}` }}</span>
           </span>
-          <span class="hidden rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground sm:inline-flex">选择文件</span>
+          <span class="btn-gradient inline-flex rounded-full px-4 py-2 text-xs font-semibold sm:inline-flex">选择文件</span>
         </label>
         <div v-if="calculating" class="grid gap-2 px-3" aria-live="polite">
           <progress class="h-2 w-full accent-primary" :value="progress" max="100">{{ progress }}%</progress>
@@ -344,7 +345,7 @@ function statusLabel(status: CandidateStatus): string {
             <Button variant="outline" size="sm" type="button" @click="cancelCalculation">取消</Button>
           </div>
         </div>
-        <p v-if="elapsedMs !== null" class="text-sm text-emerald-600 dark:text-emerald-400">本地计算完成，用时 {{ elapsedMs }} ms。文件内容未上传。</p>
+        <p v-if="elapsedMs !== null" class="text-sm text-[hsl(var(--success))]">本地计算完成，用时 {{ elapsedMs }} ms。文件内容未上传。</p>
       </div>
 
       <div v-else class="grid gap-4">
@@ -363,7 +364,7 @@ function statusLabel(status: CandidateStatus): string {
       <div class="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Button
           v-if="searchMode === 'manual'"
-          class="min-w-44 rounded-full px-6"
+          class="btn-gradient min-w-44 px-6"
           type="button"
           :disabled="searching"
           @click="searchManual"
@@ -379,7 +380,7 @@ function statusLabel(status: CandidateStatus): string {
   </section>
 
   <section class="mx-auto mt-8 max-w-4xl px-4" aria-live="polite">
-    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-5 shadow-lg backdrop-blur-xl sm:p-7">
+    <div class="glass rounded-[2rem] p-5 sm:p-7">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <span class="badge">查询结果</span>
@@ -432,12 +433,12 @@ function statusLabel(status: CandidateStatus): string {
                 </div>
                 <small class="mt-3 block text-muted-foreground">同一账号仅保留一条有效反馈，修改会追加历史事件。</small>
               </div>
-              <Button v-if="hasVerifiedCandidate" class="w-full rounded-full sm:w-auto" type="button" :disabled="revealing" @click="reveal">{{ revealing ? "安全揭示中…" : "揭示最高可信候选" }}</Button>
+              <Button v-if="hasVerifiedCandidate" class="btn-gradient w-full sm:w-auto" type="button" :disabled="revealing" @click="reveal">{{ revealing ? "安全揭示中…" : "揭示最高可信候选" }}</Button>
               <p v-else class="text-sm text-muted-foreground">候选尚未满足独立验证门槛，暂不可揭示。</p>
             </template>
             <div v-else class="flex flex-col gap-3 rounded-2xl bg-muted/40 p-5 sm:flex-row sm:items-center sm:justify-between">
               <span class="text-sm text-muted-foreground">登录后可查看遮挡候选，并在配额允许时揭示已验证密码。</span>
-              <Button class="rounded-full" as-child><RouterLink to="/login">登录继续</RouterLink></Button>
+              <Button class="btn-gradient" as-child><RouterLink to="/login">登录继续</RouterLink></Button>
             </div>
           </div>
         </template>
@@ -451,12 +452,12 @@ function statusLabel(status: CandidateStatus): string {
         </div>
       </div>
       <p v-if="error" class="mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{{ error }}</p>
-      <p v-if="notice" class="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">{{ notice }}</p>
+      <p v-if="notice" class="mt-4 rounded-xl bg-[hsl(var(--success)/0.1)] px-4 py-3 text-sm text-[hsl(var(--success))]">{{ notice }}</p>
     </div>
   </section>
 
   <section v-if="searchResult && !searchResult.matched" class="mx-auto mt-6 max-w-4xl px-4">
-    <div class="rounded-[2rem] border border-border/70 bg-card/70 p-5 shadow-lg backdrop-blur-xl sm:p-7">
+    <div class="glass rounded-[2rem] p-5 sm:p-7">
       <div>
         <span class="badge">下一步</span>
         <h2 class="mt-3 text-2xl font-semibold">贡献已在本地验证的解压密码</h2>
@@ -475,13 +476,13 @@ function statusLabel(status: CandidateStatus): string {
           <Checkbox v-model="authorizationConfirmed" class="mt-0.5" />
           <span>我确认自己拥有该压缩包，或已获明确授权进行恢复和贡献。</span>
         </label>
-        <Button class="w-full rounded-full sm:w-fit" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">{{ submitting ? "提交中…" : auth.isAuthenticated ? "提交网页待验证贡献" : "以游客身份提交待验证贡献" }}</Button>
+        <Button class="btn-gradient w-full sm:w-fit" type="button" :disabled="!canSubmit || submitting" @click="submitContribution">{{ submitting ? "提交中…" : auth.isAuthenticated ? "提交网页待验证贡献" : "以游客身份提交待验证贡献" }}</Button>
       </div>
     </div>
   </section>
 
   <section class="mx-auto grid max-w-6xl gap-5 px-4 py-10 lg:grid-cols-3" aria-label="站点发现与排行榜">
-    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+    <div class="glass rounded-3xl p-5">
       <div class="flex items-start justify-between gap-3">
         <div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">DISCOVERY</p><h2 class="mt-2 text-xl font-semibold">热门哈希值</h2></div>
         <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span>
@@ -497,7 +498,7 @@ function statusLabel(status: CandidateStatus): string {
       <p v-else class="mt-5 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">暂无可排行的哈希互动数据。</p>
     </div>
 
-    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+    <div class="glass rounded-3xl p-5">
       <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">CONTRIBUTORS</p><h2 class="mt-2 text-xl font-semibold">用户贡献排行榜</h2></div><span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span></div>
       <div v-if="discoveryLoading" class="mt-5 space-y-3"><div v-for="index in 5" :key="index" class="h-14 animate-pulse rounded-2xl bg-muted" /></div>
       <ol v-else-if="discovery.contribution_leaders.length" class="mt-5 space-y-2">
@@ -510,12 +511,12 @@ function statusLabel(status: CandidateStatus): string {
       <p v-else class="mt-5 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">暂无有效贡献排行数据。</p>
     </div>
 
-    <div class="rounded-3xl border border-border/60 bg-card/70 p-5 shadow-lg backdrop-blur-xl">
+    <div class="glass rounded-3xl p-5">
       <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">POINTS</p><h2 class="mt-2 text-xl font-semibold">用户积分排行榜</h2></div><span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">TOP 5</span></div>
       <div v-if="discoveryLoading" class="mt-5 space-y-3"><div v-for="index in 5" :key="index" class="h-14 animate-pulse rounded-2xl bg-muted" /></div>
       <ol v-else-if="discovery.points_leaders.length" class="mt-5 space-y-2">
         <li v-for="item in discovery.points_leaders" :key="item.uid" class="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/55 p-3">
-          <span class="flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ item.rank }}</span>
+          <span class="flex size-8 items-center justify-center rounded-full bg-[hsl(var(--success)/0.1)] text-sm font-semibold text-[hsl(var(--success))]">{{ item.rank }}</span>
           <RouterLink class="min-w-0 flex-1 truncate font-medium hover:text-primary" :to="`/community/users/${item.username}`">{{ item.username }}</RouterLink>
           <span class="text-sm font-semibold">{{ item.score }} 分</span>
         </li>
@@ -525,8 +526,8 @@ function statusLabel(status: CandidateStatus): string {
   </section>
 
   <section class="mx-auto grid max-w-4xl gap-4 px-4 py-10 sm:grid-cols-3">
-    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">◌</span><h2 class="mt-4 font-semibold">本地计算</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">文件内容留在浏览器，只提交用于检索的完整指纹。</p></div>
-    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">✦</span><h2 class="mt-4 font-semibold">可信候选</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">社区验证、反馈与信誉事件共同决定候选可信度。</p></div>
-    <div class="rounded-3xl border border-border/60 bg-card/55 p-5 backdrop-blur-xl"><span class="text-2xl">↗</span><h2 class="mt-4 font-semibold">授权协作</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">仅处理本人拥有或已获明确授权的压缩包。</p></div>
+    <div class="glass rounded-3xl p-5"><span class="text-2xl text-primary">◌</span><h2 class="mt-4 font-semibold">本地计算</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">文件内容留在浏览器，只提交用于检索的完整指纹。</p></div>
+    <div class="glass rounded-3xl p-5"><span class="text-2xl text-primary">✦</span><h2 class="mt-4 font-semibold">可信候选</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">社区验证、反馈与信誉事件共同决定候选可信度。</p></div>
+    <div class="glass rounded-3xl p-5"><span class="text-2xl text-primary">↗</span><h2 class="mt-4 font-semibold">授权协作</h2><p class="mt-2 text-sm leading-6 text-muted-foreground">授权协作仅处理本人拥有或已获明确授权的压缩包。</p></div>
   </section>
 </template>

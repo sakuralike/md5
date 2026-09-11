@@ -42,7 +42,7 @@ async function confirm(): Promise<void> {
       <h1>绑定 TOTP</h1>
     </div>
     <p class="muted">TOTP 默认关闭。需要增强账号安全时，可将下方配置录入认证器；密钥只在本次设置流程中显示。</p>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="error" class="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{{ error }}</p>
     <div v-if="secret" class="stack">
       <div class="field">
         <Label for="totp-secret">手工密钥</Label>

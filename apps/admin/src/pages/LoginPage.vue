@@ -80,7 +80,7 @@ async function submit(): Promise<void> {
           <p class="text-xs leading-5 text-muted-foreground">仅保存用户名或邮箱；密码由浏览器密码管理器处理，管理端不保存明文密码。</p>
         </div>
       </div>
-      <Button class="h-11 w-full" type="submit" :disabled="auth.busy">
+      <Button class="btn-gradient h-11 w-full" type="submit" :disabled="auth.busy">
         {{ auth.busy ? "验证中…" : "登录管理端" }}
       </Button>
       <p class="text-center text-xs leading-5 text-muted-foreground">仅使用分配给你的管理员账号；不要共享密码，已启用 TOTP 时也不要共享动态验证码。</p>

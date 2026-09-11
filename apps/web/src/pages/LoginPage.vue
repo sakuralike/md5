@@ -3,7 +3,7 @@ import { ref } from "vue";
 import { RouterLink } from "vue-router";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -31,26 +31,12 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="mx-auto grid min-h-[calc(100vh-11rem)] w-full max-w-5xl items-center gap-8 py-4 lg:grid-cols-[0.9fr_1.1fr] lg:py-8">
-    <div class="space-y-5 px-2 text-center lg:text-left">
-      <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xl font-bold text-primary-foreground shadow-lg lg:mx-0">密</div>
-      <div class="space-y-3">
-        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">隐私优先的协作工作台</p>
-        <h1 class="bg-gradient-to-r from-primary to-accent bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">从本地指纹开始，找到可信答案。</h1>
-        <p class="mx-auto max-w-xl text-sm leading-7 text-muted-foreground lg:mx-0">压缩包始终留在本地。登录后可查看授权范围内的候选、贡献验证结果并参与安全社区。</p>
-      </div>
-      <div class="mx-auto flex max-w-xl flex-wrap justify-center gap-2 lg:mx-0 lg:justify-start">
-        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">本地计算</span>
-        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">最小披露</span>
-        <span class="rounded-full border border-card/80 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-xl">全程审计</span>
-      </div>
-    </div>
-
-    <Card class="w-full border-card/80 bg-card/75 shadow-xl backdrop-blur-2xl">
+  <section class="mx-auto flex min-h-[calc(100vh-11rem)] w-full max-w-md items-center px-4 py-10">
+    <Card class="glass-modal w-full rounded-[1.5rem]">
       <CardHeader class="space-y-1.5 p-6 pb-5 sm:p-8 sm:pb-6">
         <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary">安全会话</p>
-        <CardTitle class="text-2xl leading-tight sm:text-3xl">登录密码侦探社</CardTitle>
-        <CardDescription class="text-sm leading-6">使用用户名或邮箱进入你的安全工作台。</CardDescription>
+        <h1 class="text-2xl font-semibold leading-tight sm:text-3xl">登录密码侦探社</h1>
+        <CardDescription class="text-sm leading-6">欢迎回来，使用用户名或邮箱进入你的安全工作台。</CardDescription>
       </CardHeader>
       <CardContent class="px-6 pb-6 pt-0 sm:px-8 sm:pb-8">
         <form data-testid="user-login-form" class="flex flex-col gap-5" @submit.prevent="submit">
@@ -85,7 +71,7 @@ async function submit(): Promise<void> {
               <p class="text-xs leading-5 text-muted-foreground">仅保存用户名或邮箱；密码由浏览器密码管理器处理，本站不会保存明文密码。</p>
             </div>
           </div>
-          <Button type="submit" class="h-11 w-full" :disabled="auth.busy">
+          <Button type="submit" class="btn-gradient h-11 w-full" :disabled="auth.busy">
             {{ auth.busy ? "登录中…" : "登录" }}
           </Button>
           <div class="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">

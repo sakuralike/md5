@@ -20,10 +20,11 @@ vi.mock("../stores/auth", () => ({
 }));
 
 describe("LoginPage", () => {
-  it("renders a single-column user login form with Shadcn controls", async () => {
+  it("renders a centered user login form with Shadcn controls", async () => {
     const html = await renderToString(createSSRApp(LoginPage));
 
     expect(html).toContain("登录密码侦探社");
+    expect(html).toMatch(/<h1[^>]*>登录密码侦探社<\/h1>/);
     expect(html).toContain("用户名或邮箱");
     expect(html).toContain("账号密码");
     expect(html).toContain("TOTP 验证码");
@@ -31,9 +32,9 @@ describe("LoginPage", () => {
     expect(html).toContain("不会保存明文密码");
     expect(html).toContain('data-testid="user-login-form"');
     expect(html).toContain("flex flex-col gap-5");
-    expect(html).toContain("从本地指纹开始，找到可信答案");
-    expect(html).toContain("bg-gradient-to-r from-primary to-accent");
-    expect(html).toContain("backdrop-blur-2xl");
+    expect(html).toContain("欢迎回来");
+    expect(html).toContain("glass-modal");
+    expect(html).toContain("btn-gradient");
     expect(html).toContain('autocomplete="username"');
     expect(html).toContain("<button");
   });

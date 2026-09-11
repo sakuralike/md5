@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PublicSiteConfig } from "@password-detective/api-contract";
-import { CircleHelp } from "lucide-vue-next";
+import { CircleHelp, Menu, Palette, Upload, X } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import AppBreadcrumbs from "./components/AppBreadcrumbs.vue";
@@ -13,6 +13,7 @@ import { provideCommunitySeo } from "./composables/useCommunitySeo";
 import { useCommunityAvatar } from "./composables/useCommunityAvatar";
 import { useCommunityDirectMessageStream } from "./composables/useCommunityDirectMessageStream";
 import { useCommunityNotificationStream } from "./composables/useCommunityNotificationStream";
+import { ThemeToggle } from "@password-detective/web-ui/theme-toggle";
 import { applySeoMetadata, buildSeoMetadata, type SeoRouteScope } from "./lib/seo";
 import { createDefaultPublicSiteConfig, getPublicSiteConfig } from "./services/site";
 import { useRoute } from "vue-router";
@@ -35,9 +36,20 @@ const communitySeo = provideCommunitySeo();
 const currentAvatarSrc = communityAvatar.avatarSrc;
 const siteConfig = ref<PublicSiteConfig>(createDefaultPublicSiteConfig());
 const onboardingTour = ref<{ open: () => void } | null>(null);
+const navigationOpen = ref(false);
 
 const visibleNavigation = computed(() =>
   siteConfig.value.navigation.filter((item) => !item.requires_auth || auth.isAuthenticated),
+);
+const isAuthenticationRoute = computed(() =>
+  [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/oauth/authorize",
+  ].includes(route.path),
 );
 
 function applyCurrentSeo(): void {
@@ -154,6 +166,12 @@ onMounted(() => {
   );
 });
 onBeforeUnmount(releaseCustomBackground);
+watch(
+  () => route.path,
+  () => {
+    navigationOpen.value = false;
+  },
+);
 </script>
 
 <template>
@@ -183,9 +201,6 @@ onBeforeUnmount(releaseCustomBackground);
         alt=""
         class="absolute inset-0 h-full w-full object-cover opacity-40"
       />
-      <span class="ambient-orb ambient-orb-one"></span>
-      <span class="ambient-orb ambient-orb-two"></span>
-      <span class="ambient-grid"></span>
     </div>
 
     <header class="topbar">
@@ -204,8 +219,21 @@ onBeforeUnmount(releaseCustomBackground);
         </span>
       </RouterLink>
 
-      <nav class="nav" aria-label="主导航">
-        <RouterLink v-for="item in visibleNavigation" :key="item.path" :to="item.path">{{ item.label }}</RouterLink>
+      <nav
+        v-if="!isAuthenticationRoute"
+        id="main-navigation"
+        class="nav"
+        :class="{ 'nav-open': navigationOpen }"
+        aria-label="主导航"
+      >
+        <RouterLink
+          v-for="item in visibleNavigation"
+          :key="item.path"
+          :to="item.path"
+          @click="navigationOpen = false"
+        >
+          {{ item.label }}
+        </RouterLink>
       </nav>
 
       <div class="topbar-actions">
@@ -219,7 +247,8 @@ onBeforeUnmount(releaseCustomBackground);
         >
           <CircleHelp class="size-4" />
         </Button>
-        <div class="background-control">
+        <ThemeToggle v-if="!isAuthenticationRoute" />
+        <div v-if="!isAuthenticationRoute" class="background-control">
           <Button
             class="icon-button"
             type="button"
@@ -228,12 +257,7 @@ onBeforeUnmount(releaseCustomBackground);
             title="更换页面背景"
             @click="backgroundPanelOpen = !backgroundPanelOpen"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-2-2V6.8A3.8 3.8 0 0 0 12 3Z" />
-              <circle cx="7.5" cy="11" r="1" />
-              <circle cx="10" cy="7" r="1" />
-              <circle cx="8.5" cy="15" r="1" />
-            </svg>
+            <Palette class="size-4" aria-hidden="true" />
             <span>背景</span>
           </Button>
 
@@ -243,7 +267,9 @@ onBeforeUnmount(releaseCustomBackground);
                 <strong>空间背景</strong>
                 <small>选择预设或上传本地图片</small>
               </div>
-              <Button class="panel-close" type="button" aria-label="关闭背景选择" @click="backgroundPanelOpen = false">×</Button>
+              <Button class="panel-close" variant="ghost" size="icon" type="button" aria-label="关闭背景选择" title="关闭背景选择" @click="backgroundPanelOpen = false">
+                <X class="size-4" />
+              </Button>
             </div>
             <div class="background-options">
               <Button
@@ -262,9 +288,7 @@ onBeforeUnmount(releaseCustomBackground);
             <div class="background-panel-actions">
               <label class="upload-background">
                 <Input type="file" accept="image/*" @change="uploadBackground" />
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
-                </svg>
+                <Upload class="size-4" aria-hidden="true" />
                 上传本地图片
               </label>
               <Button class="reset-background" type="button" @click="resetBackground">恢复默认</Button>
@@ -274,7 +298,7 @@ onBeforeUnmount(releaseCustomBackground);
           </section>
         </div>
 
-        <div v-if="!auth.isAuthenticated" class="flex items-center gap-2">
+        <div v-if="!auth.isAuthenticated && !isAuthenticationRoute" class="flex items-center gap-2">
           <Button variant="ghost" size="sm" as-child>
             <RouterLink to="/login">登录</RouterLink>
           </Button>
@@ -293,11 +317,26 @@ onBeforeUnmount(releaseCustomBackground);
           :direct-message-status="communityDirectMessages.status.value"
           @logout="auth.logout()"
         />
+        <Button
+          v-if="!isAuthenticationRoute"
+          class="nav-menu-button h-10 w-10 rounded-full"
+          variant="outline"
+          size="icon"
+          type="button"
+          :aria-controls="'main-navigation'"
+          :aria-expanded="navigationOpen"
+          :aria-label="navigationOpen ? '关闭导航菜单' : '打开导航菜单'"
+          :title="navigationOpen ? '关闭导航菜单' : '打开导航菜单'"
+          @click="navigationOpen = !navigationOpen"
+        >
+          <X v-if="navigationOpen" class="size-4" />
+          <Menu v-else class="size-4" />
+        </Button>
       </div>
     </header>
 
     <main id="main-content" class="main" tabindex="-1">
-      <AppBreadcrumbs />
+      <AppBreadcrumbs v-if="!isAuthenticationRoute" />
       <RouterView />
     </main>
 

@@ -64,7 +64,7 @@ function sectionsForPath(path: string): readonly SystemSettingsSectionItem[] {
 <template>
   <aside
     v-if="props.mode === 'desktop'"
-    class="fixed bottom-4 left-4 top-24 z-30 hidden w-64 overscroll-contain overflow-y-auto rounded-3xl border border-border/80 bg-card/95 p-4 shadow-xl backdrop-blur-2xl lg:block 2xl:left-[calc((100vw-1536px)/2+1rem)]"
+    class="glass fixed bottom-4 left-4 top-24 z-30 hidden w-64 overscroll-contain overflow-y-auto rounded-3xl p-4 lg:block 2xl:left-[calc((100vw-1536px)/2+1rem)]"
     aria-label="后台设置导航"
   >
     <div class="border-b border-border/70 px-2 pb-4">
@@ -84,7 +84,7 @@ function sectionsForPath(path: string): readonly SystemSettingsSectionItem[] {
             <RouterLink
               :to="item.path"
               class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              exact-active-class="bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground"
+              exact-active-class="btn-gradient text-primary-foreground shadow-sm"
             >
               <component :is="item.icon" class="size-4 shrink-0" aria-hidden="true" />
               <span>{{ item.label }}</span>

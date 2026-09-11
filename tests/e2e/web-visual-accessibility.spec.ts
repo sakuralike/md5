@@ -1,7 +1,37 @@
 import { expect, test } from "@playwright/test";
 import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_assertions";
-import { expectNoSeriousAccessibilityViolations, expectPageVisualBaseline } from "./support/visual_assertions";
+import {
+  expectGradientControlContrast,
+  expectNoSeriousAccessibilityViolations,
+  expectPageVisualBaseline,
+} from "./support/visual_assertions";
 import { dismissAllWebAnnouncements } from "./support/web_announcements";
+
+test("Web 主题开关保留主题、ARIA 状态与原生键盘操作", async ({ page }) => {
+  const browserErrors = observeBrowserErrors(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.setItem("pd-theme", "light");
+  });
+  await page.reload();
+  await dismissAllWebAnnouncements(page);
+
+  const themeToggle = page.getByRole("switch", { name: "切换主题" });
+  await expect(themeToggle).toHaveAttribute("aria-checked", "false");
+  await themeToggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "true");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("pd-theme"))).toBe("dark");
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.colorScheme)).toBe("dark");
+
+  await page.reload();
+  await expect(themeToggle).toHaveAttribute("aria-checked", "true");
+  await themeToggle.focus();
+  await page.keyboard.press("Space");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "false");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("pd-theme"))).toBe("light");
+  expectNoBrowserErrors(browserErrors);
+});
 
 test("Web 登录页形成桌面视觉、键盘顺序与错误提示门禁", async ({ page }, testInfo) => {
   const browserErrors = observeBrowserErrors(page);
@@ -38,6 +68,33 @@ test("Web 登录页形成桌面视觉、键盘顺序与错误提示门禁", asyn
   browserErrors.length = 0;
   await expectNoSeriousAccessibilityViolations(page);
   expectNoBrowserErrors(browserErrors);
+});
+
+test("Web 深色渐变按钮在交互状态保持白色文字对比度", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("pd-theme", "dark"));
+  await page.goto("/login");
+  await dismissAllWebAnnouncements(page);
+  const button = page.getByRole("button", { name: "登录", exact: true });
+  await expect(button).toBeVisible();
+  await expect(page.locator("html")).toHaveClass(/dark/u);
+  await expectGradientControlContrast(button, "Web dark default");
+  await button.hover();
+  await expect.poll(async () => {
+    const filter = await button.evaluate((element) => getComputedStyle(element).filter);
+    return Number(/brightness\(([\d.]+)\)/u.exec(filter)?.[1] ?? 0);
+  }).toBeGreaterThanOrEqual(1.08);
+  await expectGradientControlContrast(button, "Web dark hover");
+  await page.mouse.move(0, 0);
+  await page.getByRole("checkbox", { name: "记住登录账号" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(button).toBeFocused();
+  await expect.poll(() => button.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+  await expectGradientControlContrast(button, "Web dark focus-visible");
+  await button.evaluate((element) => {
+    (element as HTMLButtonElement).disabled = true;
+  });
+  await expect.poll(() => button.evaluate((element) => getComputedStyle(element).filter)).toMatch(/^none$/u);
+  await expectGradientControlContrast(button, "Web dark disabled");
 });
 
 test.describe("Web 移动端视觉门禁", () => {

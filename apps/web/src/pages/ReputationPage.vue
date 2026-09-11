@@ -82,7 +82,7 @@ function scoreText(profile: TrustProfileResponse): string {
     </div>
 
     <p v-if="loading" class="muted" role="status" aria-live="polite">正在加载积分与信誉记录…</p>
-    <p v-if="error" class="error" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-if="error" class="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert" aria-live="assertive">{{ error }}</p>
 
     <template v-if="data">
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

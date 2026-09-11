@@ -29,6 +29,7 @@ describe("LoginPage", () => {
     expect(html).toContain("安全运营从受控身份开始");
     expect(html).toContain("bg-gradient-to-r from-primary to-accent");
     expect(html).toContain("backdrop-blur-2xl");
+    expect(html).toContain("btn-gradient");
     expect(html).toContain("<button");
     expect(html).toContain('autocomplete="username"');
   });
