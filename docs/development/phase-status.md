@@ -1044,3 +1044,10 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - 运行拓扑：API 2、Worker 3、Scheduler、API Proxy、Web、Admin、MySQL、Redis 和监控服务；应用镜像均为 `8f7b625`，API/Web/Admin 健康。
 - 目标环境 HTTP：`http://111.229.195.138:5173/api/v1/health/ready`、插件目录、撤销列表、Web 根路径和 Admin 根路径均返回 HTTP 200；API `:8000` 按既有拓扑仅绑定服务器本机，不作为公网入口。
 - Windows 专项为 70/70；UAT/Production、真实 Windows VM/mTLS/隔离网络和公开市场批准仍未完成。
+
+## 2026-09-12：跨浏览器门禁与 Staging 发布复验
+
+- WebKit 全量 `web-webkit + admin-webkit`：`49/49` 通过；私信登出竞态的 SSE/401 提示按生命周期归因，Admin 复杂无障碍旅程设置 90 秒预算。
+- 统一本地门禁 `pwsh ./scripts/check.ps1 -SkipInstall -IncludeE2E` 通过：API `411 passed, 1 skipped`、覆盖率 `85.45%`，Web `111`、Admin `104`、Chromium `49/49`、桌面 `124/124`，迁移、lint、类型检查和生产构建均通过。
+- 提交 `8a42bfe` 已推送至 `ssh-release/codex/desktop-plugin-control-plane`；Staging `111.229.195.138` 已部署同一修订，备份 `/opt/password-detective-backups/20260912T052645Z-8a42bfe`，MySQL 为 `20260902_0064 (head)`。
+- Staging API 2、Worker 3、Scheduler、Web、Admin 和 API Proxy 健康；Web/Admin、ready、stable catalog、revocations 返回 200，未授权 Canary catalog 和 install-evidence 返回 401。独立 Runner VM、真实 mTLS、隔离网络、Production 和公开市场生产批准仍未验收。
