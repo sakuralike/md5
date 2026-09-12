@@ -1068,3 +1068,9 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - Worker 健康检查改为 Celery `inspect ping`，Scheduler 健康检查改为校验 PID 1 的 Beat 进程命令行，避免异步服务继承 API HTTP 探针导致运行中被误报 `unhealthy`。
 - 新增 Compose 健康检查合同测试并纳入 `check.ps1`；本地 Ruff、4 项脚本测试和 Compose 配置校验通过，Staging 探针实测 Worker `pong`、Scheduler Beat 进程存在。
 - 提交 `0b463c6` 已部署到 Staging；备份 `/opt/password-detective-backups/20260912T121311Z-0b463c6`。API 2、Worker 3、Scheduler 全部 `healthy`，API ready `200`，Worker 任务和 Scheduler 调度日志持续正常。
+
+## WP5-I11：私信隐私生命周期目标环境验收
+
+- Staging 合成私信导出：导出任务 `ready`，下载返回 `200`，包含参与会话正文且不含 `ciphertext` 等加密存储字段。
+- Staging 合成账号删除：删除任务经 Worker 处理 `processed=1`，消息、会话成员和会话记录均清理为 0，原访问令牌返回 `403 auth.account_unavailable`，删除请求状态为 `completed`。
+- Redis/SSE 降级：本地 `test_redis_subscription_failure_falls_back_to_database_polling` 已通过；目标环境 Redis 短暂停机探针因远端容器 ID/命令转义未形成有效证据，不宣称 Staging Redis 故障验收完成。Redis 已恢复 healthy，API ready、Worker 3 和 Scheduler 均正常。

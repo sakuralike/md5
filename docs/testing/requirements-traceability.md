@@ -627,9 +627,9 @@
 
 | 需求 | 实现证据 | 自动化证据 | 当前状态 |
 |---|---|---|---|
-| COMMUNITY-77～93 导出边界 | `build_privacy_export` 仅查询请求人参与的私信会话；导出 `direct_conversations` 与 `direct_messages` 时只投影公开身份、正文、序号和时间 | `test_privacy_export_contains_only_requesters_direct_message_records`；断言不含 `ciphertext` | 本地已实现并通过定向测试；目标环境导出回归待部署 |
-| COMMUNITY-77～93 删除清理 | `process_due_deletion_requests` 按通知 Outbox、通知、消息、成员、会话顺序清理私信数据；不把正文写入审计详情 | `test_account_deletion_removes_direct_message_rows`；断言消息、成员、会话、私信通知和 Outbox 清零 | 本地已实现并通过定向测试；目标环境删除回归待部署 |
-| I9 全闭环状态 | 加密、授权、幂等、通知、导出/删除、Web 收件箱和会话页面均已实现 | 私信专项 API、N1 隐私、CORS、Web 单元测试；Chromium/Firefox/WebKit 私信旅程 3/3；统一门禁 Chromium Web/Admin 42/42、Desktop 29/29 | 本地闭环完成；远端和 Staging 证据在本轮发布后补记，UAT/Production 未完成 |
+| COMMUNITY-77～93 导出边界 | `build_privacy_export` 仅查询请求人参与的私信会话；导出 `direct_conversations` 与 `direct_messages` 时只投影公开身份、正文、序号和时间 | `test_privacy_export_contains_only_requesters_direct_message_records`；断言不含 `ciphertext`；Staging 合成导出 ready、下载 HTTP 200 | 已验证本地与 Staging |
+| COMMUNITY-77～93 删除清理 | `process_due_deletion_requests` 按通知 Outbox、通知、消息、成员、会话顺序清理私信数据；不把正文写入审计详情 | `test_account_deletion_removes_direct_message_rows`；Staging Worker processed=1，消息/成员/会话为 0，原令牌 403 | 已验证本地与 Staging |
+| I9 全闭环状态 | 加密、授权、幂等、通知、导出/删除、Web 收件箱和会话页面均已实现 | 私信专项 API、N1 隐私、CORS、Web 单元测试；Chromium/Firefox/WebKit 私信旅程 3/3；统一门禁通过；Staging 导出/删除回归通过 | 本地与 Staging 闭环完成；UAT/Production 未完成 |
 
 
 ## 2026-08-16 WP5-I10 私信实时事件本地追踪
