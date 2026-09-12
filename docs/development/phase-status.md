@@ -1051,3 +1051,11 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - 统一本地门禁 `pwsh ./scripts/check.ps1 -SkipInstall -IncludeE2E` 通过：API `411 passed, 1 skipped`、覆盖率 `85.45%`，Web `111`、Admin `104`、Chromium `49/49`、桌面 `124/124`，迁移、lint、类型检查和生产构建均通过。
 - 提交 `8a42bfe` 已推送至 `ssh-release/codex/desktop-plugin-control-plane`；Staging `111.229.195.138` 已部署同一修订，备份 `/opt/password-detective-backups/20260912T052645Z-8a42bfe`，MySQL 为 `20260902_0064 (head)`。
 - Staging API 2、Worker 3、Scheduler、Web、Admin 和 API Proxy 健康；Web/Admin、ready、stable catalog、revocations 返回 200，未授权 Canary catalog 和 install-evidence 返回 401。独立 Runner VM、真实 mTLS、隔离网络、Production 和公开市场生产批准仍未验收。
+
+## 2026-09-12：WP5-I10 消息举报与批量私信风控
+
+- 新增私信举报迁移 `20260912_0065`、独立 `community_direct_message_reports` 和发送冷却表；消息移除只写 `removed_at`，保留举报事实与审计关联。
+- 用户侧新增 `POST /api/v1/community/messages/{message_id}/reports`，仅会话成员可举报，支持幂等和独立限流；普通列表不返回举报消息正文。
+- Admin 新增私信举报队列、MFA 详情和处置接口；只有具体案件详情可最小披露解密正文，处置支持驳回或移除消息并写入审计。
+- 批量私信在 60 秒内达到 5 条后进入持久化 15 分钟冷却，返回 429 和剩余秒数；冷却触发写入最小化审计，不影响已完成消息。
+- 定向 API/迁移测试、Web/Admin 服务与页面测试、类型检查通过；Chromium 双用户私信真实旅程包含消息举报并通过。尚未重新部署 Staging，需下一步执行迁移和目标环境回归。

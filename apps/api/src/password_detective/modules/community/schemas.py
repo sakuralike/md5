@@ -11,6 +11,7 @@ from password_detective.db.models.community import (
     CommunityActivitySource,
     CommunityAvatarKind,
     CommunityBoardStatus,
+    CommunityDirectMessageReportStatus,
     CommunityGroupMembershipStatus,
     CommunityGroupRole,
     CommunityGroupStatus,
@@ -487,6 +488,24 @@ class CommunityDirectMessageListResponse(BaseModel):
     last_read_sequence: int
     counterpart_last_read_sequence: int
     unread_count: int
+
+
+class CommunityDirectMessageReportCreateRequest(BaseModel):
+    reason: CommunityReportReason
+    details: str = Field(min_length=10, max_length=1000)
+
+    @field_validator("details")
+    @classmethod
+    def normalize_details(cls, value: str) -> str:
+        return _normalize(value, "举报说明不能为空")
+
+
+class CommunityDirectMessageReportResponse(BaseModel):
+    id: str
+    message_id: str
+    reason: CommunityReportReason
+    status: CommunityDirectMessageReportStatus
+    created_at: datetime
 
 
 class CommunityDirectReadStateResponse(BaseModel):

@@ -1702,6 +1702,8 @@ export type CommunityContentStatus = "published" | "removed";
 export type CommunityReportReason = "spam" | "harassment" | "privacy" | "unsafe" | "other";
 export type CommunityReportStatus = "open" | "resolved" | "dismissed";
 export type CommunityReportDecision = "dismiss" | "remove_content" | "remove_and_lock";
+export type CommunityDirectMessageReportStatus = "open" | "resolved" | "dismissed";
+export type CommunityDirectMessageReportDecision = "dismiss" | "remove_message";
 export type CommunityModerationAction = "lock" | "unlock" | "pin" | "unpin" | "remove" | "restore";
 export type CommunityNotificationKind =
   | "mention"
@@ -2704,6 +2706,19 @@ export interface CommunityReportResponse {
   created_at: string;
 }
 
+export interface CommunityDirectMessageReportCreateRequest {
+  reason: CommunityReportReason;
+  details: string;
+}
+
+export interface CommunityDirectMessageReportResponse {
+  id: string;
+  message_id: string;
+  reason: CommunityReportReason;
+  status: CommunityDirectMessageReportStatus;
+  created_at: string;
+}
+
 export interface AdminCommunityReportSummary {
   id: string;
   reporter_username: string;
@@ -2753,6 +2768,48 @@ export interface AdminCommunityPostState {
 export interface AdminCommunityReportMutationResponse {
   report: AdminCommunityReportSummary;
   post: AdminCommunityPostState;
+  audit_id: string;
+  request_id: string | null;
+}
+
+export interface AdminCommunityDirectMessageReportSummary {
+  id: string;
+  reporter_username: string;
+  message_id: string | null;
+  conversation_id: string | null;
+  sender_username: string | null;
+  reason: CommunityReportReason;
+  details: string;
+  status: CommunityDirectMessageReportStatus;
+  decision: CommunityDirectMessageReportDecision | null;
+  resolution_note: string | null;
+  resolved_by_username: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface AdminCommunityDirectMessageReportListResponse {
+  items: AdminCommunityDirectMessageReportSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface AdminCommunityDirectMessageReportDetail
+  extends AdminCommunityDirectMessageReportSummary {
+  message_body: string | null;
+  message_sequence: number | null;
+  message_created_at: string | null;
+}
+
+export interface AdminCommunityDirectMessageReportResolveRequest {
+  decision: CommunityDirectMessageReportDecision;
+  note: string;
+}
+
+export interface AdminCommunityDirectMessageReportMutationResponse {
+  report: AdminCommunityDirectMessageReportSummary;
+  message_removed: boolean;
   audit_id: string;
   request_id: string | null;
 }

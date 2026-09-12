@@ -5,6 +5,8 @@ import type {
   CommunityReportDecision,
   CommunityReportReason,
   CommunityReportStatus,
+  AdminCommunityDirectMessageReportDetail,
+  AdminCommunityDirectMessageReportSummary,
 } from "@password-detective/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,9 @@ import {
   listCommunityReports,
   moderateCommunityPost,
   resolveCommunityReport,
+  getCommunityDirectMessageReport,
+  listCommunityDirectMessageReports,
+  resolveCommunityDirectMessageReport,
 } from "../services/communityModeration";
 import { useAdminAuthStore } from "../stores/auth";
 
@@ -37,11 +42,16 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref("");
 const success = ref("");
+const directReports = ref<AdminCommunityDirectMessageReportSummary[]>([]);
+const selectedDirectReport = ref<AdminCommunityDirectMessageReportDetail | null>(null);
+const directDecision = ref<"dismiss" | "remove_message">("dismiss");
+const directNote = ref("");
 
 const openCount = computed(() => reports.value.filter((item) => item.status === "open").length);
 
 onMounted(() => {
   void loadReports();
+  void loadDirectReports();
 });
 
 async function loadReports(): Promise<void> {
@@ -60,6 +70,49 @@ async function loadReports(): Promise<void> {
     error.value = caught instanceof Error ? caught.message : "社区举报队列加载失败";
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadDirectReports(): Promise<void> {
+  try {
+    const response = await listCommunityDirectMessageReports("open", auth.accessToken);
+    directReports.value = response.items;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "私信举报队列加载失败";
+  }
+}
+
+async function selectDirectReport(report: AdminCommunityDirectMessageReportSummary): Promise<void> {
+  try {
+    selectedDirectReport.value = await getCommunityDirectMessageReport(report.id, auth.accessToken);
+    directDecision.value = "dismiss";
+    directNote.value = "";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "私信举报详情加载失败";
+  }
+}
+
+async function resolveDirectReport(): Promise<void> {
+  const report = selectedDirectReport.value;
+  if (!report || directNote.value.trim().length < 4 || busy.value) return;
+  busy.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    const response = await resolveCommunityDirectMessageReport(
+      report.id,
+      { decision: directDecision.value, note: directNote.value.trim() },
+      auth.accessToken,
+      createCommunityModerationKey("direct-message-report"),
+    );
+    success.value = `私信举报已处理，审计记录 ${response.audit_id}`;
+    selectedDirectReport.value = null;
+    directNote.value = "";
+    await loadDirectReports();
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "私信举报处理失败";
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -282,5 +335,53 @@ function formatTime(value: string | null): string {
         请选择左侧举报查看详情并执行审核。
       </article>
     </div>
+
+    <section class="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="font-semibold">私信举报队列</h2>
+          <p class="text-sm text-muted-foreground">列表不展示正文；仅在 MFA 管理会话的具体案件详情中最小披露。</p>
+        </div>
+        <span class="text-sm text-muted-foreground">{{ directReports.length }} 条</span>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div class="space-y-2">
+          <Button
+            v-for="report in directReports"
+            :key="report.id"
+            type="button"
+            variant="ghost"
+            class="h-auto w-full justify-start whitespace-normal border p-3 text-left"
+            @click="selectDirectReport(report)"
+          >
+            <span class="space-y-1">
+              <span class="block text-xs text-muted-foreground">{{ report.reporter_username }} · {{ report.reason }}</span>
+              <span class="block text-sm">{{ report.details }}</span>
+            </span>
+          </Button>
+          <p v-if="directReports.length === 0" class="rounded-lg bg-muted/40 p-4 text-center text-sm text-muted-foreground">暂无待处理私信举报。</p>
+        </div>
+        <article v-if="selectedDirectReport" class="space-y-4 rounded-lg border p-4">
+          <div>
+            <h3 class="font-medium">受控消息案件详情</h3>
+            <p class="text-sm text-muted-foreground">{{ selectedDirectReport.sender_username || "未知发送者" }} · {{ formatTime(selectedDirectReport.created_at) }}</p>
+          </div>
+          <p class="whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 text-sm">{{ selectedDirectReport.message_body || "消息已移除或不可读取" }}</p>
+          <div class="space-y-2">
+            <Label for="community-direct-message-report-decision">处理决定</Label>
+            <Select v-model="directDecision">
+              <SelectTrigger id="community-direct-message-report-decision"><SelectValue placeholder="选择处理决定" /></SelectTrigger>
+              <SelectContent><SelectItem value="dismiss">驳回举报</SelectItem><SelectItem value="remove_message">移除消息</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-2">
+            <Label for="community-direct-message-report-note">处理说明</Label>
+            <Textarea id="community-direct-message-report-note" v-model="directNote" :maxlength="1000" placeholder="记录判断依据和处置理由…" />
+          </div>
+          <Button type="button" :disabled="busy || directNote.trim().length < 4" @click="resolveDirectReport">确认处理私信举报</Button>
+        </article>
+        <p v-else class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">请选择私信举报查看受控详情。</p>
+      </div>
+    </section>
   </section>
 </template>

@@ -179,6 +179,7 @@ def conversation_unread_count(
     value = db.scalar(
         select(func.count(CommunityDirectMessage.id)).where(
             CommunityDirectMessage.conversation_id == conversation_id,
+            CommunityDirectMessage.removed_at.is_(None),
             CommunityDirectMessage.sequence > last_read_sequence,
             CommunityDirectMessage.sender_id != user_id,
         )
@@ -197,6 +198,7 @@ def total_direct_unread_count(db: Session, *, user_id: str) -> int:
         )
         .where(
             CommunityDirectConversationMember.user_id == user_id,
+            CommunityDirectMessage.removed_at.is_(None),
             CommunityDirectMessage.sequence
             > CommunityDirectConversationMember.last_read_sequence,
             CommunityDirectMessage.sender_id != user_id,

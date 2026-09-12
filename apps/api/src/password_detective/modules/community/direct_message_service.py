@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -15,11 +15,15 @@ from password_detective.core.direct_message_crypto import (
 )
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
+from password_detective.db.audit import write_audit_log
 from password_detective.db.models.community import (
     CommunityDirectConversation,
     CommunityDirectConversationMember,
     CommunityDirectEventType,
     CommunityDirectMessage,
+    CommunityDirectMessageCooldown,
+    CommunityDirectMessageReport,
+    CommunityDirectMessageReportStatus,
     CommunityInteractionPolicy,
     CommunityNotificationKind,
     CommunityNotificationSource,
@@ -28,6 +32,7 @@ from password_detective.db.models.community import (
     CommunityUserFollow,
 )
 from password_detective.db.models.user import User, UserStatus
+from password_detective.modules.auth.context import ClientContext
 from password_detective.modules.auth.dependencies import Principal
 from password_detective.modules.community.direct_message_events import (
     DirectEventDraft,
@@ -44,6 +49,8 @@ from password_detective.modules.community.schemas import (
     CommunityDirectMemberStateUpdateRequest,
     CommunityDirectMessageCreateRequest,
     CommunityDirectMessageListResponse,
+    CommunityDirectMessageReportCreateRequest,
+    CommunityDirectMessageReportResponse,
     CommunityDirectMessageResponse,
     CommunityDirectReadStateResponse,
     CommunityDirectReadStateUpdateRequest,
@@ -51,6 +58,9 @@ from password_detective.modules.community.schemas import (
 
 _DEFAULT_PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 100
+_BULK_MESSAGE_WINDOW_SECONDS = 60
+_BULK_MESSAGE_THRESHOLD = 5
+_MESSAGE_COOLDOWN_SECONDS = 15 * 60
 
 
 def create_direct_conversation(
@@ -441,6 +451,7 @@ def send_direct_message(
     payload: CommunityDirectMessageCreateRequest,
     idempotency_key: str,
     settings: Settings | None = None,
+    context: ClientContext | None = None,
 ) -> CommunityDirectMessageResponse:
     del idempotency_key
     sender = _active_user(db, principal.user.id)
@@ -466,6 +477,7 @@ def send_direct_message(
             status_code=409,
         )
 
+    _enforce_message_cooldown(db, sender_id=sender.id, context=context)
     locked = db.scalar(
         select(CommunityDirectConversation)
         .where(CommunityDirectConversation.id == conversation.id)
@@ -565,6 +577,136 @@ def send_direct_message(
     return _message_response(db, message=message, vault=vault)
 
 
+def create_direct_message_report(
+    db: Session,
+    *,
+    principal: Principal,
+    message_id: str,
+    payload: CommunityDirectMessageReportCreateRequest,
+) -> CommunityDirectMessageReportResponse:
+    reporter = _active_user(db, principal.user.id)
+    if not reporter.email_verified:
+        raise AppError(
+            "community.email_verification_required",
+            "提交私信举报前需要完成邮箱验证",
+            status_code=403,
+        )
+    message = db.get(CommunityDirectMessage, message_id)
+    if message is None or message.removed_at is not None:
+        raise AppError("community.direct_message_not_found", "私信消息不存在", status_code=404)
+    conversation = _get_member_conversation(
+        db, conversation_id=message.conversation_id, user_id=reporter.id
+    )
+    _require_existing_conversation_access(db, conversation=conversation, user_id=reporter.id)
+    duplicate = db.scalar(
+        select(CommunityDirectMessageReport).where(
+            CommunityDirectMessageReport.reporter_id == reporter.id,
+            CommunityDirectMessageReport.message_id == message.id,
+            CommunityDirectMessageReport.status == CommunityDirectMessageReportStatus.OPEN,
+        )
+    )
+    if duplicate is not None:
+        raise AppError(
+            "community.direct_message_report_already_open",
+            "你已提交过该消息的待处理举报",
+            status_code=409,
+        )
+
+    report = CommunityDirectMessageReport(
+        reporter_id=reporter.id,
+        message_id=message.id,
+        conversation_id=message.conversation_id,
+        sender_id=message.sender_id,
+        reason=payload.reason,
+        details=payload.details,
+        status=CommunityDirectMessageReportStatus.OPEN,
+        created_at=utc_now(),
+        updated_at=utc_now(),
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return CommunityDirectMessageReportResponse(
+        id=report.id,
+        message_id=message.id,
+        reason=report.reason,
+        status=report.status,
+        created_at=report.created_at,
+    )
+
+
+def _enforce_message_cooldown(
+    db: Session, *, sender_id: str, context: ClientContext | None
+) -> None:
+    now = utc_now()
+    cooldown = db.scalar(
+        select(CommunityDirectMessageCooldown).where(
+            CommunityDirectMessageCooldown.user_id == sender_id
+        )
+    )
+    if cooldown is not None:
+        cooldown_until = (
+            cooldown.until.replace(tzinfo=UTC)
+            if cooldown.until.tzinfo is None
+            else cooldown.until.astimezone(UTC)
+        )
+        if cooldown_until > now:
+            raise AppError(
+                "community.direct_message_cooldown",
+                "私信发送过于频繁，请稍后重试",
+                status_code=429,
+                details={
+                    "retry_after_seconds": max(1, int((cooldown_until - now).total_seconds()))
+                },
+            )
+        db.delete(cooldown)
+        db.flush()
+    cutoff = now - timedelta(seconds=_BULK_MESSAGE_WINDOW_SECONDS)
+    recent_count = int(
+        db.scalar(
+            select(func.count(CommunityDirectMessage.id)).where(
+                CommunityDirectMessage.sender_id == sender_id,
+                CommunityDirectMessage.created_at >= cutoff,
+            )
+        )
+        or 0
+    )
+    if recent_count < _BULK_MESSAGE_THRESHOLD:
+        return
+    cooldown = CommunityDirectMessageCooldown(
+        user_id=sender_id,
+        reason="burst_messages",
+        until=now + timedelta(seconds=_MESSAGE_COOLDOWN_SECONDS),
+        triggered_message_count=recent_count,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(cooldown)
+    if context is not None:
+        write_audit_log(
+            db,
+            actor_id=sender_id,
+            action="community.direct_message.cooldown",
+            target_type="user",
+            target_id=sender_id,
+            result="blocked",
+            ip_prefix=context.ip_prefix,
+            request_id=context.request_id,
+            details={
+                "reason": cooldown.reason,
+                "triggered_message_count": recent_count,
+                "cooldown_seconds": _MESSAGE_COOLDOWN_SECONDS,
+            },
+        )
+    db.commit()
+    raise AppError(
+        "community.direct_message_cooldown",
+        "私信发送过于频繁，请稍后重试",
+        status_code=429,
+        details={"retry_after_seconds": _MESSAGE_COOLDOWN_SECONDS},
+    )
+
+
 def list_direct_messages(
     db: Session,
     *,
@@ -579,6 +721,7 @@ def list_direct_messages(
     _require_existing_conversation_access(db, conversation=conversation, user_id=user.id)
     page_size = _validate_page_size(limit)
     conditions = [CommunityDirectMessage.conversation_id == conversation.id]
+    conditions.append(CommunityDirectMessage.removed_at.is_(None))
     if cursor is not None:
         before_sequence = _decode_message_cursor(cursor)
         conditions.append(CommunityDirectMessage.sequence < before_sequence)

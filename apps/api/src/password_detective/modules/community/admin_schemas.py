@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 from password_detective.db.models.community import (
     CommunityBoardStatus,
     CommunityContentStatus,
+    CommunityDirectMessageReportDecision,
+    CommunityDirectMessageReportStatus,
     CommunityModerationAction,
     CommunityNotificationKind,
     CommunityNotificationOutboxStatus,
@@ -114,6 +116,55 @@ class AdminCommunityPostState(BaseModel):
 class AdminCommunityReportMutationResponse(BaseModel):
     report: AdminCommunityReportSummary
     post: AdminCommunityPostState
+    audit_id: str
+    request_id: str | None
+
+
+class AdminCommunityDirectMessageReportSummary(BaseModel):
+    id: str
+    reporter_username: str
+    message_id: str | None
+    conversation_id: str | None
+    sender_username: str | None
+    reason: CommunityReportReason
+    details: str
+    status: CommunityDirectMessageReportStatus
+    decision: CommunityDirectMessageReportDecision | None
+    resolution_note: str | None
+    resolved_by_username: str | None
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class AdminCommunityDirectMessageReportListResponse(BaseModel):
+    items: list[AdminCommunityDirectMessageReportSummary]
+    page: int
+    page_size: int
+    total: int
+
+
+class AdminCommunityDirectMessageReportDetail(AdminCommunityDirectMessageReportSummary):
+    message_body: str | None
+    message_sequence: int | None
+    message_created_at: datetime | None
+
+
+class AdminCommunityDirectMessageReportResolveRequest(BaseModel):
+    decision: CommunityDirectMessageReportDecision
+    note: str = Field(min_length=4, max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        normalized = value.replace("\x00", "").strip()
+        if not normalized:
+            raise ValueError("处理说明不能为空")
+        return normalized
+
+
+class AdminCommunityDirectMessageReportMutationResponse(BaseModel):
+    report: AdminCommunityDirectMessageReportSummary
+    message_removed: bool
     audit_id: str
     request_id: str | None
 

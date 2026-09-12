@@ -5,6 +5,9 @@ import {
   listCommunityReports,
   moderateCommunityPost,
   resolveCommunityReport,
+  listCommunityDirectMessageReports,
+  getCommunityDirectMessageReport,
+  resolveCommunityDirectMessageReport,
 } from "./communityModeration";
 
 vi.mock("./api", () => ({
@@ -81,5 +84,22 @@ describe("community moderation service", () => {
       "admin-community-post-synthetic-request-id",
     );
     vi.unstubAllGlobals();
+  });
+
+  it("supports the MFA-only direct-message report queue and resolution contract", async () => {
+    await listCommunityDirectMessageReports("open", "mfa-access-token");
+    await getCommunityDirectMessageReport("direct-report/1", "mfa-access-token");
+    await resolveCommunityDirectMessageReport(
+      "direct-report/1",
+      { decision: "remove_message", note: "合成处置说明" },
+      "mfa-access-token",
+      "direct-report-resolve-key",
+    );
+    expect(mockedApiRequest.mock.calls[0]?.[0]).toContain("/admin/community/message-reports");
+    expect(mockedApiRequest.mock.calls[1]?.[0]).toContain("direct-report%2F1");
+    expect(mockedApiRequest.mock.calls[2]?.[1]).toMatchObject({
+      method: "POST",
+      headers: { "Idempotency-Key": "direct-report-resolve-key" },
+    });
   });
 });

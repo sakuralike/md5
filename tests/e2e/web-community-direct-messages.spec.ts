@@ -84,6 +84,11 @@ test("Web 私信完成发起、双向收发、已读、归档、静音和非成�
   await expect(recipientRow.getByText(/未读 \d+/u)).toBeVisible();
   await recipientRow.getByRole("link", { name: "打开会话" }).click();
   await expect(page.getByText(outbound, { exact: true })).toBeVisible();
+  const reportedMessage = page.locator("article").filter({ hasText: outbound });
+  await reportedMessage.getByRole("button", { name: "举报消息" }).click();
+  await page.getByLabel("问题说明").fill("合成私信举报说明，用于验证受控消息治理闭环。");
+  await page.getByRole("button", { name: "提交举报" }).click();
+  await expect(page.getByText("消息举报已提交", { exact: false })).toBeVisible();
   await page.getByLabel("消息内容").fill(reply);
   await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText(reply, { exact: true })).toBeVisible();

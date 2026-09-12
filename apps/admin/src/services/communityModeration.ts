@@ -6,6 +6,10 @@ import type {
   AdminCommunityReportMutationResponse,
   AdminCommunityReportResolveRequest,
   CommunityReportStatus,
+  AdminCommunityDirectMessageReportListResponse,
+  AdminCommunityDirectMessageReportDetail,
+  AdminCommunityDirectMessageReportResolveRequest,
+  AdminCommunityDirectMessageReportMutationResponse,
 } from "@password-detective/api-contract";
 import { apiRequest } from "./api";
 
@@ -15,7 +19,7 @@ export interface CommunityReportFilters {
   pageSize?: number;
 }
 
-export function createCommunityModerationKey(kind: "report" | "post"): string {
+export function createCommunityModerationKey(kind: "report" | "post" | "direct-message-report"): string {
   return `admin-community-${kind}-${createClientId()}`;
 }
 
@@ -60,6 +64,47 @@ export function moderateCommunityPost(
 ): Promise<AdminCommunityPostMutationResponse> {
   return apiRequest<AdminCommunityPostMutationResponse>(
     `/admin/community/posts/${encodeURIComponent(postId)}/moderate`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function listCommunityDirectMessageReports(
+  status: "open" | "resolved" | "dismissed" | "" = "open",
+  token: string,
+): Promise<AdminCommunityDirectMessageReportListResponse> {
+  const params = new URLSearchParams({ page: "1", page_size: "50" });
+  if (status) params.set("status", status);
+  return apiRequest<AdminCommunityDirectMessageReportListResponse>(
+    `/admin/community/message-reports?${params.toString()}`,
+    {},
+    token,
+  );
+}
+
+export function getCommunityDirectMessageReport(
+  reportId: string,
+  token: string,
+): Promise<AdminCommunityDirectMessageReportDetail> {
+  return apiRequest<AdminCommunityDirectMessageReportDetail>(
+    `/admin/community/message-reports/${encodeURIComponent(reportId)}`,
+    {},
+    token,
+  );
+}
+
+export function resolveCommunityDirectMessageReport(
+  reportId: string,
+  payload: AdminCommunityDirectMessageReportResolveRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<AdminCommunityDirectMessageReportMutationResponse> {
+  return apiRequest<AdminCommunityDirectMessageReportMutationResponse>(
+    `/admin/community/message-reports/${encodeURIComponent(reportId)}/resolve`,
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },

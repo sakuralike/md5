@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from password_detective.core.config import Settings, get_settings
 from password_detective.core.idempotency import (
     abandon_idempotency,
     acquire_idempotency,
@@ -17,6 +18,7 @@ from password_detective.core.idempotency import (
 from password_detective.core.rate_limit import rate_limit
 from password_detective.db.dependencies import get_db
 from password_detective.db.models.community import (
+    CommunityDirectMessageReportStatus,
     CommunityNotificationKind,
     CommunityNotificationOutboxStatus,
     CommunityReportStatus,
@@ -33,6 +35,10 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityBoardListResponse,
     AdminCommunityBoardMutationResponse,
     AdminCommunityBoardUpdateRequest,
+    AdminCommunityDirectMessageReportDetail,
+    AdminCommunityDirectMessageReportListResponse,
+    AdminCommunityDirectMessageReportMutationResponse,
+    AdminCommunityDirectMessageReportResolveRequest,
     AdminCommunityImageUploadConfigResponse,
     AdminCommunityNotificationOutboxListResponse,
     AdminCommunityNotificationOutboxMetrics,
@@ -48,13 +54,16 @@ from password_detective.modules.community.admin_schemas import (
 )
 from password_detective.modules.community.admin_service import (
     create_admin_board,
+    get_admin_direct_message_report_detail,
     get_admin_notification_outbox_metrics,
     get_admin_search_health,
     list_admin_boards,
+    list_admin_direct_message_reports,
     list_admin_notification_outbox,
     list_admin_reports,
     moderate_admin_post,
     replay_admin_notification_outbox,
+    resolve_admin_direct_message_report,
     resolve_admin_report,
     update_admin_board,
 )
@@ -337,6 +346,73 @@ def admin_community_report_resolve(
         principal=principal,
         response_type=AdminCommunityReportMutationResponse,
         mutate=lambda: resolve_admin_report(
+            db,
+            report_id=report_id,
+            payload=payload,
+            principal=principal,
+            context=get_client_context(request),
+        ),
+    )
+
+
+@admin_router.get(
+    "/message-reports",
+    response_model=AdminCommunityDirectMessageReportListResponse,
+)
+def admin_community_direct_message_reports(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    status: CommunityDirectMessageReportStatus | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminCommunityDirectMessageReportListResponse:
+    del principal
+    return list_admin_direct_message_reports(db, status=status, page=page, page_size=page_size)
+
+
+@admin_router.get(
+    "/message-reports/{report_id}",
+    response_model=AdminCommunityDirectMessageReportDetail,
+)
+def admin_community_direct_message_report_detail(
+    report_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AdminCommunityDirectMessageReportDetail:
+    del principal
+    return get_admin_direct_message_report_detail(db, report_id=report_id, settings=settings)
+
+
+@admin_router.post(
+    "/message-reports/{report_id}/resolve",
+    response_model=AdminCommunityDirectMessageReportMutationResponse,
+    dependencies=[
+        Depends(
+            rate_limit(
+                "admin.community.direct_message_report.resolve",
+                limit=120,
+                window_seconds=3600,
+            )
+        )
+    ],
+)
+def admin_community_direct_message_report_resolve(
+    report_id: str,
+    payload: AdminCommunityDirectMessageReportResolveRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(require_admin_mfa)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> AdminCommunityDirectMessageReportMutationResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="admin.community.direct_message_report.resolve",
+        idempotency_key=idempotency_key,
+        request_payload={"report_id": report_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=AdminCommunityDirectMessageReportMutationResponse,
+        mutate=lambda: resolve_admin_direct_message_report(
             db,
             report_id=report_id,
             payload=payload,

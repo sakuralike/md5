@@ -16,6 +16,7 @@ import {
   markCommunityNotificationRead,
   searchCommunity,
   sendCommunityDirectMessage,
+  reportCommunityDirectMessage,
   listCommunityBookmarks,
   setCommunityCommentLike,
   setCommunityPostBookmark,
@@ -272,6 +273,23 @@ describe("web community service", () => {
     expect((readAllInit.headers as Headers).get("Idempotency-Key")).toBe(
       "stable-notifications-all-key",
     );
+  });
+
+  it("reports a direct message with an encoded id and idempotency header", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse({ id: "report-1", message_id: "message-1", status: "open" })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await reportCommunityDirectMessage(
+      "message/with space",
+      { reason: "harassment", details: "合成私信举报最小披露说明。" },
+      "access-token",
+      "direct-report-key",
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/community/messages/message%2Fwith%20space/reports");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer access-token");
+    expect((init.headers as Headers).get("Idempotency-Key")).toBe("direct-report-key");
   });
 
 

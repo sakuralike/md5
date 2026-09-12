@@ -12,7 +12,7 @@ def test_release_migrations_extend_search_document_version_head() -> None:
     config.set_main_option("script_location", str(api_directory / "alembic"))
     script_directory = ScriptDirectory.from_config(config)
 
-    assert script_directory.get_heads() == ["20260902_0064"]
+    assert script_directory.get_heads() == ["20260912_0065"]
     assert script_directory.get_revision("20260816_0046").down_revision == "20260816_0045"
     assert script_directory.get_revision("20260816_0045").down_revision == "20260816_0044"
     assert script_directory.get_revision("20260816_0044").down_revision == "20260816_0043"

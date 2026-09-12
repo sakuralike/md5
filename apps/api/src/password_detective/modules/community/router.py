@@ -49,6 +49,7 @@ from password_detective.modules.community.direct_message_realtime import (
 )
 from password_detective.modules.community.direct_message_service import (
     create_direct_conversation,
+    create_direct_message_report,
     list_direct_conversations,
     list_direct_messages,
     send_direct_message,
@@ -96,6 +97,8 @@ from password_detective.modules.community.schemas import (
     CommunityDirectMemberStateUpdateRequest,
     CommunityDirectMessageCreateRequest,
     CommunityDirectMessageListResponse,
+    CommunityDirectMessageReportCreateRequest,
+    CommunityDirectMessageReportResponse,
     CommunityDirectMessageResponse,
     CommunityDirectReadStateResponse,
     CommunityDirectReadStateUpdateRequest,
@@ -268,6 +271,7 @@ def community_direct_message_list(
 )
 def community_direct_message_create(
     conversation_id: str,
+    request: Request,
     payload: CommunityDirectMessageCreateRequest,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_principal)],
@@ -288,6 +292,7 @@ def community_direct_message_create(
             payload=payload,
             idempotency_key=idempotency_key,
             settings=settings,
+            context=get_client_context(request),
         ),
     )
     _publish_direct_conversation_wakeups(
@@ -356,6 +361,36 @@ def community_direct_member_state_update(
             db,
             principal=principal,
             conversation_id=conversation_id,
+            payload=payload,
+        ),
+    )
+
+
+@router.post(
+    "/messages/{message_id}/reports",
+    response_model=CommunityDirectMessageReportResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("community.direct.report", limit=20, window_seconds=86400))],
+)
+def community_direct_message_report_create(
+    message_id: str,
+    payload: CommunityDirectMessageReportCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> CommunityDirectMessageReportResponse:
+    return _mutate_with_idempotency(
+        db,
+        scope="community.direct.report",
+        idempotency_key=idempotency_key,
+        request_payload={"message_id": message_id, **payload.model_dump(mode="json")},
+        principal=principal,
+        response_type=CommunityDirectMessageReportResponse,
+        response_status=status.HTTP_201_CREATED,
+        create=lambda: create_direct_message_report(
+            db,
+            principal=principal,
+            message_id=message_id,
             payload=payload,
         ),
     )

@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClientId } from "@/lib/clientId";
 import {
   createCommunityIdempotencyKey,
   listCommunityDirectMessages,
+  reportCommunityDirectMessage,
   sendCommunityDirectMessage,
   updateCommunityDirectReadState,
 } from "../services/community";
@@ -29,6 +31,11 @@ const loadingMore = ref(false);
 const sending = ref(false);
 const body = ref("");
 const error = ref("");
+const reportMessageId = ref<string | null>(null);
+const reportReason = ref<"spam" | "harassment" | "privacy" | "unsafe" | "other">("harassment");
+const reportDetails = ref("");
+const reporting = ref(false);
+const reportSuccess = ref("");
 const counterpartLastReadSequence = ref(0);
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let loadRequestId = 0;
@@ -134,6 +141,27 @@ async function send(): Promise<void> {
   }
 }
 
+async function reportMessage(): Promise<void> {
+  if (!reportMessageId.value || reportDetails.value.trim().length < 10 || reporting.value) return;
+  reporting.value = true;
+  error.value = "";
+  reportSuccess.value = "";
+  try {
+    await reportCommunityDirectMessage(
+      reportMessageId.value,
+      { reason: reportReason.value, details: reportDetails.value.trim() },
+      auth.accessToken,
+      createCommunityIdempotencyKey("direct-message-report"),
+    );
+    reportSuccess.value = "消息举报已提交，管理员将在受控案件中复核。";
+    reportDetails.value = "";
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "消息举报失败";
+  } finally {
+    reporting.value = false;
+  }
+}
+
 function mergeMessages(items: CommunityDirectMessageResponse[]): CommunityDirectMessageResponse[] {
   const byId = new Map<string, CommunityDirectMessageResponse>();
   for (const item of items) byId.set(item.id, item);
@@ -229,6 +257,16 @@ onBeforeUnmount(() => {
                   : "已发送"
               }}
             </Badge>
+            <Button
+              v-if="!isOwnMessage(message)"
+              type="button"
+              size="sm"
+              variant="ghost"
+              class="mt-2"
+              @click="reportMessageId = message.id; reportSuccess = ''"
+            >
+              举报消息
+            </Button>
           </article>
 
           <div
@@ -238,6 +276,46 @@ onBeforeUnmount(() => {
             尚无消息。发送第一条合成、非敏感内容开始会话。
           </div>
         </div>
+      </CardContent>
+    </Card>
+
+    <Card v-if="reportMessageId">
+      <CardHeader>
+        <CardTitle>举报私信消息</CardTitle>
+        <CardDescription>仅提交最小化举报说明，管理员将在受控案件上下文中复核。</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="space-y-2">
+          <Label for="community-direct-message-report-reason">举报原因</Label>
+          <Select v-model="reportReason">
+            <SelectTrigger id="community-direct-message-report-reason">
+              <SelectValue placeholder="选择举报原因" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="spam">垃圾广告</SelectItem>
+              <SelectItem value="harassment">骚扰攻击</SelectItem>
+              <SelectItem value="privacy">隐私泄露</SelectItem>
+              <SelectItem value="unsafe">不安全内容</SelectItem>
+              <SelectItem value="other">其他问题</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="space-y-2">
+          <Label for="community-direct-message-report-details">问题说明</Label>
+          <Textarea
+            id="community-direct-message-report-details"
+            v-model="reportDetails"
+            :maxlength="1000"
+            placeholder="请用至少 10 个字说明需要复核的原因…"
+          />
+        </div>
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="ghost" @click="reportMessageId = null">取消</Button>
+          <Button type="button" :disabled="reporting || reportDetails.trim().length < 10" @click="reportMessage">
+            {{ reporting ? "提交中…" : "提交举报" }}
+          </Button>
+        </div>
+        <p v-if="reportSuccess" role="status" class="text-sm text-muted-foreground">{{ reportSuccess }}</p>
       </CardContent>
     </Card>
 

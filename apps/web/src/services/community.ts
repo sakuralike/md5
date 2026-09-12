@@ -16,6 +16,8 @@ import type {
   CommunityDirectMemberStateResponse,
   CommunityDirectMemberStateUpdateRequest,
   CommunityDirectMessageCreateRequest,
+  CommunityDirectMessageReportCreateRequest,
+  CommunityDirectMessageReportResponse,
   CommunityDirectMessageListResponse,
   CommunityDirectMessageResponse,
   CommunityDirectReadStateResponse,
@@ -95,7 +97,8 @@ export function createCommunityIdempotencyKey(
     | "direct-conversation"
     | "direct-message"
     | "direct-read-state"
-    | "direct-member-state",
+    | "direct-member-state"
+    | "direct-message-report",
 ): string {
   return `web-community-${kind}-${createClientId()}`;
 }
@@ -164,6 +167,23 @@ export function sendCommunityDirectMessage(
 ): Promise<CommunityDirectMessageResponse> {
   return apiRequest<CommunityDirectMessageResponse>(
     `/community/direct-conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function reportCommunityDirectMessage(
+  messageId: string,
+  payload: CommunityDirectMessageReportCreateRequest,
+  token: string,
+  idempotencyKey: string,
+): Promise<CommunityDirectMessageReportResponse> {
+  return apiRequest<CommunityDirectMessageReportResponse>(
+    `/community/messages/${encodeURIComponent(messageId)}/reports`,
     {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },

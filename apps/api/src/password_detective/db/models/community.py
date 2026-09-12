@@ -243,6 +243,17 @@ class CommunityDirectEventType(StrEnum):
     UNREAD_CHANGED = "unread.changed"
 
 
+class CommunityDirectMessageReportStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class CommunityDirectMessageReportDecision(StrEnum):
+    DISMISS = "dismiss"
+    REMOVE_MESSAGE = "remove_message"
+
+
 class CommunityDirectConversation(Base):
     __tablename__ = "community_direct_conversations"
     __table_args__ = (
@@ -390,6 +401,86 @@ class CommunityDirectMessage(Base):
     client_message_id: Mapped[str] = mapped_column(String(72))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CommunityDirectMessageReport(Base):
+    __tablename__ = "community_direct_message_reports"
+    __table_args__ = (
+        Index(
+            "ix_community_direct_message_report_reporter_message_status",
+            "reporter_id",
+            "message_id",
+            "status",
+        ),
+        Index(
+            "ix_community_direct_message_report_status_created",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    reporter_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("community_direct_messages.id", ondelete="SET NULL"), nullable=True
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("community_direct_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    sender_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    reason: Mapped[CommunityReportReason] = mapped_column(
+        Enum(CommunityReportReason, native_enum=False, length=24), index=True
+    )
+    details: Mapped[str] = mapped_column(Text)
+    status: Mapped[CommunityDirectMessageReportStatus] = mapped_column(
+        Enum(CommunityDirectMessageReportStatus, native_enum=False, length=16),
+        default=CommunityDirectMessageReportStatus.OPEN,
+        index=True,
+    )
+    decision: Mapped[CommunityDirectMessageReportDecision | None] = mapped_column(
+        Enum(CommunityDirectMessageReportDecision, native_enum=False, length=24), nullable=True
+    )
+    resolved_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class CommunityDirectMessageCooldown(Base):
+    __tablename__ = "community_direct_message_cooldowns"
+    __table_args__ = (
+        Index(
+            "ix_community_direct_message_cooldown_until",
+            "until",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(64))
+    until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    triggered_message_count: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
 

@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
+from password_detective.core.config import Settings
+from password_detective.core.direct_message_crypto import build_direct_message_vault
 from password_detective.core.errors import AppError
 from password_detective.core.time import utc_now
 from password_detective.db.audit import write_audit_log
@@ -12,6 +14,10 @@ from password_detective.db.models.community import (
     CommunityBoard,
     CommunityComment,
     CommunityContentStatus,
+    CommunityDirectMessage,
+    CommunityDirectMessageReport,
+    CommunityDirectMessageReportDecision,
+    CommunityDirectMessageReportStatus,
     CommunityModerationAction,
     CommunityNotification,
     CommunityNotificationEmailDigest,
@@ -39,6 +45,11 @@ from password_detective.modules.community.admin_schemas import (
     AdminCommunityBoardMutationResponse,
     AdminCommunityBoardResponse,
     AdminCommunityBoardUpdateRequest,
+    AdminCommunityDirectMessageReportDetail,
+    AdminCommunityDirectMessageReportListResponse,
+    AdminCommunityDirectMessageReportMutationResponse,
+    AdminCommunityDirectMessageReportResolveRequest,
+    AdminCommunityDirectMessageReportSummary,
     AdminCommunityNotificationOutboxItem,
     AdminCommunityNotificationOutboxListResponse,
     AdminCommunityNotificationOutboxMetrics,
@@ -227,6 +238,127 @@ def list_admin_reports(
     )
 
 
+def list_admin_direct_message_reports(
+    db: Session,
+    *,
+    status: CommunityDirectMessageReportStatus | None,
+    page: int,
+    page_size: int,
+) -> AdminCommunityDirectMessageReportListResponse:
+    conditions = [] if status is None else [CommunityDirectMessageReport.status == status]
+    total = db.scalar(select(func.count(CommunityDirectMessageReport.id)).where(*conditions)) or 0
+    reports = list(
+        db.scalars(
+            select(CommunityDirectMessageReport)
+            .where(*conditions)
+            .order_by(CommunityDirectMessageReport.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
+    return AdminCommunityDirectMessageReportListResponse(
+        items=[_direct_message_report_summary(db, report) for report in reports],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def get_admin_direct_message_report_detail(
+    db: Session, *, report_id: str, settings: Settings
+) -> AdminCommunityDirectMessageReportDetail:
+    report = db.get(CommunityDirectMessageReport, report_id)
+    if report is None:
+        raise AppError(
+            "community.direct_message_report_not_found", "私信举报不存在", status_code=404
+        )
+    message = db.get(CommunityDirectMessage, report.message_id) if report.message_id else None
+    body = None
+    sequence = None
+    created_at = None
+    if message is not None and message.removed_at is None:
+        body = build_direct_message_vault(settings).decrypt(
+            ciphertext=message.ciphertext,
+            nonce=message.nonce,
+            key_version=message.key_version,
+        )
+        sequence = message.sequence
+        created_at = message.created_at
+    return AdminCommunityDirectMessageReportDetail(
+        **_direct_message_report_summary(db, report).model_dump(),
+        message_body=body,
+        message_sequence=sequence,
+        message_created_at=created_at,
+    )
+
+
+def resolve_admin_direct_message_report(
+    db: Session,
+    *,
+    report_id: str,
+    payload: AdminCommunityDirectMessageReportResolveRequest,
+    principal: Principal,
+    context: ClientContext,
+) -> AdminCommunityDirectMessageReportMutationResponse:
+    report = db.scalar(
+        select(CommunityDirectMessageReport)
+        .where(CommunityDirectMessageReport.id == report_id)
+        .with_for_update()
+    )
+    if report is None:
+        raise AppError(
+            "community.direct_message_report_not_found", "私信举报不存在", status_code=404
+        )
+    if report.status != CommunityDirectMessageReportStatus.OPEN:
+        raise AppError(
+            "community.direct_message_report_already_resolved",
+            "私信举报已处理",
+            status_code=409,
+        )
+    message = db.get(CommunityDirectMessage, report.message_id) if report.message_id else None
+    message_removed = False
+    if (
+        payload.decision == CommunityDirectMessageReportDecision.REMOVE_MESSAGE
+        and message is not None
+    ):
+        message.removed_at = utc_now()
+        message_removed = True
+    report.status = (
+        CommunityDirectMessageReportStatus.DISMISSED
+        if payload.decision == CommunityDirectMessageReportDecision.DISMISS
+        else CommunityDirectMessageReportStatus.RESOLVED
+    )
+    report.decision = payload.decision
+    report.resolved_by_id = principal.user.id
+    report.resolution_note = payload.note
+    report.resolved_at = utc_now()
+    audit = write_audit_log(
+        db,
+        actor_id=principal.user.id,
+        action="community.direct_message_report.resolve",
+        target_type="community_direct_message_report",
+        target_id=report.id,
+        result="success",
+        ip_prefix=context.ip_prefix,
+        request_id=context.request_id,
+        details={
+            "decision": payload.decision.value,
+            "message_id": report.message_id,
+            "conversation_id": report.conversation_id,
+            "message_removed": message_removed,
+            "note": payload.note,
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return AdminCommunityDirectMessageReportMutationResponse(
+        report=_direct_message_report_summary(db, report),
+        message_removed=message_removed,
+        audit_id=audit.id,
+        request_id=context.request_id,
+    )
+
+
 def resolve_admin_report(
     db: Session,
     *,
@@ -401,6 +533,29 @@ def _report_summary(db: Session, report: CommunityReport) -> AdminCommunityRepor
         comment_id=report.comment_id,
         target_type=target_type,
         target_excerpt=excerpt,
+        reason=report.reason,
+        details=report.details,
+        status=report.status,
+        decision=report.decision,
+        resolution_note=report.resolution_note,
+        resolved_by_username=resolver.username if resolver else None,
+        created_at=report.created_at,
+        resolved_at=report.resolved_at,
+    )
+
+
+def _direct_message_report_summary(
+    db: Session, report: CommunityDirectMessageReport
+) -> AdminCommunityDirectMessageReportSummary:
+    reporter = db.get(User, report.reporter_id)
+    sender = db.get(User, report.sender_id) if report.sender_id else None
+    resolver = db.get(User, report.resolved_by_id) if report.resolved_by_id else None
+    return AdminCommunityDirectMessageReportSummary(
+        id=report.id,
+        reporter_username=reporter.username if reporter else "已注销用户",
+        message_id=report.message_id,
+        conversation_id=report.conversation_id,
+        sender_username=sender.username if sender else None,
         reason=report.reason,
         details=report.details,
         status=report.status,
