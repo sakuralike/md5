@@ -26,15 +26,19 @@ def test_browser_session_lifetimes_remain_operator_configurable():
 def test_login_rate_limits_keep_secure_defaults_and_allow_controlled_overrides(monkeypatch):
     monkeypatch.delenv("WEB_LOGIN_RATE_LIMIT", raising=False)
     monkeypatch.delenv("ADMIN_LOGIN_RATE_LIMIT", raising=False)
+    monkeypatch.delenv("WEB_ANNOUNCEMENT_LIST_RATE_LIMIT", raising=False)
 
     defaults = Settings(_env_file=None)
     overridden = Settings(
         _env_file=None,
         web_login_rate_limit=100,
         admin_login_rate_limit=80,
+        web_announcement_list_rate_limit=500,
     )
 
     assert defaults.web_login_rate_limit == 10
     assert defaults.admin_login_rate_limit == 10
+    assert defaults.web_announcement_list_rate_limit == 60
     assert overridden.web_login_rate_limit == 100
     assert overridden.admin_login_rate_limit == 80
+    assert overridden.web_announcement_list_rate_limit == 500

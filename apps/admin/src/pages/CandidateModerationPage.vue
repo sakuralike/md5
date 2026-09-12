@@ -128,10 +128,10 @@ function statusVariant(status: CandidateStatus): "default" | "secondary" | "dest
 
 function statusClass(status: CandidateStatus): string {
   if (status === "verified") {
-    return "border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]";
+    return "border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.12)] text-foreground";
   }
   if (status === "pending") {
-    return "border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.12)] text-[hsl(var(--warning))]";
+    return "border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.12)] text-foreground";
   }
   if (status === "quarantined") {
     return "border-border bg-muted text-muted-foreground";

@@ -582,16 +582,22 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 | 范围 | 状态 | 说明 |
 |---|---|---|
 | GitHub 构建证明 | 已完成（真实 CI 已验证） | CI run `33674455086` 的 `plugin build proof` 与 `desktop` job 均成功；artifact `9863979694` 已由服务端真实下载并校验 proof 清单摘要、commit `c68d1d3...` 和 provenance 内容摘要 |
-| 迁移失败重试 | 已部署 Staging（认证设备闭环未验收） | Staging API/Worker/Scheduler 当前运行 `63f535dfa0c4`，配置提交 `ce2ccd3`；Scheduler 已加载每 30 秒调度任务，重试路由未认证返回 `401`；真实认证桌面失败→重试→成功/耗尽闭环仍未验收 |
+| 迁移失败重试 | 已完成 Staging 真实合成闭环 | Staging API/Worker/Scheduler 已运行 `0757132`；认证安装实例 A 经真实退避后成功回执并完成，安装实例 B 经真实退避后第三次失败进入 `exhausted`；两个安装实例的轮询列表最终为空 |
 | CI 修复 | 已修复 | Windows 2025 的插件证明作业使用可用 Python 3.12.10；桌面测试兼容 Release 输出目录 |
-| 目标环境边界 | 未完成 | 独立 Runner VM、真实 mTLS/隔离网络、认证 Canary、真实 Windows 安装和 UAT/Production 仍需外部环境执行 |
+| 目标环境边界 | 按当前范围排除 | 独立 Runner VM、真实 mTLS/隔离网络和 Production 不执行；认证 Canary 与本机 Windows UAT 已有独立验收记录 |
 
 ## 2026-09-02 桌面插件迁移证据声明门禁
 
 | 范围 | 状态 | 说明 |
 |---|---|---|
 | 服务端迁移证据合同 | 已完成（局部收口） | `completed`/`failed` 迁移证据必须对应版本 Manifest 的 `migration.required=true`，并携带与版本/架构制品一致的 SHA-256；未声明或非必需迁移只能提交 `not_required` |
-| 验收 | 已完成 | 新增未声明和制品摘要不匹配的服务端反例测试；真实设备升级、受信构建证明绑定和服务端重试调度仍未完成 |
+| 验收 | 已完成 | 新增未声明和制品摘要不匹配的服务端反例测试；Staging 真实认证安装实例重试调度与成功/耗尽回执已完成，受信构建证明绑定由独立发布门禁覆盖 |
+
+## 2026-09-04 Staging 迁移重试真实闭环
+
+- 合成插件 `com.passworddetective.uat-migration-20260904` 的 `1.0.0` 和 `1.1.0` 在 Staging 完成上传、静态审核、管理员批准和 stable 发布，验收后均撤销。
+- 安装实例 A 的失败事件经真实 60 秒退避和 30 秒 Beat 调度变为 `available`，成功回执后原事件为 `completed`；安装实例 B 经真实 60 秒和 300 秒退避各完成一次 `available` 调度，第三次失败为 `exhausted`。
+- 管理员证据接口保留 5 条脱敏事件；撤销列表包含两个合成版本，公开插件目录对该插件返回 404；Staging `ready` 返回 200，API/Worker/Scheduler 保持 `0757132`。
 
 ## 2026-08-09 WP3 第 8 次迭代补充：视觉、可访问性与刷新竞争收口
 

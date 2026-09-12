@@ -101,7 +101,7 @@ const defaultSnapshot: OperationalSettingsSnapshot = {
 const defaultSeoSettings: SeoSettings = {
   enabled: false,
   indexing_enabled: false,
-  home_title: "密码侦探社",
+  home_title: "",
   keywords: [],
   description: "",
   title_separator: "-",

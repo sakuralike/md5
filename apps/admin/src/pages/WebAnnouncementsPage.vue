@@ -23,6 +23,7 @@ import {
   uploadWebAnnouncementImage,
   type WebAnnouncementDraft,
 } from "../services/webAnnouncements";
+import { resolveApiResourceUrl } from "../services/api";
 import { useAdminAuthStore } from "../stores/auth";
 
 const auth = useAdminAuthStore();
@@ -242,7 +243,7 @@ function statusLabel(status: WebAnnouncement["status"]): string {
             <p v-if="uploadError" class="text-sm text-destructive">{{ uploadError }}</p>
             <div v-if="imageUrls.length" class="grid gap-3 sm:grid-cols-2">
               <div v-for="url in imageUrls" :key="url" class="overflow-hidden rounded-xl border bg-muted/20">
-                <img :src="url" alt="公告图片预览" class="h-32 w-full object-cover" />
+                <img :src="resolveApiResourceUrl(url)" alt="公告图片预览" class="h-32 w-full object-cover" />
                 <div class="flex items-center justify-between gap-2 p-2"><span class="truncate text-xs text-muted-foreground">{{ url }}</span><Button type="button" variant="ghost" size="sm" :disabled="selected?.status === 'archived'" @click="removeImage(url)">移除</Button></div>
               </div>
             </div>

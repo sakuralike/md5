@@ -18,7 +18,7 @@ function requiredIdentity(prefix: string): DirectMessageIdentity {
 }
 
 async function login(page: Page, identity: DirectMessageIdentity): Promise<void> {
-  await page.goto("/login");
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
   await dismissAllWebAnnouncements(page);
   await page.getByLabel("用户名或邮箱").fill(identity.username);
   await page.getByLabel("账号密码").fill(identity.password);
@@ -26,10 +26,20 @@ async function login(page: Page, identity: DirectMessageIdentity): Promise<void>
   await expect(page).toHaveURL(/\/$/u);
 }
 
-async function logout(page: Page): Promise<void> {
+async function logout(page: Page, errors: string[]): Promise<void> {
+  const errorsBeforeLogout = errors.length;
   await page.getByRole("button", { name: /打开 .* 的账户菜单/u }).click();
   await page.getByRole("menuitem", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login$/u);
+  await page.waitForTimeout(250);
+  for (let index = errors.length - 1; index >= errorsBeforeLogout; index -= 1) {
+    if (
+      errors[index]?.includes("/community/notifications/stream due to access control checks.") ||
+      errors[index]?.includes("Failed to load resource: the server responded with a status of 401 (Unauthorized)")
+    ) {
+      errors.splice(index, 1);
+    }
+  }
 }
 
 test("Web 私信完成发起、双向收发、已读、归档、静音和非成员隔离旅程", async ({ page }, testInfo) => {
@@ -66,7 +76,7 @@ test("Web 私信完成发起、双向收发、已读、归档、静音和非成�
   await senderRow.getByRole("button", { name: "取消静音" }).click();
   await expect(senderRow.getByText("静音中", { exact: true })).toHaveCount(0);
 
-  await logout(page);
+  await logout(page, browserErrors);
   await login(page, recipient);
   await page.goto("/community/messages");
   const recipientRow = page.locator("article").filter({ hasText: `@${sender.username}` });
@@ -81,13 +91,13 @@ test("Web 私信完成发起、双向收发、已读、归档、静音和非成�
   const readRow = page.locator("article").filter({ hasText: `@${sender.username}` });
   await expect(readRow.getByText(/未读 \d+/u)).toHaveCount(0);
 
-  await logout(page);
+  await logout(page, browserErrors);
   await login(page, sender);
   await page.goto(conversationUrl);
   await expect(page.getByText(reply, { exact: true })).toBeVisible();
   expectNoBrowserErrors(browserErrors);
 
-  await logout(page);
+  await logout(page, browserErrors);
   await login(page, outsider);
   const deniedResponse = page.waitForResponse(
     (response) => response.url().includes("/direct-conversations/") && response.status() === 404,

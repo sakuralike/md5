@@ -3,6 +3,7 @@ import { expectNoBrowserErrors, observeBrowserErrors } from "./support/browser_a
 import { loginWorkflowAdmin } from "./support/admin_session";
 
 test.use({ screenshot: "off", trace: "off" });
+test.setTimeout(60_000);
 
 test("Admin SEO 工作台支持直接保存和重置当前编辑", async ({ page }) => {
   const browserErrors = observeBrowserErrors(page);

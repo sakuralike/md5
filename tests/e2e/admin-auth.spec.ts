@@ -21,7 +21,7 @@ test("Admin 游客门禁、默认关闭 TOTP 的密码登录和可选设置入�
 
   await expect(page).toHaveURL(/\/$/u);
   await expect(page.getByRole("link", { name: "仪表盘", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "真实指标仪表盘" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "运营仪表盘" })).toBeVisible();
 
   await page.goto("/totp-setup");
   await expect(page).toHaveURL(/\/totp-setup$/u);

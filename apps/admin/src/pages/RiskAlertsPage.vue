@@ -302,7 +302,7 @@ onMounted(async () => {
   <section class="space-y-5">
     <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div class="space-y-2">
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-destructive">
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-foreground">
           M4 · RISK OPERATIONS
         </p>
         <h1 class="text-2xl font-semibold tracking-tight">风险告警</h1>

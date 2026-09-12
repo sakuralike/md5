@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const apiPort = 18100;
 const webPort = 15173;
 const adminPort = 15174;
-const e2eApiBaseUrl = process.env.E2E_DIRECT_API === "1"
+const e2eApiBaseUrl = process.env.E2E_DIRECT_API !== "0"
   ? `http://127.0.0.1:${apiPort}/api/v1`
   : "/api/v1";
 

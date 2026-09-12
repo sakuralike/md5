@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { announcementAutoCloseMilliseconds, plainAnnouncementContent } from "@/lib/announcementContent";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPopupAnnouncements } from "@/services/announcements";
+import { resolveApiResourceUrl } from "@/services/api";
 
 const DISMISS_PREFIX = "web-popup-announcement:";
 
@@ -56,7 +57,10 @@ const activeAnnouncement = computed(() =>
 const plainContent = computed(() =>
   activeAnnouncement.value ? plainAnnouncementContent(activeAnnouncement.value.content) : "",
 );
-const imageUrl = computed(() => activeAnnouncement.value?.image_urls[0] ?? null);
+const imageUrl = computed(() => {
+  const value = activeAnnouncement.value?.image_urls[0];
+  return value ? resolveApiResourceUrl(value) : null;
+});
 const actionUrl = computed(() => safeLink(activeAnnouncement.value?.action_url ?? null));
 
 function dismiss(): void {

@@ -18,7 +18,7 @@ function requiredIdentity(prefix: string): DirectMessageIdentity {
 }
 
 async function login(page: Page, identity: DirectMessageIdentity): Promise<void> {
-  await page.goto("/login");
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
   await dismissAllWebAnnouncements(page);
   await page.getByLabel("用户名或邮箱").fill(identity.username);
   await page.getByLabel("账号密码").fill(identity.password);

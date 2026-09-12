@@ -47,6 +47,9 @@ async function load(reset = true): Promise<void> {
       limit: 20,
     });
     items.value = reset ? response.items : [...items.value, ...response.items];
+    directMessages.setTotalUnreadCount(
+      items.value.reduce((total, item) => total + Math.max(0, item.unread_count), 0),
+    );
     nextCursor.value = response.next_cursor;
     hasMore.value = response.has_more;
   } catch (caught) {

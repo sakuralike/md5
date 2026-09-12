@@ -21,6 +21,10 @@ export const useCommunityDirectMessagesStore = defineStore(
       status.value = nextStatus;
     }
 
+    function setTotalUnreadCount(value: number): void {
+      totalUnreadCount.value = Math.max(0, Math.trunc(value));
+    }
+
     function apply(event: CommunityDirectStreamEvent, currentUserId?: string): boolean {
       if (event.type === "ready") {
         if (event.eventId < latestEventId.value && !event.resetRequired) return false;
@@ -82,6 +86,7 @@ export const useCommunityDirectMessagesStore = defineStore(
       conversationMessageRevision,
       resetRevision,
       setStatus,
+      setTotalUnreadCount,
       apply,
       resetRuntime,
       resetSnapshots,

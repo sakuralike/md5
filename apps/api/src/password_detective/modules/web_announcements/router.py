@@ -38,7 +38,15 @@ admin_router = APIRouter(prefix="/admin/web-announcements", tags=["管理端·We
 @public_router.get(
     "",
     response_model=WebAnnouncementListResponse,
-    dependencies=[Depends(rate_limit("web.announcement.list", limit=60, window_seconds=60))],
+    dependencies=[
+        Depends(
+            rate_limit(
+                "web.announcement.list",
+                limit=get_settings().web_announcement_list_rate_limit,
+                window_seconds=60,
+            )
+        )
+    ],
 )
 def public_announcements(
     response: Response,

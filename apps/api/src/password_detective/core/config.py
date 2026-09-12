@@ -137,6 +137,7 @@ class Settings(BaseSettings):
     rate_limit_backend: Literal["memory", "redis"] = "memory"
     web_login_rate_limit: int = Field(default=10, ge=1, le=1000)
     admin_login_rate_limit: int = Field(default=10, ge=1, le=1000)
+    web_announcement_list_rate_limit: int = Field(default=60, ge=1, le=1000)
     rate_limit_namespace: str = "password-detective"
     notification_backend: Literal["memory", "log", "webhook", "smtp"] = "memory"
     notification_webhook_url: str = ""

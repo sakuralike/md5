@@ -41,7 +41,7 @@ export async function loginWorkflowAdmin(page: Page): Promise<WorkflowAdminCrede
   await page.getByLabel("动态验证码（仅已启用 TOTP 时填写）").fill(currentTotp(credentials.totpSecret));
   await page.getByRole("button", { name: "登录管理端" }).click();
   await expect(page).toHaveURL(/\/$/u);
-  await expect(page.getByRole("heading", { name: "真实指标仪表盘" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "运营仪表盘" })).toBeVisible();
   return credentials;
 }
 

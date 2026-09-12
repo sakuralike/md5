@@ -15,7 +15,7 @@ test("Admin 仪表盘形成桌面视觉与严重 WCAG 门禁", async ({ page }, 
     criticalRegions: [
       page.getByRole("banner"),
       page.getByRole("navigation", { name: "管理导航" }),
-      page.getByRole("heading", { name: "真实指标仪表盘" }),
+      page.getByRole("heading", { name: "运营仪表盘" }),
     ],
     minimumScreenshotBytes: 8_000,
   });

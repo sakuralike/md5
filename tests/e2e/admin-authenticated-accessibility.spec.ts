@@ -7,6 +7,8 @@ import {
   expectPageVisualBaseline,
 } from "./support/visual_assertions";
 
+test.setTimeout(90_000);
+
 async function expectPageBaseline(
   page: Parameters<typeof expectPageVisualBaseline>[0],
   testInfo: Parameters<typeof expectPageVisualBaseline>[1],

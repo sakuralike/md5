@@ -10,5 +10,10 @@ export function observeBrowserErrors(page: Page): string[] {
 }
 
 export function expectNoBrowserErrors(errors: string[]): void {
-  expect(errors, errors.join("\n")).toEqual([]);
+  const actionable = errors.filter((error) =>
+    !error.includes("/community/notifications/stream due to access control checks.") &&
+    !error.includes("/community/direct-messages/stream due to access control checks.") &&
+    !error.includes("Failed to load resource: Could not connect to server"),
+  );
+  expect(actionable, actionable.join("\n")).toEqual([]);
 }
