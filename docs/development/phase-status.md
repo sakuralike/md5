@@ -1062,3 +1062,8 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - 提交 `569bdea` 已推送到 `ssh-release/codex/desktop-plugin-control-plane`；Staging `111.229.195.138` 已部署同一修订，数据库备份 `/opt/password-detective-backups/20260912T092408Z-569bdea`，源码归档 SHA-256 为 `ae491bdc37ccaa1e969e201e7c2a1ea6c40ea47b49e793cd6004d4e02903756`，迁移为 `20260912_0065 (head)`。
 - Staging API 2、API Proxy、Web、Admin 健康；Worker 3 和 Scheduler 持续运行并有任务执行日志（基础 API 镜像继承的 HTTP healthcheck 对非 HTTP Worker/Scheduler 返回 unhealthy，不代表进程退出）。OpenAPI 暴露用户私信举报、Admin 举报队列/详情/处置。真实合成冒烟通过：举报 `201`、Admin 详情最小披露、移除后正文与列表隐藏、批量发送冷却 `429 community.direct_message_cooldown` 且 `retry_after_seconds=900`。
 - 仍未验收 UAT/Production、独立 Runner VM、真实 mTLS 和隔离网络；旧 Staging 服务器继续使用，未切换 DNS 或关闭。
+
+## WP5-I11：异步服务健康检查收口
+
+- Worker 健康检查改为 Celery `inspect ping`，Scheduler 健康检查改为校验 PID 1 的 Beat 进程命令行，避免异步服务继承 API HTTP 探针导致运行中被误报 `unhealthy`。
+- 新增 Compose 健康检查合同测试并纳入 `check.ps1`；本地 Ruff、4 项脚本测试和 Compose 配置校验通过，Staging 探针实测 Worker `pong`、Scheduler Beat 进程存在。

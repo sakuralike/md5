@@ -214,6 +214,16 @@ services:
     command: ["celery", "-A", "password_detective.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}"]
     depends_on:
       api: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          celery -A password_detective.worker.celery_app inspect ping
+          --destination celery@$$(hostname) --timeout=5 | grep -q pong
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   scheduler:
     build:
@@ -281,6 +291,14 @@ services:
     command: ["celery", "-A", "password_detective.worker.celery_app", "beat", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
     depends_on:
       api: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          from pathlib import Path; command = Path('/proc/1/cmdline').read_bytes();
+          assert b'celery' in command and b'beat' in command
 
   web:
     build:
