@@ -1060,5 +1060,5 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - 批量私信在 60 秒内达到 5 条后进入持久化 15 分钟冷却，返回 429 和剩余秒数；冷却触发写入最小化审计，不影响已完成消息。
 - 统一本地门禁 `pwsh ./scripts/check.ps1 -SkipInstall -IncludeE2E` 通过：API `417 passed, 1 skipped`、覆盖率 `85.49%`，Web/Admin 单测、Chromium/Admin E2E `49 passed`、桌面测试 `124 passed`；Firefox/WebKit 私信举报定向旅程各通过。
 - 提交 `569bdea` 已推送到 `ssh-release/codex/desktop-plugin-control-plane`；Staging `111.229.195.138` 已部署同一修订，数据库备份 `/opt/password-detective-backups/20260912T092408Z-569bdea`，源码归档 SHA-256 为 `ae491bdc37ccaa1e969e201e7c2a1ea6c40ea47b49e793cd6004d4e02903756`，迁移为 `20260912_0065 (head)`。
-- Staging API 2、Worker 3、Scheduler、Web、Admin 和 API Proxy 健康；OpenAPI 暴露用户私信举报、Admin 举报队列/详情/处置。真实合成冒烟通过：举报 `201`、Admin 详情最小披露、移除后正文与列表隐藏、批量发送冷却 `429 community.direct_message_cooldown` 且 `retry_after_seconds=900`。
+- Staging API 2、API Proxy、Web、Admin 健康；Worker 3 和 Scheduler 持续运行并有任务执行日志（基础 API 镜像继承的 HTTP healthcheck 对非 HTTP Worker/Scheduler 返回 unhealthy，不代表进程退出）。OpenAPI 暴露用户私信举报、Admin 举报队列/详情/处置。真实合成冒烟通过：举报 `201`、Admin 详情最小披露、移除后正文与列表隐藏、批量发送冷却 `429 community.direct_message_cooldown` 且 `retry_after_seconds=900`。
 - 仍未验收 UAT/Production、独立 Runner VM、真实 mTLS 和隔离网络；旧 Staging 服务器继续使用，未切换 DNS 或关闭。
