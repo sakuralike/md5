@@ -1058,4 +1058,7 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 - 用户侧新增 `POST /api/v1/community/messages/{message_id}/reports`，仅会话成员可举报，支持幂等和独立限流；普通列表不返回举报消息正文。
 - Admin 新增私信举报队列、MFA 详情和处置接口；只有具体案件详情可最小披露解密正文，处置支持驳回或移除消息并写入审计。
 - 批量私信在 60 秒内达到 5 条后进入持久化 15 分钟冷却，返回 429 和剩余秒数；冷却触发写入最小化审计，不影响已完成消息。
-- 定向 API/迁移测试、Web/Admin 服务与页面测试、类型检查通过；Chromium 双用户私信真实旅程包含消息举报并通过。尚未重新部署 Staging，需下一步执行迁移和目标环境回归。
+- 统一本地门禁 `pwsh ./scripts/check.ps1 -SkipInstall -IncludeE2E` 通过：API `417 passed, 1 skipped`、覆盖率 `85.49%`，Web/Admin 单测、Chromium/Admin E2E `49 passed`、桌面测试 `124 passed`；Firefox/WebKit 私信举报定向旅程各通过。
+- 提交 `569bdea` 已推送到 `ssh-release/codex/desktop-plugin-control-plane`；Staging `111.229.195.138` 已部署同一修订，数据库备份 `/opt/password-detective-backups/20260912T092408Z-569bdea`，源码归档 SHA-256 为 `ae491bdc37ccaa1e969e201e7c2a1ea6c40ea47b49e793cd6004d4e02903756`，迁移为 `20260912_0065 (head)`。
+- Staging API 2、Worker 3、Scheduler、Web、Admin 和 API Proxy 健康；OpenAPI 暴露用户私信举报、Admin 举报队列/详情/处置。真实合成冒烟通过：举报 `201`、Admin 详情最小披露、移除后正文与列表隐藏、批量发送冷却 `429 community.direct_message_cooldown` 且 `retry_after_seconds=900`。
+- 仍未验收 UAT/Production、独立 Runner VM、真实 mTLS 和隔离网络；旧 Staging 服务器继续使用，未切换 DNS 或关闭。
