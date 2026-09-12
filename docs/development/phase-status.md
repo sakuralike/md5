@@ -1067,3 +1067,4 @@ P2 已完成，进入 P3。P3 仅表示开发阶段切换，不代表 `ui:panel`
 
 - Worker 健康检查改为 Celery `inspect ping`，Scheduler 健康检查改为校验 PID 1 的 Beat 进程命令行，避免异步服务继承 API HTTP 探针导致运行中被误报 `unhealthy`。
 - 新增 Compose 健康检查合同测试并纳入 `check.ps1`；本地 Ruff、4 项脚本测试和 Compose 配置校验通过，Staging 探针实测 Worker `pong`、Scheduler Beat 进程存在。
+- 提交 `0b463c6` 已部署到 Staging；备份 `/opt/password-detective-backups/20260912T121311Z-0b463c6`。API 2、Worker 3、Scheduler 全部 `healthy`，API ready `200`，Worker 任务和 Scheduler 调度日志持续正常。
